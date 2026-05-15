@@ -184,16 +184,28 @@ def main():
 
     # Fetch credentials from Secret Manager
     log.info("Fetching credentials from Secret Manager...")
-    user         = get_secret(SECRET_USER)
-    password     = get_secret(SECRET_PASSWORD)
-    company_code = get_secret(SECRET_COMPANY)
+    try:
+        user         = get_secret(SECRET_USER)
+        password     = get_secret(SECRET_PASSWORD)
+        company_code = get_secret(SECRET_COMPANY)
+    except Exception as exc:
+        log.exception("Failed to fetch credentials from Secret Manager.")
+        raise RuntimeError("Secret Manager fetch failed.") from exc
 
     # Init BigQuery client
-    bq = bigquery.Client(project=GCP_PROJECT)
-    ensure_metadata_table(bq)
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        ensure_metadata_table(bq)
+    except Exception as exc:
+        log.exception("Failed to initialize BigQuery client or metadata table.")
+        raise RuntimeError("BigQuery initialization failed.") from exc
 
     # Get last sync timestamp for incremental load
-    last_sync = get_last_sync(bq)
+    try:
+        last_sync = get_last_sync(bq)
+    except Exception as exc:
+        log.exception("Failed to fetch last sync metadata.")
+        raise RuntimeError("Metadata lookup failed.") from exc
     backfill_window = timedelta(minutes=BACKFILL_MINUTES)
     query_cutoff = last_sync - backfill_window
     if query_cutoff.tzinfo is None:
@@ -201,12 +213,23 @@ def main():
     log.info(f"Using backfill window: {BACKFILL_MINUTES} minutes")
 
     # Connect to Plex and pull data
-    conn = get_odbc_connection(user, password, company_code)
+    try:
+        conn = get_odbc_connection(user, password, company_code)
+    except Exception as exc:
+        log.exception("Failed to establish ODBC connection to Plex.")
+        raise RuntimeError("ODBC connection failed.") from exc
+
     try:
         df = query_plex(conn, query_cutoff)
+    except Exception as exc:
+        log.exception("Plex query failed.")
+        raise RuntimeError("Plex query failed.") from exc
     finally:
-        conn.close()
-        log.info("ODBC connection closed.")
+        try:
+            conn.close()
+            log.info("ODBC connection closed.")
+        except Exception:
+            log.warning("Failed to close ODBC connection cleanly.")
 
     if not df.empty and "Modified_Date" in df.columns:
         df["Modified_Date"] = pd.to_datetime(
@@ -216,14 +239,25 @@ def main():
         )
 
     # Write to BigQuery
-    rows_written = write_to_bigquery(bq, df)
+    try:
+        rows_written = write_to_bigquery(bq, df)
+    except Exception as exc:
+        log.exception("BigQuery write failed.")
+        raise RuntimeError("BigQuery write failed.") from exc
 
     # Update sync metadata
     if rows_written > 0:
-        max_modified = df["Modified_Date"].max()
-        if pd.isna(max_modified):
+        if "Modified_Date" in df.columns:
+            max_modified = df["Modified_Date"].max()
+            if pd.isna(max_modified):
+                max_modified = sync_time
+        else:
             max_modified = sync_time
-        update_last_sync(bq, sync_time, rows_written, max_modified)
+        try:
+            update_last_sync(bq, sync_time, rows_written, max_modified)
+        except Exception as exc:
+            log.exception("Failed to update sync metadata.")
+            raise RuntimeError("Metadata update failed.") from exc
 
     log.info(f"=== ETL job complete — {rows_written} rows written ===")
 

@@ -19,6 +19,18 @@ How it works (plain English)
 3. New and updated records are pulled.
 4. The data is written into BigQuery.
 
+Architecture (simple view)
+--------------------------
+```mermaid
+flowchart LR
+	A[Cloud Scheduler] --> B[Cloud Run Job]
+	B --> C[Secret Manager]
+	B --> D[Plex ODBC]
+	D --> E[DataFrame]
+	E --> F[BigQuery Table]
+	B --> G[Sync Metadata]
+```
+
 Where to go next
 ---------------
 - Setup and admin checklist: SETUP_GUIDE.md

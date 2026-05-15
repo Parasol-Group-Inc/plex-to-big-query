@@ -13,6 +13,26 @@ provider "google" {
   region  = var.gcp_region
 }
 
+data "google_project" "current" {
+  project_id = var.gcp_project
+}
+
+resource "google_project_service" "required" {
+  for_each = toset([
+    "run.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "bigquery.googleapis.com",
+    "secretmanager.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "iam.googleapis.com",
+  ])
+
+  project            = var.gcp_project
+  service            = each.value
+  disable_on_destroy = false
+}
+
 resource "google_service_account" "etl" {
   account_id   = var.service_account_name
   display_name = "Plex ETL Service Account"
@@ -33,10 +53,23 @@ resource "google_project_iam_member" "etl_roles" {
   member  = "serviceAccount:${google_service_account.etl.email}"
 }
 
+resource "google_service_account_iam_member" "scheduler_token_creator" {
+  service_account_id = google_service_account.etl.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
 resource "google_bigquery_dataset" "plex" {
   dataset_id                 = var.bq_dataset
   location                   = var.bq_location
   delete_contents_on_destroy = false
+}
+
+resource "google_artifact_registry_repository" "etl" {
+  location      = var.gcp_region
+  repository_id = var.artifact_registry_repo
+  format        = "DOCKER"
+  description   = "Plex ETL Docker images"
 }
 
 resource "google_bigquery_table" "sync_metadata" {

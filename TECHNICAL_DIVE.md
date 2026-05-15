@@ -86,6 +86,8 @@ resource set:
 - Secret Manager secrets for Plex credentials
 - Cloud Run job definition with env vars
 - Cloud Scheduler job to trigger Cloud Run
+- Required API enablement and Artifact Registry
+- Scheduler service agent token creator binding
 
 Terraform layout
 ----------------

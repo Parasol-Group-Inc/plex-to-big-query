@@ -91,6 +91,12 @@ variable "service_account_name" {
   default     = "plex-etl-sa"
 }
 
+variable "artifact_registry_repo" {
+  type        = string
+  description = "Artifact Registry repository name"
+  default     = "plex-pipeline"
+}
+
 variable "image_url" {
   type        = string
   description = "Full container image URL in Artifact Registry"

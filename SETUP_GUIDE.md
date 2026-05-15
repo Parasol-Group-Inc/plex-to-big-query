@@ -42,6 +42,7 @@ Use Terraform for:
 - BigQuery dataset and metadata table
 - Secret Manager secrets
 - Cloud Run job and Cloud Scheduler trigger
+- Required API enablement and Artifact Registry
 Basic flow:
 - Populate Terraform variables in terraform/variables.tf or a tfvars file.
 - Run terraform init and terraform apply from terraform/.

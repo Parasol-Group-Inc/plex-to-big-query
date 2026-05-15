@@ -1,0 +1,110 @@
+# deploy/cloudbuild.yaml
+#
+# Google Cloud Build pipeline for the Plex → BigQuery ETL job.
+# Triggered automatically on push to main, or manually via:
+#
+#   gcloud builds submit --config deploy/cloudbuild.yaml .
+#
+# Substitution variables are set in the Cloud Build trigger config
+# in the GCP console, or overridden at submit time with --substitutions.
+
+substitutions:
+  _GCP_REGION:    "us-central1"
+  _AR_REPO:       "plex-pipeline"
+  _CR_JOB:        "plex-etl"
+  _IMAGE_NAME:    "etl"
+  _ENV:           "prod"             # prod | test
+
+# Full image URL derived from substitutions
+# e.g. us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:abc123
+tags:
+  - plex-etl
+  - "${_ENV}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8          # faster builds — ODBC driver copy is heavy
+
+steps:
+
+  # ── 1. Verify driver files are present ──────────────────────────────────────
+  # The Plex .so driver files are stored in Cloud Storage (not in the repo)
+  # and copied into the build workspace before the Docker build runs.
+  - name: "gcr.io/cloud-builders/gsutil"
+    id: "fetch-driver"
+    args:
+      - "-m"
+      - "cp"
+      - "-r"
+      - "gs://${PROJECT_ID}-build-assets/plex-odbc-driver/*"
+      - "driver/"
+    waitFor: ["-"]                   # start immediately
+
+  # ── 2. Build Docker image ────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build"
+    args:
+      - "build"
+      - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
+      - "--cache-from=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
+      - "."
+    waitFor:
+      - "fetch-driver"
+
+  # ── 3. Push image to Artifact Registry ───────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-sha"
+    args:
+      - "push"
+      - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+    waitFor:
+      - "build"
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-latest"
+    args:
+      - "push"
+      - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
+    waitFor:
+      - "build"
+
+  # ── 4. Update Cloud Run job with new image ───────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "jobs"
+      - "update"
+      - "${_CR_JOB}"
+      - "--image=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_GCP_REGION}"
+    waitFor:
+      - "push-sha"
+
+  # ── 5. Smoke test — trigger a single execution and wait for result ────────────
+  # Remove or comment this step out if you don't want automatic test runs
+  # on every push to main.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "smoke-test"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "jobs"
+      - "execute"
+      - "${_CR_JOB}"
+      - "--region=${_GCP_REGION}"
+      - "--wait"                      # block until job completes or fails
+    waitFor:
+      - "deploy"
+
+# ── Final image references ────────────────────────────────────────────────────
+images:
+  - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+  - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
+
+# ── Build timeout ─────────────────────────────────────────────────────────────
+# 20 minutes — ODBC driver copy + Docker build can be slow on first run
+# with no layer cache available.
+timeout: "1200s"

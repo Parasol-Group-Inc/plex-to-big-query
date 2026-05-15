@@ -57,6 +57,12 @@ Environment variables:
 - SECRET_ODBC_USER
 - SECRET_ODBC_PASSWORD
 - SECRET_COMPANY_CODE
+- SENDGRID_ENABLED (default: false)
+- SENDGRID_API_KEY
+- REPORT_FROM_EMAIL
+- REPORT_TO_EMAILS (comma-separated)
+- REPORT_SUBJECT (optional)
+- REPORT_TEMPLATE (optional; default: report.html)
 
 ODBC notes
 ----------
@@ -99,3 +105,8 @@ Operational reliability
 - Enable retries in Cloud Run job for transient errors.
 - Add alerting on Cloud Run job failures and BigQuery load errors.
 - Consider a staging table and MERGE to handle updates cleanly.
+
+Email report template
+---------------------
+The HTML template lives in templates/report.html and is rendered with simple
+placeholders. Keep it free of external assets for reliable delivery.

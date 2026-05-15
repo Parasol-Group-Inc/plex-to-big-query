@@ -6,6 +6,8 @@ import pyodbc
 import pandas as pd
 from google.cloud import bigquery, secretmanager
 
+from email_utils import send_report
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -181,6 +183,9 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
 def main():
     sync_time = datetime.now(timezone.utc)
     log.info("=== Plex → BigQuery ETL job starting ===")
+    events = []
+    rows_fetched = 0
+    rows_written = 0
 
     # Fetch credentials from Secret Manager
     log.info("Fetching credentials from Secret Manager...")
@@ -188,6 +193,7 @@ def main():
         user         = get_secret(SECRET_USER)
         password     = get_secret(SECRET_PASSWORD)
         company_code = get_secret(SECRET_COMPANY)
+        events.append("Fetched credentials from Secret Manager")
     except Exception as exc:
         log.exception("Failed to fetch credentials from Secret Manager.")
         raise RuntimeError("Secret Manager fetch failed.") from exc
@@ -196,6 +202,7 @@ def main():
     try:
         bq = bigquery.Client(project=GCP_PROJECT)
         ensure_metadata_table(bq)
+        events.append("Initialized BigQuery and metadata table")
     except Exception as exc:
         log.exception("Failed to initialize BigQuery client or metadata table.")
         raise RuntimeError("BigQuery initialization failed.") from exc
@@ -211,6 +218,7 @@ def main():
     if query_cutoff.tzinfo is None:
         query_cutoff = query_cutoff.replace(tzinfo=timezone.utc)
     log.info(f"Using backfill window: {BACKFILL_MINUTES} minutes")
+    events.append(f"Using backfill window: {BACKFILL_MINUTES} minutes")
 
     # Connect to Plex and pull data
     try:
@@ -237,6 +245,8 @@ def main():
             utc=True,
             errors="coerce",
         )
+    rows_fetched = len(df)
+    events.append(f"Fetched {rows_fetched} rows from Plex")
 
     # Write to BigQuery
     try:
@@ -244,6 +254,10 @@ def main():
     except Exception as exc:
         log.exception("BigQuery write failed.")
         raise RuntimeError("BigQuery write failed.") from exc
+    if rows_written > 0:
+        events.append(f"Wrote {rows_written} rows to BigQuery")
+    else:
+        events.append("No new rows to write")
 
     # Update sync metadata
     if rows_written > 0:
@@ -255,12 +269,61 @@ def main():
             max_modified = sync_time
         try:
             update_last_sync(bq, sync_time, rows_written, max_modified)
+            events.append("Updated sync metadata")
         except Exception as exc:
             log.exception("Failed to update sync metadata.")
             raise RuntimeError("Metadata update failed.") from exc
+    else:
+        events.append("No metadata update needed")
 
     log.info(f"=== ETL job complete — {rows_written} rows written ===")
+    return {
+        "rows_fetched": rows_fetched,
+        "rows_written": rows_written,
+        "events": events,
+    }
+
+
+def run_and_report():
+    start_time = datetime.now(timezone.utc)
+    error = None
+    result = {
+        "rows_fetched": 0,
+        "rows_written": 0,
+        "events": [],
+    }
+
+    try:
+        result = main()
+        status = "success"
+        errors = []
+    except Exception as exc:
+        error = exc
+        status = "failed"
+        errors = [str(exc)]
+
+    end_time = datetime.now(timezone.utc)
+    report = {
+        "status": status,
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "duration_seconds": int((end_time - start_time).total_seconds()),
+        "rows_fetched": result.get("rows_fetched", 0),
+        "rows_written": result.get("rows_written", 0),
+        "events": result.get("events", []),
+        "errors": errors,
+    }
+
+    try:
+        send_report(report)
+    except Exception:
+        log.exception("Failed to send report email.")
+
+    if error is not None:
+        raise error
+
+    return report
 
 
 if __name__ == "__main__":
-    main()
+    run_and_report()

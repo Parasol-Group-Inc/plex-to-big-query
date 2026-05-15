@@ -18,6 +18,7 @@ How it works (plain English)
 2. The job connects to Plex using the ODBC driver.
 3. New and updated records are pulled.
 4. The data is written into BigQuery.
+5. Optional: a SendGrid email report summarizes the run.
 
 Architecture (simple view)
 --------------------------

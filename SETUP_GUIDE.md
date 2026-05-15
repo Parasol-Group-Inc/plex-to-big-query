@@ -82,6 +82,18 @@ Operational notes
 - Rotate Plex credentials by updating Secret Manager entries.
 - If Plex restricts IPs, use a VPC connector and NAT for fixed egress IPs.
 
+Email report (optional)
+-----------------------
+You can send a run summary email via SendGrid.
+Required env vars on the Cloud Run job:
+- SENDGRID_ENABLED=true
+- SENDGRID_API_KEY=your_api_key (recommended to source from Secret Manager)
+- REPORT_FROM_EMAIL=sender@example.com
+- REPORT_TO_EMAILS=person1@example.com,person2@example.com
+Optional:
+- REPORT_SUBJECT="Plex to BigQuery ETL Report"
+- REPORT_TEMPLATE=report.html
+
 Support checklist for Plex staff
 --------------------------------
 Share this with Plex support:

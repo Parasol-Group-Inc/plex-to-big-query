@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Plex to BigQuery ETL Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; color: #1f2937; }
+      h1 { font-size: 20px; margin-bottom: 6px; }
+      .status { font-weight: bold; }
+      .success { color: #0f766e; }
+      .failed { color: #b91c1c; }
+      .section { margin-top: 16px; }
+      .label { color: #6b7280; }
+      ul { padding-left: 18px; }
+    </style>
+  </head>
+  <body>
+    <h1>Plex to BigQuery ETL Report</h1>
+    <div class="section">
+      <div><span class="label">Status:</span> <span class="status {{status_class}}">{{status}}</span></div>
+      <div><span class="label">Start:</span> {{start_time}}</div>
+      <div><span class="label">End:</span> {{end_time}}</div>
+      <div><span class="label">Duration:</span> {{duration_seconds}} seconds</div>
+      <div><span class="label">Rows fetched:</span> {{rows_fetched}}</div>
+      <div><span class="label">Rows written:</span> {{rows_written}}</div>
+    </div>
+
+    <div class="section">
+      <div class="label">What went well</div>
+      {{events_html}}
+    </div>
+
+    <div class="section">
+      <div class="label">Errors</div>
+      {{errors_html}}
+    </div>
+  </body>
+</html>

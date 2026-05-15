@@ -10,6 +10,9 @@ google-cloud-bigquery==3.25.0
 # Secret Manager — fetch ODBC credentials at runtime
 google-cloud-secret-manager==2.20.0
 
+# SendGrid — email report delivery
+sendgrid==6.11.0
+
 # DataFrame-based BQ writes and data wrangling
 pandas==2.2.2
 

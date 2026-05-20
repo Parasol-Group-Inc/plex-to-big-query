@@ -1,0 +1,11 @@
+services:
+  etl:
+    build: .
+    env_file:
+      - .env
+    environment:
+      OUTPUT_MODE: local
+      OUTPUT_DIR: /output
+    volumes:
+      - ./output:/output
+    restart: "no"

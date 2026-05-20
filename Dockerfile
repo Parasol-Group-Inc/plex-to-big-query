@@ -40,5 +40,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── App ───────────────────────────────────────────────────────────────────────
 WORKDIR /app
 COPY main.py .
+COPY email_utils.py .
+COPY templates/ templates/
+RUN mkdir -p /output
 
 CMD ["python", "main.py"]

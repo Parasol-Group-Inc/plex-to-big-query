@@ -1,0 +1,66 @@
+# terraform.tfvars.example
+# Copy this file to terraform.tfvars and fill in all values.
+# terraform.tfvars is gitignored and must never be committed.
+#
+#   cd terraform
+#   cp terraform.tfvars.example terraform.tfvars
+#   # edit terraform.tfvars
+#   terraform init
+#   terraform apply -var-file=terraform.tfvars
+
+# ── GCP project ───────────────────────────────────────────────────────────────
+# Your GCP project ID (not the display name or project number).
+# Find it: gcloud config get-value project
+gcp_project = "your-gcp-project-id"
+
+# GCP region for Cloud Run, Cloud Scheduler, and Artifact Registry.
+# Cloud Run and Cloud Scheduler must be in the same region.
+gcp_region = "us-central1"
+
+# ── BigQuery ──────────────────────────────────────────────────────────────────
+# Dataset name — will be created by Terraform.
+bq_dataset = "plex_dataset"
+
+# BigQuery multi-region location. US or EU recommended.
+bq_location = "US"
+
+# Target table where Plex data is appended on each run.
+# Must match BQ_TABLE in the Cloud Run job environment.
+bq_table = "production_orders"
+
+# Internal metadata table that tracks incremental sync state.
+metadata_table = "sync_metadata"
+
+# ── Plex ODBC ─────────────────────────────────────────────────────────────────
+# DSN name — must match a [section] in config/odbc.ini.
+# Use PlexProduction for production, PlexTest for staging.
+plex_dsn = "PlexProduction"
+
+# Minutes to backfill behind the last sync timestamp.
+# Prevents missed rows at the sync boundary. Default 5 is safe.
+backfill_minutes = 5
+
+# ── Secret Manager secret names ───────────────────────────────────────────────
+# These are the SECRET NAMES (identifiers), NOT the actual credential values.
+# After terraform apply, add the real values using the secret_version_commands output.
+secret_odbc_user     = "plex-odbc-user"
+secret_odbc_password = "plex-odbc-password"
+secret_company_code  = "plex-company-code"
+
+# ── Cloud Run ─────────────────────────────────────────────────────────────────
+cloud_run_job = "plex-etl"
+
+# Full container image URL in Artifact Registry.
+# Format: REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:TAG
+# On first apply, Artifact Registry won't exist yet — set a placeholder and
+# re-apply after pushing the image (see DEPLOYMENT_GUIDE.md Step 2).
+image_url = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest"
+
+# ── Cloud Scheduler ───────────────────────────────────────────────────────────
+scheduler_job       = "plex-daily-sync"
+scheduler_cron      = "0 2 * * *"   # 2 AM UTC daily — adjust to your needs
+scheduler_time_zone = "UTC"          # Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+
+# ── IAM / infrastructure ──────────────────────────────────────────────────────
+service_account_name   = "plex-etl-sa"
+artifact_registry_repo = "plex-pipeline"

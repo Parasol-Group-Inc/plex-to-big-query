@@ -1,0 +1,4 @@
+driver/
+.env
+output/
+terraform/terraform.tfvars

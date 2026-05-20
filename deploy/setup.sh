@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # deploy/setup.sh
 #
+# DEPRECATED — use Terraform instead.
+# This script is superseded by terraform/ and is no longer maintained.
+# See DEPLOYMENT_GUIDE.md for the current setup process.
+#
+# Kept for reference only. Do not use for new deployments.
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # One-time GCP infrastructure setup for the Plex → BigQuery ETL pipeline.
 # Run this once per environment (test / production).
 #

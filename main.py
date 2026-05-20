@@ -16,16 +16,19 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-GCP_PROJECT      = os.environ["GCP_PROJECT"]         # e.g. "vox-nutrition-prod"
-BQ_DATASET       = os.environ["BQ_DATASET"]          # e.g. "plex_dataset"
-BQ_TABLE         = os.environ["BQ_TABLE"]            # e.g. "production_orders"
+OUTPUT_MODE      = os.environ.get("OUTPUT_MODE", "bigquery").lower()  # "local" | "bigquery"
+OUTPUT_DIR       = os.environ.get("OUTPUT_DIR", "/output")
+
+GCP_PROJECT      = os.environ.get("GCP_PROJECT", "")
+BQ_DATASET       = os.environ.get("BQ_DATASET", "")
+BQ_TABLE         = os.environ.get("BQ_TABLE", "plex_extract")
 PLEX_DSN         = os.environ.get("PLEX_DSN", "PlexProduction")
 METADATA_TABLE   = os.environ.get("METADATA_TABLE", "sync_metadata")
 BACKFILL_MINUTES = int(os.environ.get("BACKFILL_MINUTES", "5"))
 
-SECRET_USER      = os.environ["SECRET_ODBC_USER"]    # Secret Manager secret name
-SECRET_PASSWORD  = os.environ["SECRET_ODBC_PASSWORD"]
-SECRET_COMPANY   = os.environ["SECRET_COMPANY_CODE"]
+SECRET_USER      = os.environ.get("SECRET_ODBC_USER",    "plex-odbc-user")
+SECRET_PASSWORD  = os.environ.get("SECRET_ODBC_PASSWORD", "plex-odbc-password")
+SECRET_COMPANY   = os.environ.get("SECRET_COMPANY_CODE",  "plex-company-code")
 
 
 # ── Secret Manager ────────────────────────────────────────────────────────────
@@ -35,6 +38,15 @@ def get_secret(secret_name: str) -> str:
     name = f"projects/{GCP_PROJECT}/secrets/{secret_name}/versions/latest"
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
+
+
+def get_credential(direct_env: str, secret_name: str) -> str:
+    """Return a direct env var value if set, otherwise fetch from Secret Manager."""
+    direct = os.environ.get(direct_env)
+    if direct:
+        log.info(f"Using direct credential from {direct_env}.")
+        return direct
+    return get_secret(secret_name)
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -179,6 +191,21 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
     return len(df)
 
 
+# ── CSV writer (local mode) ───────────────────────────────────────────────────
+def write_to_csv(df: pd.DataFrame, output_dir: str, table_name: str) -> int:
+    if df.empty:
+        log.info("No rows to write — skipping CSV output.")
+        return 0
+
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filepath  = os.path.join(output_dir, f"{table_name}_{timestamp}.csv")
+
+    df.to_csv(filepath, index=False)
+    log.info(f"Wrote {len(df)} rows to {filepath}")
+    return len(df)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     sync_time = datetime.now(timezone.utc)
@@ -190,29 +217,34 @@ def main():
     # Fetch credentials from Secret Manager
     log.info("Fetching credentials from Secret Manager...")
     try:
-        user         = get_secret(SECRET_USER)
-        password     = get_secret(SECRET_PASSWORD)
-        company_code = get_secret(SECRET_COMPANY)
+        user         = get_credential("PLEX_ODBC_USER",     SECRET_USER)
+        password     = get_credential("PLEX_ODBC_PASSWORD",  SECRET_PASSWORD)
+        company_code = get_credential("PLEX_COMPANY_CODE",   SECRET_COMPANY)
         events.append("Fetched credentials from Secret Manager")
     except Exception as exc:
         log.exception("Failed to fetch credentials from Secret Manager.")
         raise RuntimeError("Secret Manager fetch failed.") from exc
 
-    # Init BigQuery client
-    try:
-        bq = bigquery.Client(project=GCP_PROJECT)
-        ensure_metadata_table(bq)
-        events.append("Initialized BigQuery and metadata table")
-    except Exception as exc:
-        log.exception("Failed to initialize BigQuery client or metadata table.")
-        raise RuntimeError("BigQuery initialization failed.") from exc
+    # Init BigQuery client and get incremental sync cursor (bigquery mode only)
+    if OUTPUT_MODE == "bigquery":
+        try:
+            bq = bigquery.Client(project=GCP_PROJECT)
+            ensure_metadata_table(bq)
+            events.append("Initialized BigQuery and metadata table")
+        except Exception as exc:
+            log.exception("Failed to initialize BigQuery client or metadata table.")
+            raise RuntimeError("BigQuery initialization failed.") from exc
+        try:
+            last_sync = get_last_sync(bq)
+        except Exception as exc:
+            log.exception("Failed to fetch last sync metadata.")
+            raise RuntimeError("Metadata lookup failed.") from exc
+    else:
+        bq = None
+        last_sync = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        log.info("LOCAL MODE — skipping BigQuery, full extract from epoch.")
+        events.append("Local mode — full extract")
 
-    # Get last sync timestamp for incremental load
-    try:
-        last_sync = get_last_sync(bq)
-    except Exception as exc:
-        log.exception("Failed to fetch last sync metadata.")
-        raise RuntimeError("Metadata lookup failed.") from exc
     backfill_window = timedelta(minutes=BACKFILL_MINUTES)
     query_cutoff = last_sync - backfill_window
     if query_cutoff.tzinfo is None:
@@ -248,19 +280,27 @@ def main():
     rows_fetched = len(df)
     events.append(f"Fetched {rows_fetched} rows from Plex")
 
-    # Write to BigQuery
-    try:
-        rows_written = write_to_bigquery(bq, df)
-    except Exception as exc:
-        log.exception("BigQuery write failed.")
-        raise RuntimeError("BigQuery write failed.") from exc
-    if rows_written > 0:
-        events.append(f"Wrote {rows_written} rows to BigQuery")
+    # Write output
+    if OUTPUT_MODE == "bigquery":
+        try:
+            rows_written = write_to_bigquery(bq, df)
+        except Exception as exc:
+            log.exception("BigQuery write failed.")
+            raise RuntimeError("BigQuery write failed.") from exc
+        if rows_written > 0:
+            events.append(f"Wrote {rows_written} rows to BigQuery")
+        else:
+            events.append("No new rows to write")
     else:
-        events.append("No new rows to write")
+        try:
+            rows_written = write_to_csv(df, OUTPUT_DIR, BQ_TABLE)
+        except Exception as exc:
+            log.exception("CSV write failed.")
+            raise RuntimeError("CSV write failed.") from exc
+        events.append(f"Wrote {rows_written} rows to {OUTPUT_DIR}")
 
-    # Update sync metadata
-    if rows_written > 0:
+    # Update sync metadata (bigquery mode only)
+    if OUTPUT_MODE == "bigquery" and rows_written > 0:
         if "Modified_Date" in df.columns:
             max_modified = df["Modified_Date"].max()
             if pd.isna(max_modified):
@@ -314,10 +354,11 @@ def run_and_report():
         "errors": errors,
     }
 
-    try:
-        send_report(report)
-    except Exception:
-        log.exception("Failed to send report email.")
+    if OUTPUT_MODE == "bigquery":
+        try:
+            send_report(report)
+        except Exception:
+            log.exception("Failed to send report email.")
 
     if error is not None:
         raise error

@@ -12,7 +12,7 @@ RUN dpkg --add-architecture i386 && \
         unixodbc-dev \
         ksh \
         libc6:i386 \
-        libncurses5:i386 \
+        libncurses6:i386 \
         libstdc++6:i386 && \
     rm -rf /var/lib/apt/lists/*
 
@@ -26,6 +26,7 @@ RUN dpkg --add-architecture i386 && \
 #     oaodbc64.sh       ← env setup script (not needed at runtime)
 #     rscshell          ← 32-bit utility (needs i386 libs above)
 COPY driver/ /usr/oaodbc81/
+ENV LD_LIBRARY_PATH=/usr/oaodbc81/lib64
 
 # ── ODBC config ───────────────────────────────────────────────────────────────
 # odbcinst.ini  : registers the driver with unixODBC

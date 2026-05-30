@@ -105,6 +105,15 @@ resource "google_bigquery_table" "sync_metadata" {
   ])
 }
 
+# IAM token auth — primary secret
+resource "google_secret_manager_secret" "access_token" {
+  secret_id = var.secret_access_token
+  replication {
+    auto {}
+  }
+}
+
+# Username/password auth — kept for fallback / future use
 resource "google_secret_manager_secret" "odbc_user" {
   secret_id  = var.secret_odbc_user
   replication {
@@ -147,17 +156,31 @@ resource "google_cloud_run_v2_job" "etl" {
           name  = "BQ_TABLE"
           value = var.bq_table
         }
+        # Plex connection — IAM auth
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        # Plex connection — username/password auth (fallback)
         env {
           name  = "PLEX_DSN"
           value = var.plex_dsn
-        }
-        env {
-          name  = "METADATA_TABLE"
-          value = var.metadata_table
-        }
-        env {
-          name  = "BACKFILL_MINUTES"
-          value = tostring(var.backfill_minutes)
         }
         env {
           name  = "SECRET_ODBC_USER"
@@ -170,6 +193,15 @@ resource "google_cloud_run_v2_job" "etl" {
         env {
           name  = "SECRET_COMPANY_CODE"
           value = var.secret_company_code
+        }
+        # Sync config
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
         }
       }
       max_retries = 3

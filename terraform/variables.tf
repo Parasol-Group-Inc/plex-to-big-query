@@ -31,10 +31,27 @@ variable "metadata_table" {
   default     = "sync_metadata"
 }
 
+variable "plex_host" {
+  type        = string
+  description = "Plex ODBC hostname (odbc.plex.com for prod, vox.odbc.plex.com for test)"
+  default     = "odbc.plex.com"
+}
+
+variable "plex_odbc_user" {
+  type        = string
+  description = "Plex login in username.company format (e.g. edominguez.parasol)"
+}
+
 variable "plex_dsn" {
   type        = string
-  description = "ODBC DSN name"
+  description = "ODBC DSN name — used for username/password auth fallback only"
   default     = "PlexProduction"
+}
+
+variable "secret_access_token" {
+  type        = string
+  description = "Secret Manager secret name for the Plex IAM access token"
+  default     = "plex-access-token"
 }
 
 variable "backfill_minutes" {

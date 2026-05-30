@@ -23,12 +23,16 @@ GCP_PROJECT      = os.environ.get("GCP_PROJECT", "")
 BQ_DATASET       = os.environ.get("BQ_DATASET", "")
 BQ_TABLE         = os.environ.get("BQ_TABLE", "plex_extract")
 PLEX_DSN         = os.environ.get("PLEX_DSN", "PlexProduction")
+PLEX_HOST        = os.environ.get("PLEX_HOST", "")
+PLEX_PORT        = os.environ.get("PLEX_PORT", "19995")
+PLEX_SERVER_DS   = os.environ.get("PLEX_SERVER_DATASOURCE", "ReportDataSource")
 METADATA_TABLE   = os.environ.get("METADATA_TABLE", "sync_metadata")
 BACKFILL_MINUTES = int(os.environ.get("BACKFILL_MINUTES", "5"))
 
 SECRET_USER      = os.environ.get("SECRET_ODBC_USER",    "plex-odbc-user")
 SECRET_PASSWORD  = os.environ.get("SECRET_ODBC_PASSWORD", "plex-odbc-password")
 SECRET_COMPANY   = os.environ.get("SECRET_COMPANY_CODE",  "plex-company-code")
+SECRET_TOKEN     = os.environ.get("SECRET_ACCESS_TOKEN",  "plex-access-token")
 
 
 # ── Secret Manager ────────────────────────────────────────────────────────────
@@ -116,51 +120,63 @@ def ensure_metadata_table(bq: bigquery.Client):
 
 
 # ── ODBC connection ───────────────────────────────────────────────────────────
-def get_odbc_connection(user: str, password: str, company_code: str) -> pyodbc.Connection:
+def get_odbc_connection(user: str, password: str, company_code: str, access_token: str = "") -> pyodbc.Connection:
     """
-    Connect to Plex via ODBC using the DSN defined in /etc/odbc.ini.
-    CompanyCode is injected at runtime from Secret Manager rather than
-    hardcoded in the config file.
+    Connect to Plex via ODBC.
+
+    IAM token auth: uses a driver-direct connection string (bypasses DSN lookup)
+    because unixODBC does not forward driver-specific attributes like
+    CustomProperties from the DSN file to the driver.
+
+    Username/password auth: uses the DSN defined in /etc/odbc.ini.
     """
-    conn_str = (
-        f"DSN={PLEX_DSN};"
-        f"UID={user};"
-        f"PWD={password};"
-        f"CustomProperties=CompanyCode={company_code};"
-    )
-    log.info(f"Connecting to Plex via DSN: {PLEX_DSN}")
+    if access_token:
+        # Driver-direct: all attributes passed explicitly so CustomProperties
+        # (which contains semicolons) is at the END of the string — no escaping needed.
+        host = PLEX_HOST or ("vox.odbc.plex.com" if "test" in PLEX_DSN.lower() else "odbc.plex.com")
+        conn_str = (
+            "DRIVER={/usr/oaodbc81/lib64/ivoa27.so};"
+            f"HOST={host};"
+            f"PORT={PLEX_PORT};"
+            f"ServerDataSource={PLEX_SERVER_DS};"
+            "Encrypted=1;"
+            "UseLDAP=0;"
+            f"UID={user};"
+            "PWD=;"
+            f"CustomProperties=authmethod=iam; accesstoken={access_token}"
+        )
+        log.info(f"Connecting driver-direct to {host}:{PLEX_PORT} (IAM token auth, UID={user})")
+    else:
+        conn_str = (
+            f"DSN={PLEX_DSN};"
+            f"UID={user};"
+            f"PWD={password};"
+            f"CustomProperties=CompanyCode={company_code};"
+        )
+        log.info(f"Connecting via DSN={PLEX_DSN} (username/password auth)")
     conn = pyodbc.connect(conn_str, timeout=30)
     log.info("ODBC connection established.")
     return conn
 
 
 # ── Plex query ────────────────────────────────────────────────────────────────
-def query_plex(conn: pyodbc.Connection, last_sync: datetime) -> pd.DataFrame:
-    """
-    Pull records from Plex modified since the last sync.
+# Plex view: Part_v_Part — full extract of Raw Materials part master.
+# No incremental date filter; run as a full refresh each time.
+PLEX_VIEW      = "Part_v_Part"
+PLEX_DATE_COL  = ""   # no date column — full refresh only
 
-    Replace the SQL below with the actual Plex report/view name and
-    columns provided by the implementors. The modified_date filter
-    keeps each run incremental — only new or changed rows are pulled.
-    """
-    sql = f"""
-        SELECT
-            P.Plexus_Customer_No,
-            P.Part_No,
-            P.Part_Name,
-            P.Quantity,
-            P.Status,
-            P.Modified_Date
-        FROM
-            Production_Order_v_Production_Order AS P
-        WHERE
-            P.Modified_Date > ?
-        ORDER BY
-            P.Modified_Date ASC
-    """
-    log.info(f"Querying Plex for records modified after {last_sync}...")
-    df = pd.read_sql(sql, conn, params=[last_sync])
-    log.info(f"Fetched {len(df)} rows from Plex.")
+
+def query_plex(conn: pyodbc.Connection, last_sync: datetime) -> pd.DataFrame:
+    """Pull all Raw Materials parts from the Plex part master."""
+    sql = f"SELECT * FROM {PLEX_VIEW} WHERE Part_Type = 'Raw Materials' ORDER BY Part_No ASC"
+    log.info(f"Querying Plex [{PLEX_VIEW}] for Raw Materials parts...")
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    columns = [col[0] for col in cursor.description]
+    rows = cursor.fetchall()
+    df = pd.DataFrame.from_records(rows, columns=columns)
+    cursor.close()
+    log.info(f"Fetched {len(df)} Raw Materials parts from Plex.")
     return df
 
 
@@ -214,16 +230,30 @@ def main():
     rows_fetched = 0
     rows_written = 0
 
-    # Fetch credentials from Secret Manager
-    log.info("Fetching credentials from Secret Manager...")
+    # Fetch credentials — IAM token takes priority over username/password
+    log.info("Fetching credentials...")
     try:
-        user         = get_credential("PLEX_ODBC_USER",     SECRET_USER)
-        password     = get_credential("PLEX_ODBC_PASSWORD",  SECRET_PASSWORD)
-        company_code = get_credential("PLEX_COMPANY_CODE",   SECRET_COMPANY)
-        events.append("Fetched credentials from Secret Manager")
+        access_token = os.environ.get("PLEX_ACCESS_TOKEN", "")
+        if not access_token and OUTPUT_MODE == "bigquery":
+            try:
+                access_token = get_secret(SECRET_TOKEN)
+            except Exception:
+                pass  # fall through to username/password auth
+
+        if access_token:
+            user         = os.environ.get("PLEX_ODBC_USER", "")
+            password     = ""
+            company_code = ""
+            log.info("Using IAM access token for Plex authentication.")
+        else:
+            user         = get_credential("PLEX_ODBC_USER",    SECRET_USER)
+            password     = get_credential("PLEX_ODBC_PASSWORD", SECRET_PASSWORD)
+            company_code = get_credential("PLEX_COMPANY_CODE",  SECRET_COMPANY)
+            log.info("Using username/password for Plex authentication.")
+        events.append("Fetched credentials")
     except Exception as exc:
-        log.exception("Failed to fetch credentials from Secret Manager.")
-        raise RuntimeError("Secret Manager fetch failed.") from exc
+        log.exception("Failed to fetch credentials.")
+        raise RuntimeError("Credential fetch failed.") from exc
 
     # Init BigQuery client and get incremental sync cursor (bigquery mode only)
     if OUTPUT_MODE == "bigquery":
@@ -254,7 +284,7 @@ def main():
 
     # Connect to Plex and pull data
     try:
-        conn = get_odbc_connection(user, password, company_code)
+        conn = get_odbc_connection(user, password, company_code, access_token)
     except Exception as exc:
         log.exception("Failed to establish ODBC connection to Plex.")
         raise RuntimeError("ODBC connection failed.") from exc
@@ -271,12 +301,8 @@ def main():
         except Exception:
             log.warning("Failed to close ODBC connection cleanly.")
 
-    if not df.empty and "Modified_Date" in df.columns:
-        df["Modified_Date"] = pd.to_datetime(
-            df["Modified_Date"],
-            utc=True,
-            errors="coerce",
-        )
+    if not df.empty and PLEX_DATE_COL and PLEX_DATE_COL in df.columns:
+        df[PLEX_DATE_COL] = pd.to_datetime(df[PLEX_DATE_COL], utc=True, errors="coerce")
     rows_fetched = len(df)
     events.append(f"Fetched {rows_fetched} rows from Plex")
 
@@ -301,8 +327,8 @@ def main():
 
     # Update sync metadata (bigquery mode only)
     if OUTPUT_MODE == "bigquery" and rows_written > 0:
-        if "Modified_Date" in df.columns:
-            max_modified = df["Modified_Date"].max()
+        if "Ship_Date" in df.columns:
+            max_modified = df[PLEX_DATE_COL].max() if PLEX_DATE_COL and PLEX_DATE_COL in df.columns else sync_time
             if pd.isna(max_modified):
                 max_modified = sync_time
         else:

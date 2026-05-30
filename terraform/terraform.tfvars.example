@@ -26,23 +26,29 @@ bq_location = "US"
 
 # Target table where Plex data is appended on each run.
 # Must match BQ_TABLE in the Cloud Run job environment.
-bq_table = "production_orders"
+bq_table = "raw_materials_parts"
 
 # Internal metadata table that tracks incremental sync state.
 metadata_table = "sync_metadata"
 
 # ── Plex ODBC ─────────────────────────────────────────────────────────────────
-# DSN name — must match a [section] in config/odbc.ini.
-# Use PlexProduction for production, PlexTest for staging.
+# IAM auth — primary method (recommended)
+# Production Plex ODBC hostname.
+plex_host      = "odbc.plex.com"
+# Plex login in username.company format.
+plex_odbc_user = "edominguez.parasol"
+
+# Username/password auth — fallback only (leave as defaults if not using)
 plex_dsn = "PlexProduction"
 
-# Minutes to backfill behind the last sync timestamp.
-# Prevents missed rows at the sync boundary. Default 5 is safe.
+# Minutes to backfill behind the last sync timestamp (incremental tables only).
 backfill_minutes = 5
 
 # ── Secret Manager secret names ───────────────────────────────────────────────
-# These are the SECRET NAMES (identifiers), NOT the actual credential values.
-# After terraform apply, add the real values using the secret_version_commands output.
+# These are SECRET NAMES (identifiers), NOT the actual values.
+# After terraform apply, populate them:
+#   echo -n 'TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=PROJECT
+secret_access_token  = "plex-access-token"
 secret_odbc_user     = "plex-odbc-user"
 secret_odbc_password = "plex-odbc-password"
 secret_company_code  = "plex-company-code"

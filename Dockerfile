@@ -27,6 +27,9 @@ RUN dpkg --add-architecture i386 && \
 #     rscshell          ← 32-bit utility (needs i386 libs above)
 COPY driver/ /usr/oaodbc81/
 ENV LD_LIBRARY_PATH=/usr/oaodbc81/lib64
+# DataDirect reads these directly, independent of unixODBC
+ENV ODBCINI=/etc/odbc.ini
+ENV ODBCINSTINI=/etc/odbcinst.ini
 
 # ── ODBC config ───────────────────────────────────────────────────────────────
 # odbcinst.ini  : registers the driver with unixODBC
@@ -43,6 +46,8 @@ WORKDIR /app
 COPY main.py .
 COPY email_utils.py .
 COPY templates/ templates/
-RUN mkdir -p /output
+COPY entrypoint.sh /entrypoint.sh
+RUN mkdir -p /output && chmod +x /entrypoint.sh
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "main.py"]

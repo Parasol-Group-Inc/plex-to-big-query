@@ -12,18 +12,42 @@ By the end of this guide:
 
 ---
 
+## How the GCP pieces fit together
+
+If you're coming from frontend, here's a mental model for each service this pipeline uses:
+
+| GCP Service | Think of it like… | What it does here |
+|---|---|---|
+| **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
+| **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run job daily at 2 AM UTC |
+| **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
+| **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
+| **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |
+| **Terraform** | `npm install` for cloud infra | Provisions all of the above with a single `terraform apply` |
+
+> **Two kinds of tokens:** There are two separate authentication systems at play. The **Plex IAM token** (`plex-access-token`) is how the ETL script authenticates to the Plex ERP ODBC endpoint — you store this in Secret Manager. The **GCP service account** is how Cloud Run authenticates to GCP services (BigQuery, Secret Manager) — Terraform creates this automatically. You never see the service account token directly.
+
+---
+
 ## Prerequisites checklist
 
 - [ ] **Phase 1 complete** — `docker compose up` ran locally and produced a CSV in `./output/`
-- [ ] **GCP project** created (`vox-nutrition-prod`) with billing enabled
+- [ ] **GCP project** created with billing enabled
+  - In GCP Console: top-left dropdown → **New Project** → note the **Project ID** (like `vox-nutrition-prod`) — this is different from the display name
+  - Billing: GCP Console → **Billing** → link a billing account to the project
 - [ ] **`gcloud` CLI** installed and authenticated
   ```powershell
-  gcloud version
-  gcloud auth login
-  gcloud auth application-default login
+  # Install: https://cloud.google.com/sdk/docs/install (Windows installer)
+  gcloud version          # verify install
+  gcloud auth login       # opens browser — log in with your Google account
+  gcloud auth application-default login   # grants Terraform access to your credentials
+  gcloud config set project vox-nutrition-prod  # set your default project
   ```
 - [ ] **Terraform** >= 1.5.0 installed
   ```powershell
+  # Install: https://developer.hashicorp.com/terraform/install (Windows AMD64)
+  # Extract terraform.exe to a folder on your PATH (e.g. C:\tools\)
   terraform version
   ```
 - [ ] **Docker** running (same Docker Desktop from Phase 1)
@@ -31,151 +55,133 @@ By the end of this guide:
 
 ---
 
-## Step 1 — Update `main.py` for BigQuery full-refresh mode
+## Step 1 — Terraform setup
 
-The `Part_v_Part` data source is a full refresh (no date column). Before deploying, update `write_to_bigquery()` to use `WRITE_TRUNCATE` instead of `WRITE_APPEND` and define an explicit schema:
+Terraform reads a `terraform.tfvars` file (like a `.env` for infrastructure), creates all the GCP resources, and outputs the commands you'll need for the next steps.
 
-In [main.py](main.py), find `write_to_bigquery()` and replace the `LoadJobConfig`:
-
-```python
-job_config = bigquery.LoadJobConfig(
-    write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    schema=[
-        bigquery.SchemaField("Part_No",     "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("Rev",         "STRING"),
-        bigquery.SchemaField("Name",        "STRING"),
-        bigquery.SchemaField("Old_Part_No", "STRING"),
-        bigquery.SchemaField("Part_Type",   "STRING"),
-        bigquery.SchemaField("Part_Group",  "STRING"),
-        bigquery.SchemaField("Part_Status", "STRING"),
-        bigquery.SchemaField("Part_Source", "STRING"),
-        bigquery.SchemaField("Note",        "STRING"),
-    ],
-)
-```
-
-> For future incremental tables (with a date column), keep `WRITE_APPEND` and the schema for that view.
-
----
-
-## Step 2 — Terraform setup
-
-### 2.1 Create `terraform.tfvars`
+### 1.1 Create `terraform.tfvars`
 
 ```powershell
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Fill in `terraform.tfvars`:
+Open `terraform.tfvars` and fill in your values:
 
 ```hcl
-gcp_project    = "vox-nutrition-prod"
+gcp_project    = "your-gcp-project-id"       # ← the Project ID, not display name
 bq_dataset     = "plex_dataset"
 bq_table       = "raw_materials_parts"
-plex_host      = "odbc.plex.com"          # production Plex ODBC host
-plex_odbc_user = "edominguez.parasol"     # Plex login (username.company)
-image_url      = "us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:latest"
+plex_host      = "odbc.plex.com"              # production Plex ODBC host
+plex_odbc_user = "edominguez.parasol"         # Plex login (username.company)
+image_url      = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest"
 ```
 
-Leave `image_url` as the correct format even before the image is pushed — Terraform will create the Cloud Run job definition and you will push the image in Step 4.
+> **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 3. The job will show an error if triggered before then, which is expected.
 
-### 2.2 Initialize and apply
+### 1.2 Initialize and apply
 
 ```powershell
-terraform init
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
+terraform init      # downloads the Google provider plugin (like npm install)
+terraform plan -var-file=terraform.tfvars   # dry-run: shows what will be created
+terraform apply -var-file=terraform.tfvars  # actually creates everything
 ```
 
-Type `yes` when prompted. Takes 2–5 minutes (API enablement is slowest).
+Type `yes` when prompted. Takes 2–5 minutes — API enablement is the slowest part.
 
-> **If apply fails "API not yet enabled":** Wait 60 seconds and re-run. GCP API enablement is eventually consistent.
+**What Terraform just created:**
+- A service account (`plex-etl-sa`) with permissions to read secrets, write to BigQuery, and pull from Artifact Registry
+- A BigQuery dataset and `sync_metadata` table
+- An Artifact Registry repo to store your Docker image
+- Four Secret Manager secret containers (empty for now — you'll fill them in 1.3)
+- A Cloud Run job definition pointing at your image
+- A Cloud Scheduler job on a daily cron
 
-### 2.3 Store the IAM token in Secret Manager
+> **If apply fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `terraform apply`.
 
-Terraform creates the secret container but does not populate it. Add the token value:
+> **If apply fails "image not found":** That's expected on first run if the image hasn't been pushed yet. Push the image (Step 3) and re-run `terraform apply`.
+
+**Verify in GCP Console** (optional but helpful):
+- Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@...`
+- Console → **BigQuery** → your project → `plex_dataset` dataset
+- Console → **Secret Manager** → four secrets: `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — they're empty containers)
+
+### 1.3 Store the IAM token in Secret Manager
+
+Terraform creates the secret *container* but doesn't put any value in it. Add your Plex IAM token:
 
 ```powershell
-# Replace <token> with the value from PLEX_ACCESS_TOKEN in your .env
+# Replace the token string with the value from PLEX_ACCESS_TOKEN in your .env
 echo -n 'Mjc4MDIyN2Et...' | gcloud secrets versions add plex-access-token `
-  --data-file=- --project=vox-nutrition-prod
+  --data-file=- --project=your-gcp-project-id
 ```
 
-Verify:
+Verify it was stored:
 ```powershell
-gcloud secrets versions list plex-access-token --project=vox-nutrition-prod
-# Should show: VERSION  STATE    CREATED
-#              1        enabled  ...
+gcloud secrets versions list plex-access-token --project=your-gcp-project-id
+# Expected output:
+#   NAME                                                              STATE    CREATED
+#   projects/.../secrets/plex-access-token/versions/1    enabled  2026-06-...
 ```
 
-> **Token rotation:** Plex IAM tokens are long-lived but will eventually need refreshing. When you get a new token from Plex, add it as a new version — Cloud Run automatically picks up `latest`:
+> **GCP Console path:** Console → **Secret Manager** → `plex-access-token` → **Versions** tab → you should see version 1 with status "Enabled".
+
+> **Token rotation:** When you get a new Plex IAM token, add it as a new version — Cloud Run automatically picks up the `latest` version on the next run:
 > ```powershell
-> echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=vox-nutrition-prod
+> echo -n 'NEW_TOKEN_VALUE' | gcloud secrets versions add plex-access-token --data-file=- --project=your-gcp-project-id
 > ```
 
 ---
 
-## Step 3 — Update `main.py` Secret Manager retrieval
+## Step 2 — Build and push the Docker image
 
-In [main.py](main.py), the IAM auth branch currently reads `PLEX_ACCESS_TOKEN` directly from the environment. For Cloud Run, it must fall back to Secret Manager. Verify this block in `main()`:
-
-```python
-access_token = os.environ.get("PLEX_ACCESS_TOKEN", "")
-if not access_token and OUTPUT_MODE == "bigquery":
-    try:
-        access_token = get_secret(SECRET_TOKEN)
-    except Exception:
-        pass  # fall through to username/password auth
-```
-
-`SECRET_TOKEN` defaults to `"plex-access-token"` which matches the secret created in Step 2.3. No code change needed — this was already wired in.
-
----
-
-## Step 4 — Build and push the Docker image
-
-Run from the **repo root**:
+Run from the **repo root** (not the `terraform/` folder):
 
 ```powershell
-# Authenticate Docker to Artifact Registry
+# Authenticate Docker to your Artifact Registry region
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# Build (replace project ID and region if different)
-docker build -t us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:latest .
+# Build — replace the project ID with yours
+docker build -t us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest .
 
-# Push
-docker push us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:latest
+# Push to Artifact Registry (this is what Cloud Run will pull from)
+docker push us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest
 ```
 
-Then re-apply Terraform so the Cloud Run job picks up the real image:
+> This can take 3–8 minutes on first push because of the ODBC driver files. Subsequent pushes are faster (layer caching).
+
+Then re-apply Terraform so the Cloud Run job picks up the now-real image:
 
 ```powershell
 cd terraform
 terraform apply -var-file=terraform.tfvars
 ```
 
+**Verify in GCP Console:** Console → **Artifact Registry** → `plex-pipeline` repo → you should see an `etl` image with a recent timestamp.
+
 ---
 
-## Step 5 — Test the Cloud Run job manually
+## Step 3 — Test the Cloud Run job manually
 
 ```powershell
 gcloud run jobs execute plex-etl `
   --region=us-central1 `
-  --project=vox-nutrition-prod `
+  --project=your-gcp-project-id `
   --wait
 ```
+
+The `--wait` flag keeps the terminal open until the job finishes (or fails). It takes about 30–60 seconds.
 
 Check the logs:
 ```powershell
 gcloud logging read `
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" `
-  --project=vox-nutrition-prod `
+  --project=your-gcp-project-id `
   --limit=50 `
   --format="table(timestamp,textPayload)"
 ```
 
-Expected success log sequence:
+**Expected success log sequence:**
 ```
 [INFO] Fetching credentials...
 [INFO] Using IAM access token for Plex authentication.
@@ -183,79 +189,113 @@ Expected success log sequence:
 [INFO] ODBC connection established.
 [INFO] Querying Plex [Part_v_Part] for Raw Materials parts...
 [INFO] Fetched NNN Raw Materials parts from Plex.
-[INFO] Writing NNN rows to vox-nutrition-prod.plex_dataset.raw_materials_parts...
+[INFO] Writing NNN rows to your-gcp-project-id.plex_dataset.raw_materials_parts...
 [INFO] === ETL job complete — NNN rows written ===
 ```
 
+**GCP Console path for logs:** Console → **Cloud Run** → **Jobs** tab → `plex-etl` → click the execution → **Logs** tab. This is often easier to read than the CLI output.
+
 ---
 
-## Step 6 — Verify data in BigQuery
+## Step 4 — Verify data in BigQuery
 
 ```powershell
-bq query --project_id=vox-nutrition-prod --nouse_legacy_sql `
-  "SELECT COUNT(*) AS part_count FROM \`vox-nutrition-prod.plex_dataset.raw_materials_parts\`"
+bq query --project_id=your-gcp-project-id --nouse_legacy_sql `
+  "SELECT COUNT(*) AS part_count FROM \`your-gcp-project-id.plex_dataset.raw_materials_parts\`"
 
-bq query --project_id=vox-nutrition-prod --nouse_legacy_sql `
-  "SELECT Part_No, Name, Part_Status FROM \`vox-nutrition-prod.plex_dataset.raw_materials_parts\` LIMIT 10"
+bq query --project_id=your-gcp-project-id --nouse_legacy_sql `
+  "SELECT Part_No, Name, Part_Status FROM \`your-gcp-project-id.plex_dataset.raw_materials_parts\` LIMIT 10"
 ```
+
+**GCP Console path:** Console → **BigQuery** → your project → `plex_dataset` → `raw_materials_parts` → **Preview** tab shows the first 50 rows without writing a query.
 
 ---
 
-## Step 7 — Verify Cloud Scheduler
+## Step 5 — Verify Cloud Scheduler
 
 Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily):
 
 ```powershell
-gcloud scheduler jobs list --location=us-central1 --project=vox-nutrition-prod
+gcloud scheduler jobs list --location=us-central1 --project=your-gcp-project-id
 ```
 
-Trigger it immediately to confirm end-to-end:
+Trigger it immediately to confirm end-to-end scheduling works:
 ```powershell
-gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=vox-nutrition-prod
+gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=your-gcp-project-id
 ```
+
+> This runs the Cloud Run job the same way the scheduler will — it's a safe test to run anytime.
+
+**GCP Console path:** Console → **Cloud Scheduler** → `plex-daily-sync` → **Run now** button does the same thing.
 
 ---
 
-## Step 8 — CI/CD with Cloud Build (optional)
+## Step 6 — CI/CD with Cloud Build (optional)
 
-`deploy/cloudbuild.yaml` automates build → push → deploy on every push to `main`.
+Cloud Build automates build → push → deploy every time you push to `main`. Without it, you re-run the `docker build/push` commands manually after each code change.
 
-1. Store the driver in GCS (avoids committing binaries):
-   ```powershell
-   gcloud storage buckets create gs://vox-nutrition-prod-build-assets --project=vox-nutrition-prod
-   gcloud storage cp -r driver/* gs://vox-nutrition-prod-build-assets/plex-odbc-driver/
-   ```
+`deploy/cloudbuild.yaml` is already written. You just need to:
 
-2. Create a Cloud Build trigger in GCP Console:
-   - Source: this repo
-   - Branch: `main`
-   - Config: `deploy/cloudbuild.yaml`
+**1. Store the driver in GCS** (avoids committing the binary files to git):
+```powershell
+# Create the storage bucket
+gcloud storage buckets create gs://your-gcp-project-id-build-assets --project=your-gcp-project-id
+
+# Upload the driver folder
+gcloud storage cp -r driver/* gs://your-gcp-project-id-build-assets/plex-odbc-driver/
+```
+
+**2. Create a Cloud Build trigger in GCP Console:**
+- Console → **Cloud Build** → **Triggers** → **Create trigger**
+- Name: `plex-etl-deploy`
+- Region: `us-central1`
+- Event: **Push to a branch**
+- Source: connect your repo (GitHub/GitLab) — follow the OAuth flow
+- Branch: `^main$`
+- Configuration: **Cloud Build configuration file** → `deploy/cloudbuild.yaml`
+- Click **Create**
+
+After this, every `git push origin main` automatically rebuilds and redeploys the container. The trigger also runs a smoke test (executes the job and waits) — if the job fails, the build is marked as failed.
+
+**Verify in GCP Console:** Console → **Cloud Build** → **History** — shows each build with pass/fail status and full logs.
 
 ---
 
 ## Troubleshooting
 
-### Cloud Run job: `Secret not found` or `Permission denied on secret`
+### `Secret not found` or `Permission denied on secret`
 
-Verify the secret has a version (Step 2.3) and the service account has `roles/secretmanager.secretAccessor`:
+The secret exists but either (a) has no version yet or (b) the service account lacks access.
+
+Check that version 1 was added (Step 1.3):
 ```powershell
-gcloud projects get-iam-policy vox-nutrition-prod `
+gcloud secrets versions list plex-access-token --project=your-gcp-project-id
+```
+
+Check that the service account has the right permission:
+```powershell
+gcloud projects get-iam-policy your-gcp-project-id `
   --flatten="bindings[].members" `
   --filter="bindings.members:plex-etl-sa@"
 ```
+You should see `roles/secretmanager.secretAccessor` in the output.
 
 ### Cloud Run job: ODBC connection error
 
-- Confirm `PLEX_HOST` in `terraform.tfvars` is the correct production Plex ODBC endpoint
-- If Plex restricts by IP: Cloud Run uses variable egress IPs. Add a VPC connector + Cloud NAT for a fixed outbound IP, then allowlist it with Plex.
+- Confirm `plex_host` in `terraform.tfvars` is `odbc.plex.com` (not the test host)
+- Cloud Run uses variable egress IPs — if Plex restricts connections by IP, you need a VPC connector + Cloud NAT to get a fixed outbound IP, then allowlist it with Plex support. This is an uncommon but known issue.
 
-### Cloud Run job: `WRITE_TRUNCATE` wipes the table on error
+### Cloud Run job: table is empty after a failure
 
-If the job fails mid-write, the table may be empty on the next query. This is acceptable for a full-refresh table — the next successful run restores it. To avoid this window, load into a staging table first and swap with `CREATE OR REPLACE TABLE ... AS SELECT`.
+`WRITE_TRUNCATE` replaces the entire table on each run. If a job fails mid-write, the table may be empty until the next successful run. This is expected behavior for a full-refresh table — the next run restores it. To prevent data loss windows in production, the safer pattern is to load into a staging table first and swap with `CREATE OR REPLACE TABLE ... AS SELECT` — but that requires more code changes.
 
-### Terraform: `image not found / manifest unknown`
+### Terraform: `Error: Provider configuration`
 
-Push the Docker image (Step 4) before re-applying Terraform.
+Make sure you've run `gcloud auth application-default login` (not just `gcloud auth login`). Terraform uses Application Default Credentials, which is a separate login flow.
+
+### Terraform: `Error acquiring the state lock`
+
+Terraform state is stored locally in `terraform/terraform.tfstate`. If a previous `apply` was interrupted, a lock file may remain. Delete `terraform/.terraform.lock.hcl` and retry.
 
 ---
 
@@ -263,28 +303,32 @@ Push the Docker image (Step 4) before re-applying Terraform.
 
 **Rotate the IAM token:**
 ```powershell
-echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=vox-nutrition-prod
+echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=your-gcp-project-id
 ```
 
-**Change the sync schedule:**
-Update `scheduler_cron` in `terraform.tfvars`, then `terraform apply`.
-
-**Pause the pipeline:**
+**Change the sync schedule** (e.g. run at 6 AM UTC instead of 2 AM):
+Update `scheduler_cron = "0 6 * * *"` in `terraform.tfvars`, then:
 ```powershell
-gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=vox-nutrition-prod
+cd terraform
+terraform apply -var-file=terraform.tfvars
+```
+
+**Pause the pipeline** (stops the scheduler without deleting anything):
+```powershell
+gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=your-gcp-project-id
 ```
 
 **Resume the pipeline:**
 ```powershell
-gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=vox-nutrition-prod
+gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=your-gcp-project-id
 ```
 
 **View recent job history:**
 ```powershell
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=vox-nutrition-prod
+gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=your-gcp-project-id
 ```
 
 **Add a second Plex table:**
-1. Add a new `query_plex()` variant (or make the view configurable via env var)
-2. Update `BQ_TABLE` in the Cloud Run job env, or run a second Cloud Run job for the second table
-3. Define the BigQuery schema for the new table
+1. Add a new `query_plex()` variant (or make the view name configurable via env var)
+2. Create a second Cloud Run job in Terraform pointing at the new table name
+3. Define the BigQuery schema for the new table explicitly

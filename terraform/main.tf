@@ -219,7 +219,7 @@ resource "google_cloud_scheduler_job" "etl" {
 
   http_target {
     http_method = "POST"
-    uri         = "https://${var.gcp_region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.etl.name}:run"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
     body        = base64encode("{}")
 
     oauth_token {

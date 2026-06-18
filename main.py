@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import pyodbc
 import pandas as pd
@@ -166,7 +166,7 @@ PLEX_VIEW      = "Part_v_Part"
 PLEX_DATE_COL  = ""   # no date column — full refresh only
 
 
-def query_plex(conn: pyodbc.Connection, last_sync: datetime) -> pd.DataFrame:
+def query_plex(conn: pyodbc.Connection) -> pd.DataFrame:
     """Pull all Raw Materials parts from the Plex part master."""
     sql = f"SELECT * FROM {PLEX_VIEW} WHERE Part_Type = 'Raw Materials' ORDER BY Part_No ASC"
     log.info(f"Querying Plex [{PLEX_VIEW}] for Raw Materials parts...")
@@ -183,8 +183,9 @@ def query_plex(conn: pyodbc.Connection, last_sync: datetime) -> pd.DataFrame:
 # ── BigQuery write ────────────────────────────────────────────────────────────
 def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
     """
-    Append the DataFrame to the target BigQuery table.
-    Uses WRITE_APPEND so incremental runs accumulate over time.
+    Replace the target BigQuery table with the current DataFrame.
+    Part_v_Part has no date column so every run is a full refresh —
+    WRITE_TRUNCATE replaces the table atomically each time.
     """
     if df.empty:
         log.info("No new rows to write — skipping BigQuery write.")
@@ -192,7 +193,7 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
 
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
     job_config = bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         autodetect=True,
     )
 
@@ -237,8 +238,8 @@ def main():
         if not access_token and OUTPUT_MODE == "bigquery":
             try:
                 access_token = get_secret(SECRET_TOKEN)
-            except Exception:
-                pass  # fall through to username/password auth
+            except Exception as sm_err:
+                log.warning("Could not fetch IAM token from Secret Manager (%s) — falling back to username/password auth.", sm_err)
 
         if access_token:
             user         = os.environ.get("PLEX_ODBC_USER", "")
@@ -255,7 +256,7 @@ def main():
         log.exception("Failed to fetch credentials.")
         raise RuntimeError("Credential fetch failed.") from exc
 
-    # Init BigQuery client and get incremental sync cursor (bigquery mode only)
+    # Init BigQuery client (bigquery mode only)
     if OUTPUT_MODE == "bigquery":
         try:
             bq = bigquery.Client(project=GCP_PROJECT)
@@ -264,23 +265,10 @@ def main():
         except Exception as exc:
             log.exception("Failed to initialize BigQuery client or metadata table.")
             raise RuntimeError("BigQuery initialization failed.") from exc
-        try:
-            last_sync = get_last_sync(bq)
-        except Exception as exc:
-            log.exception("Failed to fetch last sync metadata.")
-            raise RuntimeError("Metadata lookup failed.") from exc
     else:
         bq = None
-        last_sync = datetime(1970, 1, 1, tzinfo=timezone.utc)
-        log.info("LOCAL MODE — skipping BigQuery, full extract from epoch.")
+        log.info("LOCAL MODE — skipping BigQuery, full extract.")
         events.append("Local mode — full extract")
-
-    backfill_window = timedelta(minutes=BACKFILL_MINUTES)
-    query_cutoff = last_sync - backfill_window
-    if query_cutoff.tzinfo is None:
-        query_cutoff = query_cutoff.replace(tzinfo=timezone.utc)
-    log.info(f"Using backfill window: {BACKFILL_MINUTES} minutes")
-    events.append(f"Using backfill window: {BACKFILL_MINUTES} minutes")
 
     # Connect to Plex and pull data
     try:
@@ -290,7 +278,7 @@ def main():
         raise RuntimeError("ODBC connection failed.") from exc
 
     try:
-        df = query_plex(conn, query_cutoff)
+        df = query_plex(conn)
     except Exception as exc:
         log.exception("Plex query failed.")
         raise RuntimeError("Plex query failed.") from exc
@@ -326,13 +314,9 @@ def main():
         events.append(f"Wrote {rows_written} rows to {OUTPUT_DIR}")
 
     # Update sync metadata (bigquery mode only)
+    # Part_v_Part has no date column (PLEX_DATE_COL is empty) — use sync_time as the watermark.
     if OUTPUT_MODE == "bigquery" and rows_written > 0:
-        if "Ship_Date" in df.columns:
-            max_modified = df[PLEX_DATE_COL].max() if PLEX_DATE_COL and PLEX_DATE_COL in df.columns else sync_time
-            if pd.isna(max_modified):
-                max_modified = sync_time
-        else:
-            max_modified = sync_time
+        max_modified = sync_time
         try:
             update_last_sync(bq, sync_time, rows_written, max_modified)
             events.append("Updated sync metadata")

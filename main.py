@@ -335,6 +335,13 @@ def main():
         "rows_fetched": rows_fetched,
         "rows_written": rows_written,
         "events": events,
+        "gcp_project": GCP_PROJECT,
+        "bq_dataset": BQ_DATASET,
+        "bq_table": BQ_TABLE,
+        "plex_view": PLEX_VIEW,
+        "plex_filter": PLEX_FILTER,
+        "plex_host": PLEX_HOST,
+        "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
 
@@ -345,6 +352,13 @@ def run_and_report():
         "rows_fetched": 0,
         "rows_written": 0,
         "events": [],
+        "gcp_project": GCP_PROJECT,
+        "bq_dataset": BQ_DATASET,
+        "bq_table": BQ_TABLE,
+        "plex_view": PLEX_VIEW,
+        "plex_filter": PLEX_FILTER,
+        "plex_host": PLEX_HOST,
+        "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
     try:

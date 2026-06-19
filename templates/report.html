@@ -1,38 +1,85 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Plex to BigQuery ETL Report</title>
-    <style>
-      body { font-family: Arial, sans-serif; color: #1f2937; }
-      h1 { font-size: 20px; margin-bottom: 6px; }
-      .status { font-weight: bold; }
-      .success { color: #0f766e; }
-      .failed { color: #b91c1c; }
-      .section { margin-top: 16px; }
-      .label { color: #6b7280; }
-      ul { padding-left: 18px; }
-    </style>
-  </head>
-  <body>
-    <h1>Plex to BigQuery ETL Report</h1>
-    <div class="section">
-      <div><span class="label">Status:</span> <span class="status {{status_class}}">{{status}}</span></div>
-      <div><span class="label">Start:</span> {{start_time}}</div>
-      <div><span class="label">End:</span> {{end_time}}</div>
-      <div><span class="label">Duration:</span> {{duration_seconds}} seconds</div>
-      <div><span class="label">Rows fetched:</span> {{rows_fetched}}</div>
-      <div><span class="label">Rows written:</span> {{rows_written}}</div>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+  body { margin: 0; padding: 0; background: #f4f6f8; font-family: Arial, sans-serif; color: #1f2937; }
+  .wrapper { width: 100%; padding: 24px 0; }
+  .card { max-width: 700px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
+  .header { background: #111827; color: #ffffff; padding: 18px 24px; }
+  .header h1 { margin: 0; font-size: 18px; }
+  .header p { margin: 6px 0 0; font-size: 12px; color: #d1d5db; }
+  .body { padding: 22px 24px; }
+  .badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }
+  .badge-success { background: #dcfce7; color: #166534; }
+  .badge-error { background: #fee2e2; color: #991b1b; }
+  .grid { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .grid td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
+  .grid td:first-child { width: 200px; color: #6b7280; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; padding: 14px 10px 4px; }
+  .mono { font-family: "Courier New", monospace; font-size: 12px; }
+  .link-row td { border-bottom: none; padding-top: 6px; padding-bottom: 6px; }
+  .link { color: #2563eb; text-decoration: none; font-size: 12px; }
+  .events-list { margin: 0; padding-left: 16px; font-size: 12px; color: #374151; }
+  .events-list li { padding: 2px 0; }
+  .error-text { color: #991b1b; font-size: 12px; font-family: "Courier New", monospace; }
+  .none-text { color: #9ca3af; font-size: 12px; font-style: italic; }
+  .footer { padding: 14px 24px; background: #f9fafb; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
+  .footer a { color: #6b7280; text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card">
+
+    <div class="header">
+      <h1>Plex &#x2192; BigQuery ETL</h1>
+      <p>{{execution_name}} &nbsp;|&nbsp; {{gcp_project}}</p>
     </div>
 
-    <div class="section">
-      <div class="label">What went well</div>
-      {{events_html}}
+    <div class="body">
+      <span class="badge {{status_class}}">{{status}}</span>
+
+      <table class="grid">
+
+        <tr><td colspan="2" class="section-label">Run</td></tr>
+        <tr><td>Date</td><td>{{run_date}}</td></tr>
+        <tr><td>Time (UTC)</td><td>{{run_time}}</td></tr>
+        <tr><td>Duration</td><td>{{duration_seconds}} seconds</td></tr>
+
+        <tr><td colspan="2" class="section-label">Source &mdash; Plex ERP</td></tr>
+        <tr><td>Host</td><td class="mono">{{plex_host}}</td></tr>
+        <tr><td>View / Report</td><td class="mono">{{plex_view}}</td></tr>
+        <tr><td>Filter</td><td class="mono">{{plex_filter}}</td></tr>
+        <tr><td>Rows fetched</td><td>{{rows_fetched}}</td></tr>
+
+        <tr><td colspan="2" class="section-label">Destination &mdash; BigQuery</td></tr>
+        <tr><td>Project</td><td class="mono">{{gcp_project}}</td></tr>
+        <tr><td>Dataset</td><td class="mono">{{bq_dataset}}</td></tr>
+        <tr><td>Table</td><td class="mono">{{bq_table}}</td></tr>
+        <tr><td>Rows written</td><td>{{rows_written}}</td></tr>
+
+        <tr><td colspan="2" class="section-label">Events</td></tr>
+        <tr><td colspan="2" style="padding: 10px;">{{events_html}}</td></tr>
+
+        <tr><td colspan="2" class="section-label">Errors</td></tr>
+        <tr><td colspan="2" style="padding: 10px;">{{errors_html}}</td></tr>
+
+        <tr><td colspan="2" class="section-label">Links</td></tr>
+        <tr class="link-row"><td>Cloud Run logs</td><td><a class="link" href="{{logs_url}}">{{logs_url_label}}</a></td></tr>
+        <tr class="link-row"><td>Repository</td><td><a class="link" href="{{repo_url}}">{{repo_url}}</a></td></tr>
+
+      </table>
     </div>
 
-    <div class="section">
-      <div class="label">Errors</div>
-      {{errors_html}}
+    <div class="footer">
+      <span>Automated notification &mdash; generated on every run.</span>
+      <a href="{{repo_url}}">plex-to-big-query</a>
     </div>
-  </body>
+
+  </div>
+</div>
+</body>
 </html>

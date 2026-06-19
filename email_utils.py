@@ -23,9 +23,9 @@ def _render_template(template: str, context: Dict[str, str]) -> str:
 
 def _list_to_html(items: List[str]) -> str:
     if not items:
-        return "<div>None</div>"
+        return "<span class=\"none-text\">None</span>"
     rows = "".join(f"<li>{item}</li>" for item in items)
-    return f"<ul>{rows}</ul>"
+    return f"<ul class=\"events-list\">{rows}</ul>"
 
 
 def _list_to_text(items: List[str]) -> str:
@@ -68,19 +68,56 @@ def send_report(report: Dict[str, object]) -> bool:
         return False
 
     status = str(report.get("status", "unknown")).lower()
-    status_class = "success" if status == "success" else "failed"
+    status_class = "badge-success" if status == "success" else "badge-error"
 
     events = [str(item) for item in report.get("events", [])]
     errors = [str(item) for item in report.get("errors", [])]
 
+    start_time_raw = str(report.get("start_time", ""))
+    run_date = start_time_raw[:10] if len(start_time_raw) >= 10 else start_time_raw
+    run_time = start_time_raw[11:19] if len(start_time_raw) >= 19 else start_time_raw
+
+    gcp_project    = str(report.get("gcp_project", os.environ.get("GCP_PROJECT", "")))
+    bq_dataset     = str(report.get("bq_dataset",  os.environ.get("BQ_DATASET",  "")))
+    bq_table       = str(report.get("bq_table",    os.environ.get("BQ_TABLE",    "")))
+    plex_view      = str(report.get("plex_view",   os.environ.get("PLEX_VIEW",   "")))
+    plex_filter    = str(report.get("plex_filter", os.environ.get("PLEX_FILTER", ""))) or "none"
+    plex_host      = str(report.get("plex_host",   os.environ.get("PLEX_HOST",   "")))
+    execution_name = str(report.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "local")))
+    repo_url       = "https://github.com/Parasol-Group-Inc/plex-to-big-query"
+
+    region = os.environ.get("CLOUD_RUN_REGION", "us-central1")
+    if execution_name and execution_name != "local":
+        logs_url = (
+            f"https://console.cloud.google.com/run/jobs/executions/details"
+            f"/{region}/{execution_name}?project={gcp_project}"
+        )
+        logs_url_label = execution_name
+    else:
+        logs_url = (
+            f"https://console.cloud.google.com/run/jobs/details"
+            f"/{region}/plex-etl?project={gcp_project}"
+        )
+        logs_url_label = "View in Cloud Console"
+
     context = {
         "status": status.upper(),
         "status_class": status_class,
-        "start_time": str(report.get("start_time", "")),
-        "end_time": str(report.get("end_time", "")),
+        "run_date": run_date,
+        "run_time": run_time,
         "duration_seconds": str(report.get("duration_seconds", "")),
         "rows_fetched": str(report.get("rows_fetched", "0")),
         "rows_written": str(report.get("rows_written", "0")),
+        "gcp_project": gcp_project,
+        "bq_dataset": bq_dataset,
+        "bq_table": bq_table,
+        "plex_view": plex_view,
+        "plex_filter": plex_filter,
+        "plex_host": plex_host,
+        "execution_name": execution_name,
+        "logs_url": logs_url,
+        "logs_url_label": logs_url_label,
+        "repo_url": repo_url,
         "events_html": _list_to_html(events),
         "errors_html": _list_to_html(errors),
     }
@@ -89,15 +126,22 @@ def send_report(report: Dict[str, object]) -> bool:
     html_content = _render_template(html_template, context)
     text_content = (
         f"Status: {context['status']}\n"
-        f"Start: {context['start_time']}\n"
-        f"End: {context['end_time']}\n"
-        f"Duration: {context['duration_seconds']} seconds\n"
-        f"Rows fetched: {context['rows_fetched']}\n"
-        f"Rows written: {context['rows_written']}\n\n"
-        "What went well:\n"
-        f"{_list_to_text(events)}\n\n"
-        "Errors:\n"
-        f"{_list_to_text(errors)}\n"
+        f"Date: {context['run_date']}  Time: {context['run_time']} UTC\n"
+        f"Duration: {context['duration_seconds']} seconds\n\n"
+        f"SOURCE\n"
+        f"  Host:         {context['plex_host']}\n"
+        f"  View/Report:  {context['plex_view']}\n"
+        f"  Filter:       {context['plex_filter']}\n"
+        f"  Rows fetched: {context['rows_fetched']}\n\n"
+        f"DESTINATION\n"
+        f"  Project:      {context['gcp_project']}\n"
+        f"  Dataset:      {context['bq_dataset']}\n"
+        f"  Table:        {context['bq_table']}\n"
+        f"  Rows written: {context['rows_written']}\n\n"
+        f"EVENTS\n{_list_to_text(events)}\n\n"
+        f"ERRORS\n{_list_to_text(errors)}\n\n"
+        f"Logs:  {context['logs_url']}\n"
+        f"Repo:  {context['repo_url']}\n"
     )
 
     message = Mail(

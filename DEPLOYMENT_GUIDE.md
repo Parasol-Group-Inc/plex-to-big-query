@@ -176,11 +176,37 @@ rm terraform.tfstate terraform.tfstate.backup   # wipe stale state
 
 ## Step 2 — Build and push the Docker image
 
+### About the Docker image
+
+The image contains everything needed to run the ETL in a Linux container:
+
+- **Python 3.11** (base image)
+- **unixODBC** driver manager — the Linux ODBC standard
+- **DataDirect OpenAccess SDK 8.1** — the actual Plex ODBC driver (`ivoa27.so`), copied from your local `driver/` folder into `/usr/oaodbc81/lib64/` inside the container
+- **Python packages** — `pyodbc`, `pandas`, `google-cloud-bigquery`, `sendgrid` (from `requirements.txt`)
+- **App code** — `main.py`, `email_utils.py`, `templates/`
+
+The ODBC driver is **not in git** — it must be present in `driver/` on your machine before building. If the folder is missing, `docker build` will fail at the `COPY driver/` step. Obtain the Linux 64-bit driver from the Plex support portal.
+
+### What "rebuilding" means
+
+Cloud Run always pulls `:latest` at the start of each execution. Once you push a new image, the next job run automatically uses it. No Terraform apply needed after a push-only change.
+
+You only need to rebuild when **code or files inside the image change**:
+- `main.py`, `email_utils.py`, `templates/report.html` — Python logic or email design
+- `requirements.txt` — a new Python package
+- `driver/` — a new Plex ODBC driver version
+- `config/odbcinst.ini` or `config/odbc.ini` — ODBC config changes
+
+For everything else (Plex host, table name, email addresses, company name), edit `terraform.tfvars` and run `terraform apply`. No rebuild needed.
+
+### Build and push commands
+
 Run from the **repo root** (not the `terraform/` folder):
 
 ```bash
 # Authenticate Docker to your Artifact Registry region
-gcloud auth configure-docker us-central1-docker.pkg.dev
+gcloud auth configure-docker us-central1-docker.pkg.dev --project=parasoldatalake
 
 # Build the image
 docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
@@ -189,7 +215,7 @@ docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:lat
 docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
 ```
 
-> This takes 3–8 minutes on first push because of the ODBC driver files. Subsequent pushes are faster (layer caching).
+> First push takes 3–8 minutes because of the ODBC driver files (~40 MB). Subsequent pushes are faster — Docker reuses cached layers for anything that didn't change.
 
 Then re-apply Terraform so the Cloud Run job picks up the now-real image:
 

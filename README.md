@@ -52,6 +52,7 @@ Cloud Run Job
 | gcloud / docker / terraform commands | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Tear down all GCP infrastructure | [docs/TEARDOWN.md](docs/TEARDOWN.md) |
 | Add tables, configure SendGrid | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Fix errors (copy-paste commands) | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Request ODBC access from Plex support | [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) |
 
 ---
@@ -79,6 +80,7 @@ Cloud Run Job
 | `docs/FRONTEND_GUIDE.md` | Architecture study guide with diagrams, written for frontend devs |
 | `docs/API_REFERENCE.md` | All gcloud, docker, terraform, and bq commands for this project |
 | `docs/OPERATIONS.md` | How to configure SendGrid and add more Plex tables/reports |
+| `docs/TROUBLESHOOTING.md` | Copy-paste fixes for every common error — secrets, ODBC, rebuild, teardown |
 | `output/` | CSV files written by local runs — gitignored |
 
 ---

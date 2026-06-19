@@ -40,7 +40,19 @@ def send_report(report: Dict[str, object]) -> bool:
         log.info("SendGrid disabled; skipping email report.")
         return False
 
+    # Prefer direct env var; fall back to Secret Manager secret name pointer
     api_key = os.environ.get("SENDGRID_API_KEY")
+    if not api_key:
+        secret_name = os.environ.get("SECRET_SENDGRID_KEY", "sendgrid-api-key")
+        gcp_project = os.environ.get("GCP_PROJECT", "")
+        if gcp_project:
+            try:
+                from google.cloud import secretmanager as sm
+                client = sm.SecretManagerServiceClient()
+                name = f"projects/{gcp_project}/secrets/{secret_name}/versions/latest"
+                api_key = client.access_secret_version(request={"name": name}).payload.data.decode("UTF-8")
+            except Exception as e:
+                log.warning("Could not fetch SendGrid key from Secret Manager: %s", e)
     to_emails_raw = os.environ.get("REPORT_TO_EMAILS", "")
     from_email = os.environ.get("REPORT_FROM_EMAIL")
     subject = os.environ.get("REPORT_SUBJECT", "Plex to BigQuery ETL Report")

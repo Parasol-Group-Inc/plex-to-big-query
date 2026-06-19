@@ -113,6 +113,14 @@ resource "google_secret_manager_secret" "access_token" {
   }
 }
 
+# SendGrid API key — optional, only needed when SENDGRID_ENABLED=true
+resource "google_secret_manager_secret" "sendgrid_api_key" {
+  secret_id = var.secret_sendgrid_key
+  replication {
+    auto {}
+  }
+}
+
 # Username/password auth — kept for fallback / future use
 resource "google_secret_manager_secret" "odbc_user" {
   secret_id  = var.secret_odbc_user
@@ -194,6 +202,19 @@ resource "google_cloud_run_v2_job" "etl" {
           name  = "SECRET_COMPANY_CODE"
           value = var.secret_company_code
         }
+        # Plex query config — which view and filter to run
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
         # Sync config
         env {
           name  = "METADATA_TABLE"
@@ -202,6 +223,27 @@ resource "google_cloud_run_v2_job" "etl" {
         env {
           name  = "BACKFILL_MINUTES"
           value = tostring(var.backfill_minutes)
+        }
+        # Email reporting (optional — leave SENDGRID_ENABLED=false to disable)
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
         }
       }
       max_retries = 3

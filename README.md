@@ -51,6 +51,7 @@ Cloud Run Job
 | Understand the data flow and config | [TECHNICAL_REFERENCE.md](TECHNICAL_REFERENCE.md) |
 | gcloud / docker / terraform commands | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Tear down all GCP infrastructure | [docs/TEARDOWN.md](docs/TEARDOWN.md) |
+| Add tables, configure SendGrid | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | Request ODBC access from Plex support | [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) |
 
 ---
@@ -77,6 +78,7 @@ Cloud Run Job
 | `docs/QUICKSTART.md` | Step-by-step setup guide, no prior knowledge assumed |
 | `docs/FRONTEND_GUIDE.md` | Architecture study guide with diagrams, written for frontend devs |
 | `docs/API_REFERENCE.md` | All gcloud, docker, terraform, and bq commands for this project |
+| `docs/OPERATIONS.md` | How to configure SendGrid and add more Plex tables/reports |
 | `output/` | CSV files written by local runs — gitignored |
 
 ---

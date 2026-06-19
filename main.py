@@ -32,6 +32,7 @@ BACKFILL_MINUTES = int(os.environ.get("BACKFILL_MINUTES", "5"))
 SECRET_USER      = os.environ.get("SECRET_ODBC_USER",    "plex-odbc-user")
 SECRET_PASSWORD  = os.environ.get("SECRET_ODBC_PASSWORD", "plex-odbc-password")
 SECRET_COMPANY   = os.environ.get("SECRET_COMPANY_CODE",  "plex-company-code")
+SECRET_SENDGRID  = os.environ.get("SECRET_SENDGRID_KEY",  "sendgrid-api-key")
 SECRET_TOKEN     = os.environ.get("SECRET_ACCESS_TOKEN",  "plex-access-token")
 
 
@@ -160,23 +161,26 @@ def get_odbc_connection(user: str, password: str, company_code: str, access_toke
 
 
 # ── Plex query ────────────────────────────────────────────────────────────────
-# Plex view: Part_v_Part — full extract of Raw Materials part master.
-# No incremental date filter; run as a full refresh each time.
-PLEX_VIEW      = "Part_v_Part"
-PLEX_DATE_COL  = ""   # no date column — full refresh only
+# Configurable per Cloud Run job via env vars — one job per Plex view.
+# PLEX_FILTER: full WHERE clause, or empty string for no filter.
+# PLEX_DATE_COL: timestamp column name for incremental sync, or empty for full refresh.
+PLEX_VIEW      = os.environ.get("PLEX_VIEW",      "Part_v_Part")
+PLEX_DATE_COL  = os.environ.get("PLEX_DATE_COL",  "")
+PLEX_FILTER    = os.environ.get("PLEX_FILTER",    "WHERE Part_Type = 'Raw Materials'")
 
 
 def query_plex(conn: pyodbc.Connection) -> pd.DataFrame:
-    """Pull all Raw Materials parts from the Plex part master."""
-    sql = f"SELECT * FROM {PLEX_VIEW} WHERE Part_Type = 'Raw Materials' ORDER BY Part_No ASC"
-    log.info(f"Querying Plex [{PLEX_VIEW}] for Raw Materials parts...")
+    filter_clause = f" {PLEX_FILTER}" if PLEX_FILTER else ""
+    order_clause  = f" ORDER BY {PLEX_DATE_COL} ASC" if PLEX_DATE_COL else ""
+    sql = f"SELECT * FROM {PLEX_VIEW}{filter_clause}{order_clause}"
+    log.info(f"Querying Plex [{PLEX_VIEW}]...")
     cursor = conn.cursor()
     cursor.execute(sql)
     columns = [col[0] for col in cursor.description]
     rows = cursor.fetchall()
     df = pd.DataFrame.from_records(rows, columns=columns)
     cursor.close()
-    log.info(f"Fetched {len(df)} Raw Materials parts from Plex.")
+    log.info(f"Fetched {len(df)} rows from Plex [{PLEX_VIEW}].")
     return df
 
 

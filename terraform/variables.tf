@@ -118,3 +118,55 @@ variable "image_url" {
   type        = string
   description = "Full container image URL in Artifact Registry"
 }
+
+# ── Plex query config ─────────────────────────────────────────────────────────
+
+variable "plex_view" {
+  type        = string
+  description = "Plex view or stored procedure name to query (e.g. Part_v_Part)"
+  default     = "Part_v_Part"
+}
+
+variable "plex_filter" {
+  type        = string
+  description = "SQL WHERE clause to apply (include the word WHERE, or leave empty for all rows)"
+  default     = "WHERE Part_Type = 'Raw Materials'"
+}
+
+variable "plex_date_col" {
+  type        = string
+  description = "Timestamp column name for incremental sync. Leave empty for full refresh."
+  default     = ""
+}
+
+# ── Email reporting ───────────────────────────────────────────────────────────
+
+variable "sendgrid_enabled" {
+  type        = string
+  description = "Set to 'true' to enable email reports after each run"
+  default     = "false"
+}
+
+variable "report_from_email" {
+  type        = string
+  description = "Verified sender email address in SendGrid"
+  default     = ""
+}
+
+variable "report_to_emails" {
+  type        = string
+  description = "Comma-separated list of report recipient emails"
+  default     = ""
+}
+
+variable "report_subject" {
+  type        = string
+  description = "Email subject line for run reports"
+  default     = "Plex to BigQuery ETL Report"
+}
+
+variable "secret_sendgrid_key" {
+  type        = string
+  description = "Secret Manager secret name for the SendGrid API key"
+  default     = "sendgrid-api-key"
+}

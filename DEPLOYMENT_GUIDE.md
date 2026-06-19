@@ -4,11 +4,31 @@
 
 By the end of this guide:
 
-- All GCP infrastructure provisioned by Terraform
+- All GCP infrastructure provisioned by Terraform in project `parasoldatalake`
 - Docker image built and pushed to Artifact Registry
 - Plex IAM token stored in Secret Manager
 - Cloud Run job executing successfully against Plex and writing to BigQuery
 - Cloud Scheduler running on a daily cron schedule
+
+---
+
+## Shell compatibility note
+
+All multi-line commands in this guide use **backslash `\`** for line continuation — this works in **Git Bash, bash, and zsh**. If you are in PowerShell, replace `\` with a backtick `` ` ``.
+
+```bash
+# Git Bash / bash — use backslash
+gcloud run jobs execute plex-etl \
+  --region=us-central1 \
+  --project=parasoldatalake
+
+# PowerShell — use backtick
+gcloud run jobs execute plex-etl `
+  --region=us-central1 `
+  --project=parasoldatalake
+```
+
+When in doubt, put everything on one line — it always works in both shells.
 
 ---
 
@@ -33,21 +53,18 @@ If you're coming from frontend, here's a mental model for each service this pipe
 ## Prerequisites checklist
 
 - [ ] **Phase 1 complete** — `docker compose up` ran locally and produced a CSV in `./output/`
-- [ ] **GCP project** created with billing enabled
-  - In GCP Console: top-left dropdown → **New Project** → note the **Project ID** (like `vox-nutrition-prod`) — this is different from the display name
+- [ ] **GCP project** `parasoldatalake` with billing enabled
+  - In GCP Console: top-left dropdown → **New Project** → note the **Project ID** (like `parasoldatalake`) — this is different from the display name
   - Billing: GCP Console → **Billing** → link a billing account to the project
 - [ ] **`gcloud` CLI** installed and authenticated
-  ```powershell
-  # Install: https://cloud.google.com/sdk/docs/install (Windows installer)
+  ```bash
   gcloud version          # verify install
   gcloud auth login       # opens browser — log in with your Google account
   gcloud auth application-default login   # grants Terraform access to your credentials
-  gcloud config set project vox-nutrition-prod  # set your default project
+  gcloud config set project parasoldatalake
   ```
-- [ ] **Terraform** >= 1.5.0 installed
-  ```powershell
-  # Install: https://developer.hashicorp.com/terraform/install (Windows AMD64)
-  # Extract terraform.exe to a folder on your PATH (e.g. C:\tools\)
+- [ ] **Terraform** >= 1.5.0 installed and on your PATH
+  ```bash
   terraform version
   ```
 - [ ] **Docker** running (same Docker Desktop from Phase 1)
@@ -61,35 +78,36 @@ Terraform reads a `terraform.tfvars` file (like a `.env` for infrastructure), cr
 
 ### 1.1 Create `terraform.tfvars`
 
-```powershell
+```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Open `terraform.tfvars` and fill in your values:
+Open `terraform.tfvars` and confirm your values. For this project, the file should contain:
 
 ```hcl
-gcp_project    = "your-gcp-project-id"       # ← the Project ID, not display name
-bq_dataset     = "plex_dataset"
+gcp_project    = "parasoldatalake"
+gcp_region     = "us-central1"
+bq_dataset     = "plex_sandbox"
 bq_table       = "raw_materials_parts"
-plex_host      = "odbc.plex.com"              # production Plex ODBC host
-plex_odbc_user = "edominguez.parasol"         # Plex login (username.company)
-image_url      = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest"
+plex_host      = "vox.odbc.plex.com"     # test host — change to odbc.plex.com for production
+plex_odbc_user = "edominguez.parasol"
+image_url      = "us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest"
 ```
 
-> **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 3. The job will show an error if triggered before then, which is expected.
+> **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 2. The job will show an error if triggered before then, which is expected.
 
 ### 1.2 Initialize and apply
 
-```powershell
-terraform init      # downloads the Google provider plugin (like npm install)
-terraform plan -var-file=terraform.tfvars   # dry-run: shows what will be created
-terraform apply -var-file=terraform.tfvars  # actually creates everything
+```bash
+terraform init
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
 ```
 
 Type `yes` when prompted. Takes 2–5 minutes — API enablement is the slowest part.
 
-**What Terraform just created:**
+**What Terraform creates:**
 - A service account (`plex-etl-sa`) with permissions to read secrets, write to BigQuery, and pull from Artifact Registry
 - A BigQuery dataset and `sync_metadata` table
 - An Artifact Registry repo to store your Docker image
@@ -99,37 +117,60 @@ Type `yes` when prompted. Takes 2–5 minutes — API enablement is the slowest 
 
 > **If apply fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `terraform apply`.
 
-> **If apply fails "image not found":** That's expected on first run if the image hasn't been pushed yet. Push the image (Step 3) and re-run `terraform apply`.
+> **If apply fails "image not found":** Expected on first run. Push the image (Step 2) and re-run `terraform apply`.
 
-**Verify in GCP Console** (optional but helpful):
-- Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@...`
-- Console → **BigQuery** → your project → `plex_dataset` dataset
-- Console → **Secret Manager** → four secrets: `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — they're empty containers)
+**Verify in GCP Console:**
+- Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@parasoldatalake.iam.gserviceaccount.com`
+- Console → **BigQuery** → `parasoldatalake` → `plex_sandbox` dataset
+- Console → **Secret Manager** → four secrets: `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — empty containers)
 
 ### 1.3 Store the IAM token in Secret Manager
 
 Terraform creates the secret *container* but doesn't put any value in it. Add your Plex IAM token:
 
-```powershell
-# Replace the token string with the value from PLEX_ACCESS_TOKEN in your .env
-echo -n 'Mjc4MDIyN2Et...' | gcloud secrets versions add plex-access-token `
-  --data-file=- --project=your-gcp-project-id
+```bash
+echo -n '<YOUR_PLEX_IAM_TOKEN>' | gcloud secrets versions add plex-access-token \
+  --data-file=- --project=parasoldatalake
 ```
+
+Paste the token from your `.env` file (`PLEX_ACCESS_TOKEN=...`) in place of `<YOUR_PLEX_IAM_TOKEN>`.
 
 Verify it was stored:
-```powershell
-gcloud secrets versions list plex-access-token --project=your-gcp-project-id
-# Expected output:
-#   NAME                                                              STATE    CREATED
-#   projects/.../secrets/plex-access-token/versions/1    enabled  2026-06-...
+```bash
+gcloud secrets versions list plex-access-token --project=parasoldatalake
+# Expected:
+#   NAME    STATE    CREATED
+#   1       enabled  2026-06-...
 ```
 
-> **GCP Console path:** Console → **Secret Manager** → `plex-access-token` → **Versions** tab → you should see version 1 with status "Enabled".
+> **GCP Console path:** Console → **Secret Manager** → `plex-access-token` → **Versions** tab → version 1, status "Enabled".
 
-> **Token rotation:** When you get a new Plex IAM token, add it as a new version — Cloud Run automatically picks up the `latest` version on the next run:
-> ```powershell
-> echo -n 'NEW_TOKEN_VALUE' | gcloud secrets versions add plex-access-token --data-file=- --project=your-gcp-project-id
+> **Token rotation:** When you get a new Plex IAM token, add a new version — Cloud Run picks up `latest` automatically:
+> ```bash
+> echo -n 'NEW_TOKEN_VALUE' | gcloud secrets versions add plex-access-token --data-file=- --project=parasoldatalake
 > ```
+
+### 1.4 If resources already exist (state recovery)
+
+If `terraform apply` fails with `Error 409: Already Exists` for secrets or the BigQuery dataset, Terraform's state is out of sync with reality. Import the existing resources before re-running apply:
+
+```bash
+# Import secrets
+terraform import google_secret_manager_secret.access_token projects/parasoldatalake/secrets/plex-access-token
+terraform import google_secret_manager_secret.odbc_user projects/parasoldatalake/secrets/plex-odbc-user
+terraform import google_secret_manager_secret.odbc_password projects/parasoldatalake/secrets/plex-odbc-password
+terraform import google_secret_manager_secret.company_code projects/parasoldatalake/secrets/plex-company-code
+
+# Import BigQuery dataset (replace plex_sandbox with your dataset name if different)
+terraform import google_bigquery_dataset.plex parasoldatalake/plex_sandbox
+```
+
+Then re-run `terraform apply`. If the state file is badly corrupted (references the wrong project entirely), delete it and reimport everything:
+
+```bash
+rm terraform.tfstate terraform.tfstate.backup   # wipe stale state
+# then run all imports above before apply
+```
 
 ---
 
@@ -137,22 +178,22 @@ gcloud secrets versions list plex-access-token --project=your-gcp-project-id
 
 Run from the **repo root** (not the `terraform/` folder):
 
-```powershell
+```bash
 # Authenticate Docker to your Artifact Registry region
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# Build — replace the project ID with yours
-docker build -t us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest .
+# Build the image
+docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
 
-# Push to Artifact Registry (this is what Cloud Run will pull from)
-docker push us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest
+# Push to Artifact Registry
+docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
 ```
 
-> This can take 3–8 minutes on first push because of the ODBC driver files. Subsequent pushes are faster (layer caching).
+> This takes 3–8 minutes on first push because of the ODBC driver files. Subsequent pushes are faster (layer caching).
 
 Then re-apply Terraform so the Cloud Run job picks up the now-real image:
 
-```powershell
+```bash
 cd terraform
 terraform apply -var-file=terraform.tfvars
 ```
@@ -163,21 +204,18 @@ terraform apply -var-file=terraform.tfvars
 
 ## Step 3 — Test the Cloud Run job manually
 
-```powershell
-gcloud run jobs execute plex-etl `
-  --region=us-central1 `
-  --project=your-gcp-project-id `
-  --wait
+```bash
+gcloud run jobs execute plex-etl --region=us-central1 --project=parasoldatalake --wait
 ```
 
-The `--wait` flag keeps the terminal open until the job finishes (or fails). It takes about 30–60 seconds.
+The `--wait` flag keeps the terminal open until the job finishes (or fails). Takes about 30–60 seconds.
 
 Check the logs:
-```powershell
-gcloud logging read `
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" `
-  --project=your-gcp-project-id `
-  --limit=50 `
+```bash
+gcloud logging read \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
+  --project=parasoldatalake \
+  --limit=50 \
   --format="table(timestamp,textPayload)"
 ```
 
@@ -185,29 +223,29 @@ gcloud logging read `
 ```
 [INFO] Fetching credentials...
 [INFO] Using IAM access token for Plex authentication.
-[INFO] Connecting driver-direct to odbc.plex.com:19995 (IAM token auth, UID=edominguez.parasol)
+[INFO] Connecting driver-direct to vox.odbc.plex.com:19995 (IAM token auth, UID=edominguez.parasol)
 [INFO] ODBC connection established.
 [INFO] Querying Plex [Part_v_Part] for Raw Materials parts...
 [INFO] Fetched NNN Raw Materials parts from Plex.
-[INFO] Writing NNN rows to your-gcp-project-id.plex_dataset.raw_materials_parts...
+[INFO] Writing NNN rows to parasoldatalake.plex_sandbox.raw_materials_parts...
 [INFO] === ETL job complete — NNN rows written ===
 ```
 
-**GCP Console path for logs:** Console → **Cloud Run** → **Jobs** tab → `plex-etl` → click the execution → **Logs** tab. This is often easier to read than the CLI output.
+**GCP Console path for logs:** Console → **Cloud Run** → **Jobs** tab → `plex-etl` → click the execution → **Logs** tab.
 
 ---
 
 ## Step 4 — Verify data in BigQuery
 
-```powershell
-bq query --project_id=your-gcp-project-id --nouse_legacy_sql `
-  "SELECT COUNT(*) AS part_count FROM \`your-gcp-project-id.plex_dataset.raw_materials_parts\`"
+```bash
+bq query --project_id=parasoldatalake --nouse_legacy_sql \
+  "SELECT COUNT(*) AS part_count FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\`"
 
-bq query --project_id=your-gcp-project-id --nouse_legacy_sql `
-  "SELECT Part_No, Name, Part_Status FROM \`your-gcp-project-id.plex_dataset.raw_materials_parts\` LIMIT 10"
+bq query --project_id=parasoldatalake --nouse_legacy_sql \
+  "SELECT Part_No, Name, Part_Status FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\` LIMIT 10"
 ```
 
-**GCP Console path:** Console → **BigQuery** → your project → `plex_dataset` → `raw_materials_parts` → **Preview** tab shows the first 50 rows without writing a query.
+**GCP Console path:** Console → **BigQuery** → `parasoldatalake` → `plex_sandbox` → `raw_materials_parts` → **Preview** tab.
 
 ---
 
@@ -215,18 +253,16 @@ bq query --project_id=your-gcp-project-id --nouse_legacy_sql `
 
 Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily):
 
-```powershell
-gcloud scheduler jobs list --location=us-central1 --project=your-gcp-project-id
+```bash
+gcloud scheduler jobs list --location=us-central1 --project=parasoldatalake
 ```
 
 Trigger it immediately to confirm end-to-end scheduling works:
-```powershell
-gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=your-gcp-project-id
+```bash
+gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=parasoldatalake
 ```
 
-> This runs the Cloud Run job the same way the scheduler will — it's a safe test to run anytime.
-
-**GCP Console path:** Console → **Cloud Scheduler** → `plex-daily-sync` → **Run now** button does the same thing.
+**GCP Console path:** Console → **Cloud Scheduler** → `plex-daily-sync` → **Run now** button.
 
 ---
 
@@ -237,12 +273,9 @@ Cloud Build automates build → push → deploy every time you push to `main`. W
 `deploy/cloudbuild.yaml` is already written. You just need to:
 
 **1. Store the driver in GCS** (avoids committing the binary files to git):
-```powershell
-# Create the storage bucket
-gcloud storage buckets create gs://your-gcp-project-id-build-assets --project=your-gcp-project-id
-
-# Upload the driver folder
-gcloud storage cp -r driver/* gs://your-gcp-project-id-build-assets/plex-odbc-driver/
+```bash
+gcloud storage buckets create gs://parasoldatalake-build-assets --project=parasoldatalake
+gcloud storage cp -r driver/* gs://parasoldatalake-build-assets/plex-odbc-driver/
 ```
 
 **2. Create a Cloud Build trigger in GCP Console:**
@@ -250,14 +283,12 @@ gcloud storage cp -r driver/* gs://your-gcp-project-id-build-assets/plex-odbc-dr
 - Name: `plex-etl-deploy`
 - Region: `us-central1`
 - Event: **Push to a branch**
-- Source: connect your repo (GitHub/GitLab) — follow the OAuth flow
+- Source: connect your repo (GitHub) — follow the OAuth flow
 - Branch: `^main$`
 - Configuration: **Cloud Build configuration file** → `deploy/cloudbuild.yaml`
 - Click **Create**
 
-After this, every `git push origin main` automatically rebuilds and redeploys the container. The trigger also runs a smoke test (executes the job and waits) — if the job fails, the build is marked as failed.
-
-**Verify in GCP Console:** Console → **Cloud Build** → **History** — shows each build with pass/fail status and full logs.
+After this, every `git push origin main` automatically rebuilds and redeploys the container.
 
 ---
 
@@ -265,29 +296,48 @@ After this, every `git push origin main` automatically rebuilds and redeploys th
 
 ### `Secret not found` or `Permission denied on secret`
 
-The secret exists but either (a) has no version yet or (b) the service account lacks access.
+The secret exists but either has no version or the service account lacks access.
 
 Check that version 1 was added (Step 1.3):
-```powershell
-gcloud secrets versions list plex-access-token --project=your-gcp-project-id
+```bash
+gcloud secrets versions list plex-access-token --project=parasoldatalake
 ```
 
 Check that the service account has the right permission:
-```powershell
-gcloud projects get-iam-policy your-gcp-project-id `
-  --flatten="bindings[].members" `
+```bash
+gcloud projects get-iam-policy parasoldatalake \
+  --flatten="bindings[].members" \
   --filter="bindings.members:plex-etl-sa@"
 ```
 You should see `roles/secretmanager.secretAccessor` in the output.
 
-### Cloud Run job: ODBC connection error
+### Error 10300: `The requested service was not found in the provided configuration`
 
-- Confirm `plex_host` in `terraform.tfvars` is `odbc.plex.com` (not the test host)
-- Cloud Run uses variable egress IPs — if Plex restricts connections by IP, you need a VPC connector + Cloud NAT to get a fixed outbound IP, then allowlist it with Plex support. This is an uncommon but known issue.
+The `ServerDataSource` name in the ODBC connection string doesn't match what the Plex server has configured.
+
+- **This means your token or PLEX_HOST points to one environment but the service name belongs to another.**
+- `ReportDataSource` works on `vox.odbc.plex.com` (test).
+- The production host `odbc.plex.com` likely uses a different name — confirm with Plex support.
+
+To switch Cloud Run to the test host temporarily for validation:
+```bash
+gcloud run jobs update plex-etl \
+  --region=us-central1 \
+  --project=parasoldatalake \
+  --update-env-vars=PLEX_HOST=vox.odbc.plex.com
+```
+
+To update the ServerDataSource once you have the correct name from Plex support:
+```bash
+gcloud run jobs update plex-etl \
+  --region=us-central1 \
+  --project=parasoldatalake \
+  --update-env-vars=PLEX_SERVER_DATASOURCE=<name-from-plex-support>
+```
 
 ### Cloud Run job: table is empty after a failure
 
-`WRITE_TRUNCATE` replaces the entire table on each run. If a job fails mid-write, the table may be empty until the next successful run. This is expected behavior for a full-refresh table — the next run restores it. To prevent data loss windows in production, the safer pattern is to load into a staging table first and swap with `CREATE OR REPLACE TABLE ... AS SELECT` — but that requires more code changes.
+`WRITE_TRUNCATE` replaces the entire table on each run. If a job fails mid-write, the table may be empty until the next successful run. This is expected behavior for a full-refresh table.
 
 ### Terraform: `Error: Provider configuration`
 
@@ -302,31 +352,40 @@ Terraform state is stored locally in `terraform/terraform.tfstate`. If a previou
 ## Operational runbook
 
 **Rotate the IAM token:**
-```powershell
-echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=your-gcp-project-id
+```bash
+echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=parasoldatalake
 ```
 
 **Change the sync schedule** (e.g. run at 6 AM UTC instead of 2 AM):
 Update `scheduler_cron = "0 6 * * *"` in `terraform.tfvars`, then:
-```powershell
+```bash
 cd terraform
 terraform apply -var-file=terraform.tfvars
 ```
 
-**Pause the pipeline** (stops the scheduler without deleting anything):
-```powershell
-gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=your-gcp-project-id
+**Pause the pipeline:**
+```bash
+gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=parasoldatalake
 ```
 
 **Resume the pipeline:**
-```powershell
-gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=your-gcp-project-id
+```bash
+gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=parasoldatalake
 ```
 
 **View recent job history:**
-```powershell
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=your-gcp-project-id
+```bash
+gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=parasoldatalake
 ```
+
+**Switch to production Plex host** (once confirmed with Plex support):
+```bash
+gcloud run jobs update plex-etl \
+  --region=us-central1 \
+  --project=parasoldatalake \
+  --update-env-vars=PLEX_HOST=odbc.plex.com,PLEX_SERVER_DATASOURCE=<production-service-name>
+```
+Then update `terraform.tfvars` to match so the next `terraform apply` doesn't revert the change.
 
 **Add a second Plex table:**
 1. Add a new `query_plex()` variant (or make the view name configurable via env var)

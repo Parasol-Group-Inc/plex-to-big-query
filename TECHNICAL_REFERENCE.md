@@ -71,6 +71,8 @@ CustomProperties=authmethod=iam; accesstoken=<token>
 
 `UID` follows Plex's `username.company` login format. The IAM token authenticates the user; `UID` identifies which company context to open.
 
+> **Test vs production host:** `ServerDataSource=ReportDataSource` is confirmed working on `vox.odbc.plex.com` (test host). The production host `odbc.plex.com` returns error `HY000 10300: service not found` — the service name is different on production. Confirm the correct `ServerDataSource` with Plex support before switching to production.
+
 ### Username/password connection string (fallback)
 
 Still used if `PLEX_ACCESS_TOKEN` is not set. Routes through the DSN because `CompanyCode` does not need to be inside `CustomProperties` when using standard auth:

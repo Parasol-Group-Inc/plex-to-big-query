@@ -1,6 +1,8 @@
 # Plex to BigQuery ETL Pipeline
 
-Pulls operational data from **Plex ERP** via ODBC and loads it into **Google BigQuery** on a scheduled basis. The pipeline runs as a Cloud Run Job triggered daily by Cloud Scheduler. Credentials are stored in Secret Manager and never touch the filesystem.
+Pulls operational data from **Plex ERP** via ODBC and loads it into **Google BigQuery** on a scheduled basis. Runs as a Cloud Run Job triggered daily by Cloud Scheduler. Credentials are stored in Secret Manager and never touch the filesystem.
+
+**GCP project:** `parasoldatalake` | **BigQuery dataset:** `plex_sandbox` | **Plex view:** `Part_v_Part` (Raw Materials)
 
 ---
 
@@ -24,16 +26,15 @@ Docker container
 **BigQuery mode** — production pipeline running in GCP:
 
 ```
-Cloud Scheduler (cron)
+Cloud Scheduler (cron 2 AM UTC)
       │
       ▼
 Cloud Run Job
       │
-      ├─ Reads credentials from Secret Manager
-      ├─ Connects to Plex via ODBC
-      ├─ Reads last sync timestamp from BigQuery (sync_metadata table)
-      ├─ Queries only rows modified since last run
-      ├─ Appends rows to BigQuery target table
+      ├─ Reads IAM token from Secret Manager
+      ├─ Connects to Plex via ODBC (driver-direct, IAM token auth)
+      ├─ Queries Part_v_Part WHERE Part_Type = 'Raw Materials'
+      ├─ Writes rows to BigQuery (WRITE_TRUNCATE — full refresh)
       └─ Sends email report via SendGrid (optional)
 ```
 
@@ -43,9 +44,12 @@ Cloud Run Job
 
 | What you want to do | Where to look |
 |---|---|
+| New here? Start here | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Frontend dev learning the stack | [docs/FRONTEND_GUIDE.md](docs/FRONTEND_GUIDE.md) |
 | Run locally and get CSV output | [LOCAL_SETUP.md](LOCAL_SETUP.md) |
 | Deploy to GCP with Terraform | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) |
 | Understand the data flow and config | [TECHNICAL_REFERENCE.md](TECHNICAL_REFERENCE.md) |
+| gcloud / docker / terraform commands | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Request ODBC access from Plex support | [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) |
 
 ---
@@ -68,24 +72,18 @@ Cloud Run Job
 | `terraform/variables.tf` | Terraform input variable definitions |
 | `terraform/outputs.tf` | Terraform outputs — copy-paste commands after apply |
 | `terraform/terraform.tfvars.example` | Template for your `terraform.tfvars` file |
-| `deploy/setup.sh` | Manual GCP setup script — deprecated, use Terraform |
 | `deploy/cloudbuild.yaml` | Cloud Build CI/CD pipeline definition |
+| `docs/QUICKSTART.md` | Step-by-step setup guide, no prior knowledge assumed |
+| `docs/FRONTEND_GUIDE.md` | Architecture study guide with diagrams, written for frontend devs |
+| `docs/API_REFERENCE.md` | All gcloud, docker, terraform, and bq commands for this project |
 | `output/` | CSV files written by local runs — gitignored |
-
----
-
-## Important: the SQL query is a placeholder
-
-The `query_plex()` function in [main.py](main.py) contains a placeholder SQL query referencing a sample Plex view (`Production_Order_v_Production_Order`). You must replace this with the actual view or report name and columns confirmed with your Plex support contact before any data will flow.
-
-See [LOCAL_SETUP.md](LOCAL_SETUP.md) Step 4 for instructions.
 
 ---
 
 ## Two-phase setup
 
 **Phase 1** — get local extraction working:
-```powershell
+```bash
 cp .env.example .env        # fill in Plex credentials
 docker compose build
 docker compose up
@@ -93,11 +91,23 @@ docker compose up
 ```
 
 **Phase 2** — deploy to GCP once extraction is verified:
-```powershell
+```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars   # fill in GCP project details
 terraform init && terraform apply -var-file=terraform.tfvars
 # push image, add secret versions, run job
 ```
 
-Full step-by-step instructions in [LOCAL_SETUP.md](LOCAL_SETUP.md) and [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
+Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual guides above.
+
+---
+
+## Current status
+
+| Component | State |
+|---|---|
+| Local Docker extraction | Working — `vox.odbc.plex.com`, `ReportDataSource` |
+| GCP infrastructure | Deployed — `parasoldatalake` |
+| Cloud Run image | Pushed — `plex-pipeline/etl:latest` |
+| Plex → BigQuery on test host | Pending first successful run |
+| Plex production host (`odbc.plex.com`) | Blocked — need production `ServerDataSource` name from Plex support |

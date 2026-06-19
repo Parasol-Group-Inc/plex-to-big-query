@@ -245,6 +245,10 @@ resource "google_cloud_run_v2_job" "etl" {
           name  = "SECRET_SENDGRID_KEY"
           value = var.secret_sendgrid_key
         }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
       }
       max_retries = 3
       timeout     = "600s"

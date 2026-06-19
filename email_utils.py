@@ -55,7 +55,6 @@ def send_report(report: Dict[str, object]) -> bool:
                 log.warning("Could not fetch SendGrid key from Secret Manager: %s", e)
     to_emails_raw = os.environ.get("REPORT_TO_EMAILS", "")
     from_email = os.environ.get("REPORT_FROM_EMAIL")
-    subject = os.environ.get("REPORT_SUBJECT", "Plex to BigQuery ETL Report")
     template_name = os.environ.get("REPORT_TEMPLATE", "report.html")
 
     if not api_key or not to_emails_raw or not from_email:
@@ -84,6 +83,7 @@ def send_report(report: Dict[str, object]) -> bool:
     plex_filter    = str(report.get("plex_filter", os.environ.get("PLEX_FILTER", ""))) or "none"
     plex_host      = str(report.get("plex_host",   os.environ.get("PLEX_HOST",   "")))
     execution_name = str(report.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "local")))
+    company_name   = os.environ.get("COMPANY_NAME", "Parasol")
     repo_url       = "https://github.com/Parasol-Group-Inc/plex-to-big-query"
 
     region = os.environ.get("CLOUD_RUN_REGION", "us-central1")
@@ -100,6 +100,15 @@ def send_report(report: Dict[str, object]) -> bool:
         )
         logs_url_label = "View in Cloud Console"
 
+    # Subject: [Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19
+    # Override entirely with REPORT_SUBJECT if set to a non-default value.
+    subject_override = os.environ.get("REPORT_SUBJECT", "")
+    subject = (
+        subject_override
+        if subject_override and subject_override != "Plex to BigQuery ETL Report"
+        else f"[Plex ETL] {status.upper()} — {company_name} — {run_date}"
+    )
+
     context = {
         "status": status.upper(),
         "status_class": status_class,
@@ -115,6 +124,7 @@ def send_report(report: Dict[str, object]) -> bool:
         "plex_filter": plex_filter,
         "plex_host": plex_host,
         "execution_name": execution_name,
+        "company_name": company_name,
         "logs_url": logs_url,
         "logs_url_label": logs_url_label,
         "repo_url": repo_url,

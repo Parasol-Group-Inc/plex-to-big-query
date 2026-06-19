@@ -170,3 +170,9 @@ variable "secret_sendgrid_key" {
   description = "Secret Manager secret name for the SendGrid API key"
   default     = "sendgrid-api-key"
 }
+
+variable "company_name" {
+  type        = string
+  description = "Company name shown in email subject line: [Plex ETL] STATUS — {company_name} — DATE"
+  default     = "Parasol"
+}

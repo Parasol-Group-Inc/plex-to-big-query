@@ -372,6 +372,93 @@ graph TD
 
 ---
 
+## The Python scripts explained
+
+If you open the repo, you'll see two Python files. Here's what they actually do, explained in terms you already know.
+
+### `main.py` — the one script that does everything
+
+Think of this as the server-side handler for a single cron job request. It runs once, top to bottom, and either succeeds or throws an error.
+
+**The config block at the top** is like reading `process.env` in Node.js. Every tunable value — which Plex view to query, which BigQuery table to write to, which email to send reports to — is an env var. Nothing is hardcoded. This means you can point the same script at a different table just by changing an env var, with no code change.
+
+```python
+PLEX_VIEW   = os.environ.get("PLEX_VIEW",   "Part_v_Part")
+PLEX_FILTER = os.environ.get("PLEX_FILTER", "WHERE Part_Type = 'Raw Materials'")
+BQ_TABLE    = os.environ.get("BQ_TABLE",    "raw_materials_parts")
+```
+
+**`get_secret(name)`** is like a `fetch()` call to a secrets vault. Instead of hardcoding passwords in env vars, you store them in Secret Manager and retrieve them at runtime. The Cloud Run service account has permission to read them.
+
+**`query_plex(conn)`** builds a SQL string and runs it over the ODBC connection. Think of it like a `db.query()` call. The result is a pandas DataFrame — basically a 2D table in memory, like a JavaScript array of objects.
+
+```python
+sql = f"SELECT * FROM {PLEX_VIEW} {PLEX_FILTER}"
+# same idea as: const data = await db.query(`SELECT * FROM ${view} ${filter}`)
+```
+
+**`write_to_bigquery(bq, df)`** loads the DataFrame into BigQuery. In full-refresh mode (`WRITE_TRUNCATE`), it deletes the old table and replaces it entirely — like a `PUT` request that replaces the whole resource instead of patching it.
+
+**`run_and_report()`** wraps the whole pipeline in a try/catch. Whether the job succeeds or fails, it builds a report dict and calls `send_report()`. This way you always get an email, even when something breaks.
+
+---
+
+### `email_utils.py` — the email report builder
+
+This file has one job: take the report dict from `main.py` and send an HTML email via SendGrid.
+
+**`send_report(report)`** is the only public function. It:
+1. Checks if `SENDGRID_ENABLED=true` — exits early if not
+2. Fetches the SendGrid API key from Secret Manager (same pattern as the Plex token)
+3. Reads env vars for sender address, recipients, company name
+4. Builds the HTML from the template
+5. Sends it via `SendGridAPIClient.send()`
+
+**The template system** is intentionally simple — no React, no Jinja2. It just replaces `{{placeholders}}` in `templates/report.html` with real values. Like string interpolation, but for an HTML file.
+
+**The email subject** is built dynamically:
+```
+[Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19
+```
+
+`COMPANY_NAME` is an env var you set in `terraform.tfvars`. Change it with `terraform apply` — no rebuild needed.
+
+**The Cloud Run logs link** in the email is constructed automatically from `CLOUD_RUN_EXECUTION` — an env var that GCP injects into every container execution. Clicking the link in the email takes you directly to that run's logs in the GCP Console.
+
+---
+
+## What requires a rebuild vs. what doesn't
+
+This is the most practical thing to know when making changes.
+
+```mermaid
+flowchart LR
+    change[You made a change] --> q1{Is it in a .py file,\ntemplate, or driver/?}
+    q1 -->|Yes| rebuild[docker build + push\nthen run the job]
+    q1 -->|No, it's in terraform.tfvars| apply[terraform apply\n~30 seconds]
+    apply --> done[Done — next run uses new config]
+    rebuild --> done
+```
+
+**Only `terraform apply` needed** (fast, no code change):
+- Plex host, view, filter
+- BigQuery table/dataset
+- Email on/off, sender, recipients
+- Company name in subject line
+- Cron schedule
+
+**Needs a Docker rebuild** (3–8 min first time, faster after):
+- `main.py`, `email_utils.py` — logic changes
+- `templates/report.html` — email design changes
+- `requirements.txt` — adding a Python package
+- `driver/` — Plex ODBC driver update
+
+**Just a `gcloud` command, no Terraform, no rebuild**:
+- Rotating the Plex IAM token
+- Rotating the SendGrid API key
+
+---
+
 ## Glossary
 
 | Term | Definition |

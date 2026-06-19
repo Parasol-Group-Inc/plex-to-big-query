@@ -18,15 +18,67 @@
 ### BigQuery mode (`OUTPUT_MODE=bigquery`)
 
 1. Container starts; env vars from Cloud Run job definition
-2. `PLEX_ACCESS_TOKEN` is read from Secret Manager via `get_secret(SECRET_TOKEN)`
+2. IAM token is read from Secret Manager via `get_secret(SECRET_TOKEN)`
 3. `bigquery.Client` is initialized; `ensure_metadata_table()` creates `sync_metadata` if needed
 4. `get_last_sync()` queries `sync_metadata` for `MAX(max_modified_at)` where `table_name = BQ_TABLE`; returns epoch on first run
-5. Backfill window (`BACKFILL_MINUTES`) is subtracted from `last_sync` to produce `query_cutoff`
-6. `pyodbc.connect()` establishes a driver-direct connection using the IAM token
-7. SQL query runs
-8. For full-refresh tables (no date column): `WRITE_TRUNCATE` replaces the table each run
-9. For incremental tables (with a date column): `WRITE_APPEND` and `sync_metadata` updated
-10. `send_report()` sends a SendGrid email if `SENDGRID_ENABLED=true`
+5. `pyodbc.connect()` establishes a driver-direct connection using the IAM token
+6. SQL query runs: `SELECT * FROM {PLEX_VIEW} {PLEX_FILTER} ORDER BY {PLEX_DATE_COL}`
+7. For full-refresh tables (no `PLEX_DATE_COL`): `WRITE_TRUNCATE` replaces the table atomically
+8. For incremental tables (`PLEX_DATE_COL` set): `WRITE_APPEND` and `sync_metadata` updated
+9. `send_report()` in `email_utils.py` sends a SendGrid email if `SENDGRID_ENABLED=true`
+
+---
+
+## Python scripts
+
+### `main.py` — ETL entry point
+
+This is the only script that runs when the container starts. It orchestrates every step.
+
+**Top section — config:** All `os.environ.get()` calls live here. Every tunable value is an env var. Nothing is hardcoded except the BigQuery write mode logic.
+
+**`get_secret(name)`** — calls Google Secret Manager and returns the plain-text value. Used for the Plex IAM token, ODBC password, and company code. Credentials never appear in env vars or logs.
+
+**`get_credential(env_var, secret_name)`** — tries a direct env var first, falls back to Secret Manager. Used to let local runs bypass Secret Manager by setting the value directly in `.env`.
+
+**`get_last_sync(bq)`** — reads `MAX(max_modified_at)` from `sync_metadata`. Returns `1970-01-01` if the table is empty (first run = full load). This is the high-water mark for incremental sync.
+
+**`update_last_sync(bq, ...)`** — writes a new row to `sync_metadata` after a successful load, recording how many rows were written and the new high-water mark.
+
+**`ensure_metadata_table(bq)`** — creates `sync_metadata` if it doesn't exist, and adds any missing columns if the schema has evolved. Safe to call on every run.
+
+**`get_odbc_connection(user, password, company_code, access_token)`** — builds the ODBC connection string and calls `pyodbc.connect()`. See the ODBC section for why driver-direct is required.
+
+**`query_plex(conn)`** — builds and executes the SQL query dynamically from `PLEX_VIEW`, `PLEX_FILTER`, and `PLEX_DATE_COL` env vars. Returns a pandas DataFrame.
+
+**`write_to_bigquery(bq, df)`** — loads the DataFrame into BigQuery using `WRITE_TRUNCATE` (full refresh). Returns row count.
+
+**`write_to_csv(df, output_dir, table_name)`** — writes the DataFrame to a timestamped CSV file for local testing.
+
+**`main()`** — the full pipeline: credentials → BigQuery client → ODBC connection → query → write → metadata update. Returns a `result` dict for the email report.
+
+**`run_and_report()`** — wraps `main()` in a try/except, builds the report dict whether the job succeeds or fails, then calls `send_report()`. This is the actual entry point (`if __name__ == "__main__": run_and_report()`).
+
+---
+
+### `email_utils.py` — SendGrid email report builder
+
+Called from `run_and_report()` after every run, regardless of success or failure.
+
+**`send_report(report)`** — the only public function. Takes the report dict from `main()` and sends an HTML email via SendGrid.
+
+Flow inside `send_report()`:
+1. Check `SENDGRID_ENABLED` — exit early if `false`
+2. Fetch API key: checks `SENDGRID_API_KEY` env var first, then falls back to Secret Manager using the secret named by `SECRET_SENDGRID_KEY`
+3. Build the template context — pulls project, dataset, table, Plex view, host, execution name, and constructs the Cloud Run logs URL automatically
+4. Build the email subject: `[Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19`. Can be overridden with `REPORT_SUBJECT` env var
+5. Load `templates/report.html`, substitute `{{placeholders}}`, send via `SendGridAPIClient`
+
+**`_render_template(template, context)`** — simple string replacement for `{{key}}` → value. No external template engine needed.
+
+**`_list_to_html(items)`** — converts a list of event strings to a `<ul>` for the email body.
+
+**`_load_template(name)`** — reads the HTML file from `templates/`. Changing the template only requires a Docker rebuild (the file is baked into the image). See the hot-update table below.
 
 ---
 
@@ -45,12 +97,12 @@ unixODBC driver manager  (/etc/odbcinst.ini registers the driver)
 DataDirect OpenAccess SDK 8.1  (/usr/oaodbc81/lib64/ivoa27.so)
     │  TLS encrypted (Encrypted=1)
     ▼
-Plex ERP ODBC endpoint  (vox.odbc.plex.com:19995 for test / odbc.plex.com:19995 for prod)
+Plex ERP ODBC endpoint  (vox.odbc.plex.com:19995 or odbc.plex.com:19995)
 ```
 
 ### Why driver-direct instead of DSN
 
-unixODBC does **not** forward driver-specific DSN attributes to the DataDirect driver. In particular, `CustomProperties` — which carries the IAM token — is silently dropped when routing through a DSN lookup. This causes error `HY000 / 3059: The specified data source is not defined` on the Plex server.
+unixODBC does **not** forward driver-specific DSN attributes to the DataDirect driver. In particular, `CustomProperties` — which carries the IAM token — is silently dropped when routing through a DSN lookup. This causes error `HY000 / 3059` on the Plex server.
 
 The fix is to pass all connection attributes directly in the connection string using `DRIVER={path}` instead of `DSN=name`. `CustomProperties` is placed **last** in the string so its internal semicolons are not misinterpreted as connection string delimiters.
 
@@ -71,59 +123,158 @@ CustomProperties=authmethod=iam; accesstoken=<token>
 
 `UID` follows Plex's `username.company` login format. The IAM token authenticates the user; `UID` identifies which company context to open.
 
-> **Test vs production host:** `ServerDataSource=ReportDataSource` is confirmed working on `vox.odbc.plex.com` (test host). The production host `odbc.plex.com` returns error `HY000 10300: service not found` — the service name is different on production. Confirm the correct `ServerDataSource` with Plex support before switching to production.
+> **Test vs production host:** `ServerDataSource=ReportDataSource` is confirmed working on `vox.odbc.plex.com` (test host). The production host `odbc.plex.com` returns error `HY000 10300` with this service name. Confirm the correct `ServerDataSource` with Plex support before switching to production.
 
 ### Username/password connection string (fallback)
 
-Still used if `PLEX_ACCESS_TOKEN` is not set. Routes through the DSN because `CompanyCode` does not need to be inside `CustomProperties` when using standard auth:
+Still used if `PLEX_ACCESS_TOKEN` is not set:
 
 ```
 DSN=PlexProduction;UID=<user>;PWD=<password>;CustomProperties=CompanyCode=<code>;
 ```
 
-### Key configuration files
+---
 
-| File | Container path | Purpose |
+## ODBC driver — files, location, and updates
+
+### Where the driver files live
+
+The driver is baked into the Docker image during `docker build`. It is not present in the git repo (gitignored).
+
+| File in the repo | Destination inside container | Purpose |
 |---|---|---|
-| `config/odbcinst.ini` | `/etc/odbcinst.ini` | Registers the DataDirect driver with unixODBC |
-| `config/odbc.ini` | `/etc/odbc.ini` | DSN definitions (used for username/password auth only) |
-| `driver/lib64/ivoa27.so` | `/usr/oaodbc81/lib64/ivoa27.so` | DataDirect OpenAccess SDK 8.1 main driver |
-| `driver/lib64/ivoa27.ini` | `/usr/oaodbc81/lib64/ivoa27.ini` | Driver's own config (auth plugins, LDAP, translit) |
-| `entrypoint.sh` | `/entrypoint.sh` | Container startup script |
+| `driver/lib64/ivoa27.so` | `/usr/oaodbc81/lib64/ivoa27.so` | Main ODBC driver shared object |
+| `driver/lib64/ddtrc27.so` | `/usr/oaodbc81/lib64/ddtrc27.so` | Trace library |
+| `driver/lib64/ivoa27.ini` | `/usr/oaodbc81/lib64/ivoa27.ini` | Driver config (auth plugins, LDAP settings) |
+| `driver/rscshell` | `/usr/oaodbc81/rscshell` | 32-bit utility — requires `libc6:i386` |
+| `driver/etc/lang/` | `/usr/oaodbc81/etc/lang/` | Driver locale and error message files |
+| `config/odbcinst.ini` | `/etc/odbcinst.ini` | Registers the driver path with unixODBC |
+| `config/odbc.ini` | `/etc/odbc.ini` | DSN definitions (used for password auth fallback) |
 
-### DataDirect license
+The container env vars that tell the runtime where to find these:
 
-The driver ships with an OEM SDK Client license (serial `004193623`, key `35057920`) tied to the Plex application. When invoked from Python/pyodbc it runs in 15-day trial mode and prints a warning. This does not block connectivity. Resolve before going to production by contacting Progress Software or Plex support for a standalone license.
+```dockerfile
+ENV LD_LIBRARY_PATH=/usr/oaodbc81/lib64     # tells Linux linker where .so files are
+ENV ODBCINI=/etc/odbc.ini                   # unixODBC DSN config
+ENV ODBCINSTINI=/etc/odbcinst.ini           # unixODBC driver registry
+```
+
+### Obtaining the driver
+
+The Plex ODBC driver is a Progress Software DataDirect product distributed through Plex. Download it from the Plex support portal under `Developer Tools → ODBC Driver → Linux 64-bit`. Extract the archive into the `driver/` folder before running `docker build`.
+
+### What happens when the driver is updated
+
+When Plex releases a new driver version (e.g. from `ivoa27` to `ivoa28`):
+
+1. Download the new Linux driver package from the Plex portal
+2. Extract it into `driver/` (overwrite existing files)
+3. If the `.so` filename changed, update three places:
+   - `Dockerfile`: `COPY driver/ /usr/oaodbc81/` stays the same, but check `ENV LD_LIBRARY_PATH`
+   - `config/odbcinst.ini` — the `Driver=` path: `Driver=/usr/oaodbc81/lib64/ivoa28.so`
+   - `main.py` `get_odbc_connection()` — the connection string: `DRIVER={/usr/oaodbc81/lib64/ivoa28.so}`
+4. Rebuild and push the Docker image:
+
+   ```bash
+   docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
+   docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+   ```
+
+5. Run the job to verify connectivity
+
+### Driver license
+
+The DataDirect OpenAccess SDK ships with an OEM license tied to the Plex application. The container prints this warning on every run — it is **not blocking**:
+
+```
+[DataDirect][ODBC OpenAccess SDK driver] You are not licensed to use this Progress
+Software product under the license you have purchased...
+```
+
+This warning means the driver detects it is running outside of its primary licensed application context. As long as your Plex subscription includes ODBC access, connectivity works and this warning is cosmetic. If Plex disables ODBC on your account, the connection will fail with a hard error. Contact Plex support to resolve a license issue — it is managed at the Plex account level, not locally.
+
+There is no license file to rotate or renew yourself. It is not a file on disk.
+
+---
+
+## Hot-updatable configuration (no rebuild required)
+
+Changes in this table take effect after `terraform apply` (~30 seconds). No Docker build needed.
+
+| What you're changing | `terraform.tfvars` variable | Notes |
+|---|---|---|
+| Plex host (test vs production) | `plex_host` | |
+| Which Plex view to query | `plex_view` | |
+| SQL WHERE filter | `plex_filter` | Include the word `WHERE` |
+| Timestamp column for incremental sync | `plex_date_col` | Empty = full refresh |
+| ODBC username | `plex_odbc_user` | |
+| Target BigQuery table name | `bq_table` | |
+| BigQuery dataset | `bq_dataset` | |
+| Email on/off | `sendgrid_enabled` | `"true"` or `"false"` |
+| Sender email | `report_from_email` | Must be verified in SendGrid |
+| Recipients | `report_to_emails` | Comma-separated |
+| Company name in email subject | `company_name` | |
+| Backfill window | `backfill_minutes` | Number |
+| Cron schedule | `scheduler_cron` | Cron syntax |
+
+**Secrets rotate with a single command — no Terraform, no rebuild:**
+
+```bash
+# Rotate the Plex IAM token
+echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token \
+  --data-file=- --project=parasoldatalake
+
+# Rotate the SendGrid API key
+echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
+  --data-file=- --project=parasoldatalake
+```
+
+### Changes that DO require a Docker rebuild
+
+| What changed | Rebuild command |
+|---|---|
+| `main.py` | `docker build … && docker push …` |
+| `email_utils.py` | `docker build … && docker push …` |
+| `templates/report.html` | `docker build … && docker push …` |
+| `requirements.txt` (new Python package) | `docker build … && docker push …` |
+| `driver/` (new ODBC driver version) | `docker build … && docker push …` |
+| `config/odbcinst.ini` or `config/odbc.ini` | `docker build … && docker push …` |
+
+Cloud Run always pulls `:latest` at the start of each execution — no Terraform apply needed after a push.
 
 ---
 
 ## Environment variable reference
 
-| Variable | Default | Required | Description |
+| Variable | Default | Hot-update? | Description |
 |---|---|---|---|
-| `OUTPUT_MODE` | `bigquery` | no | `local` writes CSVs; `bigquery` writes to BQ. docker-compose forces `local`. |
-| `OUTPUT_DIR` | `/output` | no | Host-mounted directory for local CSV files |
-| `PLEX_ACCESS_TOKEN` | — | **yes** | IAM access token from Plex. Presence triggers IAM auth mode. |
-| `PLEX_ODBC_USER` | — | **yes** | Plex login in `username.company` format (e.g. `edominguez.parasol`) |
-| `PLEX_HOST` | — | **yes (IAM)** | Plex ODBC hostname. `vox.odbc.plex.com` for test, `odbc.plex.com` for prod |
-| `PLEX_PORT` | `19995` | no | Plex ODBC port |
-| `PLEX_SERVER_DATASOURCE` | `ReportDataSource` | no | Server-side data source name |
-| `PLEX_DSN` | `PlexProduction` | no | DSN name used for username/password auth path only |
-| `PLEX_ODBC_PASSWORD` | — | only if no token | Plex ODBC password (username/password auth) |
-| `PLEX_COMPANY_CODE` | — | only if no token | Plex CompanyCode (username/password auth) |
-| `BACKFILL_MINUTES` | `5` | no | Minutes subtracted from `last_sync` (incremental tables only) |
-| `GCP_PROJECT` | `""` | bigquery | GCP project ID |
-| `BQ_DATASET` | `""` | bigquery | BigQuery dataset name |
-| `BQ_TABLE` | `plex_extract` | no | Target BQ table name; also CSV filename prefix in local mode |
-| `METADATA_TABLE` | `sync_metadata` | no | Table tracking incremental sync state |
-| `SECRET_ACCESS_TOKEN` | `plex-access-token` | no | Secret Manager secret name for the IAM token |
-| `SECRET_ODBC_USER` | `plex-odbc-user` | no | Secret Manager secret name for ODBC username (password auth) |
-| `SECRET_ODBC_PASSWORD` | `plex-odbc-password` | no | Secret Manager secret name for ODBC password |
-| `SECRET_COMPANY_CODE` | `plex-company-code` | no | Secret Manager secret name for CompanyCode |
-| `SENDGRID_ENABLED` | `false` | no | Set `true` to enable email reporting (bigquery mode only) |
-| `SENDGRID_API_KEY` | — | if enabled | SendGrid API key |
-| `REPORT_FROM_EMAIL` | — | if enabled | Sender address |
-| `REPORT_TO_EMAILS` | — | if enabled | Comma-separated recipient list |
+| `OUTPUT_MODE` | `bigquery` | rebuild | `local` = CSV files; `bigquery` = BigQuery write |
+| `GCP_PROJECT` | `""` | apply | GCP project ID |
+| `BQ_DATASET` | `""` | apply | BigQuery dataset name |
+| `BQ_TABLE` | `plex_extract` | apply | Target BigQuery table |
+| `METADATA_TABLE` | `sync_metadata` | apply | Sync state tracking table |
+| `PLEX_HOST` | `""` | apply | Plex ODBC hostname |
+| `PLEX_PORT` | `19995` | apply | Plex ODBC port |
+| `PLEX_SERVER_DATASOURCE` | `ReportDataSource` | apply | Server-side data source name |
+| `PLEX_ODBC_USER` | `""` | apply | Plex login (`username.company`) |
+| `PLEX_DSN` | `PlexProduction` | apply | DSN name for password auth fallback |
+| `PLEX_VIEW` | `Part_v_Part` | apply | Plex view or stored procedure to query |
+| `PLEX_FILTER` | `""` | apply | SQL WHERE clause (include the word `WHERE`) |
+| `PLEX_DATE_COL` | `""` | apply | Timestamp column for incremental sync |
+| `BACKFILL_MINUTES` | `5` | apply | Minutes to subtract from last sync (incremental) |
+| `PLEX_ACCESS_TOKEN` | — | secret | IAM token (direct). Normally fetched from Secret Manager. |
+| `SECRET_ACCESS_TOKEN` | `plex-access-token` | apply | Secret Manager secret name for the IAM token |
+| `SECRET_ODBC_USER` | `plex-odbc-user` | apply | Secret Manager secret name for ODBC username |
+| `SECRET_ODBC_PASSWORD` | `plex-odbc-password` | apply | Secret Manager secret name for ODBC password |
+| `SECRET_COMPANY_CODE` | `plex-company-code` | apply | Secret Manager secret name for CompanyCode |
+| `SENDGRID_ENABLED` | `false` | apply | Set `true` to enable email reports |
+| `SENDGRID_API_KEY` | — | secret | SendGrid key (direct). Normally fetched from Secret Manager. |
+| `SECRET_SENDGRID_KEY` | `sendgrid-api-key` | apply | Secret Manager secret name for SendGrid key |
+| `REPORT_FROM_EMAIL` | `""` | apply | Verified sender address |
+| `REPORT_TO_EMAILS` | `""` | apply | Comma-separated recipients |
+| `REPORT_SUBJECT` | `""` | apply | Override for auto subject. Empty = `[Plex ETL] STATUS — COMPANY — DATE` |
+| `COMPANY_NAME` | `Parasol` | apply | Company name in email subject |
+| `CLOUD_RUN_EXECUTION` | set by GCP | — | Execution ID (auto, used to build logs link) |
 
 ---
 
@@ -137,7 +288,7 @@ The driver ships with an OEM SDK Client license (serial `004193623`, key `350579
 | `BQ_TABLE` | `raw_materials_parts` |
 | `PLEX_DATE_COL` | `""` (empty — no incremental tracking) |
 
-Plex exposes ~50,000 tables/views via ODBC following the naming convention `{Module}_v_{ObjectName}`. To find a view name, look up the data source in the Plex UI under Data Source Detail and match the stored procedure or view name.
+Plex exposes its data through views following the naming convention `{Module}_v_{ObjectName}`. To find a view name, look up the data source in the Plex UI and ask Plex support to confirm the ODBC view name and whether your ODBC user has read access.
 
 ---
 
@@ -147,10 +298,10 @@ Plex exposes ~50,000 tables/views via ODBC following the naming convention `{Mod
 
 No date column on the source. The entire table is replaced on each run:
 - `write_disposition = WRITE_TRUNCATE`
-- `sync_metadata` is not updated (no meaningful high-water mark)
-- Suitable for reference/master data that changes infrequently
+- `sync_metadata` records the run timestamp as the watermark
+- Suitable for reference/master data (parts lists, customer master, etc.)
 
-### Incremental (future tables with a date column)
+### Incremental (for tables with a date column)
 
 A timestamp column (e.g. `Modified_Date`, `Ship_Date`) acts as the high-water mark:
 - `get_last_sync()` reads `MAX(max_modified_at)` from `sync_metadata`
@@ -158,7 +309,7 @@ A timestamp column (e.g. `Modified_Date`, `Ship_Date`) acts as the high-water ma
 - `write_disposition = WRITE_APPEND`
 - `update_last_sync()` records the new high-water mark after each run
 
-To switch a table to incremental: set `PLEX_DATE_COL` to the timestamp column name in `main.py` and ensure `query_plex()` filters `WHERE {date_col} > ?`.
+To enable: set `PLEX_DATE_COL = "your_timestamp_column"` in `terraform.tfvars` and apply.
 
 ---
 
@@ -168,24 +319,7 @@ To switch a table to incremental: set `PLEX_DATE_COL` to the timestamp column na
 
 **Risk:** A column with only nulls in one run gets inferred as `STRING`. When real values arrive later, the append fails with a schema mismatch.
 
-**Recommendation for production:** Define an explicit schema and set `autodetect=False`:
-
-```python
-job_config = bigquery.LoadJobConfig(
-    write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,  # or WRITE_APPEND
-    schema=[
-        bigquery.SchemaField("Part_No",     "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("Rev",         "STRING"),
-        bigquery.SchemaField("Name",        "STRING"),
-        bigquery.SchemaField("Old_Part_No", "STRING"),
-        bigquery.SchemaField("Part_Type",   "STRING"),
-        bigquery.SchemaField("Part_Group",  "STRING"),
-        bigquery.SchemaField("Part_Status", "STRING"),
-        bigquery.SchemaField("Part_Source", "STRING"),
-        bigquery.SchemaField("Note",        "STRING"),
-    ],
-)
-```
+**Recommendation for production:** Define an explicit schema and set `autodetect=False` in `write_to_bigquery()` inside `main.py`.
 
 ---
 
@@ -200,6 +334,7 @@ job_config = bigquery.LoadJobConfig(
 | `google_bigquery_table.sync_metadata` | Incremental sync state (used for date-based tables) |
 | `google_artifact_registry_repository.etl` | Docker image repository |
 | `google_secret_manager_secret.access_token` | Plex IAM access token |
+| `google_secret_manager_secret.sendgrid_api_key` | SendGrid API key |
 | `google_cloud_run_v2_job.etl` | ETL job container (600s timeout, 3 retries) |
 | `google_cloud_scheduler_job.etl` | HTTP trigger on cron schedule |
 
@@ -209,11 +344,11 @@ job_config = bigquery.LoadJobConfig(
 
 ```
 plex-to-big-query/
-├── main.py                      ETL entry point
+├── main.py                      ETL pipeline entry point
 ├── email_utils.py               SendGrid email report builder
 ├── requirements.txt             Pinned Python dependencies
 ├── Dockerfile                   Linux container definition
-├── entrypoint.sh                Container startup (env substitution if needed)
+├── entrypoint.sh                Container startup script
 ├── docker-compose.yml           Local runner (forces OUTPUT_MODE=local)
 ├── .env.example                 Environment variable template
 ├── .env                         Local credentials (gitignored)
@@ -225,14 +360,14 @@ plex-to-big-query/
 ├── templates/
 │   └── report.html              HTML email report template
 │
-├── driver/                      Plex Linux ODBC driver (gitignored)
+├── driver/                      Plex Linux ODBC driver (gitignored — get from Plex portal)
 │   ├── lib64/
 │   │   ├── ivoa27.so            Main driver shared object
 │   │   ├── ivoa27.ini           Driver config (auth plugins)
 │   │   ├── ddtrc27.so           Trace library
 │   │   └── (other .so files)
 │   ├── rscshell                 32-bit utility (needs i386 libs)
-│   └── etc/lang/                Driver locale/message files
+│   └── etc/lang/                Driver locale and error message files
 │
 ├── terraform/
 │   ├── main.tf                  All GCP resources
@@ -240,9 +375,13 @@ plex-to-big-query/
 │   ├── outputs.tf               Post-apply copy-paste commands
 │   └── terraform.tfvars.example Template for your tfvars
 │
-├── deploy/
-│   ├── setup.sh                 Manual GCP setup (deprecated, use Terraform)
-│   └── cloudbuild.yaml          Cloud Build CI/CD pipeline
+├── docs/
+│   ├── QUICKSTART.md            Step-by-step from zero to deployed
+│   ├── FRONTEND_GUIDE.md        Architecture study guide with diagrams
+│   ├── API_REFERENCE.md         All gcloud / docker / terraform / bq commands
+│   ├── OPERATIONS.md            SendGrid setup and adding more Plex tables
+│   ├── TROUBLESHOOTING.md       Error cheatsheet — copy-paste fixes
+│   └── TEARDOWN.md              Full infrastructure destroy and redeploy
 │
 └── output/                      CSV files from local runs (gitignored)
 ```

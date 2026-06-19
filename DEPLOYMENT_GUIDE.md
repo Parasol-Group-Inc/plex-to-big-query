@@ -387,6 +387,9 @@ gcloud run jobs update plex-etl \
 ```
 Then update `terraform.tfvars` to match so the next `terraform apply` doesn't revert the change.
 
+**Tear down all infrastructure** (move to a different GCP project):
+See [docs/TEARDOWN.md](docs/TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
+
 **Add a second Plex table:**
 1. Add a new `query_plex()` variant (or make the view name configurable via env var)
 2. Create a second Cloud Run job in Terraform pointing at the new table name

@@ -73,8 +73,9 @@ resource "google_artifact_registry_repository" "etl" {
 }
 
 resource "google_bigquery_table" "sync_metadata" {
-  dataset_id = google_bigquery_dataset.plex.dataset_id
-  table_id   = var.metadata_table
+  dataset_id         = google_bigquery_dataset.plex.dataset_id
+  table_id           = var.metadata_table
+  deletion_protection = false
 
   schema = jsonencode([
     {

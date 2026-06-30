@@ -18,3 +18,9 @@ pandas==2.2.2
 
 # BigQuery + pandas integration (to_gbq / load_table_from_dataframe)
 db-dtypes==1.3.0
+
+# GCS client — read report config YAML files at runtime
+google-cloud-storage==2.18.2
+
+# YAML parser — deserialize report config files
+PyYAML==6.0.2

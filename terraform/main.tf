@@ -26,6 +26,7 @@ resource "google_project_service" "required" {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
+    "storage.googleapis.com",
   ])
 
   project            = var.gcp_project
@@ -57,6 +58,53 @@ resource "google_service_account_iam_member" "scheduler_token_creator" {
   service_account_id = google_service_account.etl.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
+# ── Report config bucket — edit YAML/SQL files here to change reports ─────────
+
+resource "google_storage_bucket" "report_configs" {
+  name                        = var.report_configs_bucket
+  location                    = var.bq_location
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+# Grant the ETL service account read access to the config bucket
+resource "google_storage_bucket_iam_member" "etl_config_reader" {
+  bucket = google_storage_bucket.report_configs.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.etl.email}"
+}
+
+# Upload initial report config files (Terraform manages the initial copy only).
+# After initial setup, edit files directly in GCS Console or via:
+#   gsutil cp reports/sales_orders.yaml gs://${var.report_configs_bucket}/reports/
+#   gsutil cp reports/sql/sales_orders_view.sql gs://${var.report_configs_bucket}/sql/
+
+resource "google_storage_bucket_object" "sales_orders_config_prod" {
+  name         = "reports/sales_orders.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sales_orders.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_config_test" {
+  name         = "test/sales_orders.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/sales_orders.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_view_sql" {
+  name         = "sql/sales_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_view.sql"
+  content_type = "text/plain"
 }
 
 resource "google_bigquery_dataset" "plex" {
@@ -203,7 +251,14 @@ resource "google_cloud_run_v2_job" "etl" {
           name  = "SECRET_COMPANY_CODE"
           value = var.secret_company_code
         }
-        # Plex query config — which view and filter to run
+        # Report config — GCS path to the YAML that defines which views to extract.
+        # Edit the YAML in GCS to change queries/filters without redeployment.
+        # Leave empty to fall back to legacy single-view mode (PLEX_VIEW below).
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = var.report_config_gcs_path
+        }
+        # Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty)
         env {
           name  = "PLEX_VIEW"
           value = var.plex_view
@@ -267,6 +322,184 @@ resource "google_cloud_scheduler_job" "etl" {
   http_target {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Test environment ── same image, test Plex host, PlexTest dataset ──────────
+
+resource "google_bigquery_dataset" "plex_test" {
+  dataset_id                 = var.bq_dataset_test
+  location                   = var.bq_location
+  delete_contents_on_destroy = false
+}
+
+resource "google_bigquery_table" "sync_metadata_test" {
+  dataset_id          = google_bigquery_dataset.plex_test.dataset_id
+  table_id            = var.metadata_table
+  deletion_protection = false
+
+  schema = jsonencode([
+    {
+      name = "table_name"
+      type = "STRING"
+      mode = "REQUIRED"
+    },
+    {
+      name = "last_sync_at"
+      type = "TIMESTAMP"
+      mode = "REQUIRED"
+    },
+    {
+      name = "max_modified_at"
+      type = "TIMESTAMP"
+      mode = "REQUIRED"
+    },
+    {
+      name = "rows_written"
+      type = "INTEGER"
+      mode = "REQUIRED"
+    },
+    {
+      name = "synced_at"
+      type = "TIMESTAMP"
+      mode = "REQUIRED"
+    }
+  ])
+}
+
+resource "google_cloud_run_v2_job" "etl_test" {
+  name     = var.cloud_run_job_test
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        # Plex connection — IAM auth (test host)
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        # Plex connection — username/password auth (fallback)
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        # Report config — GCS path to the YAML that defines which views to extract
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = var.report_config_gcs_path_test
+        }
+        # Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty)
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        # Sync config
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        # Email reporting
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 3
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_test" {
+  name        = var.scheduler_job_test
+  description = "Triggers Plex to BigQuery ETL job (test)"
+  schedule    = var.scheduler_cron_test
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_test.name}:run"
     body        = base64encode("{}")
 
     oauth_token {

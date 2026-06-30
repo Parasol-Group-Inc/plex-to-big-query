@@ -64,3 +64,19 @@ output "scheduler_job_name" {
   description = "Cloud Scheduler job name and cron schedule."
   value       = "${google_cloud_scheduler_job.etl.name} — schedule: ${var.scheduler_cron} ${var.scheduler_time_zone}"
 }
+
+# ── Test environment ───────────────────────────────────────────────────────────
+output "test_bigquery_dataset_id" {
+  description = "Full BigQuery dataset reference for test pipeline."
+  value       = "${var.gcp_project}.${google_bigquery_dataset.plex_test.dataset_id}"
+}
+
+output "test_cloud_run_execute_command" {
+  description = "Copy-paste command to trigger a manual test job execution."
+  value       = "gcloud run jobs execute ${google_cloud_run_v2_job.etl_test.name} --region=${var.gcp_region} --project=${var.gcp_project} --wait"
+}
+
+output "test_scheduler_job_name" {
+  description = "Test Cloud Scheduler job name and cron schedule."
+  value       = "${google_cloud_scheduler_job.etl_test.name} — schedule: ${var.scheduler_cron_test} ${var.scheduler_time_zone}"
+}

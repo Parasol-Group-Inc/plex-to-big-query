@@ -176,3 +176,55 @@ variable "company_name" {
   description = "Company name shown in email subject line: [Plex ETL] STATUS — {company_name} — DATE"
   default     = "Parasol"
 }
+
+# ── Test environment ──────────────────────────────────────────────────────────
+
+variable "plex_host_test" {
+  type        = string
+  description = "Test Plex ODBC hostname (vox.odbc.plex.com)"
+  default     = "vox.odbc.plex.com"
+}
+
+variable "bq_dataset_test" {
+  type        = string
+  description = "BigQuery dataset for the test pipeline"
+  default     = "PlexTest"
+}
+
+variable "cloud_run_job_test" {
+  type        = string
+  description = "Cloud Run job name for the test pipeline"
+  default     = "plex-etl-test"
+}
+
+variable "scheduler_job_test" {
+  type        = string
+  description = "Cloud Scheduler job name for the test pipeline"
+  default     = "plex-daily-sync-test"
+}
+
+variable "scheduler_cron_test" {
+  type        = string
+  description = "Cron schedule for the test pipeline (offset from prod to avoid overlap)"
+  default     = "0 3 * * *"
+}
+
+# ── Report config (GCS-backed, editable without deployment) ───────────────────
+
+variable "report_configs_bucket" {
+  type        = string
+  description = "GCS bucket name for report configuration YAML files and SQL view definitions"
+  default     = ""
+}
+
+variable "report_config_gcs_path" {
+  type        = string
+  description = "GCS URI of the report config YAML for the production Cloud Run job (gs://bucket/path)"
+  default     = ""
+}
+
+variable "report_config_gcs_path_test" {
+  type        = string
+  description = "GCS URI of the report config YAML for the test Cloud Run job (gs://bucket/path)"
+  default     = ""
+}

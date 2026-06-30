@@ -1,17 +1,38 @@
 Milestone,Owner,Status,Start Date,Due Date,Completed Date,Dependencies,Notes
-Project kickoff,PM,Not Started,,,,,
-Requirements confirmed (Plex + GCP),PM,Not Started,,,,,
-Plex access requested,PM,Not Started,,,,,
-Plex credentials received,PM,Not Started,,,Plex access requested,
-GCP project + billing ready,Cloud Admin,Not Started,,,,,
-Service account + IAM ready,Cloud Admin,Not Started,,,GCP project + billing ready,
-Secrets created (Plex + SendGrid),Cloud Admin,Not Started,,,Service account + IAM ready,
-Artifact Registry + image build,DevOps,Not Started,,,GCP project + billing ready,
-Cloud Run job deployed,DevOps,Not Started,,,Artifact Registry + image build,
-Scheduler configured,DevOps,Not Started,,,Cloud Run job deployed,
-Initial data sync successful,Engineer,Not Started,,,Scheduler configured,
-Email report verified,Engineer,Not Started,,,Initial data sync successful,
-UAT sign-off,PM,Not Started,,,Initial data sync successful,
-Production go-live,PM,Not Started,,,UAT sign-off,
-Post-go-live monitoring check,PM,Not Started,,,Production go-live,
-Project closeout,PM,Not Started,,,Post-go-live monitoring check,
+Project kickoff,PM,Completed,2026-05-01,,,,"Project initiated — Plex ODBC to BigQuery pipeline for Vox Nutrition"
+Requirements confirmed (Plex + GCP),PM,Completed,2026-05-01,,,Project kickoff,Sales orders report as primary deliverable; GCP project voxdatalake
+Plex access requested,PM,Completed,2026-05-05,,,Requirements confirmed,ODBC access requested from Plex support
+Plex credentials received,PM,Completed,2026-05-10,,,Plex access requested,edominguez.parasol credentials confirmed; IAM token auth method selected
+GCP project + billing ready,Cloud Admin,Completed,2026-05-08,,,,"voxdatalake project created; billing account linked"
+Service account + IAM ready,Cloud Admin,Completed,2026-05-12,,,GCP project + billing ready,plex-etl-sa@voxdatalake.iam.gserviceaccount.com; all roles granted via Terraform
+Secrets created (Plex + SendGrid),Cloud Admin,Completed,2026-05-14,,,Service account + IAM ready,"plex-access-token, plex-odbc-user, sendgrid-api-key created in Secret Manager"
+Artifact Registry + image build,DevOps,Completed,2026-05-15,,,GCP project + billing ready,plex-pipeline registry created; etl:latest image pushed to us-central1
+Local Docker extraction working,Engineer,Completed,2026-05-15,,2026-05-15,Plex credentials received,Part_v_Part extraction to CSV confirmed on vox.odbc.plex.com
+ODBC IAM token auth confirmed,Engineer,Completed,2026-05-18,,2026-05-18,Local Docker extraction working,"Driver-direct connection string required — DSN-based auth fails (HY000/3059)"
+Cloud Run job deployed,DevOps,Completed,2026-05-20,,,Artifact Registry + image build,plex-etl and plex-etl-test jobs deployed; 24/24 Terraform resources applied
+Scheduler configured,DevOps,Completed,2026-05-20,,,Cloud Run job deployed,plex-daily-sync (2 AM UTC) and plex-daily-sync-test (3 AM UTC) active
+Plex database catalog built — Sales,Analyst,Completed,2026-06-15,,2026-06-20,,Sales_v_PO and related views confirmed via live SQL Dev queries
+Plex database catalog built — Part,Analyst,Completed,2026-06-20,,2026-06-22,,778 views confirmed; Customer_Part_Price pricing schema confirmed via live query
+Plex database catalog built — Common,Analyst,Completed,2026-06-22,,2026-06-24,,386 verified views; catalog corrected after contamination with Part views discovered
+Plex database catalog built — Plexus_Control,Analyst,Completed,2026-06-22,,2026-06-24,,213 views; Plexus_User confirmed as sales rep name source (37 columns)
+Plex database catalog built — Personnel,Analyst,Completed,2026-06-24,,2026-06-25,,272 HR views confirmed; previously contaminated with Part manufacturing views — corrected
+Plex database catalog built — Purchasing,Analyst,Completed,2026-06-24,,2026-06-25,,130 views; PO_Sales_PO links supplier POs to sales orders
+Plex database catalog built — Distribution,Analyst,Completed,2026-06-24,,2026-06-25,,15 views: Order + Order_Line + Shipper + Shipper_Line
+Plex database catalog built — Quality,Analyst,Completed,2026-06-24,,2026-06-25,,515 views: PPAP / FMEA / Problems / Warranty
+16-field sales orders report — all fields confirmed,Analyst,Completed,2026-06-25,,2026-06-25,All catalog work,"All 16 fields mapped to confirmed Plex views; status key 2073 = Pending Fulfillment = Date Approved"
+Sales orders status workflow documented,Analyst,Completed,2026-06-25,,2026-06-25,,2585→2587→2586→2073→2638→2639→2074/2076 Vox Nutrition workflow confirmed
+Multi-report GCS-backed architecture designed,Engineer,Completed,2026-06-29,,2026-06-29,16-field report confirmed,YAML report configs in GCS; no container rebuild needed to change queries
+Container updated for multi-extraction mode,Engineer,Completed,2026-06-29,,2026-06-29,Architecture design,"main.py: GCS config loader, multi-extraction loop, BigQuery VIEW creation"
+Terraform updated — GCS config bucket,DevOps,Completed,2026-06-29,,2026-06-29,Container update,voxdatalake-report-configs bucket created; IAM; bucket objects for initial upload
+Sales orders report config created,Analyst,Completed,2026-06-29,,2026-06-29,,reports/sales_orders.yaml: 13 Plex views; reports/sql/sales_orders_view.sql: 16-field JOIN view
+Documentation updated — CHEATSHEET + OPERATIONS,Engineer,Completed,2026-06-29,,2026-06-29,,CHEATSHEET.md with Mermaid diagrams; OPERATIONS.md with multi-report workflow
+Initial data sync successful (test),Engineer,Not Started,,,,Container update + Terraform apply needed,Run plex-etl-test against PlexTest; verify all 13 raw tables + sales_orders_report VIEW
+Email report verified,Engineer,Not Started,,,Initial data sync successful,,
+BigQuery VIEW validation — sales orders report,Analyst,Not Started,,,Initial data sync successful,,"Confirm 16 columns in sales_orders_report; spot-check values against Plex SQL Dev"
+Production host ServerDataSource confirmed,Engineer,Not Started,,,,Plex support ticket,"odbc.plex.com ServerDataSource name — currently blocked"
+Production go-live,PM,Not Started,,,,"Production host confirmed, UAT sign-off","Promote from PlexTest to PlexProd; trigger plex-etl job"
+DataDirect license resolved,Engineer,Not Started,,,,,15-day trial mode — resolve before production cutover
+UAT sign-off,PM,Not Started,,,Initial data sync successful,,Data scientist validates sales_orders_report output against Plex data
+Post-go-live monitoring check,PM,Not Started,,,Production go-live,,Verify scheduler running; check sync_metadata daily; email reports arriving
+Second report — purchasing orders,Analyst,Not Started,,,,Production go-live,"Add Purchasing_v_PO + Purchasing_v_PO_Line extractions; new Cloud Run job"
+Project closeout,PM,Not Started,,,Post-go-live monitoring check,,

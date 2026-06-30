@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 
 import pyodbc
 import pandas as pd
-from google.cloud import bigquery, secretmanager
+import yaml
+from google.api_core import exceptions as gcp_exceptions
+from google.cloud import bigquery, secretmanager, storage
 
 from email_utils import send_report
 
@@ -35,6 +37,16 @@ SECRET_COMPANY   = os.environ.get("SECRET_COMPANY_CODE",  "plex-company-code")
 SECRET_SENDGRID  = os.environ.get("SECRET_SENDGRID_KEY",  "sendgrid-api-key")
 SECRET_TOKEN     = os.environ.get("SECRET_ACCESS_TOKEN",  "plex-access-token")
 
+# GCS path to a report config YAML (gs://bucket/path or a local file path).
+# When set, the job runs all extractions defined in the YAML instead of the
+# single-view PLEX_VIEW env var.  Leave empty for legacy single-view mode.
+REPORT_CONFIG_GCS_PATH = os.environ.get("REPORT_CONFIG_GCS_PATH", "")
+
+# ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
+PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
+PLEX_DATE_COL = os.environ.get("PLEX_DATE_COL", "")
+PLEX_FILTER   = os.environ.get("PLEX_FILTER",   "WHERE Part_Type = 'Raw Materials'")
+
 
 # ── Secret Manager ────────────────────────────────────────────────────────────
 def get_secret(secret_name: str) -> str:
@@ -52,6 +64,26 @@ def get_credential(direct_env: str, secret_name: str) -> str:
         log.info(f"Using direct credential from {direct_env}.")
         return direct
     return get_secret(secret_name)
+
+
+# ── GCS / report config ───────────────────────────────────────────────────────
+def load_gcs_text(uri: str) -> str:
+    """Download text from a GCS URI (gs://bucket/path) or a local file path."""
+    if uri.startswith("gs://"):
+        gcs = storage.Client()
+        bucket_name, blob_path = uri[len("gs://"):].split("/", 1)
+        return gcs.bucket(bucket_name).blob(blob_path).download_as_text()
+    with open(uri) as f:
+        return f.read()
+
+
+def load_report_config(config_path: str) -> dict:
+    """Load a report definition YAML from GCS or a local path."""
+    log.info(f"Loading report config from {config_path}")
+    config = yaml.safe_load(load_gcs_text(config_path))
+    n = len(config.get("extractions", []))
+    log.info(f"Report '{config.get('report_name', 'unnamed')}' loaded: {n} extraction(s)")
+    return config
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -82,31 +114,33 @@ def update_last_sync(
     sync_time: datetime,
     rows_written: int,
     max_modified: datetime,
+    bq_table: str = None,
 ):
     """Record a successful sync in the metadata table."""
+    table_name = bq_table or BQ_TABLE
     rows = [{
-        "table_name":    BQ_TABLE,
-        "last_sync_at":  sync_time.isoformat(),
+        "table_name":      table_name,
+        "last_sync_at":    sync_time.isoformat(),
         "max_modified_at": max_modified.isoformat(),
-        "rows_written":  rows_written,
-        "synced_at":     datetime.now(timezone.utc).isoformat(),
+        "rows_written":    rows_written,
+        "synced_at":       datetime.now(timezone.utc).isoformat(),
     }]
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{METADATA_TABLE}"
     errors = bq.insert_rows_json(table_ref, rows)
     if errors:
         raise RuntimeError(f"Failed to update sync metadata: {errors}")
-    log.info(f"Metadata updated — {rows_written} rows written.")
+    log.info(f"Metadata updated for {table_name} — {rows_written} rows written.")
 
 
 def ensure_metadata_table(bq: bigquery.Client):
     """Create the metadata table if it doesn't exist yet."""
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{METADATA_TABLE}"
     schema = [
-        bigquery.SchemaField("table_name",   "STRING",    mode="REQUIRED"),
-        bigquery.SchemaField("last_sync_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("table_name",      "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("last_sync_at",    "TIMESTAMP", mode="REQUIRED"),
         bigquery.SchemaField("max_modified_at", "TIMESTAMP", mode="REQUIRED"),
-        bigquery.SchemaField("rows_written", "INTEGER",   mode="REQUIRED"),
-        bigquery.SchemaField("synced_at",    "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("rows_written",    "INTEGER",   mode="REQUIRED"),
+        bigquery.SchemaField("synced_at",       "TIMESTAMP", mode="REQUIRED"),
     ]
     try:
         table = bq.get_table(table_ref)
@@ -118,6 +152,20 @@ def ensure_metadata_table(bq: bigquery.Client):
     except Exception:
         table = bigquery.Table(table_ref, schema=schema)
         bq.create_table(table)
+
+
+def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
+    """Create or replace a BigQuery VIEW with the given SQL."""
+    view_ref = f"{GCP_PROJECT}.{dataset}.{name}"
+    table = bigquery.Table(view_ref)
+    table.view_query = sql
+    try:
+        bq.get_table(view_ref)
+        bq.update_table(table, ["view"])
+        log.info(f"Updated BigQuery view {view_ref}")
+    except gcp_exceptions.NotFound:
+        bq.create_table(table)
+        log.info(f"Created BigQuery view {view_ref}")
 
 
 # ── ODBC connection ───────────────────────────────────────────────────────────
@@ -161,41 +209,41 @@ def get_odbc_connection(user: str, password: str, company_code: str, access_toke
 
 
 # ── Plex query ────────────────────────────────────────────────────────────────
-# Configurable per Cloud Run job via env vars — one job per Plex view.
-# PLEX_FILTER: full WHERE clause, or empty string for no filter.
-# PLEX_DATE_COL: timestamp column name for incremental sync, or empty for full refresh.
-PLEX_VIEW      = os.environ.get("PLEX_VIEW",      "Part_v_Part")
-PLEX_DATE_COL  = os.environ.get("PLEX_DATE_COL",  "")
-PLEX_FILTER    = os.environ.get("PLEX_FILTER",    "WHERE Part_Type = 'Raw Materials'")
-
-
-def query_plex(conn: pyodbc.Connection) -> pd.DataFrame:
-    filter_clause = f" {PLEX_FILTER}" if PLEX_FILTER else ""
-    order_clause  = f" ORDER BY {PLEX_DATE_COL} ASC" if PLEX_DATE_COL else ""
-    sql = f"SELECT * FROM {PLEX_VIEW}{filter_clause}{order_clause}"
-    log.info(f"Querying Plex [{PLEX_VIEW}]...")
+def query_plex(
+    conn: pyodbc.Connection,
+    plex_view: str = None,
+    plex_filter: str = None,
+    plex_date_col: str = None,
+) -> pd.DataFrame:
+    view     = plex_view     if plex_view     is not None else PLEX_VIEW
+    filt     = plex_filter   if plex_filter   is not None else PLEX_FILTER
+    date_col = plex_date_col if plex_date_col is not None else PLEX_DATE_COL
+    filter_clause = f" {filt}" if filt else ""
+    order_clause  = f" ORDER BY {date_col} ASC" if date_col else ""
+    sql = f"SELECT * FROM {view}{filter_clause}{order_clause}"
+    log.info(f"Querying Plex [{view}]...")
     cursor = conn.cursor()
     cursor.execute(sql)
     columns = [col[0] for col in cursor.description]
     rows = cursor.fetchall()
     df = pd.DataFrame.from_records(rows, columns=columns)
     cursor.close()
-    log.info(f"Fetched {len(df)} rows from Plex [{PLEX_VIEW}].")
+    log.info(f"Fetched {len(df)} rows from Plex [{view}].")
     return df
 
 
 # ── BigQuery write ────────────────────────────────────────────────────────────
-def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
+def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = None):
     """
     Replace the target BigQuery table with the current DataFrame.
-    Part_v_Part has no date column so every run is a full refresh —
-    WRITE_TRUNCATE replaces the table atomically each time.
+    WRITE_TRUNCATE replaces the table atomically — idempotent on re-run.
     """
+    table_name = bq_table or BQ_TABLE
     if df.empty:
-        log.info("No new rows to write — skipping BigQuery write.")
+        log.info(f"No rows to write to {table_name} — skipping BigQuery write.")
         return 0
 
-    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
+    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{table_name}"
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         autodetect=True,
@@ -208,7 +256,7 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame):
     if job.errors:
         raise RuntimeError(f"BigQuery load job failed: {job.errors}")
 
-    log.info(f"Successfully wrote {len(df)} rows to BigQuery.")
+    log.info(f"Successfully wrote {len(df)} rows to {table_ref}.")
     return len(df)
 
 
@@ -229,11 +277,12 @@ def write_to_csv(df: pd.DataFrame, output_dir: str, table_name: str) -> int:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    sync_time = datetime.now(timezone.utc)
+    sync_time   = datetime.now(timezone.utc)
     log.info("=== Plex → BigQuery ETL job starting ===")
-    events = []
+    events      = []
     rows_fetched = 0
     rows_written = 0
+    report_name  = REPORT_CONFIG_GCS_PATH or PLEX_VIEW
 
     # Fetch credentials — IAM token takes priority over username/password
     log.info("Fetching credentials...")
@@ -243,7 +292,10 @@ def main():
             try:
                 access_token = get_secret(SECRET_TOKEN)
             except Exception as sm_err:
-                log.warning("Could not fetch IAM token from Secret Manager (%s) — falling back to username/password auth.", sm_err)
+                log.warning(
+                    "Could not fetch IAM token from Secret Manager (%s) — falling back to username/password auth.",
+                    sm_err,
+                )
 
         if access_token:
             user         = os.environ.get("PLEX_ODBC_USER", "")
@@ -274,74 +326,160 @@ def main():
         log.info("LOCAL MODE — skipping BigQuery, full extract.")
         events.append("Local mode — full extract")
 
-    # Connect to Plex and pull data
-    try:
-        conn = get_odbc_connection(user, password, company_code, access_token)
-    except Exception as exc:
-        log.exception("Failed to establish ODBC connection to Plex.")
-        raise RuntimeError("ODBC connection failed.") from exc
-
-    try:
-        df = query_plex(conn)
-    except Exception as exc:
-        log.exception("Plex query failed.")
-        raise RuntimeError("Plex query failed.") from exc
-    finally:
+    # ── Multi-report config mode ──────────────────────────────────────────────
+    if REPORT_CONFIG_GCS_PATH:
         try:
-            conn.close()
-            log.info("ODBC connection closed.")
-        except Exception:
-            log.warning("Failed to close ODBC connection cleanly.")
-
-    if not df.empty and PLEX_DATE_COL and PLEX_DATE_COL in df.columns:
-        df[PLEX_DATE_COL] = pd.to_datetime(df[PLEX_DATE_COL], utc=True, errors="coerce")
-    rows_fetched = len(df)
-    events.append(f"Fetched {rows_fetched} rows from Plex")
-
-    # Write output
-    if OUTPUT_MODE == "bigquery":
-        try:
-            rows_written = write_to_bigquery(bq, df)
+            config = load_report_config(REPORT_CONFIG_GCS_PATH)
+            report_name = config.get("report_name", REPORT_CONFIG_GCS_PATH)
+            extractions = config.get("extractions", [])
+            events.append(f"Loaded report config: {report_name} ({len(extractions)} extractions)")
         except Exception as exc:
-            log.exception("BigQuery write failed.")
-            raise RuntimeError("BigQuery write failed.") from exc
-        if rows_written > 0:
-            events.append(f"Wrote {rows_written} rows to BigQuery")
+            log.exception("Failed to load report config.")
+            raise RuntimeError("Report config load failed.") from exc
+
+        try:
+            conn = get_odbc_connection(user, password, company_code, access_token)
+        except Exception as exc:
+            log.exception("Failed to establish ODBC connection to Plex.")
+            raise RuntimeError("ODBC connection failed.") from exc
+
+        try:
+            for extraction in extractions:
+                view     = extraction["plex_view"]
+                table    = extraction["bq_table"]
+                filt     = extraction.get("filter", "")
+                date_col = extraction.get("date_col", "")
+
+                log.info(f"--- Extracting {view} → {table} ---")
+                try:
+                    df = query_plex(conn, plex_view=view, plex_filter=filt, plex_date_col=date_col)
+                except Exception as exc:
+                    log.exception(f"Query failed for {view}: {exc}")
+                    events.append(f"ERROR: {view} query failed: {exc}")
+                    continue
+
+                if date_col and date_col in df.columns:
+                    df[date_col] = pd.to_datetime(df[date_col], utc=True, errors="coerce")
+
+                rows_fetched += len(df)
+                events.append(f"Fetched {len(df)} rows from {view}")
+
+                if OUTPUT_MODE == "bigquery":
+                    try:
+                        written = write_to_bigquery(bq, df, bq_table=table)
+                        rows_written += written
+                        if written > 0:
+                            update_last_sync(bq, sync_time, written, sync_time, bq_table=table)
+                            events.append(f"Wrote {written} rows to {table}")
+                        else:
+                            events.append(f"No rows to write for {table}")
+                    except Exception as exc:
+                        log.exception(f"BigQuery write failed for {table}: {exc}")
+                        events.append(f"ERROR: {table} BQ write failed: {exc}")
+                else:
+                    try:
+                        written = write_to_csv(df, OUTPUT_DIR, table)
+                        rows_written += written
+                        events.append(f"Wrote {written} rows to {table} (CSV)")
+                    except Exception as exc:
+                        log.exception(f"CSV write failed for {table}: {exc}")
+                        events.append(f"ERROR: {table} CSV write failed: {exc}")
+        finally:
+            try:
+                conn.close()
+                log.info("ODBC connection closed.")
+            except Exception:
+                log.warning("Failed to close ODBC connection cleanly.")
+
+        # Create/replace the BigQuery JOIN view if defined in config
+        if OUTPUT_MODE == "bigquery" and "bq_view" in config:
+            view_cfg = config["bq_view"]
+            view_sql = view_cfg.get("sql", "")
+            if not view_sql and "sql_file" in view_cfg:
+                try:
+                    raw_sql  = load_gcs_text(view_cfg["sql_file"])
+                    view_sql = raw_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
+                except Exception as exc:
+                    log.exception(f"Failed to load view SQL from {view_cfg['sql_file']}: {exc}")
+                    events.append(f"ERROR: Could not load view SQL: {exc}")
+            elif view_sql:
+                view_sql = view_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
+
+            if view_sql:
+                try:
+                    create_or_replace_bq_view(bq, BQ_DATASET, view_cfg["name"], view_sql)
+                    events.append(f"Applied BigQuery view {BQ_DATASET}.{view_cfg['name']}")
+                except Exception as exc:
+                    log.exception(f"Failed to create/update BigQuery view: {exc}")
+                    events.append(f"ERROR: BigQuery view update failed: {exc}")
+
+    # ── Legacy single-view mode ───────────────────────────────────────────────
+    else:
+        try:
+            conn = get_odbc_connection(user, password, company_code, access_token)
+        except Exception as exc:
+            log.exception("Failed to establish ODBC connection to Plex.")
+            raise RuntimeError("ODBC connection failed.") from exc
+
+        try:
+            df = query_plex(conn)
+        except Exception as exc:
+            log.exception("Plex query failed.")
+            raise RuntimeError("Plex query failed.") from exc
+        finally:
+            try:
+                conn.close()
+                log.info("ODBC connection closed.")
+            except Exception:
+                log.warning("Failed to close ODBC connection cleanly.")
+
+        if not df.empty and PLEX_DATE_COL and PLEX_DATE_COL in df.columns:
+            df[PLEX_DATE_COL] = pd.to_datetime(df[PLEX_DATE_COL], utc=True, errors="coerce")
+        rows_fetched = len(df)
+        events.append(f"Fetched {rows_fetched} rows from Plex")
+
+        if OUTPUT_MODE == "bigquery":
+            try:
+                rows_written = write_to_bigquery(bq, df)
+            except Exception as exc:
+                log.exception("BigQuery write failed.")
+                raise RuntimeError("BigQuery write failed.") from exc
+            if rows_written > 0:
+                events.append(f"Wrote {rows_written} rows to BigQuery")
+            else:
+                events.append("No new rows to write")
         else:
-            events.append("No new rows to write")
-    else:
-        try:
-            rows_written = write_to_csv(df, OUTPUT_DIR, BQ_TABLE)
-        except Exception as exc:
-            log.exception("CSV write failed.")
-            raise RuntimeError("CSV write failed.") from exc
-        events.append(f"Wrote {rows_written} rows to {OUTPUT_DIR}")
+            try:
+                rows_written = write_to_csv(df, OUTPUT_DIR, BQ_TABLE)
+            except Exception as exc:
+                log.exception("CSV write failed.")
+                raise RuntimeError("CSV write failed.") from exc
+            events.append(f"Wrote {rows_written} rows to {OUTPUT_DIR}")
 
-    # Update sync metadata (bigquery mode only)
-    # Part_v_Part has no date column (PLEX_DATE_COL is empty) — use sync_time as the watermark.
-    if OUTPUT_MODE == "bigquery" and rows_written > 0:
-        max_modified = sync_time
-        try:
-            update_last_sync(bq, sync_time, rows_written, max_modified)
-            events.append("Updated sync metadata")
-        except Exception as exc:
-            log.exception("Failed to update sync metadata.")
-            raise RuntimeError("Metadata update failed.") from exc
-    else:
-        events.append("No metadata update needed")
+        if OUTPUT_MODE == "bigquery" and rows_written > 0:
+            try:
+                update_last_sync(bq, sync_time, rows_written, sync_time)
+                events.append("Updated sync metadata")
+            except Exception as exc:
+                log.exception("Failed to update sync metadata.")
+                raise RuntimeError("Metadata update failed.") from exc
+        else:
+            events.append("No metadata update needed")
 
-    log.info(f"=== ETL job complete — {rows_written} rows written ===")
+    log.info(f"=== ETL job complete — {rows_written} rows written across {rows_fetched} fetched ===")
     return {
-        "rows_fetched": rows_fetched,
-        "rows_written": rows_written,
-        "events": events,
-        "gcp_project": GCP_PROJECT,
-        "bq_dataset": BQ_DATASET,
-        "bq_table": BQ_TABLE,
-        "plex_view": PLEX_VIEW,
-        "plex_filter": PLEX_FILTER,
-        "plex_host": PLEX_HOST,
-        "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        "rows_fetched":           rows_fetched,
+        "rows_written":           rows_written,
+        "events":                 events,
+        "gcp_project":            GCP_PROJECT,
+        "bq_dataset":             BQ_DATASET,
+        "bq_table":               BQ_TABLE,
+        "report_name":            report_name,
+        "plex_view":              PLEX_VIEW,
+        "plex_filter":            PLEX_FILTER,
+        "plex_host":              PLEX_HOST,
+        "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
+        "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
 
@@ -349,16 +487,18 @@ def run_and_report():
     start_time = datetime.now(timezone.utc)
     error = None
     result = {
-        "rows_fetched": 0,
-        "rows_written": 0,
-        "events": [],
-        "gcp_project": GCP_PROJECT,
-        "bq_dataset": BQ_DATASET,
-        "bq_table": BQ_TABLE,
-        "plex_view": PLEX_VIEW,
-        "plex_filter": PLEX_FILTER,
-        "plex_host": PLEX_HOST,
-        "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        "rows_fetched":           0,
+        "rows_written":           0,
+        "events":                 [],
+        "gcp_project":            GCP_PROJECT,
+        "bq_dataset":             BQ_DATASET,
+        "bq_table":               BQ_TABLE,
+        "report_name":            REPORT_CONFIG_GCS_PATH or PLEX_VIEW,
+        "plex_view":              PLEX_VIEW,
+        "plex_filter":            PLEX_FILTER,
+        "plex_host":              PLEX_HOST,
+        "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
+        "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
     try:
@@ -372,14 +512,14 @@ def run_and_report():
 
     end_time = datetime.now(timezone.utc)
     report = {
-        "status": status,
-        "start_time": start_time.isoformat(),
-        "end_time": end_time.isoformat(),
+        "status":           status,
+        "start_time":       start_time.isoformat(),
+        "end_time":         end_time.isoformat(),
         "duration_seconds": int((end_time - start_time).total_seconds()),
-        "rows_fetched": result.get("rows_fetched", 0),
-        "rows_written": result.get("rows_written", 0),
-        "events": result.get("events", []),
-        "errors": errors,
+        "rows_fetched":     result.get("rows_fetched", 0),
+        "rows_written":     result.get("rows_written", 0),
+        "events":           result.get("events", []),
+        "errors":           errors,
     }
 
     if OUTPUT_MODE == "bigquery":

@@ -1,131 +1,147 @@
 # Operations Guide
 
-How to configure SendGrid email reports and how to add new Plex tables, reports, or stored procedures to the pipeline.
+Day-to-day operations: editing reports, adding new reports, configuring SendGrid, and managing environments.
 
 ---
 
-## SendGrid email reports
+## How the Report System Works
 
-After every run, the pipeline can send an HTML email summary showing status, row counts, and any errors. It's off by default.
+Reports are defined by **YAML files stored in Cloud Storage** — not hardcoded in the container image or Terraform variables. This means you can change what gets extracted and how the BigQuery view looks without any code deployment.
 
-### Step 1 — Get your SendGrid API key
-
-1. Go to [app.sendgrid.com](https://app.sendgrid.com) and log in (or create a free account)
-2. Left sidebar → **Settings** → **API Keys** → **Create API Key**
-3. Name it `plex-etl`, set permission to **Restricted Access** → enable **Mail Send** → Create
-4. Copy the key — **you only see it once**
-
-### Step 2 — Verify your sender email
-
-SendGrid won't send from an unverified email address.
-
-- Left sidebar → **Settings** → **Sender Authentication**
-- Choose **Single Sender Verification** (easiest — verify one email address)
-- Enter the email address you'll use as `REPORT_FROM_EMAIL`
-- Click the verification link sent to that inbox
-
-> If your company owns the sending domain (e.g. `parasolgroupinc.com`), **Domain Authentication** is stronger and removes the "via sendgrid.net" label in recipients' inboxes. Ask IT for the DNS records.
-
-### Step 3 — Store the API key in Secret Manager
-
-```bash
-echo -n 'SG.your-actual-key-here' | \
-  gcloud secrets versions add sendgrid-api-key \
-  --data-file=- --project=parasoldatalake
+```
+gs://voxdatalake-report-configs/
+├── reports/
+│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd
+│   └── (future reports here)
+├── test/
+│   └── sales_orders.yaml          ← test: same views → PlexTest
+└── sql/
+    └── sales_orders_view.sql      ← BigQuery JOIN view SQL ✏ edit here
 ```
 
-> The secret container is already created by Terraform. This just adds the value.
+**Each YAML file contains:**
+- `extractions[]` — list of Plex views to pull, with optional filters and destination table names
+- `bq_view` — optional BigQuery VIEW definition (the SQL that JOINs raw tables into the report)
 
-### Step 4 — Enable reporting in terraform.tfvars
-
-Open `terraform/terraform.tfvars` and update the SendGrid section:
-
-```hcl
-sendgrid_enabled  = "true"
-report_from_email = "emilio@parasolgroupinc.com"   # must be verified in Step 2
-report_to_emails  = "emilio@parasolgroupinc.com,team@parasolgroupinc.com"
-report_subject    = "Plex ETL — Daily Run Report"
-```
-
-Apply the changes:
-
-```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
-```
-
-### Step 5 — Test it
-
-Run the job manually and check your inbox:
-
-```bash
-gcloud run jobs execute plex-etl \
-  --region=us-central1 --project=parasoldatalake --wait
-```
-
-**Email arrives within a minute of the job completing.** If it doesn't:
-
-1. Check job logs for `SendGrid report sent with status 202` — 202 means accepted by SendGrid
-2. Check your spam folder
-3. Verify the sender email was confirmed in SendGrid
-4. Run `gcloud secrets versions access latest --secret=sendgrid-api-key --project=parasoldatalake` to confirm the key is stored correctly
-
-### To disable reporting
-
-```hcl
-# terraform.tfvars
-sendgrid_enabled = "false"
-```
-Then `terraform apply`.
+The Cloud Run Job reads the YAML at startup on every run. The `REPORT_CONFIG_GCS_PATH` env var tells it which YAML to load.
 
 ---
 
-## Adding new tables, reports, or stored procedures
+## Edit an Existing Report (No Deployment)
 
-### How it works
+### Change a filter on a Plex view
 
-The pipeline is now fully configurable via three env vars:
+1. Edit `reports/sales_orders.yaml` — find the extraction you want to filter and set the `filter` field:
 
-| Variable | What it does | Example |
-|---|---|---|
-| `PLEX_VIEW` | The Plex view or stored procedure name | `Part_v_Part`, `Production_Order_v_Production_Order` |
-| `PLEX_FILTER` | SQL WHERE clause (or empty for all rows) | `WHERE Part_Type = 'Raw Materials'` |
-| `PLEX_DATE_COL` | Timestamp column for incremental sync (empty = full refresh) | `Modified_Date`, `Ship_Date` |
+```yaml
+extractions:
+  - plex_view: Sales_v_PO
+    bq_table: raw_Sales_v_PO
+    filter: "WHERE PO_Status_Key = 2073"   # ← add filter here
+    date_col: ""
+```
 
-The pattern for multiple tables is: **one Cloud Run job per Plex view, all using the same Docker image.** Each job has different env vars but the same code. Like calling the same API endpoint with different query params.
+2. Push to GCS:
 
-### How to find the Plex view name
+```bash
+gsutil cp reports/sales_orders.yaml gs://voxdatalake-report-configs/reports/
+```
 
-Plex exposes its data through named views. Naming convention: `{Module}_v_{ObjectName}`. Examples:
+3. Trigger a run:
 
-| What you want | Likely view name |
-|---|---|
-| Parts master | `Part_v_Part` |
-| Production orders | `Production_Order_v_Production_Order` |
-| Inventory | `Inventory_v_Container_Trace` |
-| Customers | `Customer_v_Customer` |
-| Shipments | `Shipment_v_Container_Trace` |
+```bash
+gcloud run jobs execute plex-etl-test \
+  --region=us-central1 --project=voxdatalake --wait
+```
 
-To confirm the exact name and available columns: log into Plex → go to the data or report you want → note the report/data source name → ask Plex support to confirm the ODBC view name and whether your user has read access.
+### Add a Plex view to an existing report
 
-For **stored procedures** — Plex also exposes stored procedures as queryable views over ODBC. They appear in the ODBC catalog the same way. Use the procedure name as `PLEX_VIEW`.
+Add a new entry to the `extractions[]` list in the YAML:
 
-### Adding a new table — two options
+```yaml
+  - plex_view: Sales_v_PO_Type        # ← Plex view name (always {DB}_v_{View})
+    bq_table: raw_Sales_v_PO_Type     # ← BigQuery table name (choose anything)
+    filter: ""                         # ← WHERE clause, or "" for all rows
+    date_col: ""                       # ← timestamp column for incremental, or ""
+```
+
+Then push and trigger as above.
+
+### Change the BigQuery JOIN view SQL
+
+The `sales_orders_view.sql` file defines the 16-field report. Edit it and push:
+
+```bash
+# Edit reports/sql/sales_orders_view.sql locally, then:
+gsutil cp reports/sql/sales_orders_view.sql \
+  gs://voxdatalake-report-configs/sql/
+
+# The next pipeline run will CREATE OR REPLACE the view in BigQuery.
+# You can also edit the view directly in the BigQuery Console —
+# your changes persist until the next pipeline run.
+gcloud run jobs execute plex-etl-test \
+  --region=us-central1 --project=voxdatalake --wait
+```
+
+> **Note on SQL placeholders:** The SQL file uses `{gcp_project}` and `{dataset}` which the container replaces at runtime with the `GCP_PROJECT` and `BQ_DATASET` env var values. Never hardcode `voxdatalake` or `PlexProd` in the SQL file — it must work for both prod and test.
 
 ---
 
-#### Option A — New Cloud Run job via Terraform (recommended for permanent tables)
+## Add a Brand-New Report
 
-This is the right approach for syncs that will run daily in production.
+### Step 1 — Create the YAML
 
-**1. Add the job to `terraform/main.tf`**
+```bash
+cp reports/sales_orders.yaml reports/purchasing_orders.yaml
+```
 
-Copy the existing job block and change the name and env vars. Add this after the existing `google_cloud_run_v2_job.etl` resource:
+Edit `reports/purchasing_orders.yaml`:
+
+```yaml
+report_name: purchasing_orders
+description: "Daily purchasing orders from Plex Purchasing module"
+
+extractions:
+  - plex_view: Purchasing_v_PO
+    bq_table: raw_Purchasing_v_PO
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_PO_Line
+    bq_table: raw_Purchasing_v_PO_Line
+    filter: ""
+    date_col: ""
+
+# Optional: define a BigQuery VIEW that JOINs the raw tables
+bq_view:
+  name: purchasing_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/purchasing_orders_view.sql
+```
+
+### Step 2 — Create the SQL (optional)
+
+```bash
+cp reports/sql/sales_orders_view.sql reports/sql/purchasing_orders_view.sql
+# Edit to match your join logic
+```
+
+### Step 3 — Push to GCS
+
+```bash
+gsutil cp reports/purchasing_orders.yaml \
+  gs://voxdatalake-report-configs/reports/
+
+gsutil cp reports/sql/purchasing_orders_view.sql \
+  gs://voxdatalake-report-configs/sql/
+```
+
+### Step 4 — Add a Cloud Run Job in `terraform/main.tf`
+
+Copy the existing `google_cloud_run_v2_job.etl` block. Change the job name and `REPORT_CONFIG_GCS_PATH`:
 
 ```hcl
-# Example: production orders sync
-resource "google_cloud_run_v2_job" "etl_production_orders" {
-  name     = "plex-etl-production-orders"
+resource "google_cloud_run_v2_job" "etl_purchasing" {
+  name     = "plex-etl-purchasing"
   location = var.gcp_region
 
   template {
@@ -133,53 +149,46 @@ resource "google_cloud_run_v2_job" "etl_production_orders" {
       service_account = google_service_account.etl.email
       containers {
         image = var.image_url
-        env { name = "GCP_PROJECT";           value = var.gcp_project }
-        env { name = "BQ_DATASET";            value = var.bq_dataset }
-        env { name = "BQ_TABLE";              value = "production_orders" }
-        env { name = "PLEX_HOST";             value = var.plex_host }
-        env { name = "PLEX_PORT";             value = "19995" }
+        env { name = "GCP_PROJECT";            value = var.gcp_project }
+        env { name = "BQ_DATASET";             value = var.bq_dataset }
+        env { name = "BQ_TABLE";               value = "purchasing_orders" }
+        env { name = "PLEX_HOST";              value = var.plex_host }
+        env { name = "PLEX_PORT";              value = "19995" }
         env { name = "PLEX_SERVER_DATASOURCE"; value = "ReportDataSource" }
-        env { name = "PLEX_ODBC_USER";        value = var.plex_odbc_user }
-        env { name = "SECRET_ACCESS_TOKEN";   value = var.secret_access_token }
-        env { name = "PLEX_VIEW";             value = "Production_Order_v_Production_Order" }
-        env { name = "PLEX_FILTER";           value = "" }
-        env { name = "PLEX_DATE_COL";         value = "Modified_Date" }
-        env { name = "METADATA_TABLE";        value = var.metadata_table }
-        env { name = "BACKFILL_MINUTES";      value = tostring(var.backfill_minutes) }
-        env { name = "SENDGRID_ENABLED";      value = var.sendgrid_enabled }
-        env { name = "REPORT_FROM_EMAIL";     value = var.report_from_email }
-        env { name = "REPORT_TO_EMAILS";      value = var.report_to_emails }
-        env { name = "SECRET_SENDGRID_KEY";   value = var.secret_sendgrid_key }
+        env { name = "PLEX_ODBC_USER";         value = var.plex_odbc_user }
+        env { name = "SECRET_ACCESS_TOKEN";    value = var.secret_access_token }
+        # ↓ This is the only thing that differs per report
+        env { name = "REPORT_CONFIG_GCS_PATH"; value = "gs://voxdatalake-report-configs/reports/purchasing_orders.yaml" }
+        env { name = "METADATA_TABLE";         value = var.metadata_table }
+        env { name = "BACKFILL_MINUTES";       value = tostring(var.backfill_minutes) }
+        env { name = "SENDGRID_ENABLED";       value = var.sendgrid_enabled }
+        env { name = "REPORT_FROM_EMAIL";      value = var.report_from_email }
+        env { name = "REPORT_TO_EMAILS";       value = var.report_to_emails }
+        env { name = "SECRET_SENDGRID_KEY";    value = var.secret_sendgrid_key }
+        env { name = "COMPANY_NAME";           value = var.company_name }
       }
       max_retries = 3
       timeout     = "600s"
     }
   }
 }
-```
 
-**2. Add a scheduler for it (if you want it to run automatically)**
-
-```hcl
-resource "google_cloud_scheduler_job" "etl_production_orders" {
-  name        = "plex-production-orders-sync"
-  description = "Daily sync of Plex production orders"
-  schedule    = "0 3 * * *"   # 3 AM UTC — stagger from the parts job
-  time_zone   = "UTC"
-  region      = var.gcp_region
+resource "google_cloud_scheduler_job" "etl_purchasing" {
+  name      = "plex-purchasing-sync"
+  schedule  = "0 4 * * *"
+  time_zone = "UTC"
+  region    = var.gcp_region
 
   http_target {
     http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/plex-etl-production-orders:run"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/plex-etl-purchasing:run"
     body        = base64encode("{}")
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
+    oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
 ```
 
-**3. Apply**
+### Step 5 — Apply Terraform
 
 ```bash
 cd terraform
@@ -188,56 +197,137 @@ terraform apply -var-file=terraform.tfvars
 
 ---
 
-#### Option B — One-off manual run (for testing a new view before committing to Terraform)
+## Environments: Prod vs Test
 
-Run against any view without changing any code or infrastructure:
+| Setting | Production | Test |
+|---|---|---|
+| Cloud Run Job | `plex-etl` | `plex-etl-test` |
+| Cloud Scheduler | `plex-daily-sync` (2 AM UTC) | `plex-daily-sync-test` (3 AM UTC) |
+| Plex ODBC Host | `odbc.plex.com` ⚠ pending | `vox.odbc.plex.com` ✅ |
+| BigQuery Dataset | `PlexProd` | `PlexTest` |
+| Report Config | `gs://.../reports/sales_orders.yaml` | `gs://.../test/sales_orders.yaml` |
+| Status | Blocked — prod ServerDataSource TBD | Active — use for all development |
+
+**Always test in the test environment first.** The `plex-etl-test` job writes to `PlexTest` — safe to run repeatedly, no impact on production data.
+
+### Trigger test job manually
 
 ```bash
-gcloud run jobs update plex-etl \
-  --region=us-central1 \
-  --project=parasoldatalake \
-  --update-env-vars=PLEX_VIEW=Production_Order_v_Production_Order,PLEX_FILTER=,BQ_TABLE=production_orders_test
+gcloud run jobs execute plex-etl-test \
+  --region=us-central1 --project=voxdatalake --wait
+```
 
+### Promote to production
+
+After verifying results in `PlexTest`:
+1. Confirm the prod report YAML is correct (`reports/sales_orders.yaml`)
+2. Get Plex support to confirm `ServerDataSource` for `odbc.plex.com`
+3. Run the production job:
+
+```bash
 gcloud run jobs execute plex-etl \
-  --region=us-central1 --project=parasoldatalake --wait
-```
-
-Check BigQuery for the result:
-```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT COUNT(*) FROM \`parasoldatalake.plex_sandbox.production_orders_test\`"
-```
-
-**Once it looks right, switch back** to the parts job and add a proper Terraform job (Option A):
-```bash
-gcloud run jobs update plex-etl \
-  --region=us-central1 \
-  --project=parasoldatalake \
-  --update-env-vars=PLEX_VIEW=Part_v_Part,PLEX_FILTER=WHERE Part_Type = 'Raw Materials',BQ_TABLE=raw_materials_parts
+  --region=us-central1 --project=voxdatalake --wait
 ```
 
 ---
 
-### Full vs incremental sync — which to use
+## Full vs Incremental Sync
 
 | | Full refresh | Incremental |
 |---|---|---|
-| **When to use** | Reference/master data (parts, customers) that changes slowly | Transaction data (orders, shipments) that grows daily |
-| **How it works** | Replaces the entire table each run (`WRITE_TRUNCATE`) | Appends only new/changed rows since last run (`WRITE_APPEND`) |
-| **Plex requirement** | No timestamp column needed | View must have a timestamp column (e.g. `Modified_Date`) |
-| **`PLEX_DATE_COL`** | Leave empty | Set to the column name |
-| **Risk** | Table empty if job fails mid-write | Duplicates if backfill window is set wrong |
+| **When to use** | Reference/master data (parts, customers, lookups) | Transaction data (orders, releases, shipments) that grows daily |
+| **How it works** | Replaces the entire table each run (`WRITE_TRUNCATE`) | Appends only new/changed rows since last run |
+| **Plex requirement** | No timestamp column needed | View must have a timestamp column (e.g. `Change_Date`) |
+| **`date_col` in YAML** | Leave empty `""` | Set to the column name |
+| **Current approach** | All 13 views in the sales orders report | `Sales_v_PO_Change` uses `Change_Date` |
 
-**To set a view as incremental:** set `PLEX_DATE_COL` to the timestamp column name. The `sync_metadata` table automatically tracks the high-water mark between runs.
+To switch a view to incremental, set `date_col` to the timestamp column name in the YAML and push to GCS:
+
+```yaml
+  - plex_view: Sales_v_PO_Change
+    bq_table: raw_Sales_v_PO_Change
+    filter: ""
+    date_col: Change_Date    # ← enables incremental sync
+```
 
 ---
 
-### Checklist for each new table
+## YAML Schema Reference
 
-- [ ] Confirm view name and column names with Plex support
-- [ ] Confirm your ODBC user has read access to the view
+```yaml
+report_name: string           # required — identifier for logs and email reports
+description: string           # optional — human-readable description
+
+extractions:                  # required — list of Plex views to extract
+  - plex_view: string         # required — Plex ODBC view name ({DB}_v_{View})
+    bq_table: string          # required — destination BigQuery table name
+    filter: string            # optional — SQL WHERE clause, e.g. "WHERE Active = 1"
+    date_col: string          # optional — column for incremental sync watermark
+
+bq_view:                      # optional — BigQuery VIEW to create after extraction
+  name: string                # VIEW name in BigQuery
+  sql_file: string            # gs:// URI to a .sql file (uses {gcp_project}/{dataset})
+  sql: string                 # inline SQL alternative (same placeholders)
+```
+
+---
+
+## SendGrid Email Reports
+
+After every run the pipeline can email an HTML summary with status, row counts per table, and any errors.
+
+### Setup
+
+**1. Get a SendGrid API key**
+- Log in at [app.sendgrid.com](https://app.sendgrid.com) → Settings → API Keys → Create
+- Name it `plex-etl`, restrict to **Mail Send** only
+
+**2. Verify your sender email**
+- Settings → Sender Authentication → Single Sender Verification
+- Must match `report_from_email` in `terraform.tfvars`
+
+**3. Store the key in Secret Manager**
+
+```bash
+echo -n 'SG.your-key-here' | \
+  gcloud secrets versions add sendgrid-api-key \
+  --data-file=- --project=voxdatalake
+```
+
+**4. Enable in `terraform/terraform.tfvars`**
+
+```hcl
+sendgrid_enabled  = "true"
+report_from_email = "marketing@parasolgroupinc.com"
+report_to_emails  = "emilio.dominguez@parasolgroupinc.com,jennilyn.tockstein@parasolgroupinc.com"
+company_name      = "Vox Nutrition"
+```
+
+Then `terraform apply -var-file=terraform.tfvars`.
+
+**5. Test**
+
+```bash
+gcloud run jobs execute plex-etl-test \
+  --region=us-central1 --project=voxdatalake --wait
+# Check inbox within 1 minute
+```
+
+If no email arrives:
+- Check logs for `SendGrid report sent with status 202`
+- Verify sender address is confirmed in SendGrid
+- Check spam folder
+- Confirm the API key: `gcloud secrets versions access latest --secret=sendgrid-api-key --project=voxdatalake`
+
+---
+
+## Checklist for Each New Table or Report
+
+- [ ] Identify the Plex view name (`{Database}_v_{ViewName}` format)
+- [ ] Verify your ODBC user has read access to the view (run `SELECT TOP 3 * FROM {view}` in Plex SQL Dev)
+- [ ] Add entry to the report YAML, push to GCS, trigger test run
+- [ ] Check BigQuery for the new table: `bq query --nouse_legacy_sql "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.{table}\`"`
 - [ ] Decide: full refresh or incremental? (does the view have a timestamp column?)
-- [ ] Test with Option B (manual run) before committing to Terraform
-- [ ] Add the Cloud Run job + scheduler to `main.tf` (Option A)
-- [ ] Run `terraform apply`
-- [ ] Check BigQuery for the new table after the first run
+- [ ] If adding a new report: add Cloud Run job + scheduler to `main.tf`, run `terraform apply`
+- [ ] Test the BigQuery VIEW if you added `bq_view` to the YAML
+- [ ] Verify row counts and spot-check a few rows against Plex

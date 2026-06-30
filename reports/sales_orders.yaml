@@ -1,0 +1,105 @@
+report_name: sales_orders
+description: "16-field Vox Nutrition sales orders report — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW TO EDIT THIS REPORT (no deployment required):
+#
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/sales_orders_view.sql and save to GCS
+#
+# After saving, the next Cloud Run job execution picks up the changes automatically.
+# Manual trigger: gcloud run jobs execute plex-etl --region us-central1
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Each entry below becomes one raw BigQuery table in the BQ_DATASET (e.g. PlexProd).
+# plex_view : Plex ODBC view name — always {Database}_v_{ViewName}
+# bq_table  : Destination BigQuery table name
+# filter    : SQL WHERE clause (include the word WHERE), or "" for all rows
+# date_col  : Column name for incremental sync watermark, or "" for full refresh
+extractions:
+  # Sales Order header — one row per sales order
+  - plex_view: Sales_v_PO
+    bq_table: raw_Sales_v_PO
+    filter: ""
+    date_col: ""
+
+  # Sales Order line items — one row per part line on each order
+  - plex_view: Sales_v_PO_Line
+    bq_table: raw_Sales_v_PO_Line
+    filter: ""
+    date_col: ""
+
+  # Status change audit trail — used to derive Date Approved (status key 2073)
+  - plex_view: Sales_v_PO_Change
+    bq_table: raw_Sales_v_PO_Change
+    filter: ""
+    date_col: Change_Date
+
+  # Status lookup — PO_Status_Key → human-readable status text
+  - plex_view: Sales_v_PO_Status
+    bq_table: raw_Sales_v_PO_Status
+    filter: ""
+    date_col: ""
+
+  # Order type lookup — PO_Type_Key → order type text
+  - plex_view: Sales_v_PO_Type
+    bq_table: raw_Sales_v_PO_Type
+    filter: ""
+    date_col: ""
+
+  # Sales rep assignments — Sort_Order 1 = primary rep, 2 = secondary
+  - plex_view: Sales_v_Order_Salesperson
+    bq_table: raw_Sales_v_Order_Salesperson
+    filter: ""
+    date_col: ""
+
+  # Release schedule — qty ordered per line item
+  - plex_view: Sales_v_Release
+    bq_table: raw_Sales_v_Release
+    filter: ""
+    date_col: ""
+
+  # Customer master — Customer_No → customer name and info
+  - plex_view: Common_v_Customer
+    bq_table: raw_Common_v_Customer
+    filter: ""
+    date_col: ""
+
+  # Customer part pricing — tiered by Breakpoint_Quantity
+  - plex_view: Part_v_Customer_Part_Price
+    bq_table: raw_Part_v_Customer_Part_Price
+    filter: ""
+    date_col: ""
+
+  # Part master — Part_Key → part number, name, product classification
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+
+  # Product type lookup — Part_Product_Type_Key → product type name
+  - plex_view: Part_v_Part_Product_Type
+    bq_table: raw_Part_v_Part_Product_Type
+    filter: ""
+    date_col: ""
+
+  # Product group lookup — Part_Product_Group_Key → product group name
+  - plex_view: Part_v_Part_Product_Group
+    bq_table: raw_Part_v_Part_Product_Group
+    filter: ""
+    date_col: ""
+
+  # User master — Plexus_User_No → sales rep first/last name
+  - plex_view: Plexus_Control_v_Plexus_User
+    bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+
+# BigQuery reporting view that JOINs the raw tables above into the 16-field report.
+# The SQL file is loaded from GCS at runtime so it can be edited independently
+# without touching this YAML.  {gcp_project} and {dataset} in the SQL are
+# replaced at runtime with the GCP_PROJECT and BQ_DATASET env var values.
+bq_view:
+  name: sales_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql

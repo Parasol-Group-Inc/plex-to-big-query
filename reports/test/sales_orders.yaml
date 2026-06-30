@@ -1,0 +1,76 @@
+report_name: sales_orders_test
+description: "16-field sales orders report — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/sales_orders.yaml.
+# BQ_DATASET=PlexTest is injected by the plex-etl-test Cloud Run job,
+# so all raw tables land in PlexTest and the BQ view is created there too.
+
+extractions:
+  - plex_view: Sales_v_PO
+    bq_table: raw_Sales_v_PO
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_PO_Line
+    bq_table: raw_Sales_v_PO_Line
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_PO_Change
+    bq_table: raw_Sales_v_PO_Change
+    filter: ""
+    date_col: Change_Date
+
+  - plex_view: Sales_v_PO_Status
+    bq_table: raw_Sales_v_PO_Status
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_PO_Type
+    bq_table: raw_Sales_v_PO_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Order_Salesperson
+    bq_table: raw_Sales_v_Order_Salesperson
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Release
+    bq_table: raw_Sales_v_Release
+    filter: ""
+    date_col: ""
+
+  - plex_view: Common_v_Customer
+    bq_table: raw_Common_v_Customer
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Customer_Part_Price
+    bq_table: raw_Part_v_Customer_Part_Price
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part_Product_Type
+    bq_table: raw_Part_v_Part_Product_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part_Product_Group
+    bq_table: raw_Part_v_Part_Product_Group
+    filter: ""
+    date_col: ""
+
+  - plex_view: Plexus_Control_v_Plexus_User
+    bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: sales_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql

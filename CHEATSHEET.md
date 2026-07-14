@@ -341,86 +341,79 @@ gcloud secrets versions access latest \
 
 ## How to Add a New Report
 
-Adding a new report requires **no container rebuild**. The only deployment needed is one `terraform apply` to create the new Cloud Run Job.
+> **Full guide with SAFE_CAST patterns, shared table rules, and step-by-step Plex view discovery:** [docs/OPERATIONS.md](docs/OPERATIONS.md#add-a-brand-new-report)
 
-### Step 1 — Create the report YAML
+Quick version — no container rebuild needed. Only one `terraform apply` required.
+
+### Step 1 — Create the YAML (prod + test)
 
 ```bash
-cp reports/sales_orders.yaml reports/purchasing_orders.yaml
-# Edit reports/purchasing_orders.yaml:
-# - Change report_name: purchasing_orders
-# - List the Plex views you want (e.g. Purchasing_v_PO, Purchasing_v_PO_Line)
-# - Optionally define bq_view for a JOIN view
+cp reports/work_orders.yaml reports/purchasing_orders.yaml
+cp reports/test/work_orders.yaml reports/test/purchasing_orders.yaml
+# Edit both: change report_name, extractions list, bq_view name
 ```
 
-### Step 2 — Create the optional BigQuery SQL
+### Step 2 — Write the BigQuery SQL
 
 ```bash
-cp reports/sql/sales_orders_view.sql reports/sql/purchasing_orders_view.sql
-# Edit to define your JOIN logic
-# Uses {gcp_project} and {dataset} placeholders — don't hardcode
+cp reports/sql/work_orders_view.sql reports/sql/purchasing_orders_view.sql
+# Edit JOIN logic. Always use {gcp_project} and {dataset} placeholders.
+# Wrap numeric JOIN keys and aggregated columns in SAFE_CAST — see work_orders_view.sql.
 ```
 
 ### Step 3 — Upload to GCS
 
 ```bash
-gcloud storage cp reports/purchasing_orders.yaml \
-  gs://voxdatalake-report-configs/reports/
-
-gcloud storage cp reports/sql/purchasing_orders_view.sql \
-  gs://voxdatalake-report-configs/sql/
+gcloud storage cp reports/purchasing_orders.yaml gs://voxdatalake-report-configs/reports/ --project=voxdatalake
+gcloud storage cp reports/test/purchasing_orders.yaml gs://voxdatalake-report-configs/test/ --project=voxdatalake
+gcloud storage cp reports/sql/purchasing_orders_view.sql gs://voxdatalake-report-configs/sql/ --project=voxdatalake
 ```
 
-### Step 4 — Add a Cloud Run Job in `terraform/main.tf`
+### Step 4 — Add Cloud Run Jobs in `terraform/main.tf`
 
-Copy the existing `google_cloud_run_v2_job.etl` block, rename it, and set `REPORT_CONFIG_GCS_PATH`:
+Copy the `etl_work_orders` + `etl_work_orders_test` blocks. Change job name, `REPORT_CONFIG_GCS_PATH`, `BQ_DATASET`, `PLEX_HOST`, and schedule. `BQ_TABLE` and `PLEX_VIEW` are **not needed** for multi-report jobs.
 
 ```hcl
 resource "google_cloud_run_v2_job" "etl_purchasing" {
   name     = "plex-etl-purchasing"
   location = var.gcp_region
-
   template {
     template {
       service_account = google_service_account.etl.email
+      max_retries     = 1
+      timeout         = "600s"
       containers {
         image = var.image_url
-        env { name = "GCP_PROJECT";             value = var.gcp_project }
-        env { name = "BQ_DATASET";              value = var.bq_dataset }
-        env { name = "BQ_TABLE";                value = "purchasing_orders" }
-        env { name = "PLEX_HOST";               value = var.plex_host }
-        env { name = "PLEX_PORT";               value = "19995" }
-        env { name = "PLEX_SERVER_DATASOURCE";  value = "ReportDataSource" }
-        env { name = "PLEX_ODBC_USER";          value = var.plex_odbc_user }
-        env { name = "SECRET_ACCESS_TOKEN";     value = var.secret_access_token }
-        env { name = "REPORT_CONFIG_GCS_PATH";  value = "gs://voxdatalake-report-configs/reports/purchasing_orders.yaml" }
-        env { name = "METADATA_TABLE";          value = var.metadata_table }
-        env { name = "BACKFILL_MINUTES";        value = tostring(var.backfill_minutes) }
-        env { name = "SENDGRID_ENABLED";        value = var.sendgrid_enabled }
-        env { name = "REPORT_FROM_EMAIL";       value = var.report_from_email }
-        env { name = "REPORT_TO_EMAILS";        value = var.report_to_emails }
-        env { name = "SECRET_SENDGRID_KEY";     value = var.secret_sendgrid_key }
-        env { name = "COMPANY_NAME";            value = var.company_name }
+        env { name = "GCP_PROJECT";            value = var.gcp_project }
+        env { name = "BQ_DATASET";             value = var.bq_dataset }
+        env { name = "PLEX_HOST";              value = var.plex_host }
+        env { name = "PLEX_PORT";              value = "19995" }
+        env { name = "PLEX_SERVER_DATASOURCE"; value = "ReportDataSource" }
+        env { name = "REPORT_CONFIG_GCS_PATH"
+              value = "gs://${var.report_configs_bucket}/reports/purchasing_orders.yaml" }
+        env { name = "METADATA_TABLE";         value = var.metadata_table }
+        env { name = "SENDGRID_ENABLED";       value = var.sendgrid_enabled }
+        env { name = "REPORT_FROM_EMAIL";      value = var.report_from_email }
+        env { name = "REPORT_TO_EMAILS";       value = var.report_to_emails }
+        env { name = "SECRET_SENDGRID_KEY";    value = var.secret_sendgrid_key }
+        env { name = "SECRET_ACCESS_TOKEN";    value = var.secret_access_token }
+        env { name = "COMPANY_NAME";           value = var.company_name }
+        env { name = "REPORT_SUBJECT";         value = var.report_subject }
       }
-      max_retries = 1
-      timeout     = "600s"
     }
   }
 }
 
 resource "google_cloud_scheduler_job" "etl_purchasing" {
   name      = "plex-purchasing-sync"
-  schedule  = "0 4 * * *"   # 4 AM UTC — stagger from sales (2 AM) and test (3 AM)
+  schedule  = "0 6 * * *"
   time_zone = "UTC"
   region    = var.gcp_region
-
   http_target {
     http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/plex-etl-purchasing:run"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing.name}:run"
     body        = base64encode("{}")
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
+    oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
 ```
@@ -428,11 +421,10 @@ resource "google_cloud_scheduler_job" "etl_purchasing" {
 ### Step 5 — Apply
 
 ```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
+cd terraform && terraform apply -var-file=terraform.tfvars
 ```
 
-That's it. The container image is unchanged. Future query changes go through GCS only.
+Future query changes (YAML or SQL) go through GCS only — no rebuild, no `terraform apply`.
 
 ---
 

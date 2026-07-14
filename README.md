@@ -115,6 +115,6 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual 
 | Sales Orders — test (`PlexTest`) | ✅ Validated — all 13 raw tables + `sales_orders_report` VIEW confirmed |
 | Sales Orders — prod (`PlexProd`) | ✅ Ready — `vox.odbc.plex.com` confirmed, trigger `plex-etl` to go live |
 | Sales Orders VIEW (16-field) | ✅ All columns verified against live Plex data |
-| Work Orders — infra | ✅ Deployed — `plex-etl-work-orders` + `plex-etl-work-orders-test` jobs created |
-| Work Orders — data | ⏳ Pending first run — test Plex has no production job data; validate on prod |
+| Work Orders — infra | ✅ Deployed — `plex-etl-work-orders` + `plex-etl-work-orders-test` |
+| Work Orders — data | ✅ First run complete — Workcenter data confirmed; Job/Job_Op rows pending prod data |
 | DataDirect ODBC license | ⚠ Trial — resolve before production cutover |

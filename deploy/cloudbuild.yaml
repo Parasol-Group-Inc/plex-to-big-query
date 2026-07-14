@@ -28,16 +28,14 @@ options:
 steps:
 
   # ── 1. Fetch driver files from GCS into the build workspace ─────────────────
-  # driver/ is gitignored so it's not in the source tarball.
-  # gsutil rsync creates the destination directory if it doesn't exist,
-  # avoiding the "destination must be a directory" error from cp with a glob.
+  # driver/ is gitignored so it's absent from the source tarball.
+  # mkdir first — both cp and rsync require the destination to already exist.
   - name: "gcr.io/cloud-builders/gsutil"
     id: "fetch-driver"
+    entrypoint: "bash"
     args:
-      - "rsync"
-      - "-r"
-      - "gs://${PROJECT_ID}-build-assets/plex-odbc-driver/"
-      - "driver/"
+      - "-c"
+      - "mkdir -p driver && gsutil -m cp -r gs://${PROJECT_ID}-build-assets/plex-odbc-driver/* driver/"
     waitFor: ["-"]                   # start immediately
 
   # ── 2. Build Docker image ────────────────────────────────────────────────────

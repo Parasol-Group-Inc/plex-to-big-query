@@ -1,4 +1,5 @@
 import os
+import html
 import logging
 from pathlib import Path
 from typing import Dict, List
@@ -17,14 +18,19 @@ def _load_template(template_name: str) -> str:
 def _render_template(template: str, context: Dict[str, str]) -> str:
     rendered = template
     for key, value in context.items():
-        rendered = rendered.replace(f"{{{{{key}}}}}", value)
+        # *_html values are pre-built (and already escaped) HTML fragments;
+        # everything else is plain text and must be escaped.
+        safe = value if key.endswith("_html") else html.escape(value)
+        rendered = rendered.replace(f"{{{{{key}}}}}", safe)
     return rendered
 
 
 def _list_to_html(items: List[str]) -> str:
     if not items:
         return "<span class=\"none-text\">None</span>"
-    rows = "".join(f"<li>{item}</li>" for item in items)
+    # Escape — ODBC error messages contain angle brackets (e.g.
+    # "<ServerDataSource> not found") that would otherwise break the layout.
+    rows = "".join(f"<li>{html.escape(item)}</li>" for item in items)
     return f"<ul class=\"events-list\">{rows}</ul>"
 
 

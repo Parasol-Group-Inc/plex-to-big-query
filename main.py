@@ -124,28 +124,6 @@ def validate_extraction(extraction: dict) -> str:
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
-def get_last_sync(bq: bigquery.Client) -> datetime:
-    """
-    Read the last successful sync timestamp from the metadata table.
-    Returns epoch start if the table is empty (first run).
-    """
-    query = f"""
-        SELECT MAX(max_modified_at) AS last_sync
-        FROM `{GCP_PROJECT}.{BQ_DATASET}.{METADATA_TABLE}`
-        WHERE table_name = '{BQ_TABLE}'
-    """
-    result = bq.query(query).result()
-    row = next(iter(result))
-    if row.last_sync is None:
-        log.info("No previous sync found — performing full load.")
-        return datetime(1970, 1, 1, tzinfo=timezone.utc)
-    last_sync = row.last_sync
-    if last_sync.tzinfo is None:
-        last_sync = last_sync.replace(tzinfo=timezone.utc)
-    log.info(f"Last sync (max modified): {last_sync}")
-    return last_sync
-
-
 def update_last_sync(
     bq: bigquery.Client,
     sync_time: datetime,
@@ -186,7 +164,9 @@ def ensure_metadata_table(bq: bigquery.Client):
             table.schema = table.schema + [schema[2]]
             bq.update_table(table, ["schema"])
             log.info("Added max_modified_at to sync metadata table.")
-    except Exception:
+    except gcp_exceptions.NotFound:
+        # Only create on a genuine missing-table; other errors (e.g. 403
+        # permission denied) must propagate with their original message.
         table = bigquery.Table(table_ref, schema=schema)
         bq.create_table(table)
 
@@ -360,6 +340,12 @@ def main():
             user         = os.environ.get("PLEX_ODBC_USER", "")
             password     = ""
             company_code = ""
+            if not user:
+                log.warning(
+                    "PLEX_ODBC_USER is not set — connection string will have an "
+                    "empty UID. If the ODBC connection fails with a credential "
+                    "error, set this env var on the Cloud Run job."
+                )
             log.info("Using IAM access token for Plex authentication.")
         else:
             user         = get_credential("PLEX_ODBC_USER",    SECRET_USER)

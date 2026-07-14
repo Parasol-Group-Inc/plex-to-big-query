@@ -67,7 +67,11 @@ def send_report(report: Dict[str, object]) -> bool:
         return False
 
     status = str(report.get("status", "unknown")).lower()
-    status_class = "badge-success" if status == "success" else "badge-error"
+    status_class = (
+        "badge-success" if status == "success" else
+        "badge-warning" if status == "partial" else
+        "badge-error"
+    )
 
     events = [str(item) for item in report.get("events", [])]
     errors = [str(item) for item in report.get("errors", [])]

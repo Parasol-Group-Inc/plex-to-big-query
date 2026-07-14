@@ -300,9 +300,10 @@ def write_to_csv(df: pd.DataFrame, output_dir: str, table_name: str) -> int:
 def main():
     sync_time   = datetime.now(timezone.utc)
     log.info("=== Plex → BigQuery ETL job starting ===")
-    events      = []
-    rows_fetched = 0
-    rows_written = 0
+    events         = []
+    partial_errors = []   # extraction-level failures (not fatal, but flagged in email)
+    rows_fetched   = 0
+    rows_written   = 0
     report_name      = REPORT_CONFIG_GCS_PATH or PLEX_VIEW
     email_plex_view   = PLEX_VIEW
     email_plex_filter = PLEX_FILTER or "none"
@@ -383,6 +384,7 @@ def main():
                 except Exception as exc:
                     log.exception(f"Query failed for {view}: {exc}")
                     events.append(f"ERROR: {view} query failed: {exc}")
+                    partial_errors.append(f"{view} query: {exc}")
                     continue
 
                 if date_col and date_col in df.columns:
@@ -403,6 +405,7 @@ def main():
                     except Exception as exc:
                         log.exception(f"BigQuery write failed for {table}: {exc}")
                         events.append(f"ERROR: {table} BQ write failed: {exc}")
+                        partial_errors.append(f"{table} write: {exc}")
                 else:
                     try:
                         written = write_to_csv(df, OUTPUT_DIR, table)
@@ -411,12 +414,20 @@ def main():
                     except Exception as exc:
                         log.exception(f"CSV write failed for {table}: {exc}")
                         events.append(f"ERROR: {table} CSV write failed: {exc}")
+                        partial_errors.append(f"{table} csv: {exc}")
         finally:
             try:
                 conn.close()
                 log.info("ODBC connection closed.")
             except Exception:
                 log.warning("Failed to close ODBC connection cleanly.")
+
+        if rows_fetched == 0 and not partial_errors:
+            log.warning("All extractions returned 0 rows — verify Plex data availability.")
+            events.append(
+                "WARNING: all extractions returned 0 rows — "
+                "check that Plex is returning data for this environment"
+            )
 
         # Create/replace the BigQuery JOIN view if defined in config
         if OUTPUT_MODE == "bigquery" and "bq_view" in config:
@@ -498,6 +509,7 @@ def main():
         "rows_fetched":           rows_fetched,
         "rows_written":           rows_written,
         "events":                 events,
+        "partial_errors":         partial_errors,
         "gcp_project":            GCP_PROJECT,
         "bq_dataset":             BQ_DATASET,
         "bq_table":               email_bq_table,
@@ -530,8 +542,14 @@ def run_and_report():
 
     try:
         result = main()
-        status = "success"
-        errors = []
+        partial_errors = result.get("partial_errors", [])
+        if partial_errors:
+            status = "partial"
+            errors = partial_errors
+            log.warning("Job completed with %d extraction error(s).", len(partial_errors))
+        else:
+            status = "success"
+            errors = []
     except Exception as exc:
         error = exc
         status = "failed"

@@ -11,12 +11,14 @@ Reports are defined by **YAML files stored in Cloud Storage** — not hardcoded 
 ```
 gs://voxdatalake-report-configs/
 ├── reports/
-│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd
-│   └── (future reports here)
+│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd (2 AM UTC)
+│   └── work_orders.yaml           ← prod: 4 Part DB views → PlexProd (4 AM UTC)
 ├── test/
-│   └── sales_orders.yaml          ← test: same views → PlexTest
+│   ├── sales_orders.yaml          ← test: same views → PlexTest (3 AM UTC)
+│   └── work_orders.yaml           ← test: same views → PlexTest (5 AM UTC)
 └── sql/
-    └── sales_orders_view.sql      ← BigQuery JOIN view SQL ✏ edit here
+    ├── sales_orders_view.sql      ← BigQuery JOIN SQL for 16-field sales report ✏
+    └── work_orders_view.sql       ← BigQuery JOIN SQL for work orders report ✏
 ```
 
 **Each YAML file contains:**
@@ -44,7 +46,7 @@ extractions:
 2. Push to GCS:
 
 ```bash
-gsutil cp reports/sales_orders.yaml gs://voxdatalake-report-configs/reports/
+gcloud storage cp reports/sales_orders.yaml gs://voxdatalake-report-configs/reports/
 ```
 
 3. Trigger a run:
@@ -73,7 +75,7 @@ The `sales_orders_view.sql` file defines the 16-field report. Edit it and push:
 
 ```bash
 # Edit reports/sql/sales_orders_view.sql locally, then:
-gsutil cp reports/sql/sales_orders_view.sql \
+gcloud storage cp reports/sql/sales_orders_view.sql \
   gs://voxdatalake-report-configs/sql/
 
 # The next pipeline run will CREATE OR REPLACE the view in BigQuery.
@@ -89,17 +91,33 @@ gcloud run jobs execute plex-etl-test \
 
 ## Add a Brand-New Report
 
+This is the full end-to-end process. Use `work_orders` as a reference implementation — its files are the most up-to-date example of every pattern in use.
+
+### Step 0 — Find the right Plex views
+
+Before writing any code, verify the views exist and contain the columns you need.
+
+1. Open **Plex SQL Developer** (or the ODBC query tool)
+2. Browse the database tree — views are named `{Database}_v_{ViewName}` (e.g., `Part_v_Job`, `Sales_v_PO`)
+3. Run `SELECT TOP 5 * FROM {view}` to confirm columns and data types
+4. Check [`docs/plex_catalog_index.md`](plex_catalog_index.md) for a cross-database index of known views
+
+> **No aliases in FROM clause.** Plex SQL Developer rejects trailing table aliases (`FROM Part_v_Job j`). Use the full view name every time.
+
+> **No "Prod" database.** Work orders, jobs, and manufacturing data live in the **Part** database, not a "Prod" database. Check the catalog before assuming where a view lives.
+
 ### Step 1 — Create the YAML
 
 ```bash
-cp reports/sales_orders.yaml reports/purchasing_orders.yaml
+cp reports/work_orders.yaml reports/purchasing_orders.yaml
+cp reports/test/work_orders.yaml reports/test/purchasing_orders.yaml
 ```
 
 Edit `reports/purchasing_orders.yaml`:
 
 ```yaml
 report_name: purchasing_orders
-description: "Daily purchasing orders from Plex Purchasing module"
+description: "Daily purchasing orders — Vox Nutrition (PlexProd dataset)"
 
 extractions:
   - plex_view: Purchasing_v_PO
@@ -112,32 +130,69 @@ extractions:
     filter: ""
     date_col: ""
 
-# Optional: define a BigQuery VIEW that JOINs the raw tables
 bq_view:
   name: purchasing_orders_report
   sql_file: gs://voxdatalake-report-configs/sql/purchasing_orders_view.sql
 ```
 
-### Step 2 — Create the SQL (optional)
+Edit `reports/test/purchasing_orders.yaml` — change only `report_name` to `purchasing_orders_test`:
+
+```yaml
+report_name: purchasing_orders_test
+description: "Daily purchasing orders — TEST environment (PlexTest dataset)"
+# ... same extractions and bq_view as prod ...
+```
+
+> **Shared tables:** If your report needs `raw_Part_v_Part` (already owned by `sales_orders`), do NOT add `Part_v_Part` to your extractions list. Reference it in your SQL as a shared table. Two pipelines running WRITE_TRUNCATE on the same raw table risk silently emptying it on a 0-row Plex response. See `reports/work_orders.yaml` for the comment pattern.
+
+### Step 2 — Write the BigQuery SQL
 
 ```bash
-cp reports/sql/sales_orders_view.sql reports/sql/purchasing_orders_view.sql
+cp reports/sql/work_orders_view.sql reports/sql/purchasing_orders_view.sql
 # Edit to match your join logic
 ```
 
-### Step 3 — Push to GCS
+Key patterns to follow — see `work_orders_view.sql` for a full working example:
 
-```bash
-gsutil cp reports/purchasing_orders.yaml \
-  gs://voxdatalake-report-configs/reports/
-
-gsutil cp reports/sql/purchasing_orders_view.sql \
-  gs://voxdatalake-report-configs/sql/
+**Always use `{gcp_project}` and `{dataset}` placeholders — never hardcode:**
+```sql
+FROM `{gcp_project}.{dataset}.raw_Purchasing_v_PO` po
 ```
 
-### Step 4 — Add a Cloud Run Job in `terraform/main.tf`
+**Use `SAFE_CAST` for all numeric JOIN keys and aggregated columns:**
 
-Copy the existing `google_cloud_run_v2_job.etl` block. Change the job name and `REPORT_CONFIG_GCS_PATH`:
+BigQuery autodetects schema when tables first populate. Empty tables get all-STRING schema; populated tables get proper types (INT64, FLOAT64). If one table populates before another, a JOIN on uncast columns throws a type error.
+
+```sql
+-- Joining on a key that might be STRING in one table and INT64 in another:
+LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Supplier` s
+  ON SAFE_CAST(po.Supplier_Key AS INT64) = s.Supplier_Key
+
+-- Aggregating numeric columns from an empty table (all STRING):
+SUM(SAFE_CAST(line.Amount AS FLOAT64)) AS total_amount
+```
+
+`SAFE_CAST` is a no-op when the column is already the correct type — safe to apply defensively.
+
+### Step 3 — Create a test YAML in GCS and push all files
+
+```bash
+# Push prod config
+gcloud storage cp reports/purchasing_orders.yaml \
+  gs://voxdatalake-report-configs/reports/ --project=voxdatalake
+
+# Push test config
+gcloud storage cp reports/test/purchasing_orders.yaml \
+  gs://voxdatalake-report-configs/test/ --project=voxdatalake
+
+# Push SQL
+gcloud storage cp reports/sql/purchasing_orders_view.sql \
+  gs://voxdatalake-report-configs/sql/ --project=voxdatalake
+```
+
+### Step 4 — Add Cloud Run Jobs in `terraform/main.tf`
+
+Copy the `etl_work_orders` and `etl_work_orders_test` blocks. The only required changes per report are: job name, `REPORT_CONFIG_GCS_PATH`, `BQ_DATASET`, `PLEX_HOST`, and schedule.
 
 ```hcl
 resource "google_cloud_run_v2_job" "etl_purchasing" {
@@ -147,53 +202,75 @@ resource "google_cloud_run_v2_job" "etl_purchasing" {
   template {
     template {
       service_account = google_service_account.etl.email
+      max_retries     = 1
+      timeout         = "600s"
       containers {
         image = var.image_url
         env { name = "GCP_PROJECT";            value = var.gcp_project }
-        env { name = "BQ_DATASET";             value = var.bq_dataset }
-        env { name = "BQ_TABLE";               value = "purchasing_orders" }
-        env { name = "PLEX_HOST";              value = var.plex_host }
+        env { name = "BQ_DATASET";             value = var.bq_dataset }      # "PlexProd"
+        env { name = "PLEX_HOST";              value = var.plex_host }        # prod host
         env { name = "PLEX_PORT";              value = "19995" }
         env { name = "PLEX_SERVER_DATASOURCE"; value = "ReportDataSource" }
-        env { name = "PLEX_ODBC_USER";         value = var.plex_odbc_user }
-        env { name = "SECRET_ACCESS_TOKEN";    value = var.secret_access_token }
-        # ↓ This is the only thing that differs per report
-        env { name = "REPORT_CONFIG_GCS_PATH"; value = "gs://voxdatalake-report-configs/reports/purchasing_orders.yaml" }
+        env { name = "REPORT_CONFIG_GCS_PATH"
+              value = "gs://${var.report_configs_bucket}/reports/purchasing_orders.yaml" }
         env { name = "METADATA_TABLE";         value = var.metadata_table }
-        env { name = "BACKFILL_MINUTES";       value = tostring(var.backfill_minutes) }
         env { name = "SENDGRID_ENABLED";       value = var.sendgrid_enabled }
         env { name = "REPORT_FROM_EMAIL";      value = var.report_from_email }
         env { name = "REPORT_TO_EMAILS";       value = var.report_to_emails }
         env { name = "SECRET_SENDGRID_KEY";    value = var.secret_sendgrid_key }
+        env { name = "SECRET_ACCESS_TOKEN";    value = var.secret_access_token }
         env { name = "COMPANY_NAME";           value = var.company_name }
+        env { name = "REPORT_SUBJECT";         value = var.report_subject }
       }
-      max_retries = 3
-      timeout     = "600s"
     }
   }
 }
 
 resource "google_cloud_scheduler_job" "etl_purchasing" {
   name      = "plex-purchasing-sync"
-  schedule  = "0 4 * * *"
+  schedule  = "0 6 * * *"   # pick a time after your upstream reports finish
   time_zone = "UTC"
   region    = var.gcp_region
 
   http_target {
     http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/plex-etl-purchasing:run"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing.name}:run"
     body        = base64encode("{}")
     oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
+
+# Repeat for the test job — change: name, BQ_DATASET=PlexTest, PLEX_HOST=plex_host_test,
+# REPORT_CONFIG_GCS_PATH=.../test/purchasing_orders.yaml, schedule cron
 ```
 
-### Step 5 — Apply Terraform
+> **Note on `BQ_TABLE` and `PLEX_VIEW`:** these env vars are only used in the legacy single-view mode and have no effect when `REPORT_CONFIG_GCS_PATH` is set. You don't need to set them for new multi-report pipelines.
+
+### Step 5 — Apply Terraform and deploy the image
 
 ```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
+# If you changed Python code (main.py, email_utils.py):
+gcloud builds submit \
+  --config deploy/cloudbuild.yaml \
+  --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+
+# Infrastructure only (YAML/SQL + new Cloud Run jobs):
+cd terraform && terraform apply -var-file=terraform.tfvars
 ```
+
+### Step 6 — Test and validate
+
+```bash
+# Trigger test job
+gcloud run jobs execute plex-etl-purchasing-test \
+  --region=us-central1 --project=voxdatalake --wait
+
+# Preview the BQ view (BigQuery Console or bq.cmd):
+# SELECT * FROM `voxdatalake.PlexTest.purchasing_orders_report` LIMIT 10
+```
+
+Check the email — subject will be `[Plex ETL] Purchasing Orders Test — SUCCESS — DATE`.
 
 ---
 
@@ -201,33 +278,44 @@ terraform apply -var-file=terraform.tfvars
 
 | Setting | Production | Test |
 |---|---|---|
-| Cloud Run Job | `plex-etl` | `plex-etl-test` |
-| Cloud Scheduler | `plex-daily-sync` (2 AM UTC) | `plex-daily-sync-test` (3 AM UTC) |
-| Plex ODBC Host | `odbc.plex.com` ⚠ pending | `vox.odbc.plex.com` ✅ |
+| Sales Orders job | `plex-etl` (2 AM UTC) | `plex-etl-test` (3 AM UTC) |
+| Work Orders job | `plex-etl-work-orders` (4 AM UTC) | `plex-etl-work-orders-test` (5 AM UTC) |
+| Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
-| Report Config | `gs://.../reports/sales_orders.yaml` | `gs://.../test/sales_orders.yaml` |
-| Status | Blocked — prod ServerDataSource TBD | Active — use for all development |
+| Report Config bucket | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
+| Status | ✅ Live | ✅ Active — develop and validate here first |
 
-**Always test in the test environment first.** The `plex-etl-test` job writes to `PlexTest` — safe to run repeatedly, no impact on production data.
+**Always test in the test environment first.** The test jobs write to `PlexTest` — safe to run repeatedly, no impact on production data.
 
-### Trigger test job manually
+### Trigger jobs manually
 
 ```bash
-gcloud run jobs execute plex-etl-test \
-  --region=us-central1 --project=voxdatalake --wait
+# Sales Orders
+gcloud run jobs execute plex-etl-test --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
+
+# Work Orders
+gcloud run jobs execute plex-etl-work-orders-test --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl-work-orders --region=us-central1 --project=voxdatalake --wait
 ```
 
 ### Promote to production
 
-After verifying results in `PlexTest`:
-1. Confirm the prod report YAML is correct (`reports/sales_orders.yaml`)
-2. Get Plex support to confirm `ServerDataSource` for `odbc.plex.com`
-3. Run the production job:
+After verifying results in `PlexTest`, trigger the corresponding prod job. The prod job reads from `reports/*.yaml` (not `test/*.yaml`) and writes to `PlexProd`.
 
-```bash
-gcloud run jobs execute plex-etl \
-  --region=us-central1 --project=voxdatalake --wait
-```
+---
+
+## Email Status Levels
+
+Every run sends an email with one of three status badges:
+
+| Badge | Color | Meaning |
+|---|---|---|
+| **SUCCESS** | Green | All extractions completed, all rows written |
+| **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check Events and Errors sections |
+| **FAILED** | Red | Job crashed before completing — ODBC connection refused, config load failed, BigQuery unreachable |
+
+> A PARTIAL run is not a silent failure — the email lists every failed extraction in the Errors section. Any rows that did succeed are still in BigQuery. The BigQuery VIEW still runs against whatever data is available.
 
 ---
 

@@ -236,7 +236,12 @@ plex-to-big-query/
 ### Deploy (after any code change)
 
 ```bash
-# Build and push new image
+# Preferred: Cloud Build — builds, pushes, updates both jobs, and smoke-tests
+# the TEST job only (production is never executed automatically)
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+
+# Manual alternative: build and push locally
 docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 
@@ -557,6 +562,8 @@ gcloud projects add-iam-policy-binding voxdatalake \
 
 ```bash
 # Check if the Plex view is empty, or the filter is too restrictive.
+# NOTE: a 0-row response does NOT clear the BigQuery table — existing data
+# is preserved and a warning is logged (safety guard added 2026-07-14).
 # Run the job in local mode against the test host:
 docker run --env-file .env \
   -e OUTPUT_MODE=local \
@@ -564,6 +571,20 @@ docker run --env-file .env \
   -e PLEX_FILTER="" \
   -v "$(pwd)/output:/output" \
   us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
+```
+
+### Report view shows dates as huge numbers (e.g. `1750118400000000000`)
+
+```sql
+-- Plex dates land in the raw tables as INT64 *nanoseconds*.
+-- The view SQL converts them with this pattern (DIV, not "/", because
+-- TIMESTAMP_MICROS requires INT64 and "/" returns FLOAT64):
+COALESCE(
+  DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(col AS INT64), 0), 1000))),
+  NULLIF(SAFE_CAST(col AS DATE), DATE '1970-01-01')   -- STRING/TIMESTAMP fallback
+) AS my_date
+-- If dates are STILL numbers after editing the SQL: push the .sql to GCS
+-- AND re-run the job — the view is only recreated during a pipeline run.
 ```
 
 ### Terraform plan shows changes you didn't intend

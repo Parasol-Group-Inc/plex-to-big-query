@@ -259,6 +259,11 @@ gcloud builds submit \
 cd terraform && terraform apply -var-file=terraform.tfvars
 ```
 
+> **Cloud Build safety:** the build's smoke test runs **`plex-etl-test`
+> only** (writes to `PlexTest`). Production is never executed automatically —
+> after the test run looks good, trigger prod yourself:
+> `gcloud run jobs execute plex-etl --region=us-central1`
+
 ### Step 6 — Test and validate
 
 ```bash
@@ -315,28 +320,40 @@ Every run sends an email with one of three status badges:
 | **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check Events and Errors sections |
 | **FAILED** | Red | Job crashed before completing — ODBC connection refused, config load failed, BigQuery unreachable |
 
-> A PARTIAL run is not a silent failure — the email lists every failed extraction in the Errors section. Any rows that did succeed are still in BigQuery. The BigQuery VIEW still runs against whatever data is available.
+> A PARTIAL run is not a silent failure — the email lists every failed extraction in the Errors section. Any rows that did succeed are still in BigQuery. The BigQuery VIEW still runs against whatever data is available. If the VIEW was refreshed while some extractions failed, the Events list includes an explicit warning that some source tables hold stale data.
+
+---
+
+## Data Safety Guards
+
+These are enforced by `main.py` (added in the 2026-07-14 code review — see [CODE_REVIEW_2026-07-14.md](CODE_REVIEW_2026-07-14.md)):
+
+| Guard | Behavior |
+|---|---|
+| **0-row protection** | If Plex returns 0 rows for a view (timeout, maintenance window, over-tight filter), the existing BigQuery table is **left untouched** — yesterday's data and schema are preserved, and a warning is logged. The table is only created (empty) if it doesn't exist yet. |
+| **YAML validation** | `plex_view`, `bq_table`, and `date_col` must be plain identifiers (letters, digits, underscores). `filter` may not contain `;`, `--`, or `/*`. An invalid entry is skipped and reported as a PARTIAL error — it never reaches the ODBC connection, and it doesn't crash the other extractions. |
+| **Config sanity check** | An empty or malformed YAML file fails fast with a clear error message instead of a cryptic traceback. |
+| **No automatic prod runs** | Cloud Build's smoke test only ever executes the test job. |
 
 ---
 
 ## Full vs Incremental Sync
 
-| | Full refresh | Incremental |
-|---|---|---|
-| **When to use** | Reference/master data (parts, customers, lookups) | Transaction data (orders, releases, shipments) that grows daily |
-| **How it works** | Replaces the entire table each run (`WRITE_TRUNCATE`) | Appends only new/changed rows since last run |
-| **Plex requirement** | No timestamp column needed | View must have a timestamp column (e.g. `Change_Date`) |
-| **`date_col` in YAML** | Leave empty `""` | Set to the column name |
-| **Current approach** | All 13 views in the sales orders report | `Sales_v_PO_Change` uses `Change_Date` |
+**Every extraction today is a full refresh** — the entire table is replaced each run (`WRITE_TRUNCATE`). Incremental sync (append only new/changed rows) is **not implemented yet**.
 
-To switch a view to incremental, set `date_col` to the timestamp column name in the YAML and push to GCS:
+What `date_col` actually does today:
 
 ```yaml
   - plex_view: Sales_v_PO_Change
     bq_table: raw_Sales_v_PO_Change
     filter: ""
-    date_col: Change_Date    # ← enables incremental sync
+    date_col: Change_Date    # ← ORDER BY on the Plex query + sync watermark
 ```
+
+1. Adds `ORDER BY Change_Date ASC` to the Plex query
+2. Records the column's max value as `max_modified_at` in the `sync_metadata` table — so if incremental sync is built later, the watermark history is already accurate
+
+If incremental sync is implemented in the future, use BigQuery **query parameters** (not string interpolation) for the watermark comparison — see finding 9 in [CODE_REVIEW_2026-07-14.md](CODE_REVIEW_2026-07-14.md).
 
 ---
 
@@ -350,7 +367,7 @@ extractions:                  # required — list of Plex views to extract
   - plex_view: string         # required — Plex ODBC view name ({DB}_v_{View})
     bq_table: string          # required — destination BigQuery table name
     filter: string            # optional — SQL WHERE clause, e.g. "WHERE Active = 1"
-    date_col: string          # optional — column for incremental sync watermark
+    date_col: string          # optional — ORDER BY + sync watermark (identifier chars only)
 
 bq_view:                      # optional — BigQuery VIEW to create after extraction
   name: string                # VIEW name in BigQuery

@@ -100,13 +100,21 @@ def send_report(report: Dict[str, object]) -> bool:
         )
         logs_url_label = "View in Cloud Console"
 
-    # Subject: [Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19
-    # Override entirely with REPORT_SUBJECT if set to a non-default value.
+    # Subject includes report name so each pipeline gets its own Gmail thread.
+    # e.g. "[Plex ETL] Work Orders Test — SUCCESS — 2026-07-14"
+    # REPORT_SUBJECT env var overrides entirely when set to a non-default value.
+    report_name_raw     = str(report.get("report_name", ""))
+    report_name_display = report_name_raw.replace("_", " ").title() if report_name_raw else ""
+    default_subject = (
+        f"[Plex ETL] {report_name_display} — {status.upper()} — {run_date}"
+        if report_name_display
+        else f"[Plex ETL] {status.upper()} — {company_name} — {run_date}"
+    )
     subject_override = os.environ.get("REPORT_SUBJECT", "")
     subject = (
         subject_override
         if subject_override and subject_override != "Plex to BigQuery ETL Report"
-        else f"[Plex ETL] {status.upper()} — {company_name} — {run_date}"
+        else default_subject
     )
 
     context = {

@@ -302,25 +302,25 @@ gcloud storage cp reports/sql/work_orders_view.sql \
 
 ### Check BigQuery results
 
+> **Windows Git Bash:** `bq` fails with `python3.12: command not found`.
+> Use `bq.cmd` instead — or paste the query directly in the [BigQuery Console](https://console.cloud.google.com/bigquery).
+
 ```bash
 # Row count per raw table
-bq query --project_id=voxdatalake --nouse_legacy_sql \
-  "SELECT 'raw_Sales_v_PO' AS tbl, COUNT(*) AS rows
-   FROM \`voxdatalake.PlexTest.raw_Sales_v_PO\`"
+bq.cmd query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT 'raw_Sales_v_PO' AS tbl, COUNT(*) AS rows FROM \`voxdatalake.PlexTest.raw_Sales_v_PO\`"
 
 # Preview the 16-field sales orders view
-bq query --project_id=voxdatalake --nouse_legacy_sql \
+bq.cmd query --project_id=voxdatalake --nouse_legacy_sql \
   "SELECT * FROM \`voxdatalake.PlexTest.sales_orders_report\` LIMIT 10"
 
 # Preview the work orders view
-bq query --project_id=voxdatalake --nouse_legacy_sql \
+bq.cmd query --project_id=voxdatalake --nouse_legacy_sql \
   "SELECT * FROM \`voxdatalake.PlexTest.work_orders_report\` LIMIT 10"
 
 # Last sync metadata
-bq query --project_id=voxdatalake --nouse_legacy_sql \
-  "SELECT table_name, synced_at, rows_written
-   FROM \`voxdatalake.PlexTest.sync_metadata\`
-   ORDER BY synced_at DESC LIMIT 20"
+bq.cmd query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT table_name, synced_at, rows_written FROM \`voxdatalake.PlexTest.sync_metadata\` ORDER BY synced_at DESC LIMIT 20"
 ```
 
 ### Secrets management

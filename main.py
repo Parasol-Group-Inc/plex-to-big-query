@@ -303,7 +303,10 @@ def main():
     events      = []
     rows_fetched = 0
     rows_written = 0
-    report_name  = REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+    report_name      = REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+    email_plex_view   = PLEX_VIEW
+    email_plex_filter = PLEX_FILTER or "none"
+    email_bq_table    = BQ_TABLE
 
     # Fetch credentials — IAM token takes priority over username/password
     log.info("Fetching credentials...")
@@ -353,6 +356,9 @@ def main():
             config = load_report_config(REPORT_CONFIG_GCS_PATH)
             report_name = config.get("report_name", REPORT_CONFIG_GCS_PATH)
             extractions = config.get("extractions", [])
+            email_plex_view   = report_name
+            email_plex_filter = f"{len(extractions)} extractions — see Events"
+            email_bq_table    = config.get("bq_view", {}).get("name", report_name)
             events.append(f"Loaded report config: {report_name} ({len(extractions)} extractions)")
         except Exception as exc:
             log.exception("Failed to load report config.")
@@ -494,10 +500,10 @@ def main():
         "events":                 events,
         "gcp_project":            GCP_PROJECT,
         "bq_dataset":             BQ_DATASET,
-        "bq_table":               BQ_TABLE,
+        "bq_table":               email_bq_table,
         "report_name":            report_name,
-        "plex_view":              PLEX_VIEW,
-        "plex_filter":            PLEX_FILTER,
+        "plex_view":              email_plex_view,
+        "plex_filter":            email_plex_filter,
         "plex_host":              PLEX_HOST,
         "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
         "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
@@ -541,6 +547,14 @@ def run_and_report():
         "rows_written":     result.get("rows_written", 0),
         "events":           result.get("events", []),
         "errors":           errors,
+        "gcp_project":      result.get("gcp_project",    GCP_PROJECT),
+        "bq_dataset":       result.get("bq_dataset",     BQ_DATASET),
+        "bq_table":         result.get("bq_table",       BQ_TABLE),
+        "plex_view":        result.get("plex_view",      PLEX_VIEW),
+        "plex_filter":      result.get("plex_filter",    PLEX_FILTER) or "none",
+        "plex_host":        result.get("plex_host",      PLEX_HOST),
+        "execution_name":   result.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "")),
+        "report_name":      result.get("report_name",    REPORT_CONFIG_GCS_PATH or PLEX_VIEW),
     }
 
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))

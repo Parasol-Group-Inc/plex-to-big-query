@@ -27,16 +27,16 @@ options:
 
 steps:
 
-  # ── 1. Verify driver files are present ──────────────────────────────────────
-  # The Plex .so driver files are stored in Cloud Storage (not in the repo)
-  # and copied into the build workspace before the Docker build runs.
+  # ── 1. Fetch driver files from GCS into the build workspace ─────────────────
+  # driver/ is gitignored so it's not in the source tarball.
+  # gsutil rsync creates the destination directory if it doesn't exist,
+  # avoiding the "destination must be a directory" error from cp with a glob.
   - name: "gcr.io/cloud-builders/gsutil"
     id: "fetch-driver"
     args:
-      - "-m"
-      - "cp"
+      - "rsync"
       - "-r"
-      - "gs://${PROJECT_ID}-build-assets/plex-odbc-driver/*"
+      - "gs://${PROJECT_ID}-build-assets/plex-odbc-driver/"
       - "driver/"
     waitFor: ["-"]                   # start immediately
 

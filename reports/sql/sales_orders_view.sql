@@ -30,11 +30,17 @@
 
 WITH
 
--- Date Approved: the first time each order reached status "Pending Fulfillment" (key 2073)
+-- Date Approved: the first time each order reached status "Pending Fulfillment" (key 2073).
+-- Change_Date is stored as INT64 nanoseconds (pyodbc/pandas datetime64 → BQ int64 path).
+-- NULLIF(..., 0) turns Plex's "no-date" sentinel into NULL rather than 1970-01-01.
+-- COALESCE fallback handles STRING schema (empty-table autodetect) before prod populates.
 date_approved AS (
   SELECT
     PO_Key,
-    MIN(Change_Date) AS date_approved
+    COALESCE(
+      DATE(TIMESTAMP_MICROS(NULLIF(MIN(SAFE_CAST(Change_Date AS INT64)), 0) / 1000)),
+      MIN(SAFE_CAST(Change_Date AS DATE))
+    ) AS date_approved
   FROM `{gcp_project}.{dataset}.raw_Sales_v_PO_Change`
   WHERE PO_Status_Key = 2073
   GROUP BY PO_Key
@@ -85,7 +91,10 @@ SELECT
 
   -- ── Document info ──────────────────────────────────────────────────────────
   po.PO_No                                              AS document_so,
-  po.PO_Date                                            AS date_created,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(po.PO_Date AS INT64), 0) / 1000)),
+    SAFE_CAST(po.PO_Date AS DATE)
+  )                                                     AS date_created,
   da.date_approved,
   typ.PO_Type                                           AS order_type,
 

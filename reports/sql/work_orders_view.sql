@@ -80,14 +80,35 @@ SELECT
   ah.downtime_hours,
 
   -- ── Operation dates ─────────────────────────────────────────────────────────
-  jo.Start_Date                                   AS op_start_date,
-  jo.Complete_Date                                AS op_completion_date,
-  jo.Due_Date                                     AS op_due_date,
+  -- Plex date columns arrive as INT64 nanoseconds (pyodbc datetime → pandas
+  -- datetime64[ns] → BQ int64). NULLIF(...,0) converts Plex's "no date"
+  -- sentinel to NULL. COALESCE fallback handles STRING schema on empty tables.
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(jo.Start_Date    AS INT64), 0) / 1000)),
+    SAFE_CAST(jo.Start_Date    AS DATE)
+  )                                               AS op_start_date,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(jo.Complete_Date AS INT64), 0) / 1000)),
+    SAFE_CAST(jo.Complete_Date AS DATE)
+  )                                               AS op_completion_date,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(jo.Due_Date      AS INT64), 0) / 1000)),
+    SAFE_CAST(jo.Due_Date      AS DATE)
+  )                                               AS op_due_date,
 
   -- ── Job-level dates ─────────────────────────────────────────────────────────
-  j.Due_Date                                      AS job_due_date,
-  j.Completed_Date                                AS job_completed_date,
-  j.Add_Date                                      AS job_created_date,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(j.Due_Date       AS INT64), 0) / 1000)),
+    SAFE_CAST(j.Due_Date       AS DATE)
+  )                                               AS job_due_date,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(j.Completed_Date AS INT64), 0) / 1000)),
+    SAFE_CAST(j.Completed_Date AS DATE)
+  )                                               AS job_completed_date,
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(j.Add_Date       AS INT64), 0) / 1000)),
+    SAFE_CAST(j.Add_Date       AS DATE)
+  )                                               AS job_created_date,
 
   -- ── Status keys ─────────────────────────────────────────────────────────────
   -- Part_v_Work_Order_Op_Status had no records on test — status labels unavailable.

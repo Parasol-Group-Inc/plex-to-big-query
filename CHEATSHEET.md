@@ -32,7 +32,7 @@ graph TB
         CONTAINER["Python Container\nmain.py"]
     end
 
-    subgraph PLEX["Plex ERP — vox.odbc.plex.com"]
+    subgraph PLEX["Plex ERP — vox.test.odbc.plex.com (test) / vox.odbc.plex.com (prod)"]
         direction LR
         V1["Sales_v_PO"]
         V2["Sales_v_PO_Line"]
@@ -77,7 +77,7 @@ graph LR
     subgraph PROD["🟢 Production"]
         PJ["Cloud Run Job\nplex-etl"]
         PS["Scheduler\nplex-daily-sync\n2 AM UTC"]
-        PH["Plex Host\nodbc.plex.com\n⚠ pending support confirmation"]
+        PH["Plex Host\nvox.odbc.plex.com\n✅ confirmed"]
         PD["BigQuery\nPlexProd dataset"]
         PS --> PJ
         PJ -->|ODBC| PH
@@ -87,7 +87,7 @@ graph LR
     subgraph TEST["🔵 Test"]
         TJ["Cloud Run Job\nplex-etl-test"]
         TS["Scheduler\nplex-daily-sync-test\n3 AM UTC"]
-        TH["Plex Host\nvox.odbc.plex.com\n✅ active"]
+        TH["Plex Host\nvox.test.odbc.plex.com\n✅ active"]
         TD["BigQuery\nPlexTest dataset"]
         TS --> TJ
         TJ -->|ODBC| TH
@@ -98,7 +98,16 @@ graph LR
     GCS -->|"test/sales_orders.yaml"| TJ
 ```
 
-> **Today:** Run and test against the **test environment** (`plex-etl-test`, `PlexTest` dataset, `vox.odbc.plex.com`). Production promotion blocked pending Plex support confirming the production `ServerDataSource` value.
+> **Both environments active.** Test (`plex-etl-test` → `vox.test.odbc.plex.com` → `PlexTest`) is validated with live data. Prod (`plex-etl` → `vox.odbc.plex.com` → `PlexProd`) is ready — trigger `plex-etl` for the first production run.
+
+## Active Reports
+
+| Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View |
+|---|---|---|---|---|---|
+| **Sales Orders** | `plex-etl` | `plex-etl-test` | 2 AM / 3 AM UTC | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report` |
+| **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 4 AM / 5 AM UTC | 4 Part DB views (Job, Job_Op, Workcenter, Workcenter_Log) | `work_orders_report` |
+
+> `raw_Part_v_Part` is **shared** between both reports — owned by the Sales Orders pipeline (runs first). Work Orders references it in its JOIN view without re-extracting it.
 
 ---
 
@@ -145,10 +154,13 @@ plex-to-big-query/
 │
 ├── reports/                    ← REPORT DEFINITIONS — edit these to change what runs
 │   ├── sales_orders.yaml       ← Prod report: 13 views → PlexProd
+│   ├── work_orders.yaml        ← Prod report: 4 Part DB views → PlexProd (4 AM UTC)
 │   ├── test/
-│   │   └── sales_orders.yaml   ← Test report: same views → PlexTest
+│   │   ├── sales_orders.yaml   ← Test report: same views → PlexTest
+│   │   └── work_orders.yaml    ← Test work orders → PlexTest (5 AM UTC)
 │   └── sql/
-│       └── sales_orders_view.sql  ← BigQuery JOIN SQL for the 16-field report ✏
+│       ├── sales_orders_view.sql  ← BigQuery JOIN SQL for the 16-field report ✏
+│       └── work_orders_view.sql   ← BigQuery JOIN SQL for work orders report ✏
 │
 ├── config/
 │   ├── odbc.ini                ← DSN definitions (PlexProduction / PlexTest)
@@ -251,11 +263,11 @@ gcloud logging read \
 ```bash
 # 1. Edit the YAML to change filters, add/remove a view
 #    (edit reports/sales_orders.yaml locally, then push to GCS)
-gsutil cp reports/sales_orders.yaml \
+gcloud storage cp reports/sales_orders.yaml \
   gs://voxdatalake-report-configs/reports/
 
 # 2. Edit the BigQuery JOIN SQL
-gsutil cp reports/sql/sales_orders_view.sql \
+gcloud storage cp reports/sql/sales_orders_view.sql \
   gs://voxdatalake-report-configs/sql/
 
 # 3. Trigger a run to pick up the changes
@@ -265,6 +277,29 @@ gcloud run jobs execute plex-etl-test \
 
 Or edit files directly in the [Cloud Storage Console](https://console.cloud.google.com/storage/browser/voxdatalake-report-configs) — no CLI required.
 
+### Run the work orders job manually
+
+```bash
+# Test
+gcloud run jobs execute plex-etl-work-orders-test \
+  --region=us-central1 --project=voxdatalake --wait
+
+# Prod
+gcloud run jobs execute plex-etl-work-orders \
+  --region=us-central1 --project=voxdatalake --wait
+```
+
+### Edit work orders report (no deployment needed)
+
+```bash
+# Push updated YAML or SQL to GCS — next run picks it up automatically
+gcloud storage cp reports/work_orders.yaml \
+  gs://voxdatalake-report-configs/reports/
+
+gcloud storage cp reports/sql/work_orders_view.sql \
+  gs://voxdatalake-report-configs/sql/
+```
+
 ### Check BigQuery results
 
 ```bash
@@ -273,9 +308,13 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
   "SELECT 'raw_Sales_v_PO' AS tbl, COUNT(*) AS rows
    FROM \`voxdatalake.PlexTest.raw_Sales_v_PO\`"
 
-# Preview the 16-field report view
+# Preview the 16-field sales orders view
 bq query --project_id=voxdatalake --nouse_legacy_sql \
   "SELECT * FROM \`voxdatalake.PlexTest.sales_orders_report\` LIMIT 10"
+
+# Preview the work orders view
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT * FROM \`voxdatalake.PlexTest.work_orders_report\` LIMIT 10"
 
 # Last sync metadata
 bq query --project_id=voxdatalake --nouse_legacy_sql \
@@ -287,8 +326,9 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 ### Secrets management
 
 ```bash
-# Update the Plex IAM token (do this when the token expires)
-echo -n 'your-new-token-here' | \
+# Store or replace the Plex IAM token
+# Note: this token does not expire — only replace if you generate a new one in Plex
+echo -n 'your-token-here' | \
   gcloud secrets versions add plex-access-token \
   --data-file=- --project=voxdatalake
 
@@ -324,10 +364,10 @@ cp reports/sql/sales_orders_view.sql reports/sql/purchasing_orders_view.sql
 ### Step 3 — Upload to GCS
 
 ```bash
-gsutil cp reports/purchasing_orders.yaml \
+gcloud storage cp reports/purchasing_orders.yaml \
   gs://voxdatalake-report-configs/reports/
 
-gsutil cp reports/sql/purchasing_orders_view.sql \
+gcloud storage cp reports/sql/purchasing_orders_view.sql \
   gs://voxdatalake-report-configs/sql/
 ```
 
@@ -362,7 +402,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing" {
         env { name = "SECRET_SENDGRID_KEY";     value = var.secret_sendgrid_key }
         env { name = "COMPANY_NAME";            value = var.company_name }
       }
-      max_retries = 3
+      max_retries = 1
       timeout     = "600s"
     }
   }
@@ -460,20 +500,30 @@ To discover view names: open **Plex SQL Dev** → expand the database tree → r
 ### ODBC: `[08001] [DataDirect]` or connection refused
 
 ```bash
-# Confirm the host, port, and ServerDataSource
-# Test host works: vox.odbc.plex.com:19995  ✅
-# Prod host: odbc.plex.com — ServerDataSource name needs Plex support confirmation ⚠
+# Confirm the host and port are correct:
+#   Test:  PLEX_HOST=vox.test.odbc.plex.com  PORT=19995  ✅
+#   Prod:  PLEX_HOST=vox.odbc.plex.com        PORT=19995  ✅
+# ServerDataSource must be exactly: ReportDataSource
 ```
 
-### ODBC: `HY000 3059` — wrong auth
+### ODBC: `HY000 10300` — access token invalid
 
 ```bash
-# This means you're using DSN-based auth but the driver needs driver-direct.
-# Fix: always set PLEX_ACCESS_TOKEN (IAM token), not username/password.
-# The code falls back to user/pass only if the token is missing.
-# Refresh the token in Secret Manager:
-echo -n 'your-token' | gcloud secrets versions add plex-access-token \
+# The IAM token in Secret Manager is wrong or was overwritten.
+# The Plex IAM token does NOT expire — it only breaks if replaced with the wrong value.
+# To verify what's stored:
+gcloud secrets versions access latest --secret=plex-access-token --project=voxdatalake
+# To replace it with the correct Plex token:
+echo -n 'PLEX_TOKEN_HERE' | gcloud secrets versions add plex-access-token \
   --data-file=- --project=voxdatalake
+```
+
+### ODBC: `HY000 3059` — DSN not found
+
+```bash
+# The code accidentally used DSN-based auth instead of driver-direct.
+# Fix: ensure PLEX_ACCESS_TOKEN (or SECRET_ACCESS_TOKEN) is set.
+# The IAM token path uses driver-direct; only username/password auth uses the DSN.
 ```
 
 ### `View not found: {ViewName}`
@@ -557,7 +607,7 @@ The current report extracts these 13 Plex views to produce 16 output columns:
 | `date_approved` | `MIN(Change_Date)` WHERE `PO_Status_Key=2073` | `Sales_v_PO_Change` | `PO_Key` |
 | `order_type` | `PO_Type` | `Sales_v_PO_Type` | `PO_Type_Key` |
 | `from_quote` | `From_PO_Key IS NOT NULL` | `Sales_v_PO` | — |
-| `status` | `Status` | `Sales_v_PO_Status` | `PO_Status_Key` |
+| `status` | `PO_Status` | `Sales_v_PO_Status` | `PO_Status_Key` |
 | `customer_name` | `Name` | `Common_v_Customer` | `Customer_No` |
 | `sales_rep_1` | `First_Name + Last_Name` | `Plexus_Control_v_Plexus_User` | `Sales_v_Order_Salesperson` Sort_Order=1 |
 | `sales_rep_2` | Same | Same | Sort_Order=2 |

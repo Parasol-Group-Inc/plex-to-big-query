@@ -1,16 +1,16 @@
 # Frontend Developer's Guide to the Plex → BigQuery Pipeline
 
-> This guide is written for frontend developers who are comfortable with JavaScript, APIs, and the browser, but less familiar with backend infrastructure, databases, and cloud deployments. Every concept has a frontend analogy. Read this to understand *why* the system works the way it does.
+> Written for developers comfortable with JavaScript, APIs, and the browser — but new to backend infrastructure, cloud deployments, and databases. Every concept has a frontend analogy. Use this to understand *why* the system works the way it does, and the second half as a step-by-step guide to build it from scratch.
 
 ---
 
 ## The problem we're solving
 
-Parasol uses **Plex ERP** — an enterprise system that manages manufacturing: parts, orders, inventory, shipping. The data lives in Plex's database, but Plex's reporting UI is slow and limited.
+Vox Nutrition uses **Plex ERP** to manage manufacturing: parts, orders, inventory, shipping. The data lives in Plex's database, but Plex's reporting UI is slow and limited.
 
-We want to take that data and put it in **BigQuery**, where it can be queried fast, connected to dashboards, and used for analysis. But Plex doesn't have a REST API — it only exposes data through **ODBC**, which is an older database connection standard (think of it like a database driver, similar to how you'd use `pg` or `mysql2` in Node.js to connect to Postgres or MySQL).
+The goal: copy that data into **BigQuery** on a nightly schedule so the data team can query it with SQL, build dashboards, and do analysis — without clicking around in Plex.
 
-So our job is to: **connect to Plex via ODBC, pull the data, and load it into BigQuery on a schedule.**
+Plex exposes data through **ODBC** (an older database connection standard, like using `pg` or `mysql2` in Node.js). So the pipeline: **connects via ODBC → pulls data → loads it into BigQuery every night.**
 
 ---
 
@@ -18,25 +18,25 @@ So our job is to: **connect to Plex via ODBC, pull the data, and load it into Bi
 
 ```mermaid
 graph TD
-    subgraph "Every morning at 2 AM UTC"
-        CS[☁️ Cloud Scheduler\ncron: 0 2 * * *]
+    subgraph "Every night — automated"
+        CS[⏰ Cloud Scheduler\n2 AM UTC daily]
     end
 
-    subgraph "Google Cloud — parasoldatalake"
-        CS -->|HTTP trigger| CRJ[🏃 Cloud Run Job\nplex-etl]
-        CRJ -->|reads secret| SM[🔐 Secret Manager\nplex-access-token]
-        CRJ -->|pulls image from| AR[📦 Artifact Registry\nplex-pipeline/etl:latest]
-        SA[🔑 Service Account\nplex-etl-sa] -->|identity for| CRJ
-        CRJ -->|writes data| BQ[(📊 BigQuery\nplex_sandbox.\nraw_materials_parts)]
-        CRJ -->|updates watermark| META[(📋 BigQuery\nplex_sandbox.\nsync_metadata)]
+    subgraph "Google Cloud — voxdatalake"
+        CS -->|HTTP trigger| CRJ[📦 Cloud Run Job\nplex-etl]
+        CRJ -->|reads config| GCS[☁ Cloud Storage\nvoxdatalake-report-configs]
+        CRJ -->|reads secret| SM[🔑 Secret Manager\nplex-access-token]
+        SA[🪪 Service Account\nplex-etl-sa] -->|identity for| CRJ
+        CRJ -->|writes 13 raw tables| BQ[(📊 BigQuery\nPlexProd dataset)]
+        CRJ -->|creates JOIN view| VIEW[(📊 sales_orders_report\n16-field report)]
     end
 
     subgraph "Plex ERP — external"
-        CRJ -->|ODBC over TCP :19995| PLEX[🏭 Plex ODBC Endpoint\nvox.odbc.plex.com]
+        CRJ -->|ODBC over TCP :19995| PLEX[🏭 vox.odbc.plex.com]
     end
 ```
 
-**Every arrow above is a network call.** The Cloud Run job is a single Python script that makes all of them in sequence.
+**Every arrow is a network call.** The Cloud Run job is a single Python script that makes all of them in sequence.
 
 ---
 
@@ -44,51 +44,58 @@ graph TD
 
 ### Docker = a `node_modules` folder that ships with the app
 
-When you run a Node.js app, you need the right `node_modules`. Docker packages your code + ALL its dependencies (the Python runtime, system libraries, the Plex ODBC driver binary) into a single portable image. Anyone with Docker can run it identically, no matter what OS they have.
+When you run a Node.js app, you need `node_modules`. Docker packages your code + ALL dependencies (Python runtime, system libraries, the Plex ODBC driver binary) into a single portable image. Anyone with Docker can run it identically.
 
 ```
 Your app code
 + Python 3.11
-+ pip packages (pyodbc, pandas, google-cloud-bigquery)
-+ Linux system packages (unixODBC, libc6-i386)
++ pip packages (pyodbc, pandas, google-cloud-bigquery, PyYAML)
++ Linux system packages (unixODBC)
 + Plex ODBC driver (.so files)
 = One Docker image — runs the same everywhere
 ```
 
 The `Dockerfile` is like a `package.json` + a `postinstall` script that sets up the whole environment.
 
-### Cloud Run Job = a Lambda / Vercel serverless function on a cron
+### Cloud Run Job = a Lambda / Vercel function on a cron
 
-Cloud Run runs your Docker container on demand. There's no server sitting idle — GCP spins up a container, runs it, and shuts it down. A **Job** (as opposed to a Service) is specifically for one-off executions: it runs once, does its work, exits.
+Cloud Run runs your Docker container on demand — no server sitting idle. A **Job** (vs a Service) runs once, does its work, and exits.
 
 ```
-Vercel:    deploy function → runs when HTTP request arrives → exits
-Cloud Run: deploy container → runs when triggered → exits
+Vercel:    deploy function → runs on HTTP request → exits
+Cloud Run: deploy container → runs on trigger     → exits
 ```
 
-Cloud Scheduler is the trigger — it fires an HTTP POST to Cloud Run at 2 AM UTC every day, just like a GitHub Actions schedule triggers a workflow.
+Cloud Scheduler is the trigger — it fires an HTTP POST to Cloud Run at 2 AM UTC, like a GitHub Actions schedule.
 
 ### BigQuery = Supabase for analytics
 
-BigQuery is a SQL database, but optimized for reading massive amounts of data fast (analytics), not for high-frequency writes (transactions). Think of it like a Postgres database where:
+BigQuery is a SQL database optimized for reading massive amounts of data (analytics), not high-frequency writes (transactions):
 - Reading 10 million rows is fast and cheap
-- You can't update individual rows easily — you overwrite the whole table
-- No live-updating frontend queries — it's for batch analysis and dashboards
+- You overwrite whole tables, not individual rows
+- It's for batch analysis and dashboards, not live frontend queries
 
 ### Secret Manager = `.env` but encrypted and managed by GCP
 
-Your `.env` file holds secrets locally. In production, you can't use `.env` — you can't commit it, and it doesn't exist inside a Docker container running on someone else's servers.
-
-Secret Manager is the cloud equivalent: secrets are stored encrypted, versioned, and access-controlled. Your Cloud Run job reads them at runtime via an API call.
+Your `.env` holds secrets locally. In production, you can't use `.env` — it doesn't exist inside a Docker container running on GCP servers.
 
 ```
 Local:      PLEX_ACCESS_TOKEN=abc123  (in .env file)
 Production: PLEX_ACCESS_TOKEN → read from Secret Manager at startup
 ```
 
+### Cloud Storage (GCS) = S3 / a CDN but for config files
+
+Report definitions (which Plex views to query, what SQL to run in BigQuery) live in GCS as YAML and SQL files. The container downloads them at startup. Edit a file in GCS → next run picks it up. No code change, no deployment.
+
+```
+Old way:  change a query → edit code → rebuild Docker → redeploy
+New way:  change a query → edit YAML in GCS Console → trigger job
+```
+
 ### Terraform = `npm install` for cloud infrastructure
 
-When you share a Node.js project, you don't commit `node_modules` — you commit `package.json` and run `npm install`. Infrastructure works the same way: you describe what you want in Terraform config files (`.tf`), and `terraform apply` creates it.
+You describe what GCP resources you want in `.tf` files. `terraform apply` creates them.
 
 ```
 package.json     →  terraform/*.tf
@@ -96,37 +103,33 @@ npm install      →  terraform apply
 node_modules/    →  actual GCP resources (Service Account, BigQuery, Cloud Run...)
 ```
 
-If you delete a GCP resource and re-run `terraform apply`, it recreates it. If you delete a line from the `.tf` file and apply, it deletes the resource.
+Delete a line from `.tf` → `terraform apply` deletes the resource. Add a line → it creates it.
 
 ### Service Account = an API key your app authenticates with
 
-When Cloud Run runs your container, it needs a Google identity to call GCP APIs (BigQuery, Secret Manager). It can't use your personal Google account — that would break when you change your password.
-
-A Service Account is a non-human identity: `plex-etl-sa@parasoldatalake.iam.gserviceaccount.com`. Terraform creates it and grants it exactly the permissions the job needs: read secrets, write to BigQuery, pull Docker images.
+Cloud Run needs a GCP identity to call GCP APIs (BigQuery, Secret Manager). A Service Account is a non-human identity: `plex-etl-sa@voxdatalake.iam.gserviceaccount.com`. Terraform creates it and grants it exactly the permissions the job needs.
 
 ```
-Your frontend app:  uses API keys (VITE_SUPABASE_KEY, etc.)
-Cloud Run:          uses a Service Account (managed by GCP, not you)
+Your frontend:  uses VITE_SUPABASE_KEY, VITE_API_KEY, etc.
+Cloud Run:      uses a Service Account (managed by GCP automatically)
 ```
 
 ### ODBC = a database driver
 
-ODBC (Open Database Connectivity) is a standard protocol for connecting to databases. It's the equivalent of `npm install pg` (the Node.js Postgres driver) — except ODBC is a C-level standard that works across languages, and Plex's version is a proprietary binary.
+ODBC is a standard protocol for connecting to databases — equivalent to `npm install pg` (the Node.js Postgres driver), except it's a C-level binary that Python loads.
 
 ```
 Node.js + Postgres:   npm install pg   → import {Client} from 'pg'
-Python + Plex:        DataDirect driver → import pyodbc
+Python + Plex:        DataDirect .so   → import pyodbc
 ```
 
-The `.so` files in `driver/lib64/` are the equivalent of a compiled native addon — binary code that Python loads to speak the ODBC protocol.
+### IAM token = a long-lived API key
 
-### IAM token = a JWT / OAuth token
-
-When you log into a web app, you get a JWT that proves your identity for subsequent API calls. Plex IAM tokens work the same way: you get a token from Plex, and each ODBC connection passes it in the `CustomProperties` field. Plex validates it and opens a connection as your user.
+Plex uses a token-based auth system for ODBC connections. You generate a token from your Plex user account and pass it on each connection. Unlike OAuth tokens, **this token does not expire** — it's permanently valid until you replace it.
 
 ```
 Web auth:   POST /login → { token: "eyJ..." } → Authorization: Bearer eyJ...
-Plex ODBC:  token from Plex → CustomProperties=authmethod=iam; accesstoken=Mjc4...
+Plex ODBC:  token from Plex portal → CustomProperties=authmethod=iam; accesstoken=NTI...
 ```
 
 ---
@@ -135,327 +138,332 @@ Plex ODBC:  token from Plex → CustomProperties=authmethod=iam; accesstoken=Mjc
 
 ```mermaid
 sequenceDiagram
-    participant CS as Cloud Scheduler
-    participant CR as Cloud Run Job
-    participant SM as Secret Manager
-    participant PLEX as Plex ERP
-    participant BQ as BigQuery
+    participant SCHED as ⏰ Scheduler
+    participant CR as 📦 Cloud Run Job
+    participant GCS as ☁ Cloud Storage
+    participant SM as 🔑 Secret Manager
+    participant PLEX as 🏭 Plex ODBC
+    participant BQ as 📊 BigQuery
 
-    CS->>CR: HTTP POST (trigger)
+    SCHED->>CR: POST /jobs/plex-etl:run
     Note over CR: Container starts, main.py runs
-
-    CR->>SM: GET plex-access-token (latest version)
+    CR->>SM: GET plex-access-token
     SM-->>CR: token string
-
-    CR->>PLEX: ODBC connect (driver-direct)<br/>HOST=vox.odbc.plex.com:19995<br/>UID=edominguez.parasol<br/>CustomProperties=authmethod=iam; accesstoken=...
+    CR->>GCS: GET reports/sales_orders.yaml
+    GCS-->>CR: 13 extractions + bq_view config
+    CR->>PLEX: ODBC connect (driver-direct)<br/>HOST=vox.odbc.plex.com:19995<br/>UID=edominguez.parasol<br/>authmethod=iam; accesstoken=...
     PLEX-->>CR: connection established
 
-    CR->>PLEX: SELECT * FROM Part_v_Part<br/>WHERE Part_Type = 'Raw Materials'<br/>ORDER BY Part_No ASC
-    PLEX-->>CR: rows (pandas DataFrame)
+    loop For each of 13 Plex views
+        CR->>PLEX: SELECT * FROM {view}
+        PLEX-->>CR: rows as DataFrame
+        CR->>BQ: WRITE_TRUNCATE → raw_{view}
+        CR->>BQ: UPDATE sync_metadata
+    end
 
-    CR->>BQ: Load DataFrame (WRITE_TRUNCATE)<br/>→ parasoldatalake.plex_sandbox.raw_materials_parts
-    BQ-->>CR: job complete, N rows written
-
-    CR->>BQ: INSERT INTO sync_metadata<br/>(table_name, rows_written, synced_at)
-    BQ-->>CR: ok
-
-    Note over CR: Container exits, job marked complete
+    CR->>GCS: GET sql/sales_orders_view.sql
+    GCS-->>CR: JOIN SQL
+    CR->>BQ: CREATE OR REPLACE VIEW sales_orders_report
+    Note over CR: Container exits, email sent
 ```
 
 ---
 
-## Local mode vs cloud mode
+## The multi-report config system
 
-The same Python script and Docker image runs in both modes. The difference is just where it reads credentials from and where it writes output.
+The biggest architectural decision: **report definitions don't live in the code**. They live in Cloud Storage as YAML files.
+
+```
+gs://voxdatalake-report-configs/
+├── reports/
+│   └── sales_orders.yaml      ← prod: which 13 views to extract
+├── test/
+│   └── sales_orders.yaml      ← test: same views → PlexTest dataset
+└── sql/
+    └── sales_orders_view.sql  ← BigQuery JOIN view — the actual report SQL
+```
+
+The Cloud Run job reads the YAML at startup on every execution. To change a query: edit the file in GCS and trigger the job. No container rebuild, no Terraform apply.
+
+**The `REPORT_CONFIG_GCS_PATH` env var** tells the container which YAML to load. That's the only thing that differs between the prod and test jobs.
+
+---
+
+## Prod vs test environments
 
 ```mermaid
 graph LR
-    subgraph "Local Mode  (docker compose up)"
-        direction TB
-        ENV[.env file<br/>on your laptop] --> DC[Docker container]
-        DC -->|ODBC| PLEX_T[Plex test host<br/>vox.odbc.plex.com]
-        DC -->|write| CSV["./output/*.csv<br/>on your laptop"]
+    GCS["gs://voxdatalake-report-configs"]
+
+    subgraph PROD["🟢 Production"]
+        PJ["Cloud Run Job: plex-etl\nScheduler: 2 AM UTC"]
+        PH["vox.odbc.plex.com ✅"]
+        PD["BigQuery: PlexProd"]
+        PJ -->|ODBC| PH
+        PJ -->|writes| PD
     end
 
-    subgraph "Cloud Mode  (Cloud Run job)"
-        direction TB
-        SM_C[Secret Manager<br/>plex-access-token] --> CRC[Cloud Run container]
-        CRC -->|ODBC| PLEX_P[Plex host<br/>odbc.plex.com]
-        CRC -->|write| BQ_C[BigQuery<br/>plex_sandbox.raw_materials_parts]
+    subgraph TEST["🔵 Test"]
+        TJ["Cloud Run Job: plex-etl-test\nScheduler: 3 AM UTC"]
+        TH["vox.test.odbc.plex.com ✅"]
+        TD["BigQuery: PlexTest"]
+        TJ -->|ODBC| TH
+        TJ -->|writes| TD
     end
+
+    GCS -->|"reports/sales_orders.yaml"| PJ
+    GCS -->|"test/sales_orders.yaml"| TJ
 ```
 
-Controlled by one env var: `OUTPUT_MODE=local` vs `OUTPUT_MODE=bigquery`. `docker-compose.yml` forces `local` so you can't accidentally write to prod BigQuery from your laptop.
+Same container image, same GCS bucket, different ODBC host and BigQuery dataset. Both use the same IAM token — it works on both endpoints.
 
 ---
 
 ## Authentication: two separate systems
 
-There are two authentication systems at play. Beginners often confuse them.
-
 ```mermaid
 graph TD
     subgraph "Who is Cloud Run talking to Plex as?"
-        TOKEN[Plex IAM Token<br/>plex-access-token in Secret Manager] -->|proves identity to| PLEX_AUTH[Plex ERP ODBC server]
-        NOTE1["User: edominguez.parasol<br/>Company: parasol"] -.-> PLEX_AUTH
+        TOKEN["Plex IAM Token<br/>stored in Secret Manager<br/>does not expire"] -->|authenticates to| PLEX_AUTH["Plex ODBC server<br/>edominguez.parasol"]
     end
 
     subgraph "Who is Cloud Run talking to GCP as?"
-        SA2[GCP Service Account<br/>plex-etl-sa@parasoldatalake] -->|proves identity to| GCP_SERVICES[Secret Manager<br/>BigQuery<br/>Artifact Registry]
-        NOTE2["Managed automatically by GCP<br/>You never touch this token"] -.-> GCP_SERVICES
+        SA["GCP Service Account<br/>plex-etl-sa@voxdatalake"] -->|authenticates to| GCP["Secret Manager<br/>BigQuery<br/>Cloud Storage"]
     end
 ```
 
 | | Plex IAM Token | GCP Service Account |
 |---|---|---|
-| **Authenticates to** | Plex ERP ODBC endpoint | GCP services (BigQuery, Secret Manager) |
-| **Where it lives** | Secret Manager (you put it there) | Managed by GCP automatically |
-| **Who rotates it** | You, when Plex issues a new one | GCP (transparent to you) |
-| **What happens if missing** | ODBC connection fails | Cloud Run can't read secrets or write to BQ |
-
----
-
-## What each file does
-
-```mermaid
-graph LR
-    subgraph "Python app (inside container)"
-        M[main.py] -->|imports| EU[email_utils.py]
-        M -->|reads| TMPL[templates/report.html]
-    end
-
-    subgraph "Container build"
-        DF[Dockerfile] -->|installs| DRV[driver/lib64/*.so]
-        DF -->|installs| REQ[requirements.txt]
-        DF -->|copies| CFG[config/odbcinst.ini\nconfig/odbc.ini]
-        DF -->|entry point| ENT[entrypoint.sh]
-    end
-
-    subgraph "Local run config"
-        DC[docker-compose.yml] -->|mounts| OUTP[./output/]
-        DC -->|loads| ENV[.env]
-    end
-
-    subgraph "GCP infrastructure"
-        TF[terraform/main.tf] -->|defines| GCP[all GCP resources]
-        TFVARS[terraform/terraform.tfvars] -->|configures| TF
-    end
-```
-
-| File | Frontend equivalent | What it does |
-|---|---|---|
-| `main.py` | `server.js` / route handler | Orchestrates the whole ETL: fetch token, connect ODBC, query Plex, write BQ |
-| `Dockerfile` | `package.json` + `Dockerfile` | Defines what goes in the container |
-| `docker-compose.yml` | `vite.config.js` for local dev | Local runner config: mounts output folder, sets local-only env vars |
-| `.env` | `.env.local` | Local secrets — never committed |
-| `config/odbcinst.ini` | driver registration file | Tells the ODBC driver manager where the Plex driver binary lives |
-| `config/odbc.ini` | database connection config | DSN definitions (PlexProduction, PlexTest) — hostname, port |
-| `terraform/main.tf` | infrastructure-as-code | All GCP resources defined here — Service Account, BigQuery, Cloud Run, etc. |
-| `terraform/terraform.tfvars` | `.env` for infrastructure | Your project-specific values for Terraform |
+| **Authenticates to** | Plex ODBC endpoint | GCP services |
+| **Where it lives** | Secret Manager (you stored it) | Managed by GCP automatically |
+| **Expires?** | No — permanent until replaced | Rotated by GCP transparently |
+| **Where to get it** | Plex portal → user profile → API Access | Created by Terraform |
 
 ---
 
 ## The ODBC connection string explained
 
-This is the most unusual part of the codebase — ODBC connection strings look weird if you've only seen database URLs.
-
 ```python
 # What you're used to (Postgres URL):
 "postgresql://user:password@host:5432/dbname"
 
-# What Plex ODBC looks like:
-"DRIVER={/usr/oaodbc81/lib64/ivoa27.so};" \
-"HOST=vox.odbc.plex.com;" \
-"PORT=19995;" \
-"ServerDataSource=ReportDataSource;" \
-"Encrypted=1;" \
-"UseLDAP=0;" \
-"UID=edominguez.parasol;" \
-"PWD=;" \
-"CustomProperties=authmethod=iam; accesstoken=Mjc4MDIy..."
+# What Plex ODBC looks like (driver-direct):
+"DRIVER={/usr/oaodbc81/lib64/ivoa27.so};"
+"HOST=vox.odbc.plex.com;"
+"PORT=19995;"
+"ServerDataSource=ReportDataSource;"
+"Encrypted=1;"
+"UseLDAP=0;"
+"UID=edominguez.parasol;"
+"PWD=;"
+"CustomProperties=authmethod=iam; accesstoken=NTIx..."
 ```
-
-Breaking it down:
 
 | Part | Meaning |
 |---|---|
 | `DRIVER={...}` | Path to the driver binary — like `require('./driver.so')` |
-| `HOST=` | The Plex ODBC server hostname |
-| `PORT=19995` | Plex always uses port 19995 |
-| `ServerDataSource=ReportDataSource` | Name of the data service on the Plex ODBC server |
-| `Encrypted=1` | Use TLS (like `https` vs `http`) |
+| `HOST=` | Plex ODBC server (`vox.odbc.plex.com` prod, `vox.test.odbc.plex.com` test) |
+| `PORT=19995` | Plex always uses this port |
+| `ServerDataSource=ReportDataSource` | Named data service on the Plex server |
+| `Encrypted=1` | TLS — like `https` vs `http` |
 | `UID=edominguez.parasol` | Plex login: `username.company` format |
-| `PWD=` | Empty — we're using IAM token, not a password |
-| `CustomProperties=...` | Plex-specific extra config: sets auth method and passes the token |
+| `PWD=` | Empty — IAM token auth, no password |
+| `CustomProperties=...` | **Must be last** — contains semicolons that would confuse the parser if in the middle |
 
-**Why `CustomProperties` is last:** It contains semicolons inside it (`authmethod=iam; accesstoken=...`). If it's not last, the driver misreads the semicolons as separators between connection attributes. Putting it at the end means "everything from here is CustomProperties."
-
----
-
-## GCP services map
-
-```mermaid
-graph TD
-    subgraph "Compute"
-        CRJ[Cloud Run Job\nplex-etl\nRuns our container]
-    end
-
-    subgraph "Storage"
-        BQ[BigQuery\nplex_sandbox dataset\nThe data warehouse]
-        AR[Artifact Registry\nStores Docker images]
-    end
-
-    subgraph "Secrets"
-        SM[Secret Manager\nplex-access-token\nThe Plex IAM token]
-    end
-
-    subgraph "Scheduling"
-        CS[Cloud Scheduler\nFires at 2 AM UTC]
-    end
-
-    subgraph "Identity"
-        SA[Service Account\nplex-etl-sa\nThe job's identity]
-        IAM[IAM Roles\nWhat the SA is allowed to do]
-    end
-
-    CS -->|triggers| CRJ
-    SA -->|authorizes| CRJ
-    IAM -->|granted to| SA
-    CRJ -->|reads| SM
-    CRJ -->|writes| BQ
-    AR -->|source image for| CRJ
-```
-
-**IAM roles granted to `plex-etl-sa`:**
-
-| Role | What it allows |
-|---|---|
-| `roles/bigquery.dataEditor` | Read and write tables in BigQuery |
-| `roles/bigquery.jobUser` | Run BigQuery queries (counting, loading) |
-| `roles/secretmanager.secretAccessor` | Read secret versions from Secret Manager |
-| `roles/artifactregistry.reader` | Pull Docker images from Artifact Registry |
-| `roles/run.invoker` | Be invoked by Cloud Scheduler |
+**Why driver-direct, not DSN?** The DSN config (`/etc/odbc.ini`) works for basic connections but unixODBC drops driver-specific attributes like `CustomProperties` when routing through a DSN. IAM auth requires `CustomProperties`, so we bypass the DSN entirely and pass all attributes directly.
 
 ---
 
-## The incremental sync system
+## What each file does
 
-The pipeline tracks what it has already loaded so it doesn't pull the same data twice. This is stored in the `sync_metadata` table in BigQuery.
-
-```mermaid
-graph TD
-    START([Job starts]) --> CHECK{Is this the\nfirst run?}
-    CHECK -->|Yes — no row in sync_metadata| EPOCH[Use Jan 1, 1970 as the cutoff\nPulls all data ever]
-    CHECK -->|No — found last sync timestamp| LASTSYNC[Read MAX timestamp\nfrom sync_metadata]
-    LASTSYNC --> BACKFILL[Subtract 5 minutes\nbuffer for late arrivals]
-    EPOCH --> QUERY[Query Plex with cutoff timestamp]
-    BACKFILL --> QUERY
-    QUERY --> WRITE[Write rows to BigQuery]
-    WRITE --> UPDATE[Update sync_metadata\nwith new max timestamp]
-    UPDATE --> END([Job done])
-```
-
-> **Note for Part_v_Part (current table):** Parts master data doesn't have a timestamp column, so the pipeline uses `WRITE_TRUNCATE` — it replaces the entire table on every run instead of appending. The `sync_metadata` table still records the run, but the cutoff timestamp isn't used for filtering.
-
----
-
-## Common errors and what they mean
-
-| Error | Plain English | Fix |
+| File | Frontend equivalent | What it does |
 |---|---|---|
-| `HY000 3059: data source not defined` | The ODBC driver tried to look up the DSN but the DSN config was dropped | This means the code accidentally used DSN-based auth instead of driver-direct — check `get_odbc_connection()` in `main.py` |
-| `HY000 10300: service not found` | Connected to the ODBC server OK, but asked for a service name that doesn't exist on that server | `ServerDataSource=ReportDataSource` works on the test host; production uses a different name |
-| `28000: Invalid authorization specification` | Username/password auth failed | Wrong `PLEX_ODBC_USER`, `PLEX_ODBC_PASSWORD`, or `PLEX_COMPANY_CODE` |
-| `403: Policy update access denied` | Tried to assign IAM roles but your account isn't a project owner | Ask a GCP admin to grant you `roles/owner` on the project |
-| `409: Already Exists` in Terraform | Resource exists in GCP but Terraform doesn't know about it (state mismatch) | Import the resource: `terraform import <resource> <id>` |
-| `Secret not found` in Cloud Run | Secret version doesn't exist yet | Run `gcloud secrets versions add plex-access-token ...` to add the token |
-
----
-
-## The Python scripts explained
-
-If you open the repo, you'll see two Python files. Here's what they actually do, explained in terms you already know.
-
-### `main.py` — the one script that does everything
-
-Think of this as the server-side handler for a single cron job request. It runs once, top to bottom, and either succeeds or throws an error.
-
-**The config block at the top** is like reading `process.env` in Node.js. Every tunable value — which Plex view to query, which BigQuery table to write to, which email to send reports to — is an env var. Nothing is hardcoded. This means you can point the same script at a different table just by changing an env var, with no code change.
-
-```python
-PLEX_VIEW   = os.environ.get("PLEX_VIEW",   "Part_v_Part")
-PLEX_FILTER = os.environ.get("PLEX_FILTER", "WHERE Part_Type = 'Raw Materials'")
-BQ_TABLE    = os.environ.get("BQ_TABLE",    "raw_materials_parts")
-```
-
-**`get_secret(name)`** is like a `fetch()` call to a secrets vault. Instead of hardcoding passwords in env vars, you store them in Secret Manager and retrieve them at runtime. The Cloud Run service account has permission to read them.
-
-**`query_plex(conn)`** builds a SQL string and runs it over the ODBC connection. Think of it like a `db.query()` call. The result is a pandas DataFrame — basically a 2D table in memory, like a JavaScript array of objects.
-
-```python
-sql = f"SELECT * FROM {PLEX_VIEW} {PLEX_FILTER}"
-# same idea as: const data = await db.query(`SELECT * FROM ${view} ${filter}`)
-```
-
-**`write_to_bigquery(bq, df)`** loads the DataFrame into BigQuery. In full-refresh mode (`WRITE_TRUNCATE`), it deletes the old table and replaces it entirely — like a `PUT` request that replaces the whole resource instead of patching it.
-
-**`run_and_report()`** wraps the whole pipeline in a try/catch. Whether the job succeeds or fails, it builds a report dict and calls `send_report()`. This way you always get an email, even when something breaks.
-
----
-
-### `email_utils.py` — the email report builder
-
-This file has one job: take the report dict from `main.py` and send an HTML email via SendGrid.
-
-**`send_report(report)`** is the only public function. It:
-1. Checks if `SENDGRID_ENABLED=true` — exits early if not
-2. Fetches the SendGrid API key from Secret Manager (same pattern as the Plex token)
-3. Reads env vars for sender address, recipients, company name
-4. Builds the HTML from the template
-5. Sends it via `SendGridAPIClient.send()`
-
-**The template system** is intentionally simple — no React, no Jinja2. It just replaces `{{placeholders}}` in `templates/report.html` with real values. Like string interpolation, but for an HTML file.
-
-**The email subject** is built dynamically:
-```
-[Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19
-```
-
-`COMPANY_NAME` is an env var you set in `terraform.tfvars`. Change it with `terraform apply` — no rebuild needed.
-
-**The Cloud Run logs link** in the email is constructed automatically from `CLOUD_RUN_EXECUTION` — an env var that GCP injects into every container execution. Clicking the link in the email takes you directly to that run's logs in the GCP Console.
+| `main.py` | `server.js` / route handler | Orchestrates the ETL: load GCS config, connect ODBC, loop extractions, write BigQuery, create VIEW |
+| `email_utils.py` | notification service | Sends HTML run summary via SendGrid |
+| `Dockerfile` | `package.json` + setup script | Defines the container: Python, ODBC driver, pip packages |
+| `docker-compose.yml` | `vite.config.js` for local dev | Local runner — forces `OUTPUT_MODE=local`, mounts `./output/` |
+| `.env` | `.env.local` | Local secrets — never committed |
+| `reports/sales_orders.yaml` | feature flag config | Which 13 Plex views to extract and where to write them |
+| `reports/sql/sales_orders_view.sql` | a database migration | The BigQuery JOIN SQL that produces the 16-field report |
+| `config/odbcinst.ini` | driver registration | Tells unixODBC where the Plex driver binary lives |
+| `terraform/main.tf` | infrastructure definition | All GCP resources: Service Account, BigQuery, Cloud Run, Scheduler, GCS bucket |
+| `terraform/terraform.tfvars` | `.env` for Terraform | Your project-specific values — gitignored, never committed |
 
 ---
 
 ## What requires a rebuild vs. what doesn't
 
-This is the most practical thing to know when making changes.
-
 ```mermaid
-flowchart LR
-    change[You made a change] --> q1{Is it in a .py file,\ntemplate, or driver/?}
-    q1 -->|Yes| rebuild[docker build + push\nthen run the job]
-    q1 -->|No, it's in terraform.tfvars| apply[terraform apply\n~30 seconds]
-    apply --> done[Done — next run uses new config]
-    rebuild --> done
+flowchart TD
+    change[You made a change] --> q1{Where is the change?}
+    q1 -->|YAML or SQL in GCS| gcs["gcloud storage cp → trigger job\nNo code change, no deployment"]
+    q1 -->|terraform.tfvars| apply["terraform apply\n~30 seconds"]
+    q1 -->|.py file, Dockerfile, requirements.txt| rebuild["docker build + push\nthen trigger job\n3–8 minutes"]
 ```
 
-**Only `terraform apply` needed** (fast, no code change):
-- Plex host, view, filter
-- BigQuery table/dataset
-- Email on/off, sender, recipients
-- Company name in subject line
-- Cron schedule
+**Only `gcloud storage cp` + trigger** (seconds, no deployment):
+- Which Plex views to extract (`reports/*.yaml`)
+- Filters, date columns on any view
+- BigQuery JOIN view SQL (`reports/sql/*.sql`)
 
-**Needs a Docker rebuild** (3–8 min first time, faster after):
+**Only `terraform apply`** (30 seconds, no code change):
+- ODBC host, port, ServerDataSource
+- BigQuery table or dataset name
+- Email on/off, sender, recipients
+- Cron schedule, max retries
+
+**Needs Docker rebuild** (3–8 min):
 - `main.py`, `email_utils.py` — logic changes
-- `templates/report.html` — email design changes
-- `requirements.txt` — adding a Python package
+- `templates/report.html` — email design
+- `requirements.txt` — new Python package
 - `driver/` — Plex ODBC driver update
 
-**Just a `gcloud` command, no Terraform, no rebuild**:
-- Rotating the Plex IAM token
-- Rotating the SendGrid API key
+---
+
+## Build from scratch — complete setup guide
+
+Use this if you're setting up the pipeline in a new GCP project or rebuilding after a teardown.
+
+### Prerequisites
+
+- GCP project created with billing enabled
+- `gcloud` CLI installed and authenticated: `gcloud auth login`
+- `terraform` CLI ≥ 1.5 installed
+- `docker` CLI installed and running
+- Plex ODBC driver files in `driver/` (contact Plex support for the Linux `.tar.gz`)
+- Plex IAM token (from Plex portal → your profile → API Access)
+- SendGrid account + verified sender address (optional, for email reports)
+
+### Phase 1 — Validate locally before touching GCP
+
+```bash
+# 1. Copy and fill in credentials
+cp .env.example .env
+# Edit .env:
+#   PLEX_HOST=vox.test.odbc.plex.com
+#   PLEX_ODBC_USER=yourname.company
+#   PLEX_ACCESS_TOKEN=your-plex-token
+#   BQ_DATASET=PlexTest
+#   GCP_PROJECT=your-gcp-project
+
+# 2. Build and run locally — writes CSVs to ./output/
+docker compose build
+docker compose up
+
+# 3. Inspect output
+ls output/
+# Should see files like raw_Sales_v_PO_20260701T020000Z.csv
+```
+
+If you see data in `./output/` the ODBC connection and extraction are working. Move to Phase 2.
+
+### Phase 2 — Deploy to GCP
+
+```bash
+# 1. Authenticate Docker to Artifact Registry
+gcloud auth configure-docker us-central1-docker.pkg.dev
+
+# 2. Copy and fill in Terraform variables
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars — fill in gcp_project, plex_host, plex_odbc_user,
+# image_url, email settings, etc.
+
+# 3. Init and apply — creates all GCP infrastructure
+terraform init
+terraform apply -var-file=terraform.tfvars
+# Type 'yes' when prompted. Takes ~2 minutes on first run.
+
+# 4. Build and push the container image
+cd ..
+docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT/plex-pipeline/etl:latest
+
+# 5. Store the Plex IAM token in Secret Manager
+echo -n 'YOUR_PLEX_TOKEN' | \
+  gcloud secrets versions add plex-access-token \
+  --data-file=- --project=YOUR_PROJECT
+
+# 6. Upload report configs to GCS
+gcloud storage cp reports/sales_orders.yaml \
+  gs://YOUR_PROJECT-report-configs/reports/
+gcloud storage cp reports/test/sales_orders.yaml \
+  gs://YOUR_PROJECT-report-configs/test/
+gcloud storage cp reports/sql/sales_orders_view.sql \
+  gs://YOUR_PROJECT-report-configs/sql/
+
+# 7. Trigger the test job and watch it run
+gcloud run jobs execute plex-etl-test \
+  --region=us-central1 --project=YOUR_PROJECT --wait
+```
+
+### Phase 3 — Validate
+
+```bash
+# Check all 13 raw tables exist with data
+bq query --nouse_legacy_sql --project=YOUR_PROJECT \
+  "SELECT table_name, row_count
+   FROM YOUR_PROJECT.PlexTest.INFORMATION_SCHEMA.PARTITIONS
+   ORDER BY table_name"
+
+# Preview the 16-field report view
+bq query --nouse_legacy_sql --project=YOUR_PROJECT \
+  "SELECT * FROM \`YOUR_PROJECT.PlexTest.sales_orders_report\` LIMIT 10"
+```
+
+If the view returns rows with correct data, Phase 3 is done. Repeat Phase 2 step 7 with `plex-etl` (prod job) to go live.
+
+---
+
+## Email behavior
+
+The job sends a SendGrid email after every run with this logic:
+
+| Attempt | Outcome | Email sent? |
+|---|---|---|
+| First (attempt 0) | Success or failure | ✅ Always — you know the job ran |
+| Retry (attempt 1+) | Failure | ❌ Suppressed — no inbox spam |
+| Retry (attempt 1+) | Success | ✅ Always — you know it recovered |
+
+Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container execution. `max_retries = 1` means at most one retry after a failure.
+
+---
+
+## Common errors
+
+| Error | Plain English | Fix |
+|---|---|---|
+| `HY000 10300: access token invalid` | The IAM token in Secret Manager is wrong | Replace it with the correct Plex token via `gcloud secrets versions add` |
+| `HY000 3059: data source not defined` | DSN-based auth was used instead of driver-direct | Ensure `PLEX_ACCESS_TOKEN` is set — IAM auth uses driver-direct, not the DSN |
+| `403: Policy update access denied` | Your GCP account isn't a project owner | Ask a GCP admin for `roles/owner` on the project |
+| `409: Already Exists` in Terraform | Resource exists in GCP but not in Terraform state | Import it: `terraform import <resource> <id>` |
+| `Secret not found` in Cloud Run | Secret version not created yet | Run `gcloud secrets versions add plex-access-token ...` |
+| `BigQuery view error: column not found` | Column name in SQL doesn't match actual Plex schema | Query `INFORMATION_SCHEMA.COLUMNS` on the raw table to get real names |
+
+---
+
+## GCP services and IAM summary
+
+| GCP Service | What it does in this pipeline |
+|---|---|
+| **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger |
+| **Cloud Scheduler** | Fires HTTP POST to Cloud Run at 2 AM UTC (prod) / 3 AM UTC (test) |
+| **BigQuery** | Stores 13 raw Plex tables + `sales_orders_report` JOIN view |
+| **Cloud Storage** | Holds YAML report configs and SQL view definitions — editable at runtime |
+| **Secret Manager** | Stores the Plex IAM token and SendGrid API key |
+| **Artifact Registry** | Private Docker registry — stores the ETL container image |
+| **IAM / Service Accounts** | `plex-etl-sa@voxdatalake` runs the job with least-privilege access |
+
+**IAM roles granted to `plex-etl-sa`:**
+
+| Role | Why |
+|---|---|
+| `roles/bigquery.dataEditor` | Write rows to BigQuery |
+| `roles/bigquery.jobUser` | Run BigQuery load jobs |
+| `roles/secretmanager.secretAccessor` | Read Plex token from Secret Manager |
+| `roles/artifactregistry.reader` | Pull the Docker image |
+| `roles/storage.objectViewer` | Read YAML/SQL configs from GCS |
+| `roles/run.invoker` | Cloud Scheduler invokes Cloud Run |
 
 ---
 
@@ -463,17 +471,17 @@ flowchart LR
 
 | Term | Definition |
 |---|---|
-| **ETL** | Extract, Transform, Load — the pattern of pulling data from a source (Plex), reshaping it, and loading it to a destination (BigQuery). This pipeline is mostly Extract + Load; Transform is minimal. |
-| **ODBC** | Open Database Connectivity — a standard interface for connecting to databases. Like a universal database driver. |
-| **DSN** | Data Source Name — a named ODBC connection config defined in `/etc/odbc.ini`. We don't use DSN for our connection because unixODBC drops attributes when routing through it. |
-| **IAM** | Identity and Access Management — controls who (people or services) can do what in GCP. Also used by Plex for token-based auth. |
-| **Service Account** | A GCP identity for a machine/app (not a human). Used by Cloud Run to authenticate to other GCP services. |
-| **BigQuery** | Google's managed data warehouse. SQL-queryable, handles massive datasets, optimized for analytics reads. |
-| **Cloud Run** | GCP's serverless container platform. Runs Docker containers on demand, no server management. |
-| **Cloud Scheduler** | GCP's managed cron service. Fires HTTP requests on a schedule. |
-| **Artifact Registry** | GCP's private Docker registry. Where the pipeline's container image is stored. |
-| **Secret Manager** | GCP's encrypted secrets store. Replaces `.env` files in production. |
-| **Terraform** | Infrastructure-as-code tool. Defines GCP resources in `.tf` files and creates/manages them with `terraform apply`. |
-| **WRITE_TRUNCATE** | BigQuery write mode that deletes and replaces the entire table. Used for full-refresh tables with no timestamp column. |
-| **WRITE_APPEND** | BigQuery write mode that adds rows without deleting existing ones. Used for incremental tables. |
-| **DataDirect OpenAccess SDK** | The specific ODBC driver Plex uses. A C library binary (`.so` file) that implements the ODBC protocol for Plex's server. |
+| **ETL** | Extract, Transform, Load — pull data from Plex (extract), reshape it (transform), load to BigQuery |
+| **ELT** | Extract, Load, Transform — this pipeline's actual pattern: raw data lands in BigQuery first, then the VIEW transforms it via SQL |
+| **ODBC** | Open Database Connectivity — a standard database driver interface. Like a universal adapter for databases |
+| **DSN** | Data Source Name — a named ODBC connection config in `/etc/odbc.ini`. We bypass it for IAM auth (driver-direct) |
+| **IAM** | Identity and Access Management — controls who can do what. Used by both GCP and Plex |
+| **Service Account** | A GCP identity for a machine/app (not a human) |
+| **BigQuery** | Google's managed data warehouse. SQL-queryable, handles massive datasets, optimized for analytics |
+| **Cloud Run** | GCP's serverless container platform |
+| **Cloud Scheduler** | GCP's managed cron service |
+| **Artifact Registry** | GCP's private Docker registry |
+| **Secret Manager** | GCP's encrypted secrets store |
+| **Terraform** | Infrastructure-as-code tool — defines GCP resources in `.tf` files |
+| **WRITE_TRUNCATE** | BigQuery write mode: delete and replace the entire table. Used for full-refresh (all 13 views) |
+| **DataDirect OpenAccess SDK** | The Plex ODBC driver — a C binary (`.so`) that speaks Plex's proprietary ODBC protocol |

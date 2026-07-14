@@ -237,13 +237,34 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
     """
     Replace the target BigQuery table with the current DataFrame.
     WRITE_TRUNCATE replaces the table atomically — idempotent on re-run.
+    Always writes even when empty so the table exists for VIEW references.
     """
     table_name = bq_table or BQ_TABLE
-    if df.empty:
-        log.info(f"No rows to write to {table_name} — skipping BigQuery write.")
+    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{table_name}"
+
+    if df.empty and df.columns.empty:
+        log.info(f"No rows and no schema for {table_name} — skipping BigQuery write.")
         return 0
 
-    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{table_name}"
+    if df.empty:
+        # Create/truncate the table so VIEWs can reference it even with 0 rows.
+        # Columns come from cursor.description so the schema is correct.
+        schema = [bigquery.SchemaField(col, "STRING") for col in df.columns]
+        table_obj = bigquery.Table(table_ref, schema=schema)
+        try:
+            bq.get_table(table_ref)
+            # Table exists — truncate it via an empty load
+            job_config = bigquery.LoadJobConfig(
+                write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+                schema=schema,
+            )
+            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
+            job.result()
+        except gcp_exceptions.NotFound:
+            bq.create_table(table_obj)
+        log.info(f"No rows for {table_name} — table created/truncated with {len(schema)} columns.")
+        return 0
+
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         autodetect=True,
@@ -251,7 +272,7 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
 
     log.info(f"Writing {len(df)} rows to {table_ref}...")
     job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-    job.result()  # wait for job to complete
+    job.result()
 
     if job.errors:
         raise RuntimeError(f"BigQuery load job failed: {job.errors}")
@@ -522,7 +543,8 @@ def run_and_report():
         "errors":           errors,
     }
 
-    if OUTPUT_MODE == "bigquery":
+    task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))
+    if OUTPUT_MODE == "bigquery" and (status == "success" or task_attempt == 0):
         try:
             send_report(report)
         except Exception:

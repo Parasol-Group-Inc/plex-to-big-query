@@ -7,7 +7,7 @@ Individual catalog files live in this `docs/` folder.
 |---|---|---|---|
 | **Sales** | [plex_sales_views_catalog.md](plex_sales_views_catalog.md) | Customer orders, quotes, pricing, shipping | ⭐ Primary |
 | **Common** | [plex_common_views_catalog.md](plex_common_views_catalog.md) | Customer master, employees, carriers, currencies | ⭐ JOIN source |
-| **Part** | [plex_part_views_catalog.md](plex_part_views_catalog.md) | Part master, BOM, routing, containers, tools, workcenters, Customer_Part_Price — **778 views confirmed** | ⭐ JOIN source |
+| **Part** | [plex_part_views_catalog.md](plex_part_views_catalog.md) | Part master, BOM, routing, containers, tools, workcenters, Customer_Part_Price — **778 views confirmed**. Also home to `Job`, `Job_Op`, `Workcenter`, `Workcenter_Log` (work orders pipeline) | ⭐ Primary + JOIN source |
 | **Accounting** | [plex_accounting_views_catalog.md](plex_accounting_views_catalog.md) | AR/AP invoices, GL accounts, payments | High |
 | **Purchasing** | [plex_purchasing_views_catalog.md](plex_purchasing_views_catalog.md) | Supplier POs, RFQs, receipts — **130 views confirmed** | High |
 | **Plexus_Control** | [plex_plexus_control_views_catalog.md](plex_plexus_control_views_catalog.md) | User master (`Plexus_User` ⭐), roles, menus — **213 views confirmed** | ⭐ JOIN source |
@@ -49,6 +49,41 @@ SELECT TOP 3 * FROM Part_v_Part          -- Part DB, view named "Part"
 ```
 
 This is also what goes in `PLEX_VIEW` in `.env` and `terraform.tfvars`.
+
+---
+
+## Confirmed ODBC View Names for Work Orders Pipeline
+
+Schema confirmed via live queries against `vox.test.odbc.plex.com` on 2026-07-13.
+
+> **Note:** In Plex, "Work Orders" (`Part_v_Work_Order`) and "Jobs" (`Part_v_Job`) are **separate entities** — no direct FK between them in the ODBC views. Jobs are the shop-floor execution records; this pipeline uses Jobs as the primary entity.
+
+| ODBC Query Name | Tree Name | Database | Purpose |
+|---|---|---|---|
+| `Part_v_Job` | `Job` | Part | Job header: `Job_No`, `Part_Key`, `Quantity`, `Job_Status_Key`, dates |
+| `Part_v_Job_Op` | `Job_Op` | Part | Job operation: `Job_Key`, `Workcenter_Key`, `Op_No`, `Quantity`, `Setup_Time`, `Fixed_Run_Time`, `Start_Date`, `Complete_Date` |
+| `Part_v_Workcenter` | `Workcenter` | Part | Workcenter master: `Name`, `Workcenter_Type` (inline string — no separate join needed) |
+| `Part_v_Workcenter_Log` | `Workcenter_Log` | Part | Operator time entries: `Job_Op_Key`, `Log_Hours`, `Log_Date` |
+
+### `Part_v_Job` Columns (schema confirmed 2026-07-13, no test data)
+`PCN` · `Job_Key` · `Job_No` · `Part_Key` · `Quantity` · `Due_Date` · `Job_Status_Key` · `Note` · `Add_By` · `Add_Date` · `Update_By` · `Update_Date` · `Priority_Key` · `Earliest_Start_Date` · `Earliest_Start_Reason` · `No_Material` · `From_Job_Key` · `To_Job_Key` · `Certified` · `Certified_By` · `Certified_Date` · `Job_Type_Key` · `Dependant_Job_Key` · `Cert_Note` · `Planned_Location` · `Completed_By` · `Completed_Date` · `Job_Shipper_Note` · `Job_Merge_Date` · `Note_2` · `Tracking_No` · `Description` · `Building_Key` · `Assigned_To_Key` · `Accounting_Job_Key` · `Finalized_Date` · `MRP_Processed` · `Sort_Order` · `Lot_Key` · `Resource_ID` · `External_Job_Code`
+
+### `Part_v_Job_Op` Columns (schema confirmed 2026-07-13, no test data)
+`PCN` · `Job_Op_Key` · `Job_Key` · `Part_Key` · `Part_Operation_Key` · `Operation_Key` · `Workcenter_Key` · `Op_No` · `Job_Op_Type_Key` · `Job_Op_Status_Key` · `Setup_Time` · `Rate` · `Earliest_Start_Date` · `Earliest_Start_Reason` · `Violation` · `Bottleneck` · `Due_Date` · `Schedule_Note` · `Started_By` · `Start_Date` · `Completed_By` · `Complete_Date` · `Note` · `Designated_Workcenter_Key` · `Locked` · `Description` · `Update_By` · `Update_Date` · `Bulletin` · `Production_Job_Op_Key` · `Next_Job_Op_Key` · `PLC_Count` · `Quantity` · `Container_Type_Key` · `Batch_Criteria` · `Fixed_Run_Time` · `Job_Op_Completed_Reason_Key` · `Master_Unit_Type_Key` · `Resource_ID`
+
+### `Part_v_Workcenter` Sample Data (confirmed 2026-07-13 — 3 rows returned)
+`Plexus_Customer_No` · `Workcenter_Key` · `Workcenter_Code` · `Name` · `Workcenter_Type` · ... (many config fields)
+
+Sample values: `Workcenter_Key=86857, Name=Blending 2, Workcenter_Type=Batch` · `86858, Blending 3, Batch` · `86859, Blending 4, Batch`
+
+Confirmed `Workcenter_Type` values in use: **Batch**, **Bin for Bin**, **Kanban** (from `Part_v_Workcenter_Type` live data).
+
+> ⚠ **`Workcenter_Key` is INT64** (autodetected from live data). `Job_Op.Workcenter_Key` will be STRING until `Part_v_Job_Op` loads real prod data. Always `SAFE_CAST(jo.Workcenter_Key AS INT64)` in JOIN conditions.
+
+### `Part_v_Workcenter_Log` Columns (schema confirmed 2026-07-13, no test data)
+`PCN` · `Log_Key` · `Workcenter_Key` · `Log_Date` · `Log_Hours` · `Workcenter_Status_Key` · `Workcenter_Event_Key` · `Description` · `Add_By` · `Update_By` · `Update_Date` · `Part_Key` · `Part_Operation_Key` · `Shift_Key` · `Job_Op_Key` · `Crew` · `Crew_Sheet` · `Report_Date` · `Credit_Hours` · `Reviewed` · `Equipment_Key` · `Detail_Reason_Key` · `Log_Date_Plus_Log_Hours`
+
+> `Log_Hours` = total hours logged for this entry. `Credit_Hours` = possibly productive hours only (unconfirmed — verify against prod data). `Workcenter_Event_Key` → `Part_v_Workcenter_Event` lookup (event types may include downtime, setup delays — consider filtering if actual_hours should reflect productive time only).
 
 ---
 

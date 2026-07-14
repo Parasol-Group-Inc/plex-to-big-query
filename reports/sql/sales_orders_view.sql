@@ -42,16 +42,20 @@ date_approved AS (
 
 -- Primary sales rep (Sort_Order = 1)
 rep1 AS (
-  SELECT PO_Key, Plexus_User_No
+  SELECT
+    SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
+    SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE Sort_Order = 1
+  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
 ),
 
 -- Secondary sales rep (Sort_Order = 2)
 rep2 AS (
-  SELECT PO_Key, Plexus_User_No
+  SELECT
+    SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
+    SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE Sort_Order = 2
+  WHERE SAFE_CAST(Sort_Order AS INT64) = 2
 ),
 
 -- Base price per customer part (lowest Breakpoint_Quantity tier).
@@ -60,9 +64,9 @@ rep2 AS (
 -- logic uses a different tier selection.
 base_price AS (
   SELECT
-    Customer_Part_Key,
-    Price,
-    Breakpoint_Quantity,
+    SAFE_CAST(Customer_Part_Key AS INT64)      AS Customer_Part_Key,
+    SAFE_CAST(Price AS FLOAT64)                AS Price,
+    SAFE_CAST(Breakpoint_Quantity AS FLOAT64)  AS Breakpoint_Quantity,
     Effective_Date,
     Expiration_Date
   FROM (
@@ -70,7 +74,7 @@ base_price AS (
       *,
       ROW_NUMBER() OVER (
         PARTITION BY Customer_Part_Key
-        ORDER BY Breakpoint_Quantity ASC
+        ORDER BY SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC
       ) AS rn
     FROM `{gcp_project}.{dataset}.raw_Part_v_Customer_Part_Price`
   )
@@ -93,7 +97,7 @@ SELECT
   --   2586 Released → 2073 Pending Fulfillment → 2638 Pending Payment Review →
   --   2639 Pending Shipment → 2074 Closed / 2076 Cancelled
   po.PO_Status_Key                                      AS status_key,
-  sts.Status                                            AS status,
+  sts.PO_Status                                         AS status,
 
   -- ── Customer ───────────────────────────────────────────────────────────────
   po.Customer_No,
@@ -104,9 +108,6 @@ SELECT
   CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
 
   -- ── Line item / part ───────────────────────────────────────────────────────
-  -- NOTE: column names on Part_v_Part not confirmed via live query.
-  -- Adjust Part_No / Name / Part_Product_Type_Key / Part_Product_Group_Key
-  -- if the actual column names differ.
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
 
@@ -125,7 +126,7 @@ SELECT
   -- ── Product classification ─────────────────────────────────────────────────
   -- NOTE: Part_Product_Type_Key / Part_Product_Group_Key column names on
   -- Part_v_Part are assumed from standard Plex schema. Adjust if needed.
-  ptype.Part_Product_Type                               AS product_type,
+  ptype.Product_Type                                    AS product_type,
   pgrp.Part_Product_Group                               AS product_group
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
@@ -172,6 +173,6 @@ LEFT JOIN base_price bp
 
 -- Product type and group
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` ptype
-  ON p.Part_Product_Type_Key = ptype.Part_Product_Type_Key
+  ON p.Product_Type_Key = ptype.Product_Type_Key
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON p.Part_Product_Group_Key = pgrp.Part_Product_Group_Key
+  ON p.Part_Group_Key = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)

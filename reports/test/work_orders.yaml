@@ -1,0 +1,35 @@
+report_name: work_orders_test
+description: "Work orders by workcenter — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/work_orders.yaml.
+# BQ_DATASET=PlexTest is injected by the plex-etl-work-orders-test Cloud Run job,
+# so all raw tables land in PlexTest and the BQ view is created there too.
+
+extractions:
+  - plex_view: Part_v_Job
+    bq_table: raw_Part_v_Job
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Job_Op
+    bq_table: raw_Part_v_Job_Op
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Workcenter
+    bq_table: raw_Part_v_Workcenter
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Workcenter_Log
+    bq_table: raw_Part_v_Workcenter_Log
+    filter: ""
+    date_col: ""
+
+# NOTE: Part_v_Part is intentionally NOT extracted here.
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+# work_orders_view.sql references it as a shared table in the same dataset.
+
+bq_view:
+  name: work_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/work_orders_view.sql

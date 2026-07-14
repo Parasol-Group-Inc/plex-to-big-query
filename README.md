@@ -108,12 +108,13 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual 
 
 | Component | State |
 |---|---|
-| Local Docker extraction | ✅ Working — `vox.odbc.plex.com`, IAM token auth |
-| GCP infrastructure | ✅ Deployed — `voxdatalake`, 24/24 Terraform resources |
+| Local Docker extraction | ✅ Working — `vox.test.odbc.plex.com`, IAM token auth |
+| GCP infrastructure | ✅ Deployed — `voxdatalake`, Terraform-managed |
 | Cloud Run image | ✅ Pushed — `us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest` |
-| Report config (GCS) | ✅ 13-view sales orders report defined; needs rebuild + push after dependency updates |
-| Multi-report architecture | ✅ Implemented — YAML in GCS, editable without deployment |
-| BigQuery VIEW (16-field report) | ✅ SQL written — `sales_orders_report` created on first pipeline run |
-| Test environment (`PlexTest`) | ⏳ Pending first full run with new image |
-| Production host (`odbc.plex.com`) | ⚠ Blocked — need `ServerDataSource` value from Plex support |
-| DataDirect ODBC license | ⚠ 15-day trial — resolve before production cutover |
+| Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
+| Sales Orders — test (`PlexTest`) | ✅ Validated — all 13 raw tables + `sales_orders_report` VIEW confirmed |
+| Sales Orders — prod (`PlexProd`) | ✅ Ready — `vox.odbc.plex.com` confirmed, trigger `plex-etl` to go live |
+| Sales Orders VIEW (16-field) | ✅ All columns verified against live Plex data |
+| Work Orders — infra | ✅ Deployed — `plex-etl-work-orders` + `plex-etl-work-orders-test` jobs created |
+| Work Orders — data | ⏳ Pending first run — test Plex has no production job data; validate on prod |
+| DataDirect ODBC license | ⚠ Trial — resolve before production cutover |

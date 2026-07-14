@@ -63,7 +63,8 @@ Schema confirmed via live queries against `vox.test.odbc.plex.com` on 2026-07-13
 | `Part_v_Job` | `Job` | Part | Job header: `Job_No`, `Part_Key`, `Quantity`, `Job_Status_Key`, dates |
 | `Part_v_Job_Op` | `Job_Op` | Part | Job operation: `Job_Key`, `Workcenter_Key`, `Op_No`, `Quantity`, `Setup_Time`, `Fixed_Run_Time`, `Start_Date`, `Complete_Date` |
 | `Part_v_Workcenter` | `Workcenter` | Part | Workcenter master: `Name`, `Workcenter_Type` (inline string — no separate join needed) |
-| `Part_v_Workcenter_Log` | `Workcenter_Log` | Part | Operator time entries: `Job_Op_Key`, `Log_Hours`, `Log_Date` |
+| `Part_v_Workcenter_Log` | `Workcenter_Log` | Part | Operator time entries: `Job_Op_Key`, `Log_Hours`, `Workcenter_Event_Key`, `Log_Date` |
+| `Part_v_Workcenter_Event` | `Workcenter_Event` | Part | Event type lookup: `Workcenter_Event_Key` → `Description`. **All confirmed entries are problem/downtime events** — normal production logs have `Workcenter_Event_Key = NULL` |
 
 ### `Part_v_Job` Columns (schema confirmed 2026-07-13, no test data)
 `PCN` · `Job_Key` · `Job_No` · `Part_Key` · `Quantity` · `Due_Date` · `Job_Status_Key` · `Note` · `Add_By` · `Add_Date` · `Update_By` · `Update_Date` · `Priority_Key` · `Earliest_Start_Date` · `Earliest_Start_Reason` · `No_Material` · `From_Job_Key` · `To_Job_Key` · `Certified` · `Certified_By` · `Certified_Date` · `Job_Type_Key` · `Dependant_Job_Key` · `Cert_Note` · `Planned_Location` · `Completed_By` · `Completed_Date` · `Job_Shipper_Note` · `Job_Merge_Date` · `Note_2` · `Tracking_No` · `Description` · `Building_Key` · `Assigned_To_Key` · `Accounting_Job_Key` · `Finalized_Date` · `MRP_Processed` · `Sort_Order` · `Lot_Key` · `Resource_ID` · `External_Job_Code`
@@ -83,7 +84,20 @@ Confirmed `Workcenter_Type` values in use: **Batch**, **Bin for Bin**, **Kanban*
 ### `Part_v_Workcenter_Log` Columns (schema confirmed 2026-07-13, no test data)
 `PCN` · `Log_Key` · `Workcenter_Key` · `Log_Date` · `Log_Hours` · `Workcenter_Status_Key` · `Workcenter_Event_Key` · `Description` · `Add_By` · `Update_By` · `Update_Date` · `Part_Key` · `Part_Operation_Key` · `Shift_Key` · `Job_Op_Key` · `Crew` · `Crew_Sheet` · `Report_Date` · `Credit_Hours` · `Reviewed` · `Equipment_Key` · `Detail_Reason_Key` · `Log_Date_Plus_Log_Hours`
 
-> `Log_Hours` = total hours logged for this entry. `Credit_Hours` = possibly productive hours only (unconfirmed — verify against prod data). `Workcenter_Event_Key` → `Part_v_Workcenter_Event` lookup (event types may include downtime, setup delays — consider filtering if actual_hours should reflect productive time only).
+> `Log_Hours` = total hours for this entry. `Workcenter_Event_Key` → `Part_v_Workcenter_Event` lookup. **Confirmed pattern:** `NULL` event key = normal production time; non-NULL = problem/downtime event. Use `WHERE Workcenter_Event_Key IS NULL` for productive hours only.
+
+### `Part_v_Workcenter_Event` Sample Data (confirmed 2026-07-13 — TOP 5)
+Columns: `Plexus_Customer_No` · `Workcenter_Event_Key` · `Description` · `Code` · `Workcenter_Event_Group` · `Equipment_Required` · `Specification_Prompt` · `Event_Type_Key` · `Active` · `Resource_ID`
+
+| Key | Description |
+|---|---|
+| 13382 | Conveyor Problem |
+| 13383 | Lube Problem |
+| 13385 | Material Defect |
+| 13386 | Injury |
+| 13387 | No Raw Material |
+
+All confirmed entries are **problem/downtime events**. Normal production log entries have `Workcenter_Event_Key = NULL`.
 
 ---
 

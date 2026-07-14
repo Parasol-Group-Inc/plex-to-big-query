@@ -30,12 +30,19 @@
 
 WITH
 
--- Actual hours logged by operators, summed per job operation.
--- Part_v_Workcenter_Log records one row per log entry; a single op may have many.
+-- Actual hours logged by operators, split by event type.
+-- Workcenter_Event_Key IS NULL     → normal production run (no problem triggered)
+-- Workcenter_Event_Key IS NOT NULL → problem/downtime event (Conveyor Problem,
+--   Lube Problem, Material Defect, Injury, No Raw Material, etc.)
+-- Confirmed 2026-07-13: all Part_v_Workcenter_Event rows are problem events.
 actual_hours AS (
   SELECT
     Job_Op_Key,
-    SUM(SAFE_CAST(Log_Hours AS FLOAT64)) AS actual_hours
+    SUM(SAFE_CAST(Log_Hours AS FLOAT64))                                          AS actual_hours_total,
+    SUM(CASE WHEN Workcenter_Event_Key IS NULL
+             THEN SAFE_CAST(Log_Hours AS FLOAT64) ELSE 0 END)                     AS productive_hours,
+    SUM(CASE WHEN Workcenter_Event_Key IS NOT NULL
+             THEN SAFE_CAST(Log_Hours AS FLOAT64) ELSE 0 END)                     AS downtime_hours
   FROM `{gcp_project}.{dataset}.raw_Part_v_Workcenter_Log`
   GROUP BY Job_Op_Key
 )
@@ -64,8 +71,13 @@ SELECT
   SAFE_CAST(jo.Fixed_Run_Time AS FLOAT64)         AS run_time_planned,
 
   -- ── Time (actual, from operator workcenter log entries) ─────────────────────
-  -- NULL when no log entries exist for this operation yet.
-  ah.actual_hours,
+  -- productive_hours: Workcenter_Event_Key IS NULL (normal production run)
+  -- downtime_hours:   Workcenter_Event_Key IS NOT NULL (Conveyor Problem, Lube
+  --                   Problem, Material Defect, Injury, No Raw Material, etc.)
+  -- Compare productive_hours vs run_time_planned for efficiency analysis.
+  ah.actual_hours_total,
+  ah.productive_hours,
+  ah.downtime_hours,
 
   -- ── Operation dates ─────────────────────────────────────────────────────────
   jo.Start_Date                                   AS op_start_date,

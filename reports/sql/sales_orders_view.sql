@@ -39,7 +39,7 @@ date_approved AS (
     PO_Key,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(MIN(SAFE_CAST(Change_Date AS INT64)), 0), 1000))),
-      MIN(SAFE_CAST(Change_Date AS DATE))
+      NULLIF(MIN(SAFE_CAST(Change_Date AS DATE)), DATE '1970-01-01')
     ) AS date_approved
   FROM `{gcp_project}.{dataset}.raw_Sales_v_PO_Change`
   WHERE PO_Status_Key = 2073
@@ -93,7 +93,7 @@ SELECT
   po.PO_No                                              AS document_so,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(po.PO_Date AS INT64), 0), 1000))),
-    SAFE_CAST(po.PO_Date AS DATE)
+    NULLIF(SAFE_CAST(po.PO_Date AS DATE), DATE '1970-01-01')
   )                                                     AS date_created,
   da.date_approved,
   typ.PO_Type                                           AS order_type,

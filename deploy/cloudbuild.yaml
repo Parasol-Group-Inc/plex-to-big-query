@@ -12,6 +12,7 @@ substitutions:
   _GCP_REGION:    "us-central1"
   _AR_REPO:       "plex-pipeline"
   _CR_JOB:        "plex-etl"
+  _CR_JOB_TEST:   "plex-etl-test"    # smoke test runs HERE, never on prod
   _IMAGE_NAME:    "etl"
   _ENV:           "prod"             # prod | test
 
@@ -67,7 +68,7 @@ steps:
     waitFor:
       - "build"
 
-  # ── 4. Update Cloud Run job with new image ───────────────────────────────────
+  # ── 4. Update Cloud Run jobs with new image ──────────────────────────────────
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "deploy"
     entrypoint: "gcloud"
@@ -81,9 +82,23 @@ steps:
     waitFor:
       - "push-sha"
 
-  # ── 5. Smoke test — trigger a single execution and wait for result ────────────
-  # Remove or comment this step out if you don't want automatic test runs
-  # on every push to main.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-test"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "jobs"
+      - "update"
+      - "${_CR_JOB_TEST}"
+      - "--image=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_GCP_REGION}"
+    waitFor:
+      - "push-sha"
+
+  # ── 5. Smoke test — run the TEST job only, never production ──────────────────
+  # The test job writes to the PlexTest dataset, so a buggy build cannot
+  # WRITE_TRUNCATE production tables. Trigger prod manually after verifying
+  # the test run:  gcloud run jobs execute plex-etl --region=us-central1
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "smoke-test"
     entrypoint: "gcloud"
@@ -91,11 +106,11 @@ steps:
       - "run"
       - "jobs"
       - "execute"
-      - "${_CR_JOB}"
+      - "${_CR_JOB_TEST}"
       - "--region=${_GCP_REGION}"
       - "--wait"                      # block until job completes or fails
     waitFor:
-      - "deploy"
+      - "deploy-test"
 
 # ── Final image references ────────────────────────────────────────────────────
 images:

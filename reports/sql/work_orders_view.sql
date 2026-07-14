@@ -85,29 +85,29 @@ SELECT
   -- sentinel to NULL. COALESCE fallback handles STRING schema on empty tables.
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Start_Date    AS INT64), 0), 1000))),
-    SAFE_CAST(jo.Start_Date    AS DATE)
+    NULLIF(SAFE_CAST(jo.Start_Date    AS DATE), DATE '1970-01-01')
   )                                               AS op_start_date,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Complete_Date AS INT64), 0), 1000))),
-    SAFE_CAST(jo.Complete_Date AS DATE)
+    NULLIF(SAFE_CAST(jo.Complete_Date AS DATE), DATE '1970-01-01')
   )                                               AS op_completion_date,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Due_Date      AS INT64), 0), 1000))),
-    SAFE_CAST(jo.Due_Date      AS DATE)
+    NULLIF(SAFE_CAST(jo.Due_Date      AS DATE), DATE '1970-01-01')
   )                                               AS op_due_date,
 
   -- ── Job-level dates ─────────────────────────────────────────────────────────
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Due_Date       AS INT64), 0), 1000))),
-    SAFE_CAST(j.Due_Date       AS DATE)
+    NULLIF(SAFE_CAST(j.Due_Date       AS DATE), DATE '1970-01-01')
   )                                               AS job_due_date,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Completed_Date AS INT64), 0), 1000))),
-    SAFE_CAST(j.Completed_Date AS DATE)
+    NULLIF(SAFE_CAST(j.Completed_Date AS DATE), DATE '1970-01-01')
   )                                               AS job_completed_date,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Add_Date       AS INT64), 0), 1000))),
-    SAFE_CAST(j.Add_Date       AS DATE)
+    NULLIF(SAFE_CAST(j.Add_Date       AS DATE), DATE '1970-01-01')
   )                                               AS job_created_date,
 
   -- ── Status keys ─────────────────────────────────────────────────────────────

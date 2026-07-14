@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 from datetime import datetime, timezone
 
@@ -81,9 +82,45 @@ def load_report_config(config_path: str) -> dict:
     """Load a report definition YAML from GCS or a local path."""
     log.info(f"Loading report config from {config_path}")
     config = yaml.safe_load(load_gcs_text(config_path))
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"Report config at {config_path} is not a valid YAML mapping "
+            f"(got {type(config).__name__}). Check the file wasn't saved empty."
+        )
     n = len(config.get("extractions", []))
     log.info(f"Report '{config.get('report_name', 'unnamed')}' loaded: {n} extraction(s)")
     return config
+
+
+# Plex view / column names: letters, digits, underscores only.
+_PLEX_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def validate_extraction(extraction: dict) -> str:
+    """
+    Validate one extraction entry from the report YAML before its values are
+    interpolated into SQL. Returns an error message, or "" if valid.
+
+    The YAML lives in GCS and is editable outside code review, so treat it as
+    an untrusted boundary: identifiers must be plain identifiers, and the
+    free-text filter may not contain statement separators or comment markers.
+    """
+    view  = extraction.get("plex_view", "")
+    table = extraction.get("bq_table", "")
+    filt  = extraction.get("filter", "") or ""
+    date_col = extraction.get("date_col", "") or ""
+
+    if not view or not table:
+        return f"extraction entry missing required key(s) plex_view/bq_table: {extraction}"
+    if not _PLEX_IDENTIFIER_RE.match(view):
+        return f"plex_view '{view}' is not a valid identifier (letters/digits/_ only)"
+    if not _PLEX_IDENTIFIER_RE.match(table):
+        return f"bq_table '{table}' is not a valid identifier (letters/digits/_ only)"
+    if date_col and not _PLEX_IDENTIFIER_RE.match(date_col):
+        return f"date_col '{date_col}' is not a valid identifier (letters/digits/_ only)"
+    if any(tok in filt for tok in (";", "--", "/*")):
+        return f"filter for '{view}' contains a forbidden token (; -- /*): {filt}"
+    return ""
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -245,22 +282,21 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
         return 0
 
     if df.empty:
-        # Create/truncate the table so VIEWs can reference it even with 0 rows.
-        # Columns come from cursor.description so the schema is correct.
-        schema = [bigquery.SchemaField(col, "STRING") for col in df.columns]
-        table_obj = bigquery.Table(table_ref, schema=schema)
+        # 0 rows from Plex. NEVER truncate an existing table here — a transient
+        # ODBC timeout or maintenance window would otherwise wipe yesterday's
+        # data AND flatten the schema to all-STRING. Keep existing data; only
+        # create the (empty, all-STRING) table if it doesn't exist yet so
+        # VIEWs can reference it.
         try:
             bq.get_table(table_ref)
-            # Table exists — truncate it via an empty load
-            job_config = bigquery.LoadJobConfig(
-                write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-                schema=schema,
+            log.warning(
+                f"0 rows for {table_name} — existing table left untouched "
+                f"(previous data preserved). Verify Plex returned data."
             )
-            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-            job.result()
         except gcp_exceptions.NotFound:
-            bq.create_table(table_obj)
-        log.info(f"No rows for {table_name} — table created/truncated with {len(schema)} columns.")
+            schema = [bigquery.SchemaField(col, "STRING") for col in df.columns]
+            bq.create_table(bigquery.Table(table_ref, schema=schema))
+            log.info(f"0 rows for {table_name} — created empty table with {len(schema)} columns.")
         return 0
 
     job_config = bigquery.LoadJobConfig(
@@ -371,6 +407,13 @@ def main():
 
         try:
             for extraction in extractions:
+                problem = validate_extraction(extraction)
+                if problem:
+                    log.error(f"Skipping invalid extraction entry: {problem}")
+                    events.append(f"ERROR: invalid config entry skipped: {problem}")
+                    partial_errors.append(f"config: {problem}")
+                    continue
+
                 view     = extraction["plex_view"]
                 table    = extraction["bq_table"]
                 filt     = extraction.get("filter", "")
@@ -385,8 +428,16 @@ def main():
                     partial_errors.append(f"{view} query: {exc}")
                     continue
 
-                if date_col and date_col in df.columns:
-                    df[date_col] = pd.to_datetime(df[date_col], utc=True, errors="coerce")
+                # NOTE: do NOT convert date_col in-place — a tz-aware column
+                # lands in BigQuery as TIMESTAMP while every other date column
+                # lands as INT64 nanoseconds, and the view SQL's NULLIF(x, 0)
+                # zero-date guard only works on the INT64 form. Dates are
+                # converted in the BigQuery VIEW, not here.
+                max_modified = sync_time
+                if date_col and date_col in df.columns and not df.empty:
+                    col_max = pd.to_datetime(df[date_col], utc=True, errors="coerce").max()
+                    if pd.notna(col_max):
+                        max_modified = col_max.to_pydatetime()
 
                 rows_fetched += len(df)
                 events.append(f"Fetched {len(df)} rows from {view}")
@@ -396,7 +447,7 @@ def main():
                         written = write_to_bigquery(bq, df, bq_table=table)
                         rows_written += written
                         if written > 0:
-                            update_last_sync(bq, sync_time, written, sync_time, bq_table=table)
+                            update_last_sync(bq, sync_time, written, max_modified, bq_table=table)
                             events.append(f"Wrote {written} rows to {table}")
                         else:
                             events.append(f"No rows to write for {table}")
@@ -438,6 +489,7 @@ def main():
                 except Exception as exc:
                     log.exception(f"Failed to load view SQL from {view_cfg['sql_file']}: {exc}")
                     events.append(f"ERROR: Could not load view SQL: {exc}")
+                    partial_errors.append(f"view SQL load: {exc}")
             elif view_sql:
                 view_sql = view_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
 
@@ -445,9 +497,18 @@ def main():
                 try:
                     create_or_replace_bq_view(bq, BQ_DATASET, view_cfg["name"], view_sql)
                     events.append(f"Applied BigQuery view {BQ_DATASET}.{view_cfg['name']}")
+                    if partial_errors:
+                        # The view SQL was refreshed, but one or more source
+                        # tables failed to update — flag it so the email
+                        # doesn't read as a clean run.
+                        events.append(
+                            f"WARNING: view applied despite {len(partial_errors)} "
+                            f"extraction error(s) — some source tables hold stale data"
+                        )
                 except Exception as exc:
                     log.exception(f"Failed to create/update BigQuery view: {exc}")
                     events.append(f"ERROR: BigQuery view update failed: {exc}")
+                    partial_errors.append(f"view {view_cfg.get('name', '?')}: {exc}")
 
     # ── Legacy single-view mode ───────────────────────────────────────────────
     else:
@@ -469,8 +530,13 @@ def main():
             except Exception:
                 log.warning("Failed to close ODBC connection cleanly.")
 
+        # date columns are converted in the BigQuery VIEW, not here (see
+        # multi-report loop for rationale)
+        max_modified = sync_time
         if not df.empty and PLEX_DATE_COL and PLEX_DATE_COL in df.columns:
-            df[PLEX_DATE_COL] = pd.to_datetime(df[PLEX_DATE_COL], utc=True, errors="coerce")
+            col_max = pd.to_datetime(df[PLEX_DATE_COL], utc=True, errors="coerce").max()
+            if pd.notna(col_max):
+                max_modified = col_max.to_pydatetime()
         rows_fetched = len(df)
         events.append(f"Fetched {rows_fetched} rows from Plex")
 
@@ -494,7 +560,7 @@ def main():
 
         if OUTPUT_MODE == "bigquery" and rows_written > 0:
             try:
-                update_last_sync(bq, sync_time, rows_written, sync_time)
+                update_last_sync(bq, sync_time, rows_written, max_modified)
                 events.append("Updated sync metadata")
             except Exception as exc:
                 log.exception("Failed to update sync metadata.")

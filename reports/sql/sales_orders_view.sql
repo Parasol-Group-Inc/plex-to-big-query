@@ -38,7 +38,7 @@ date_approved AS (
   SELECT
     PO_Key,
     COALESCE(
-      DATE(TIMESTAMP_MICROS(NULLIF(MIN(SAFE_CAST(Change_Date AS INT64)), 0) / 1000)),
+      DATE(TIMESTAMP_MICROS(DIV(NULLIF(MIN(SAFE_CAST(Change_Date AS INT64)), 0), 1000))),
       MIN(SAFE_CAST(Change_Date AS DATE))
     ) AS date_approved
   FROM `{gcp_project}.{dataset}.raw_Sales_v_PO_Change`
@@ -92,7 +92,7 @@ SELECT
   -- ── Document info ──────────────────────────────────────────────────────────
   po.PO_No                                              AS document_so,
   COALESCE(
-    DATE(TIMESTAMP_MICROS(NULLIF(SAFE_CAST(po.PO_Date AS INT64), 0) / 1000)),
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(po.PO_Date AS INT64), 0), 1000))),
     SAFE_CAST(po.PO_Date AS DATE)
   )                                                     AS date_created,
   da.date_approved,

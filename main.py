@@ -155,17 +155,15 @@ def ensure_metadata_table(bq: bigquery.Client):
 
 
 def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
-    """Create or replace a BigQuery VIEW with the given SQL."""
+    """Create or replace a BigQuery VIEW using DDL.
+
+    DDL is more reliable than update_table() because it handles both create and
+    update in one call and avoids field-mask ambiguity in the Python client.
+    """
     view_ref = f"{GCP_PROJECT}.{dataset}.{name}"
-    table = bigquery.Table(view_ref)
-    table.view_query = sql
-    try:
-        bq.get_table(view_ref)
-        bq.update_table(table, ["view"])
-        log.info(f"Updated BigQuery view {view_ref}")
-    except gcp_exceptions.NotFound:
-        bq.create_table(table)
-        log.info(f"Created BigQuery view {view_ref}")
+    ddl = f"CREATE OR REPLACE VIEW `{view_ref}` AS\n{sql}"
+    bq.query(ddl).result()
+    log.info(f"Created/replaced BigQuery view {view_ref}")
 
 
 # ── ODBC connection ───────────────────────────────────────────────────────────

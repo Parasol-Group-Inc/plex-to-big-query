@@ -577,14 +577,20 @@ docker run --env-file .env \
 
 ```sql
 -- Plex dates land in the raw tables as INT64 *nanoseconds*.
--- The view SQL converts them with this pattern (DIV, not "/", because
--- TIMESTAMP_MICROS requires INT64 and "/" returns FLOAT64):
+-- The view SQL converts them with this pattern. Two BigQuery gotchas baked in:
+--   * DIV, not "/" — TIMESTAMP_MICROS requires INT64; "/" returns FLOAT64
+--   * every branch routes through CAST(col AS STRING) — a direct
+--     SAFE_CAST(INT64 AS DATE) is an invalid cast PAIR and fails at
+--     compile time even inside SAFE_CAST
 COALESCE(
-  DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(col AS INT64), 0), 1000))),
-  NULLIF(SAFE_CAST(col AS DATE), DATE '1970-01-01')   -- STRING/TIMESTAMP fallback
+  DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(col AS STRING) AS INT64), 0), 1000))),
+  NULLIF(SAFE_CAST(CAST(col AS STRING) AS DATE), DATE '1970-01-01'),
+  NULLIF(DATE(SAFE_CAST(CAST(col AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
 ) AS my_date
 -- If dates are STILL numbers after editing the SQL: push the .sql to GCS
 -- AND re-run the job — the view is only recreated during a pipeline run.
+-- A view-SQL compile error shows up as a PARTIAL email with the BigQuery
+-- error message and [line:column] pointing into the substituted SQL.
 ```
 
 ### Terraform plan shows changes you didn't intend

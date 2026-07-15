@@ -80,34 +80,43 @@ SELECT
   ah.downtime_hours,
 
   -- ── Operation dates ─────────────────────────────────────────────────────────
-  -- Plex date columns arrive as INT64 nanoseconds (pyodbc datetime → pandas
-  -- datetime64[ns] → BQ int64). NULLIF(...,0) converts Plex's "no date"
-  -- sentinel to NULL. COALESCE fallback handles STRING schema on empty tables.
+  -- DATE CONVERSION PATTERN: raw date columns can be INT64 nanoseconds,
+  -- TIMESTAMP, or STRING depending on pipeline history. Every branch routes
+  -- through CAST(col AS STRING) because that cast is legal from ANY type —
+  -- a direct SAFE_CAST(INT64 AS DATE) is an invalid cast pair and fails at
+  -- view-query compile time. NULLIF(...,0) / NULLIF(..., 1970-01-01) turn
+  -- Plex's "no date" sentinel into NULL.
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Start_Date    AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(jo.Start_Date    AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(jo.Start_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(jo.Start_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(jo.Start_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS op_start_date,
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Complete_Date AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(jo.Complete_Date AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(jo.Complete_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(jo.Complete_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(jo.Complete_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS op_completion_date,
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(jo.Due_Date      AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(jo.Due_Date      AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(jo.Due_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(jo.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(jo.Due_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS op_due_date,
 
   -- ── Job-level dates ─────────────────────────────────────────────────────────
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Due_Date       AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(j.Due_Date       AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(j.Due_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(j.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(j.Due_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS job_due_date,
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Completed_Date AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(j.Completed_Date AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(j.Completed_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(j.Completed_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(j.Completed_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS job_completed_date,
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(j.Add_Date       AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(j.Add_Date       AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(j.Add_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(j.Add_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(j.Add_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                               AS job_created_date,
 
   -- ── Status keys ─────────────────────────────────────────────────────────────

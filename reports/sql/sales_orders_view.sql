@@ -31,15 +31,26 @@
 WITH
 
 -- Date Approved: the first time each order reached status "Pending Fulfillment" (key 2073).
--- Change_Date is stored as INT64 nanoseconds (pyodbc/pandas datetime64 → BQ int64 path).
--- NULLIF(..., 0) turns Plex's "no-date" sentinel into NULL rather than 1970-01-01.
--- COALESCE fallback handles STRING schema (empty-table autodetect) before prod populates.
+--
+-- DATE CONVERSION PATTERN (used for every date column in this file):
+-- Raw date columns can arrive as INT64 nanoseconds (pyodbc datetime → pandas →
+-- BQ int64), TIMESTAMP (legacy date_col conversion), or STRING (empty-table
+-- autodetect). Every branch routes through CAST(col AS STRING) first because
+-- that cast is legal from ANY type — a direct SAFE_CAST(INT64 AS DATE) is an
+-- invalid cast pair and fails at view-query compile time, not at runtime.
+--   branch 1: INT64 ns  → µs → DATE   (NULLIF 0 = Plex "no date" sentinel)
+--   branch 2: date-formatted string   → DATE
+--   branch 3: timestamp / timestamp-formatted string → DATE
+-- 1970-01-01 results are the epoch sentinel → NULL.
 date_approved AS (
   SELECT
     PO_Key,
-    COALESCE(
-      DATE(TIMESTAMP_MICROS(DIV(NULLIF(MIN(SAFE_CAST(Change_Date AS INT64)), 0), 1000))),
-      NULLIF(MIN(SAFE_CAST(Change_Date AS DATE)), DATE '1970-01-01')
+    MIN(
+      COALESCE(
+        DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(Change_Date AS STRING) AS INT64), 0), 1000))),
+        NULLIF(SAFE_CAST(CAST(Change_Date AS STRING) AS DATE), DATE '1970-01-01'),
+        NULLIF(DATE(SAFE_CAST(CAST(Change_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+      )
     ) AS date_approved
   FROM `{gcp_project}.{dataset}.raw_Sales_v_PO_Change`
   WHERE PO_Status_Key = 2073
@@ -91,9 +102,11 @@ SELECT
 
   -- ── Document info ──────────────────────────────────────────────────────────
   po.PO_No                                              AS document_so,
+  -- See DATE CONVERSION PATTERN comment on the date_approved CTE above.
   COALESCE(
-    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(po.PO_Date AS INT64), 0), 1000))),
-    NULLIF(SAFE_CAST(po.PO_Date AS DATE), DATE '1970-01-01')
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(po.PO_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
   )                                                     AS date_created,
   da.date_approved,
   typ.PO_Type                                           AS order_type,

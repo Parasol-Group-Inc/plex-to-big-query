@@ -115,7 +115,9 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual 
 | Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
 | Sales Orders — test (`PlexTest`) | ✅ Validated — all 13 raw tables + `sales_orders_report` VIEW confirmed |
 | Sales Orders — prod (`PlexProd`) | ✅ Ready — `vox.odbc.plex.com` confirmed, trigger `plex-etl` to go live |
-| Sales Orders VIEW (16-field) | ✅ All columns verified against live Plex data |
+| Sales Orders VIEW (16-field) | ✅ All columns verified against live Plex data — dates confirmed as real DATEs (2026-07-15) |
 | Work Orders — infra | ✅ Deployed — `plex-etl-work-orders` + `plex-etl-work-orders-test` |
-| Work Orders — data | ✅ First run complete — Workcenter data confirmed; Job/Job_Op rows pending prod data |
+| Work Orders — data | ✅ Test: Job/Job_Op/Workcenter data confirmed with dates; prod Job/Job_Op still empty on Plex side |
+| Code review (2026-07-14) | ✅ All findings fixed and verified — [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
 | DataDirect ODBC license | ⚠ Trial — resolve before production cutover |
+| SendGrid domain auth | ⚠ Pending — Gmail shows "couldn't verify" on report emails until CNAME records added |

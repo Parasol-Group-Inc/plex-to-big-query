@@ -24,7 +24,7 @@ ran without a guard.
 | 9 | Medium | `main.py` `get_last_sync` | Dead code that interpolated `BQ_TABLE` into raw SQL (injection-pattern precedent) | ✅ Deleted. If incremental sync is added later, use BigQuery query parameters. |
 | 10 | Medium | `main.py` watermark | `max_modified_at` recorded job start time, not the data's actual max — would silently drop records if incremental logic is ever added | ✅ Now computes the real max of `date_col` from the extracted DataFrame. |
 | 11 | Low | `email_utils.py` | Event/error strings inserted into HTML unescaped — ODBC messages contain `<angle brackets>` that broke the email layout | ✅ `html.escape()` on list items and all non-HTML template values. |
-| 12 | Low | `sales_orders_view.sql:184` | `Part_Group_Key` join column assumed, not verified — view creation succeeds (BigQuery defers validation) but querying fails with "Unrecognized name" | ⚠ Open — documented in the SQL comments; verify against live prod schema after first full prod run. |
+| 12 | Low | `sales_orders_view.sql:184` | `Part_Group_Key` join column assumed, not verified — view creation succeeds (BigQuery defers validation) but querying fails with "Unrecognized name" | ✅ Verified 2026-07-15 — `PlexProd.sales_orders_report` queries successfully, which requires every column reference in the view SQL to resolve. |
 | 13 | Low | `main.py` | Missing `plex_view`/`bq_table` YAML key raised `KeyError`, aborting all remaining extractions | ✅ Covered by `validate_extraction()` (finding 4). |
 | 14 | Low | `main.py` | `get_last_sync` never called — incremental sync documented but not implemented | ✅ Dead code removed (finding 9); OPERATIONS.md already documents that every run is a full `WRITE_TRUNCATE` load. |
 
@@ -39,12 +39,28 @@ ran without a guard.
 3. **YAML configs are validated.** View/table/date_col must be plain
    identifiers (`A-Za-z0-9_`); filters may not contain `;`, `--`, or `/*`.
    A bad entry is skipped (PARTIAL email), not fatal.
-4. **Date columns are converted only in the view SQL** using
-   `DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(col AS INT64), 0), 1000)))`.
-   Don't add pandas date conversion back into `main.py`.
+4. **Date columns are converted only in the view SQL.** Don't add pandas date
+   conversion back into `main.py`. The pattern (see CHEATSHEET.md for the full
+   version) routes every branch through `CAST(col AS STRING)`:
+   `DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(col AS STRING) AS INT64), 0), 1000)))`
+   plus DATE and TIMESTAMP fallback branches. **Follow-up found in prod
+   2026-07-15:** a direct `SAFE_CAST(INT64 AS DATE)` is an invalid cast *pair*
+   and fails at view-query compile time — `SAFE_CAST` only protects against
+   unparseable values, not unsupported type combinations. Routing through
+   STRING makes the expression compile for any column type.
+
+## Verification (2026-07-15)
+
+All four views confirmed working after the SQL was pushed to GCS and every
+job re-run: dates read as real DATEs (`2025-06-17`, not
+`1750118400000000000`), zero-date sentinels read as NULL. Prod
+`work_orders_report` compiles and queries but returns 0 rows —
+`Part_v_Job`/`Part_v_Job_Op` are still empty on the prod Plex host.
 
 ## Open items
 
-- Finding 12: verify `Part_v_Part.Part_Group_Key` column name against live
-  prod schema (run `SELECT product_group FROM sales_orders_report LIMIT 1`).
 - DataDirect ODBC license still on 15-day trial — resolve before prod cutover.
+- SendGrid domain authentication: Gmail flags report emails with a
+  "couldn't verify" warning. Fix in SendGrid → Settings → Sender
+  Authentication → Authenticate Your Domain (adds CNAME records to
+  parasolgroupinc.com DNS).

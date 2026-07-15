@@ -1,8 +1,8 @@
 # Plex to BigQuery ETL Pipeline
 
-Pulls operational data from **Plex ERP** via ODBC and loads it into **Google BigQuery** on a scheduled basis. Runs as a Cloud Run Job triggered daily by Cloud Scheduler. Credentials are stored in Secret Manager. Report definitions (which views to pull, with what filters, and how to JOIN the data) live in **Cloud Storage** and can be edited without rebuilding the container.
+Pulls operational data from **Plex ERP** via ODBC and loads it into **Google BigQuery** on a daily schedule. Runs as Cloud Run Jobs triggered by Cloud Scheduler; credentials live in Secret Manager. Report definitions (which views to pull, filters, JOIN logic) live in **Cloud Storage** and can be edited without rebuilding the container.
 
-**GCP project:** `voxdatalake` | **Datasets:** `PlexProd` (prod) `PlexTest` (test) | **Active report:** sales orders (13 Plex views → `sales_orders_report` BigQuery view)
+**GCP project:** `voxdatalake` | **Datasets:** `PlexProd` (prod) / `PlexTest` (test) | **Active reports:** Sales Orders, Work Orders
 
 ---
 
@@ -23,9 +23,9 @@ graph LR
     CR -->|raw tables + VIEW| BQ["📊 BigQuery\nPlexProd / PlexTest"]
 ```
 
-**To change a report query:** edit `reports/sales_orders.yaml` and push to GCS — no container rebuild, no Terraform apply.
-
-**To add a new report:** create a new YAML in GCS, add one Cloud Run Job in Terraform.
+- **Change a report query:** edit the YAML or SQL in GCS — no rebuild, no Terraform.
+- **Add a new report:** new YAML + SQL in GCS, one Cloud Run Job block in Terraform.
+- **After every run:** an HTML email report (SUCCESS / PARTIAL / FAILED) goes out via SendGrid.
 
 ---
 
@@ -40,11 +40,11 @@ graph LR
 | Deploy to GCP with Terraform | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) |
 | Understand the data flow and config | [TECHNICAL_REFERENCE.md](TECHNICAL_REFERENCE.md) |
 | Edit reports, add new reports, SendGrid | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
-| All Plex ODBC views by database | [docs/plex_catalog_index.md](docs/plex_catalog_index.md) |
+| Browse all Plex ODBC views by database | [catalog/plex_catalog_index.md](catalog/plex_catalog_index.md) |
 | gcloud / docker / terraform commands | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
-| Tear down all GCP infrastructure | [docs/TEARDOWN.md](docs/TEARDOWN.md) |
 | Fix errors (copy-paste commands) | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Code review findings + safety guards | [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
+| Tear down all GCP infrastructure | [docs/TEARDOWN.md](docs/TEARDOWN.md) |
 | Request ODBC access from Plex support | [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) |
 
 ---
@@ -55,31 +55,19 @@ graph LR
 |---|---|
 | `main.py` | ETL entry point — loads GCS config, loops Plex extractions, creates BigQuery VIEW |
 | `email_utils.py` | SendGrid email report builder |
-| `requirements.txt` | Python dependencies (pinned) |
-| `Dockerfile` | Container image — installs Plex ODBC driver and Python app |
-| `docker-compose.yml` | Local Phase 1 runner — builds image, writes CSVs to `./output/` |
-| `.env.example` | Template for your `.env` file — copy and fill in |
-| `config/odbcinst.ini` | Registers the Plex ODBC driver with unixODBC |
-| `config/odbc.ini` | Defines PlexProduction and PlexTest DSNs (host, port) |
 | `templates/report.html` | HTML template for email run summaries |
-| `driver/` | Plex Linux ODBC driver files — gitignored, must be populated manually |
 | **`reports/`** | **Report definitions — edit to change what the pipeline extracts** |
-| `reports/sales_orders.yaml` | Prod report: 13 Plex views → `PlexProd` |
-| `reports/test/sales_orders.yaml` | Test report: same views → `PlexTest` |
-| `reports/sql/sales_orders_view.sql` | BigQuery JOIN SQL for the 16-field sales orders report |
-| `terraform/main.tf` | All GCP infrastructure as code |
-| `terraform/variables.tf` | Terraform input variable definitions |
-| `terraform/outputs.tf` | Terraform outputs — copy-paste commands after apply |
-| `terraform/terraform.tfvars.example` | Template for your `terraform.tfvars` file |
-| `deploy/cloudbuild.yaml` | Cloud Build CI/CD pipeline definition |
-| `CHEATSHEET.md` | Quick reference — architecture, commands, troubleshooting, GCP fundamentals |
-| `docs/QUICKSTART.md` | Step-by-step setup guide, no prior knowledge assumed |
-| `docs/FRONTEND_GUIDE.md` | Architecture study guide with diagrams, written for frontend devs |
-| `docs/API_REFERENCE.md` | All gcloud, docker, terraform, and bq commands for this project |
-| `docs/OPERATIONS.md` | Edit reports, add new reports, configure SendGrid |
-| `docs/TROUBLESHOOTING.md` | Copy-paste fixes for every common error |
-| `docs/plex_catalog_index.md` | Master index of all Plex ODBC views across all databases |
-| `output/` | CSV files written by local runs — gitignored |
+| `reports/*.yaml` | Prod report configs (sales_orders, work_orders) |
+| `reports/test/*.yaml` | Test report configs (same views → `PlexTest`) |
+| `reports/sql/*.sql` | BigQuery JOIN SQL — one file per report view |
+| `terraform/` | All GCP infrastructure as code (jobs, schedulers, buckets, IAM) |
+| `deploy/cloudbuild.yaml` | CI/CD — build, push, deploy, smoke-test (test job only) |
+| `Dockerfile` / `docker-compose.yml` | Container image + local Phase-1 runner |
+| `config/` | ODBC driver registration (`odbcinst.ini`) and DSNs (`odbc.ini`) |
+| `driver/` | Plex Linux ODBC driver files — gitignored, fetched from GCS in CI |
+| `docs/` | Guides: quickstart, operations, troubleshooting, API reference, code review |
+| `catalog/` | Plex ODBC view catalogs — reference data, one file per Plex database |
+| `output/` | CSV files from local runs — gitignored |
 
 ---
 
@@ -101,7 +89,7 @@ terraform init && terraform apply -var-file=terraform.tfvars
 # push Docker image, add secret versions, trigger job
 ```
 
-Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual guides above.
+Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 ---
 
@@ -109,15 +97,10 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md) or the individual 
 
 | Component | State |
 |---|---|
-| Local Docker extraction | ✅ Working — `vox.test.odbc.plex.com`, IAM token auth |
 | GCP infrastructure | ✅ Deployed — `voxdatalake`, Terraform-managed |
-| Cloud Run image | ✅ Pushed — `us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest` |
 | Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
-| Sales Orders — test (`PlexTest`) | ✅ Validated — all 13 raw tables + `sales_orders_report` VIEW confirmed |
-| Sales Orders — prod (`PlexProd`) | ✅ Ready — `vox.odbc.plex.com` confirmed, trigger `plex-etl` to go live |
-| Sales Orders VIEW (16-field) | ✅ All columns verified against live Plex data — dates confirmed as real DATEs (2026-07-15) |
-| Work Orders — infra | ✅ Deployed — `plex-etl-work-orders` + `plex-etl-work-orders-test` |
-| Work Orders — data | ✅ Test: Job/Job_Op/Workcenter data confirmed with dates; prod Job/Job_Op still empty on Plex side |
+| Sales Orders (prod + test) | ✅ Live and verified — 16-field view, dates confirmed as real DATEs (2026-07-15) |
+| Work Orders (prod + test) | ✅ Live — test data fully confirmed; prod `Job`/`Job_Op` still empty on the Plex side |
 | Code review (2026-07-14) | ✅ All findings fixed and verified — [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
 | DataDirect ODBC license | ⚠ Trial — resolve before production cutover |
 | SendGrid domain auth | ⚠ Pending — Gmail shows "couldn't verify" on report emails until CNAME records added |

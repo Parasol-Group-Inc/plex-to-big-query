@@ -6,3 +6,10 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform/
 terraform/.terraform.lock.hcl
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Terraform numbered state backups (created by state migrations)
+terraform/*.tfstate.*.backup

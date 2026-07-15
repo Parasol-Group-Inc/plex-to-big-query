@@ -100,7 +100,7 @@ Before writing any code, verify the views exist and contain the columns you need
 1. Open **Plex SQL Developer** (or the ODBC query tool)
 2. Browse the database tree — views are named `{Database}_v_{ViewName}` (e.g., `Part_v_Job`, `Sales_v_PO`)
 3. Run `SELECT TOP 5 * FROM {view}` to confirm columns and data types
-4. Check [`docs/plex_catalog_index.md`](plex_catalog_index.md) for a cross-database index of known views
+4. Check [`catalog/plex_catalog_index.md`](../catalog/plex_catalog_index.md) for a cross-database index of known views
 
 > **No aliases in FROM clause.** Plex SQL Developer rejects trailing table aliases (`FROM Part_v_Job j`). Use the full view name every time.
 

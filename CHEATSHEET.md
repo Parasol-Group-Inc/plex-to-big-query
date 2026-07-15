@@ -174,14 +174,18 @@ plex-to-big-query/
 │   ├── outputs.tf              ← Copy-paste commands after apply
 │   └── terraform.tfvars        ← Your values (gitignored — copy from .example)
 │
-└── docs/                       ← Deep-dive documentation
-    ├── QUICKSTART.md
-    ├── FRONTEND_GUIDE.md
-    ├── OPERATIONS.md           ← How to add reports, configure SendGrid
-    ├── TROUBLESHOOTING.md
-    ├── API_REFERENCE.md
-    ├── TEARDOWN.md
-    └── plex_catalog_index.md   ← Master index of all Plex ODBC views
+├── docs/                       ← Deep-dive documentation
+│   ├── QUICKSTART.md
+│   ├── FRONTEND_GUIDE.md
+│   ├── OPERATIONS.md           ← How to add reports, configure SendGrid
+│   ├── TROUBLESHOOTING.md
+│   ├── API_REFERENCE.md
+│   ├── TEARDOWN.md
+│   └── CODE_REVIEW_2026-07-14.md
+│
+└── catalog/                    ← Plex ODBC view catalogs (reference data)
+    ├── plex_catalog_index.md   ← Master index — start here
+    └── plex_*_views_catalog.md ← One per Plex database (Sales, Part, ...)
 ```
 
 ---

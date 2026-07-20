@@ -6,6 +6,16 @@ terraform {
       version = "~> 5.40"
     }
   }
+
+  # Shared remote state so any team member can safely run plan/apply --
+  # state is no longer tied to a single machine. Bucket is created outside
+  # this config (gcloud storage buckets create) so `terraform destroy`
+  # can never delete the bucket holding its own state. Versioning is on --
+  # to roll back, restore a prior object generation and re-init.
+  backend "gcs" {
+    bucket = "voxdatalake-terraform-state"
+    prefix = "plex-to-big-query"
+  }
 }
 
 provider "google" {

@@ -371,7 +371,16 @@ Make sure you've run `gcloud auth application-default login` (not just `gcloud a
 
 ### Terraform: `Error acquiring the state lock`
 
-Terraform state is stored locally in `terraform/terraform.tfstate`. If a previous `apply` was interrupted, a lock file may remain. Delete `terraform/.terraform.lock.hcl` and retry.
+Terraform state is stored remotely in `gs://voxdatalake-terraform-state/plex-to-big-query/` (migrated 2026-07-20 — any team member with access to that bucket can safely run `plan`/`apply` from their own machine). If a previous `apply` was interrupted, GCS may still hold the lock. Check who/what holds it:
+
+```bash
+gcloud storage objects describe gs://voxdatalake-terraform-state/plex-to-big-query/default.tflock --project=voxdatalake
+```
+
+If the lock is genuinely stale (the process that created it is confirmed dead), force-unlock using the lock ID Terraform reports:
+```bash
+cd terraform && terraform force-unlock <LOCK_ID>
+```
 
 ---
 

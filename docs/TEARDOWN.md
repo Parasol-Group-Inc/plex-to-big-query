@@ -21,6 +21,7 @@
 | GCP APIs enabled | Terraform | Left enabled (harmless, free) |
 | Docker image layers | Manual | Must clear before destroy |
 | `raw_Part_v_Part` BQ table | ETL job (not Terraform) | Must delete manually first |
+| Terraform state bucket (`voxdatalake-terraform-state`) | Not managed by Terraform | `terraform destroy` never touches this — it lives outside the config on purpose so destroy can't delete its own state. Delete manually (`gcloud storage rm -r gs://voxdatalake-terraform-state`) only if decommissioning the project entirely. |
 
 ---
 

@@ -320,6 +320,8 @@ Every run sends an email with one of three status badges:
 | **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check Events and Errors sections |
 | **FAILED** | Red | Job crashed before completing — ODBC connection refused, config load failed, BigQuery unreachable |
 
+For known error signatures (e.g. a specific ODBC error code), the Errors section adds a short 💡 hint in blue explaining what it means and whether it needs Plex Support or a config fix on our side — see `_KNOWN_ERROR_HINTS` in `email_utils.py` to add more as new error patterns get diagnosed.
+
 > A PARTIAL run is not a silent failure — the email lists every failed extraction in the Errors section. Any rows that did succeed are still in BigQuery. The BigQuery VIEW still runs against whatever data is available. If the VIEW was refreshed while some extractions failed, the Events list includes an explicit warning that some source tables hold stale data.
 
 ---

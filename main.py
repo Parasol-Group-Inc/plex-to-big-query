@@ -49,6 +49,19 @@ PLEX_DATE_COL = os.environ.get("PLEX_DATE_COL", "")
 PLEX_FILTER   = os.environ.get("PLEX_FILTER",   "WHERE Part_Type = 'Raw Materials'")
 
 
+def _default_report_name() -> str:
+    """
+    Best-guess report name for the email subject when main() crashes before
+    the YAML config is loaded (so the real report_name from the config is
+    never set). Derives a readable name from the config filename rather than
+    showing the raw gs:// URL as the subject.
+    """
+    if REPORT_CONFIG_GCS_PATH:
+        filename = REPORT_CONFIG_GCS_PATH.rsplit("/", 1)[-1]
+        return filename[:-len(".yaml")] if filename.endswith(".yaml") else filename
+    return PLEX_VIEW
+
+
 # ── Secret Manager ────────────────────────────────────────────────────────────
 def get_secret(secret_name: str) -> str:
     """Fetch the latest version of a secret from Secret Manager."""
@@ -318,7 +331,7 @@ def main():
     partial_errors = []   # extraction-level failures (not fatal, but flagged in email)
     rows_fetched   = 0
     rows_written   = 0
-    report_name      = REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+    report_name      = _default_report_name()
     email_plex_view   = PLEX_VIEW
     email_plex_filter = PLEX_FILTER or "none"
     email_bq_table    = BQ_TABLE
@@ -355,7 +368,7 @@ def main():
         events.append("Fetched credentials")
     except Exception as exc:
         log.exception("Failed to fetch credentials.")
-        raise RuntimeError("Credential fetch failed.") from exc
+        raise RuntimeError(f"Credential fetch failed: {exc}") from exc
 
     # Init BigQuery client (bigquery mode only)
     if OUTPUT_MODE == "bigquery":
@@ -365,7 +378,7 @@ def main():
             events.append("Initialized BigQuery and metadata table")
         except Exception as exc:
             log.exception("Failed to initialize BigQuery client or metadata table.")
-            raise RuntimeError("BigQuery initialization failed.") from exc
+            raise RuntimeError(f"BigQuery initialization failed: {exc}") from exc
     else:
         bq = None
         log.info("LOCAL MODE — skipping BigQuery, full extract.")
@@ -383,13 +396,13 @@ def main():
             events.append(f"Loaded report config: {report_name} ({len(extractions)} extractions)")
         except Exception as exc:
             log.exception("Failed to load report config.")
-            raise RuntimeError("Report config load failed.") from exc
+            raise RuntimeError(f"Report config load failed: {exc}") from exc
 
         try:
             conn = get_odbc_connection(user, password, company_code, access_token)
         except Exception as exc:
             log.exception("Failed to establish ODBC connection to Plex.")
-            raise RuntimeError("ODBC connection failed.") from exc
+            raise RuntimeError(f"ODBC connection failed: {exc}") from exc
 
         try:
             for extraction in extractions:
@@ -502,13 +515,13 @@ def main():
             conn = get_odbc_connection(user, password, company_code, access_token)
         except Exception as exc:
             log.exception("Failed to establish ODBC connection to Plex.")
-            raise RuntimeError("ODBC connection failed.") from exc
+            raise RuntimeError(f"ODBC connection failed: {exc}") from exc
 
         try:
             df = query_plex(conn)
         except Exception as exc:
             log.exception("Plex query failed.")
-            raise RuntimeError("Plex query failed.") from exc
+            raise RuntimeError(f"Plex query failed: {exc}") from exc
         finally:
             try:
                 conn.close()
@@ -531,7 +544,7 @@ def main():
                 rows_written = write_to_bigquery(bq, df)
             except Exception as exc:
                 log.exception("BigQuery write failed.")
-                raise RuntimeError("BigQuery write failed.") from exc
+                raise RuntimeError(f"BigQuery write failed: {exc}") from exc
             if rows_written > 0:
                 events.append(f"Wrote {rows_written} rows to BigQuery")
             else:
@@ -541,7 +554,7 @@ def main():
                 rows_written = write_to_csv(df, OUTPUT_DIR, BQ_TABLE)
             except Exception as exc:
                 log.exception("CSV write failed.")
-                raise RuntimeError("CSV write failed.") from exc
+                raise RuntimeError(f"CSV write failed: {exc}") from exc
             events.append(f"Wrote {rows_written} rows to {OUTPUT_DIR}")
 
         if OUTPUT_MODE == "bigquery" and rows_written > 0:
@@ -550,7 +563,7 @@ def main():
                 events.append("Updated sync metadata")
             except Exception as exc:
                 log.exception("Failed to update sync metadata.")
-                raise RuntimeError("Metadata update failed.") from exc
+                raise RuntimeError(f"Metadata update failed: {exc}") from exc
         else:
             events.append("No metadata update needed")
 
@@ -582,7 +595,7 @@ def run_and_report():
         "gcp_project":            GCP_PROJECT,
         "bq_dataset":             BQ_DATASET,
         "bq_table":               BQ_TABLE,
-        "report_name":            REPORT_CONFIG_GCS_PATH or PLEX_VIEW,
+        "report_name":            _default_report_name(),
         "plex_view":              PLEX_VIEW,
         "plex_filter":            PLEX_FILTER,
         "plex_host":              PLEX_HOST,
@@ -622,7 +635,7 @@ def run_and_report():
         "plex_filter":      result.get("plex_filter",    PLEX_FILTER) or "none",
         "plex_host":        result.get("plex_host",      PLEX_HOST),
         "execution_name":   result.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "")),
-        "report_name":      result.get("report_name",    REPORT_CONFIG_GCS_PATH or PLEX_VIEW),
+        "report_name":      result.get("report_name",    _default_report_name()),
     }
 
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))

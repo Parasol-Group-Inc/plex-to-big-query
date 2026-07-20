@@ -33,8 +33,8 @@ variable "metadata_table" {
 
 variable "plex_host" {
   type        = string
-  description = "Plex ODBC hostname (odbc.plex.com for prod, vox.odbc.plex.com for test)"
-  default     = "odbc.plex.com"
+  description = "Plex ODBC hostname (vox.odbc.plex.com for prod, vox.test.odbc.plex.com for test)"
+  default     = "vox.odbc.plex.com"
 }
 
 variable "plex_odbc_user" {
@@ -181,8 +181,8 @@ variable "company_name" {
 
 variable "plex_host_test" {
   type        = string
-  description = "Test Plex ODBC hostname (vox.odbc.plex.com)"
-  default     = "vox.odbc.plex.com"
+  description = "Test Plex ODBC hostname"
+  default     = "vox.test.odbc.plex.com"
 }
 
 variable "bq_dataset_test" {

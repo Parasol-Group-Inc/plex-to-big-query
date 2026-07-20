@@ -7,6 +7,14 @@
 #   # edit terraform.tfvars
 #   terraform init
 #   terraform apply -var-file=terraform.tfvars
+#
+# This file mirrors every variable actually used by the live deployment as
+# of 2026-07-20 (4 Cloud Run jobs: sales orders + work orders, prod + test;
+# multi-report GCS config; SendGrid email reports). If you're rebuilding
+# this project from scratch (e.g. after losing access to the original GCP
+# project), this is the full set of values you need to reconstruct —
+# get the real ones from whoever last had a working terraform.tfvars, or
+# from docs/CLICKUP_TEAM_GUIDE.md if it documents them.
 
 # ── GCP project ───────────────────────────────────────────────────────────────
 # Your GCP project ID (not the display name or project number).
@@ -19,22 +27,25 @@ gcp_region = "us-central1"
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 # Dataset name — will be created by Terraform.
-bq_dataset = "plex_dataset"
+bq_dataset = "PlexProd"
 
 # BigQuery multi-region location. US or EU recommended.
 bq_location = "US"
 
-# Target table where Plex data is appended on each run.
-# Must match BQ_TABLE in the Cloud Run job environment.
-bq_table = "raw_materials_parts"
+# Target table for the legacy single-view job path (multi-report mode below
+# is what's actually used in production — this only matters if
+# REPORT_CONFIG_GCS_PATH is left empty for a job).
+bq_table = "sales_orders"
 
 # Internal metadata table that tracks incremental sync state.
 metadata_table = "sync_metadata"
 
 # ── Plex ODBC ─────────────────────────────────────────────────────────────────
 # IAM auth — primary method (recommended)
-# Production Plex ODBC hostname.
-plex_host      = "odbc.plex.com"
+# Production Plex ODBC hostname. Confirmed 2026-07-08: vox.odbc.plex.com is
+# production, vox.test.odbc.plex.com is test — do NOT use a bare
+# "odbc.plex.com", it is not a real Plex host.
+plex_host      = "vox.odbc.plex.com"
 # Plex login in username.company format.
 plex_odbc_user = "edominguez.parasol"
 
@@ -48,6 +59,10 @@ backfill_minutes = 5
 # These are SECRET NAMES (identifiers), NOT the actual values.
 # After terraform apply, populate them:
 #   echo -n 'TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=PROJECT
+# The actual secret VALUES (Plex IAM token, ODBC password, company code,
+# SendGrid key) live only in Secret Manager — back them up somewhere
+# durable outside GCP (e.g. a password manager) in case the project is
+# ever lost; Terraform only manages the secret containers, not their values.
 secret_access_token  = "plex-access-token"
 secret_odbc_user     = "plex-odbc-user"
 secret_odbc_password = "plex-odbc-password"
@@ -65,8 +80,54 @@ image_url = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:la
 # ── Cloud Scheduler ───────────────────────────────────────────────────────────
 scheduler_job       = "plex-daily-sync"
 scheduler_cron      = "0 2 * * *"   # 2 AM UTC daily — adjust to your needs
-scheduler_time_zone = "UTC"          # Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+scheduler_time_zone = "UTC"          # Keep as UTC — a real timezone (e.g. a
+                                      # city name) will drift by an hour twice
+                                      # a year across DST changes.
+
+# ── Plex query — legacy single-view job path ──────────────────────────────────
+# Only relevant if REPORT_CONFIG_GCS_PATH is left empty for a job (falls back
+# to this single-view mode). Production uses multi-report mode below instead.
+# Plex ODBC view name — format is always {Database}_v_{ViewName}.
+plex_view     = "Sales_v_PO"
+plex_filter   = ""   # add a WHERE clause here if you want to filter (e.g. by date range or status)
+plex_date_col = ""   # empty = full refresh; set to column name for incremental
+
+# ── Email reporting (SendGrid) ────────────────────────────────────────────────
+# Set sendgrid_enabled = "true" and fill in the email fields to activate.
+# Store the API key separately: see docs/OPERATIONS.md for instructions.
+sendgrid_enabled  = "true"
+report_from_email = "you@example.com"   # must be a verified sender in your SendGrid account
+report_to_emails  = "you@example.com, teammate@example.com"
+report_subject    = ""   # leave empty to use the auto subject: [Plex ETL] STATUS — COMPANY — DATE
+company_name      = "Your Company"
 
 # ── IAM / infrastructure ──────────────────────────────────────────────────────
 service_account_name   = "plex-etl-sa"
 artifact_registry_repo = "plex-pipeline"
+
+# ── Test environment ──────────────────────────────────────────────────────────
+# Separate Cloud Run job + BigQuery dataset for the test Plex endpoint.
+plex_host_test      = "vox.test.odbc.plex.com"
+bq_dataset_test     = "PlexTest"
+cloud_run_job_test  = "plex-etl-test"
+scheduler_job_test  = "plex-daily-sync-test"
+scheduler_cron_test = "0 3 * * *"   # offset from prod to avoid overlap
+
+# ── Report config (GCS-backed, editable without deployment) ───────────────────
+# Edit queries, filters, or the BigQuery JOIN view SQL by updating the files in
+# GCS Console or via gcloud storage cp — no terraform apply or container
+# rebuild needed for report content changes.
+#
+# Initial upload (run once after terraform apply creates the bucket):
+#   gcloud storage cp reports/sales_orders.yaml gs://YOUR_PROJECT-report-configs/reports/
+#   gcloud storage cp reports/test/sales_orders.yaml gs://YOUR_PROJECT-report-configs/test/
+#   gcloud storage cp reports/sql/sales_orders_view.sql gs://YOUR_PROJECT-report-configs/sql/
+#
+# To add a new report: see docs/OPERATIONS.md "Add a Brand-New Report".
+# Note: work_orders jobs in main.tf currently hardcode their
+# REPORT_CONFIG_GCS_PATH (gs://${report_configs_bucket}/reports/work_orders.yaml)
+# rather than using a separate tfvars variable — add one if you need it
+# configurable per-deployment.
+report_configs_bucket       = "your-gcp-project-id-report-configs"
+report_config_gcs_path      = "gs://your-gcp-project-id-report-configs/reports/sales_orders.yaml"
+report_config_gcs_path_test = "gs://your-gcp-project-id-report-configs/test/sales_orders.yaml"

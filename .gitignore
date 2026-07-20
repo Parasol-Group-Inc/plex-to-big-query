@@ -13,3 +13,5 @@ __pycache__/
 
 # Terraform numbered state backups (created by state migrations)
 terraform/*.tfstate.*.backup
+# Vendor driver packages and license (proprietary binaries + license serial — never commit)
+zipfiles/

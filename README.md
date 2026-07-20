@@ -100,8 +100,10 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md).
 | GCP infrastructure | ✅ Deployed — `voxdatalake`, Terraform-managed |
 | Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
 | Sales Orders — test | ✅ Live and verified — 16-field view, dates confirmed as real DATEs (2026-07-15) |
-| Sales Orders — prod | 🔴 **Failing since 2026-07-19** — ODBC error 2404 "Session refused by service"; confirmed NOT a driver/license/code issue — needs Plex Support: [PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md](PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md) |
+| Sales Orders — prod | ✅ Resolved (2026-07-20) — was failing with ODBC error 2404 "Session refused by service"; confirmed a Plex-side account restriction (not our driver/license/code), fixed by Plex Support |
 | Work Orders (prod + test) | ✅ Live — test data fully confirmed; prod `Job`/`Job_Op` still empty on the Plex side |
 | Code review (2026-07-14) | ✅ All findings fixed and verified — [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
-| DataDirect ODBC license | ✅ Applied (driver was running unlicensed — see [docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md)) — ruled out as the cause of the prod outage above |
+| DataDirect ODBC license | ✅ Applied (driver was running unlicensed — see [docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md)) |
+| Terraform state | ✅ Migrated to shared GCS backend (2026-07-20) — any team member with access can safely run `plan`/`apply`, no longer tied to one machine |
+| Team readiness | ✅ Audited (2026-07-20) — stale project/host/dataset references across 6 docs fixed; see [docs/CLICKUP_TEAM_GUIDE.md](docs/CLICKUP_TEAM_GUIDE.md) |
 | SendGrid domain auth | ⚠ Pending — Gmail shows "couldn't verify" on report emails until CNAME records added |

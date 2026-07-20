@@ -2,7 +2,7 @@
 
 > **Purpose of this page:** everything a team member needs to find, access, monitor, and modify the Plex-to-BigQuery data pipeline — without reading the codebase. For deeper technical detail, see the [GitHub repo](https://github.com/Parasol-Group-Inc/plex-to-big-query).
 >
-> **Last updated:** 2026-07-16 · **Owner:** Emilio Dominguez
+> **Last updated:** 2026-07-20 · **Owner:** Emilio Dominguez
 
 ---
 
@@ -37,6 +37,7 @@ Console: https://console.cloud.google.com/home/dashboard?project=voxdatalake
 | Container images | Artifact Registry → `plex-pipeline` | [Artifact Registry](https://console.cloud.google.com/artifacts?project=voxdatalake) |
 | CI/CD builds | Cloud Build → History | [Cloud Build](https://console.cloud.google.com/cloud-build/builds?project=voxdatalake) |
 | Run logs | Cloud Run → job → Executions → Logs | via Cloud Run Jobs link above |
+| **Terraform state (shared)** | Cloud Storage → `voxdatalake-terraform-state` | [GCS bucket](https://console.cloud.google.com/storage/browser/voxdatalake-terraform-state?project=voxdatalake) |
 
 ### The four pipelines
 
@@ -65,7 +66,7 @@ Raw tables (prefix `raw_`) hold unprocessed Plex data — query the **views**, n
 | `emilio.dominguez@parasolgroupinc.com` | Human — pipeline owner | Project Owner (full admin) |
 | `plex-etl-sa@voxdatalake.iam.gserviceaccount.com` | Service account (the pipeline itself) | BigQuery Data Editor + Job User, Secret Accessor, Artifact Registry Reader, Run Invoker, Storage Object Viewer on the config bucket |
 
-**Email report recipients:** emilio.dominguez@, jennilyn.tockstein@ (parasolgroupinc.com)
+**Email report recipients:** emilio.dominguez@, jennilyn.tockstein@, marketing@ (parasolgroupinc.com)
 
 To see the current full list of who has project access (this table can drift):
 **Console:** IAM & Admin → IAM ([direct link](https://console.cloud.google.com/iam-admin/iam?project=voxdatalake)), or:
@@ -81,9 +82,12 @@ gcloud projects get-iam-policy voxdatalake --format="table(bindings.role,binding
 | Query the reports in BigQuery | `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` |
 | Edit report configs in GCS | `roles/storage.objectAdmin` on `voxdatalake-report-configs` |
 | Run / debug the pipeline | `roles/run.developer` + `roles/logging.viewer` |
+| Run `terraform plan`/`apply` | Project `roles/editor` (to manage resources) + `roles/storage.objectAdmin` on `voxdatalake-terraform-state` (to read/write shared state) |
 | Full admin | `roles/editor` (or Owner — use sparingly) |
 
 IAM & Admin → IAM → **Grant access** → enter their Google account email → pick role.
+
+> **Terraform state is shared** (`gs://voxdatalake-terraform-state/`, migrated 2026-07-20) — anyone with the role above can safely run `terraform plan`/`apply` from their own clone of the repo. Just run `terraform init` after cloning; it connects to the shared backend automatically. `terraform.tfvars` itself is gitignored (contains real values) — get a copy from whoever last applied, or reconstruct it from `terraform.tfvars.example` plus the live values in this guide.
 
 ---
 

@@ -121,6 +121,37 @@ terraform apply -var-file=terraform.tfvars
 
 For production: contact Plex support to confirm the correct `ServerDataSource` name for `odbc.plex.com`.
 
+### `08S01 [2404] Session refused by service, connection closed`
+
+```
+[DataDirect][ODBC OpenAccess SDK driver][OpenAccess SDK Client]Session
+refused by service, connection closed (2404) (SQLDriverConnect)
+```
+
+The TCP connection and driver handshake succeed, but Plex's OpenAccess SDK
+service actively refuses to open a session. This is **not** a network,
+driver-config, license, or token problem — confirmed on 2026-07-19/20 by
+ruling out all four:
+
+- Reproduced identically from two independent networks (Google Cloud Run
+  and a separate office/home network) — not a firewall/IP-allowlist issue.
+- Reproduced identically with a brand-new IAM token — not a token
+  validity/expiry issue.
+- Persisted after properly licensing the DataDirect driver (see
+  [APPLY_DRIVER_LICENSE.md](APPLY_DRIVER_LICENSE.md)) — not a client-side
+  license issue.
+- The identical account/token connects successfully to the test host
+  throughout — rules out the account being globally disabled.
+
+This is an **account/session-level authorization restriction specific to
+that Plex environment** (e.g. ODBC/OpenAccess SDK reporting access not
+enabled for this account on production, even though normal Plex application
+login and reporting work fine — those are separate subsystems with
+separate entitlements). Contact Plex Support and ask them to confirm ODBC
+report-session access is enabled for the account on the affected
+environment. Rule out the four causes above first if this recurs somewhere
+new, since a fresh occurrence could have a different root cause.
+
 ### `HY000 [3059] Token is expired / invalid`
 
 The IAM access token stored in Secret Manager is no longer valid.

@@ -2,12 +2,59 @@ import os
 import html
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
 log = logging.getLogger(__name__)
+
+# Known Plex/ODBC error signatures mapped to a plain-English hint, so a
+# non-technical recipient can tell at a glance whether a failure is ours to
+# fix or Plex's. Match keys are lowercase substrings checked against the
+# lowercased error message. See docs/TROUBLESHOOTING.md for full detail on
+# each of these — keep hints short and point there for the rest.
+_KNOWN_ERROR_HINTS = [
+    (
+        ("session refused by service", "(2404)"),
+        "Plex's ODBC service is refusing the session itself (not a network/driver "
+        "problem on our side). Confirmed pattern: this means ODBC/OpenAccess SDK "
+        "report access isn't enabled for this account on this Plex environment — "
+        "normal Plex login can work fine while this still fails. Needs Plex Support "
+        "to enable it; see docs/TROUBLESHOOTING.md.",
+    ),
+    (
+        ("10300", "was not found in the provided configuration"),
+        "The ServerDataSource name doesn't exist on this Plex host (often a "
+        "test-only name used against production). Confirm the correct "
+        "ServerDataSource with Plex Support — see docs/TROUBLESHOOTING.md.",
+    ),
+    (
+        ("3059", "data source name not found"),
+        "A DSN-based connection was attempted instead of driver-direct. For IAM "
+        "token auth this means PLEX_ACCESS_TOKEN (or the Secret Manager token) is "
+        "missing — see docs/TROUBLESHOOTING.md.",
+    ),
+    (
+        ("token is expired", "token expired", "invalid access token"),
+        "The Plex IAM access token needs to be replaced in Secret Manager — see "
+        "docs/TROUBLESHOOTING.md.",
+    ),
+    (
+        ("login failed",),
+        "Likely a malformed Plex username — must be `username.company` format — "
+        "see docs/TROUBLESHOOTING.md.",
+    ),
+]
+
+
+def _classify_error(message: str) -> Optional[str]:
+    """Return a plain-English hint for a known error signature, or None."""
+    lower = message.lower()
+    for keywords, hint in _KNOWN_ERROR_HINTS:
+        if any(keyword in lower for keyword in keywords):
+            return hint
+    return None
 
 
 def _load_template(template_name: str) -> str:
@@ -38,6 +85,32 @@ def _list_to_text(items: List[str]) -> str:
     if not items:
         return "None"
     return "\n".join(f"- {item}" for item in items)
+
+
+def _errors_to_html(items: List[str]) -> str:
+    if not items:
+        return "<span class=\"none-text\">None</span>"
+    rows = []
+    for item in items:
+        row = f"<li>{html.escape(item)}"
+        hint = _classify_error(item)
+        if hint:
+            row += f"<span class=\"error-hint\">&#128161; {html.escape(hint)}</span>"
+        row += "</li>"
+        rows.append(row)
+    return f"<ul class=\"events-list\">{''.join(rows)}</ul>"
+
+
+def _errors_to_text(items: List[str]) -> str:
+    if not items:
+        return "None"
+    lines = []
+    for item in items:
+        lines.append(f"- {item}")
+        hint = _classify_error(item)
+        if hint:
+            lines.append(f"    -> {hint}")
+    return "\n".join(lines)
 
 
 def send_report(report: Dict[str, object]) -> bool:
@@ -147,7 +220,7 @@ def send_report(report: Dict[str, object]) -> bool:
         "logs_url_label": logs_url_label,
         "repo_url": repo_url,
         "events_html": _list_to_html(events),
-        "errors_html": _list_to_html(errors),
+        "errors_html": _errors_to_html(errors),
     }
 
     html_template = _load_template(template_name)
@@ -167,7 +240,7 @@ def send_report(report: Dict[str, object]) -> bool:
         f"  Table:        {context['bq_table']}\n"
         f"  Rows written: {context['rows_written']}\n\n"
         f"EVENTS\n{_list_to_text(events)}\n\n"
-        f"ERRORS\n{_list_to_text(errors)}\n\n"
+        f"ERRORS\n{_errors_to_text(errors)}\n\n"
         f"Logs:  {context['logs_url']}\n"
         f"Repo:  {context['repo_url']}\n"
     )

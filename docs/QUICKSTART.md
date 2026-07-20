@@ -39,7 +39,7 @@ Use [PLEX_SUPPORT_TEMPLATE.md](../PLEX_SUPPORT_TEMPLATE.md) as your email templa
 
 ### Things to set up in Google Cloud (requires a Google account with billing)
 
-- [ ] **GCP project** named `parasoldatalake` (or ask whoever manages your GCP account to create it)
+- [ ] **GCP project** named `voxdatalake` (or ask whoever manages your GCP account to create it)
 - [ ] **Billing account linked** to the project (required to use most GCP services)
 
 ---
@@ -96,8 +96,8 @@ Open `.env` and set these values (the others can stay as defaults for now):
 ```env
 PLEX_ACCESS_TOKEN=<token-from-plex-support>
 PLEX_ODBC_USER=edominguez.parasol
-PLEX_HOST=vox.odbc.plex.com
-BQ_TABLE=raw_materials_parts
+PLEX_HOST=vox.test.odbc.plex.com
+BQ_TABLE=raw_Part_v_Part
 ```
 
 > **Security:** `.env` is in `.gitignore` — it will never be committed. Never paste it into Slack or email.
@@ -130,11 +130,11 @@ The container runs once, connects to Plex, pulls the data, writes a CSV, and exi
 
 ```
 [INFO] LOCAL MODE — skipping BigQuery, full extract.
-[INFO] Connecting driver-direct to vox.odbc.plex.com:19995 (IAM token auth)
+[INFO] Connecting driver-direct to vox.test.odbc.plex.com:19995 (IAM token auth)
 [INFO] ODBC connection established.
 [INFO] Querying Plex [Part_v_Part] for Raw Materials parts...
 [INFO] Fetched 1234 Raw Materials parts from Plex.
-[INFO] Wrote 1234 rows to /output/raw_materials_parts_20260619T020000Z.csv
+[INFO] Wrote 1234 rows to /output/raw_Part_v_Part_20260619T020000Z.csv
 [INFO] === ETL job complete — 1234 rows written ===
 ```
 
@@ -142,7 +142,7 @@ The container runs once, connects to Plex, pulls the data, writes a CSV, and exi
 
 ```bash
 ls output/
-# Shows: raw_materials_parts_20260619T020000Z.csv
+# Shows: raw_Part_v_Part_20260619T020000Z.csv
 ```
 
 Open the CSV and verify:
@@ -161,13 +161,13 @@ Open the CSV and verify:
 ```bash
 gcloud auth login                        # opens browser, log in with your Google account
 gcloud auth application-default login    # Terraform needs this separate login
-gcloud config set project parasoldatalake
+gcloud config set project voxdatalake
 ```
 
 **Check it worked:**
 ```bash
 gcloud config get-value project
-# Should print: parasoldatalake
+# Should print: voxdatalake
 ```
 
 ### Step 8 · Set up Terraform config
@@ -180,12 +180,12 @@ cp terraform.tfvars.example terraform.tfvars
 Open `terraform.tfvars` and confirm these values are correct:
 
 ```hcl
-gcp_project    = "parasoldatalake"
-bq_dataset     = "plex_sandbox"
-bq_table       = "raw_materials_parts"
-plex_host      = "vox.odbc.plex.com"
+gcp_project    = "voxdatalake"
+bq_dataset     = "PlexTest"
+bq_table       = "raw_Part_v_Part"
+plex_host      = "vox.test.odbc.plex.com"
 plex_odbc_user = "edominguez.parasol"
-image_url      = "us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest"
+image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
 ```
 
 ### Step 9 · Create the GCP infrastructure
@@ -215,12 +215,12 @@ The token lives in a `.env` file locally. For GCP, it goes into Secret Manager �
 
 ```bash
 echo -n '<paste-your-PLEX_ACCESS_TOKEN-value-here>' | \
-  gcloud secrets versions add plex-access-token --data-file=- --project=parasoldatalake
+  gcloud secrets versions add plex-access-token --data-file=- --project=voxdatalake
 ```
 
 **Check it worked:**
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
 # Should show version 1 with state "enabled"
 ```
 
@@ -234,10 +234,10 @@ cd ..
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # Build
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 
 # Push (this uploads the image to GCP — takes 3–8 minutes first time)
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 Then re-run Terraform so it picks up the now-real image:
@@ -250,7 +250,7 @@ terraform apply -var-file=terraform.tfvars
 ### Step 12 · Run the job manually to test
 
 ```bash
-gcloud run jobs execute plex-etl --region=us-central1 --project=parasoldatalake --wait
+gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
 ```
 
 This runs the exact same job that will run automatically every morning. `--wait` keeps your terminal open and shows you the exit status.
@@ -259,7 +259,7 @@ This runs the exact same job that will run automatically every morning. `--wait`
 ```bash
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --limit=30 \
   --format="table(timestamp,textPayload)"
 ```
@@ -268,7 +268,7 @@ Or in GCP Console: **Cloud Run** → **Jobs** → `plex-etl` → click the execu
 
 ### Step 13 · Verify data is in BigQuery
 
-In GCP Console: **BigQuery** → `parasoldatalake` → `plex_sandbox` → `raw_materials_parts` → **Preview** tab.
+In GCP Console: **BigQuery** → `voxdatalake` → `PlexTest` → `raw_Part_v_Part` → **Preview** tab.
 
 You should see rows with part numbers, names, and statuses.
 
@@ -290,21 +290,21 @@ The pipeline now runs automatically every morning at 2 AM UTC. You don't need to
 
 ```bash
 # Run the job manually
-gcloud run jobs execute plex-etl --region=us-central1 --project=parasoldatalake --wait
+gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
 
 # Check recent logs
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake --limit=20 --format="table(timestamp,textPayload)"
+  --project=voxdatalake --limit=20 --format="table(timestamp,textPayload)"
 
 # Rotate the Plex token
 echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 
 # Pause the daily schedule (keeps everything deployed, just stops auto-runs)
-gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=voxdatalake
 
 # Resume the schedule
-gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=voxdatalake
 ```
 
 For the full command reference, see [docs/API_REFERENCE.md](API_REFERENCE.md).

@@ -2,7 +2,7 @@
 
 Quick-reference commands for every common error. Copy-paste ready — substitute your project values where shown.
 
-> **Project:** `parasoldatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
 
 ---
 
@@ -26,23 +26,23 @@ Quick-reference commands for every common error. Copy-paste ready — substitute
 # Logs for the most recent execution (last 100 lines)
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake --limit=100 \
+  --project=voxdatalake --limit=100 \
   --format="value(timestamp,textPayload)"
 
 # Logs for a specific execution (get execution name from the run output)
 gcloud logging read \
   "resource.type=cloud_run_job AND labels.\"run.googleapis.com/execution_name\"=plex-etl-XXXXX" \
-  --project=parasoldatalake --limit=100 \
+  --project=voxdatalake --limit=100 \
   --format="value(timestamp,textPayload)"
 
 # Only errors
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl AND severity>=ERROR" \
-  --project=parasoldatalake --limit=50 \
+  --project=voxdatalake --limit=50 \
   --format="value(timestamp,textPayload)"
 
 # Open in Cloud Console (browser)
-# https://console.cloud.google.com/run/jobs/details/us-central1/plex-etl?project=parasoldatalake
+# https://console.cloud.google.com/run/jobs/details/us-central1/plex-etl?project=voxdatalake
 ```
 
 ---
@@ -57,12 +57,12 @@ The secret container exists but no value has been stored.
 # Store the Plex IAM access token
 echo -n 'YOUR_TOKEN_HERE' | \
   gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 
 # Store the SendGrid API key (starts with SG.)
 echo -n 'SG.your-key-here' | \
   gcloud secrets versions add sendgrid-api-key \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 ### `google.api_core.exceptions.PermissionDenied: … secretmanager.versions.access`
@@ -70,8 +70,8 @@ echo -n 'SG.your-key-here' | \
 The Cloud Run service account doesn't have permission to read secrets.
 
 ```bash
-gcloud projects add-iam-policy-binding parasoldatalake \
-  --member="serviceAccount:plex-etl-sa@parasoldatalake.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding voxdatalake \
+  --member="serviceAccount:plex-etl-sa@voxdatalake.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
@@ -82,7 +82,7 @@ Plex IAM tokens expire. Generate a new one in the Plex portal, then overwrite:
 ```bash
 echo -n 'NEW_TOKEN_HERE' | \
   gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 No Terraform apply or Docker rebuild needed — the job reads the secret at runtime.
@@ -91,17 +91,17 @@ No Terraform apply or Docker rebuild needed — the job reads the secret at runt
 
 ```bash
 gcloud secrets versions access latest \
-  --secret=plex-access-token --project=parasoldatalake
+  --secret=plex-access-token --project=voxdatalake
 
 gcloud secrets versions access latest \
-  --secret=sendgrid-api-key --project=parasoldatalake
+  --secret=sendgrid-api-key --project=voxdatalake
 ```
 
 ### List all secret versions and their state
 
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
-gcloud secrets versions list sendgrid-api-key --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
+gcloud secrets versions list sendgrid-api-key --project=voxdatalake
 ```
 
 ---
@@ -110,16 +110,16 @@ gcloud secrets versions list sendgrid-api-key --project=parasoldatalake
 
 ### `HY000 [10300] The requested service was not found`
 
-The `ServerDataSource` doesn't exist on the host you're pointing at. This happens when using `odbc.plex.com` (production) with `ReportDataSource` (test-only).
+The `ServerDataSource` doesn't exist on the host you're pointing at. This happens when using `vox.odbc.plex.com` (production) with a `ServerDataSource` name that's only registered on the test host.
 
 ```bash
 # Switch to test host (works with ReportDataSource)
 cd terraform
-# Edit terraform.tfvars: plex_host = "vox.odbc.plex.com"
+# Edit terraform.tfvars: plex_host = "vox.test.odbc.plex.com"
 terraform apply -var-file=terraform.tfvars
 ```
 
-For production: contact Plex support to confirm the correct `ServerDataSource` name for `odbc.plex.com`.
+For production: contact Plex support to confirm the correct `ServerDataSource` name for `vox.odbc.plex.com`. (As of 2026-07-20, `ReportDataSource` is confirmed working on both hosts — this error is more likely to resurface if the `ServerDataSource` name is ever changed on one side only.)
 
 ### `08S01 [2404] Session refused by service, connection closed`
 
@@ -160,7 +160,7 @@ The IAM access token stored in Secret Manager is no longer valid.
 # Overwrite with a fresh token (no rebuild needed)
 echo -n 'NEW_TOKEN_HERE' | \
   gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 ### `HY000 Login failed`
@@ -196,7 +196,7 @@ The API key stored in Secret Manager is wrong or has been revoked.
 ```bash
 echo -n 'SG.new-key-here' | \
   gcloud secrets versions add sendgrid-api-key \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 ### `WARNING SendGrid config incomplete; skipping email report`
@@ -206,7 +206,7 @@ One of three required fields is missing from the Cloud Run job: API key, `REPORT
 ```bash
 # Check what env vars are currently deployed
 gcloud run jobs describe plex-etl \
-  --region=us-central1 --project=parasoldatalake --format=json \
+  --region=us-central1 --project=voxdatalake --format=json \
   | python3 -c "
 import json,sys
 j=json.load(sys.stdin)
@@ -244,12 +244,12 @@ The sender email isn't domain-authenticated. In SendGrid → Settings → Sender
 ### `403 Access Denied: Table … user does not have bigquery.tables.create`
 
 ```bash
-gcloud projects add-iam-policy-binding parasoldatalake \
-  --member="serviceAccount:plex-etl-sa@parasoldatalake.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding voxdatalake \
+  --member="serviceAccount:plex-etl-sa@voxdatalake.iam.gserviceaccount.com" \
   --role="roles/bigquery.dataEditor"
 ```
 
-### `404 Not found: Dataset parasoldatalake:plex_sandbox`
+### `404 Not found: Dataset voxdatalake:PlexTest`
 
 Dataset was deleted or never created. Re-apply Terraform:
 
@@ -261,19 +261,19 @@ cd terraform && terraform apply -var-file=terraform.tfvars
 
 ```bash
 # List tables
-bq ls --project_id=parasoldatalake plex_sandbox
+bq ls --project_id=voxdatalake PlexTest
 
 # Row count
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT COUNT(*) FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\`"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.raw_Part_v_Part\`"
 
 # Last sync timestamp
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT * FROM \`parasoldatalake.plex_sandbox.sync_metadata\` ORDER BY synced_at DESC LIMIT 5"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT * FROM \`voxdatalake.PlexTest.sync_metadata\` ORDER BY synced_at DESC LIMIT 5"
 
 # Preview data
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT * FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\` LIMIT 10"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT * FROM \`voxdatalake.PlexTest.raw_Part_v_Part\` LIMIT 10"
 ```
 
 ---
@@ -284,10 +284,10 @@ bq query --project_id=parasoldatalake --nouse_legacy_sql \
 
 ```bash
 # From project root
-gcloud auth configure-docker us-central1-docker.pkg.dev --project=parasoldatalake
+gcloud auth configure-docker us-central1-docker.pkg.dev --project=voxdatalake
 
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 Cloud Run always pulls `:latest` on the next execution — no Terraform apply needed after a push.
@@ -295,7 +295,7 @@ Cloud Run always pulls `:latest` on the next execution — no Terraform apply ne
 ### `denied: Unauthenticated request`
 
 ```bash
-gcloud auth configure-docker us-central1-docker.pkg.dev --project=parasoldatalake
+gcloud auth configure-docker us-central1-docker.pkg.dev --project=voxdatalake
 gcloud auth login
 ```
 
@@ -343,13 +343,13 @@ cd terraform
 
 # Examples — substitute the correct resource address from the error message
 terraform import google_secret_manager_secret.sendgrid_api_key \
-  projects/parasoldatalake/secrets/sendgrid-api-key
+  projects/voxdatalake/secrets/sendgrid-api-key
 
 terraform import google_bigquery_dataset.plex \
-  projects/parasoldatalake/datasets/plex_sandbox
+  projects/voxdatalake/datasets/PlexTest
 
 terraform import google_artifact_registry_repository.etl \
-  projects/parasoldatalake/locations/us-central1/repositories/plex-pipeline
+  projects/voxdatalake/locations/us-central1/repositories/plex-pipeline
 ```
 
 ### `Error 403: … caller does not have permission`
@@ -361,7 +361,7 @@ Your gcloud account doesn't have Owner or the required role on this project.
 gcloud auth list
 
 # Check your roles on the project
-gcloud projects get-iam-policy parasoldatalake \
+gcloud projects get-iam-policy voxdatalake \
   --flatten="bindings[].members" \
   --format="table(bindings.role,bindings.members)" \
   --filter="bindings.members:$(gcloud config get-value account)"
@@ -399,20 +399,20 @@ Use this when you've changed Python code, the email template, or Python dependen
 ```bash
 # 1. Make your code changes
 # 2. Rebuild and push the image
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 
 # 3. (Optional) Apply any terraform.tfvars changes at the same time
 cd terraform && terraform apply -var-file=terraform.tfvars
 
 # 4. Run manually to verify
 gcloud run jobs execute plex-etl \
-  --region=us-central1 --project=parasoldatalake --wait
+  --region=us-central1 --project=voxdatalake --wait
 
 # 5. Check logs
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake --limit=50 \
+  --project=voxdatalake --limit=50 \
   --format="value(timestamp,textPayload)"
 ```
 

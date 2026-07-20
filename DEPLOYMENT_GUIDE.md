@@ -4,7 +4,7 @@
 
 By the end of this guide:
 
-- All GCP infrastructure provisioned by Terraform in project `parasoldatalake`
+- All GCP infrastructure provisioned by Terraform in project `voxdatalake`
 - Docker image built and pushed to Artifact Registry
 - Plex IAM token stored in Secret Manager
 - Cloud Run job executing successfully against Plex and writing to BigQuery
@@ -20,12 +20,12 @@ All multi-line commands in this guide use **backslash `\`** for line continuatio
 # Git Bash / bash — use backslash
 gcloud run jobs execute plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 
 # PowerShell — use backtick
 gcloud run jobs execute plex-etl `
   --region=us-central1 `
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 When in doubt, put everything on one line — it always works in both shells.
@@ -53,15 +53,15 @@ If you're coming from frontend, here's a mental model for each service this pipe
 ## Prerequisites checklist
 
 - [ ] **Phase 1 complete** — `docker compose up` ran locally and produced a CSV in `./output/`
-- [ ] **GCP project** `parasoldatalake` with billing enabled
-  - In GCP Console: top-left dropdown → **New Project** → note the **Project ID** (like `parasoldatalake`) — this is different from the display name
+- [ ] **GCP project** `voxdatalake` with billing enabled
+  - In GCP Console: top-left dropdown → **New Project** → note the **Project ID** (like `voxdatalake`) — this is different from the display name
   - Billing: GCP Console → **Billing** → link a billing account to the project
 - [ ] **`gcloud` CLI** installed and authenticated
   ```bash
   gcloud version          # verify install
   gcloud auth login       # opens browser — log in with your Google account
   gcloud auth application-default login   # grants Terraform access to your credentials
-  gcloud config set project parasoldatalake
+  gcloud config set project voxdatalake
   ```
 - [ ] **Terraform** >= 1.5.0 installed and on your PATH
   ```bash
@@ -86,13 +86,13 @@ cp terraform.tfvars.example terraform.tfvars
 Open `terraform.tfvars` and confirm your values. For this project, the file should contain:
 
 ```hcl
-gcp_project    = "parasoldatalake"
+gcp_project    = "voxdatalake"
 gcp_region     = "us-central1"
-bq_dataset     = "plex_sandbox"
-bq_table       = "raw_materials_parts"
-plex_host      = "vox.odbc.plex.com"     # test host — change to odbc.plex.com for production
+bq_dataset     = "PlexTest"
+bq_table       = "raw_Part_v_Part"
+plex_host      = "vox.test.odbc.plex.com"     # test host — change to vox.odbc.plex.com for production
 plex_odbc_user = "edominguez.parasol"
-image_url      = "us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest"
+image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
 ```
 
 > **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 2. The job will show an error if triggered before then, which is expected.
@@ -120,8 +120,8 @@ Type `yes` when prompted. Takes 2–5 minutes — API enablement is the slowest 
 > **If apply fails "image not found":** Expected on first run. Push the image (Step 2) and re-run `terraform apply`.
 
 **Verify in GCP Console:**
-- Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@parasoldatalake.iam.gserviceaccount.com`
-- Console → **BigQuery** → `parasoldatalake` → `plex_sandbox` dataset
+- Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@voxdatalake.iam.gserviceaccount.com`
+- Console → **BigQuery** → `voxdatalake` → `PlexTest` dataset
 - Console → **Secret Manager** → four secrets: `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — empty containers)
 
 ### 1.3 Store the IAM token in Secret Manager
@@ -130,14 +130,14 @@ Terraform creates the secret *container* but doesn't put any value in it. Add yo
 
 ```bash
 echo -n '<YOUR_PLEX_IAM_TOKEN>' | gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 Paste the token from your `.env` file (`PLEX_ACCESS_TOKEN=...`) in place of `<YOUR_PLEX_IAM_TOKEN>`.
 
 Verify it was stored:
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
 # Expected:
 #   NAME    STATE    CREATED
 #   1       enabled  2026-06-...
@@ -147,7 +147,7 @@ gcloud secrets versions list plex-access-token --project=parasoldatalake
 
 > **Token rotation:** When you get a new Plex IAM token, add a new version — Cloud Run picks up `latest` automatically:
 > ```bash
-> echo -n 'NEW_TOKEN_VALUE' | gcloud secrets versions add plex-access-token --data-file=- --project=parasoldatalake
+> echo -n 'NEW_TOKEN_VALUE' | gcloud secrets versions add plex-access-token --data-file=- --project=voxdatalake
 > ```
 
 ### 1.4 If resources already exist (state recovery)
@@ -156,13 +156,13 @@ If `terraform apply` fails with `Error 409: Already Exists` for secrets or the B
 
 ```bash
 # Import secrets
-terraform import google_secret_manager_secret.access_token projects/parasoldatalake/secrets/plex-access-token
-terraform import google_secret_manager_secret.odbc_user projects/parasoldatalake/secrets/plex-odbc-user
-terraform import google_secret_manager_secret.odbc_password projects/parasoldatalake/secrets/plex-odbc-password
-terraform import google_secret_manager_secret.company_code projects/parasoldatalake/secrets/plex-company-code
+terraform import google_secret_manager_secret.access_token projects/voxdatalake/secrets/plex-access-token
+terraform import google_secret_manager_secret.odbc_user projects/voxdatalake/secrets/plex-odbc-user
+terraform import google_secret_manager_secret.odbc_password projects/voxdatalake/secrets/plex-odbc-password
+terraform import google_secret_manager_secret.company_code projects/voxdatalake/secrets/plex-company-code
 
-# Import BigQuery dataset (replace plex_sandbox with your dataset name if different)
-terraform import google_bigquery_dataset.plex parasoldatalake/plex_sandbox
+# Import BigQuery dataset (replace PlexTest with your dataset name if different)
+terraform import google_bigquery_dataset.plex voxdatalake/PlexTest
 ```
 
 Then re-run `terraform apply`. If the state file is badly corrupted (references the wrong project entirely), delete it and reimport everything:
@@ -206,13 +206,13 @@ Run from the **repo root** (not the `terraform/` folder):
 
 ```bash
 # Authenticate Docker to your Artifact Registry region
-gcloud auth configure-docker us-central1-docker.pkg.dev --project=parasoldatalake
+gcloud auth configure-docker us-central1-docker.pkg.dev --project=voxdatalake
 
 # Build the image
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 
 # Push to Artifact Registry
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 > First push takes 3–8 minutes because of the ODBC driver files (~40 MB). Subsequent pushes are faster — Docker reuses cached layers for anything that didn't change.
@@ -231,7 +231,7 @@ terraform apply -var-file=terraform.tfvars
 ## Step 3 — Test the Cloud Run job manually
 
 ```bash
-gcloud run jobs execute plex-etl --region=us-central1 --project=parasoldatalake --wait
+gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
 ```
 
 The `--wait` flag keeps the terminal open until the job finishes (or fails). Takes about 30–60 seconds.
@@ -240,7 +240,7 @@ Check the logs:
 ```bash
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --limit=50 \
   --format="table(timestamp,textPayload)"
 ```
@@ -249,11 +249,11 @@ gcloud logging read \
 ```
 [INFO] Fetching credentials...
 [INFO] Using IAM access token for Plex authentication.
-[INFO] Connecting driver-direct to vox.odbc.plex.com:19995 (IAM token auth, UID=edominguez.parasol)
+[INFO] Connecting driver-direct to vox.test.odbc.plex.com:19995 (IAM token auth, UID=edominguez.parasol)
 [INFO] ODBC connection established.
 [INFO] Querying Plex [Part_v_Part] for Raw Materials parts...
 [INFO] Fetched NNN Raw Materials parts from Plex.
-[INFO] Writing NNN rows to parasoldatalake.plex_sandbox.raw_materials_parts...
+[INFO] Writing NNN rows to voxdatalake.PlexTest.raw_Part_v_Part...
 [INFO] === ETL job complete — NNN rows written ===
 ```
 
@@ -264,14 +264,14 @@ gcloud logging read \
 ## Step 4 — Verify data in BigQuery
 
 ```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT COUNT(*) AS part_count FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\`"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT COUNT(*) AS part_count FROM \`voxdatalake.PlexTest.raw_Part_v_Part\`"
 
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT Part_No, Name, Part_Status FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\` LIMIT 10"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT Part_No, Name, Part_Status FROM \`voxdatalake.PlexTest.raw_Part_v_Part\` LIMIT 10"
 ```
 
-**GCP Console path:** Console → **BigQuery** → `parasoldatalake` → `plex_sandbox` → `raw_materials_parts` → **Preview** tab.
+**GCP Console path:** Console → **BigQuery** → `voxdatalake` → `PlexTest` → `raw_Part_v_Part` → **Preview** tab.
 
 ---
 
@@ -280,12 +280,12 @@ bq query --project_id=parasoldatalake --nouse_legacy_sql \
 Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily):
 
 ```bash
-gcloud scheduler jobs list --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
 ```
 
 Trigger it immediately to confirm end-to-end scheduling works:
 ```bash
-gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=voxdatalake
 ```
 
 **GCP Console path:** Console → **Cloud Scheduler** → `plex-daily-sync` → **Run now** button.
@@ -300,8 +300,8 @@ Cloud Build automates build → push → deploy every time you push to `main`. W
 
 **1. Store the driver in GCS** (avoids committing the binary files to git):
 ```bash
-gcloud storage buckets create gs://parasoldatalake-build-assets --project=parasoldatalake
-gcloud storage cp -r driver/* gs://parasoldatalake-build-assets/plex-odbc-driver/
+gcloud storage buckets create gs://voxdatalake-build-assets --project=voxdatalake
+gcloud storage cp -r driver/* gs://voxdatalake-build-assets/plex-odbc-driver/
 ```
 
 **2. Create a Cloud Build trigger in GCP Console:**
@@ -326,12 +326,12 @@ The secret exists but either has no version or the service account lacks access.
 
 Check that version 1 was added (Step 1.3):
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
 ```
 
 Check that the service account has the right permission:
 ```bash
-gcloud projects get-iam-policy parasoldatalake \
+gcloud projects get-iam-policy voxdatalake \
   --flatten="bindings[].members" \
   --filter="bindings.members:plex-etl-sa@"
 ```
@@ -342,22 +342,22 @@ You should see `roles/secretmanager.secretAccessor` in the output.
 The `ServerDataSource` name in the ODBC connection string doesn't match what the Plex server has configured.
 
 - **This means your token or PLEX_HOST points to one environment but the service name belongs to another.**
-- `ReportDataSource` works on `vox.odbc.plex.com` (test).
-- The production host `odbc.plex.com` likely uses a different name — confirm with Plex support.
+- `ReportDataSource` works on `vox.test.odbc.plex.com` (test).
+- The production host is `vox.odbc.plex.com` — confirm the correct `ServerDataSource` name with Plex support if this error appears on production.
 
 To switch Cloud Run to the test host temporarily for validation:
 ```bash
 gcloud run jobs update plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
-  --update-env-vars=PLEX_HOST=vox.odbc.plex.com
+  --project=voxdatalake \
+  --update-env-vars=PLEX_HOST=vox.test.odbc.plex.com
 ```
 
 To update the ServerDataSource once you have the correct name from Plex support:
 ```bash
 gcloud run jobs update plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --update-env-vars=PLEX_SERVER_DATASOURCE=<name-from-plex-support>
 ```
 
@@ -379,7 +379,7 @@ Terraform state is stored locally in `terraform/terraform.tfstate`. If a previou
 
 **Rotate the IAM token:**
 ```bash
-echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=parasoldatalake
+echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=voxdatalake
 ```
 
 **Change the sync schedule** (e.g. run at 6 AM UTC instead of 2 AM):
@@ -391,25 +391,25 @@ terraform apply -var-file=terraform.tfvars
 
 **Pause the pipeline:**
 ```bash
-gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=voxdatalake
 ```
 
 **Resume the pipeline:**
 ```bash
-gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=parasoldatalake
+gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=voxdatalake
 ```
 
 **View recent job history:**
 ```bash
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=parasoldatalake
+gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=voxdatalake
 ```
 
 **Switch to production Plex host** (once confirmed with Plex support):
 ```bash
 gcloud run jobs update plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
-  --update-env-vars=PLEX_HOST=odbc.plex.com,PLEX_SERVER_DATASOURCE=<production-service-name>
+  --project=voxdatalake \
+  --update-env-vars=PLEX_HOST=vox.odbc.plex.com,PLEX_SERVER_DATASOURCE=<production-service-name>
 ```
 Then update `terraform.tfvars` to match so the next `terraform apply` doesn't revert the change.
 

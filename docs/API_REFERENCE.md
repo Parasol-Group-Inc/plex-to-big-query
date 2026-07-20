@@ -2,7 +2,7 @@
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `parasoldatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
 
 ---
 
@@ -40,7 +40,7 @@ gcloud auth list
 ### Set default project
 
 ```bash
-gcloud config set project parasoldatalake
+gcloud config set project voxdatalake
 
 # Verify
 gcloud config get-value project
@@ -49,7 +49,7 @@ gcloud config get-value project
 ### Check your IAM permissions on the project
 
 ```bash
-gcloud projects get-iam-policy parasoldatalake \
+gcloud projects get-iam-policy voxdatalake \
   --flatten="bindings[].members" \
   --filter="bindings.members:emilio.dominguez@parasolgroupinc.com"
 ```
@@ -61,13 +61,13 @@ gcloud projects get-iam-policy parasoldatalake \
 ### List all secrets in the project
 
 ```bash
-gcloud secrets list --project=parasoldatalake
+gcloud secrets list --project=voxdatalake
 ```
 
 ### List versions of a specific secret
 
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
 ```
 
 ### Add a new value to a secret (rotate token)
@@ -75,7 +75,7 @@ gcloud secrets versions list plex-access-token --project=parasoldatalake
 ```bash
 echo -n 'YOUR_TOKEN_HERE' | \
   gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 > Always use `echo -n` (no trailing newline). A trailing newline becomes part of the secret value and will break authentication.
@@ -85,19 +85,19 @@ echo -n 'YOUR_TOKEN_HERE' | \
 ```bash
 gcloud secrets versions access latest \
   --secret=plex-access-token \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Delete a secret (and all its versions)
 
 ```bash
-gcloud secrets delete plex-access-token --project=parasoldatalake --quiet
+gcloud secrets delete plex-access-token --project=voxdatalake --quiet
 ```
 
 ### Check which service accounts can access a secret
 
 ```bash
-gcloud secrets get-iam-policy plex-access-token --project=parasoldatalake
+gcloud secrets get-iam-policy plex-access-token --project=voxdatalake
 ```
 
 ---
@@ -110,13 +110,13 @@ gcloud secrets get-iam-policy plex-access-token --project=parasoldatalake
 # Run and wait for completion (shows exit status in terminal)
 gcloud run jobs execute plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --wait
 
 # Run without waiting (fire and forget)
 gcloud run jobs execute plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Describe the job (see current config and env vars)
@@ -124,7 +124,7 @@ gcloud run jobs execute plex-etl \
 ```bash
 gcloud run jobs describe plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Update a single environment variable
@@ -132,7 +132,7 @@ gcloud run jobs describe plex-etl \
 ```bash
 gcloud run jobs update plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com
 ```
 
@@ -141,15 +141,15 @@ gcloud run jobs update plex-etl \
 ```bash
 gcloud run jobs update plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake \
-  --update-env-vars=PLEX_HOST=odbc.plex.com,PLEX_SERVER_DATASOURCE=ProductionDataSource
+  --project=voxdatalake \
+  --update-env-vars=PLEX_HOST=vox.odbc.plex.com,PLEX_SERVER_DATASOURCE=ProductionDataSource
 ```
 
 ### Common env var overrides
 
 | Variable | Test value | Production value |
 |---|---|---|
-| `PLEX_HOST` | `vox.odbc.plex.com` | `odbc.plex.com` |
+| `PLEX_HOST` | `vox.test.odbc.plex.com` | `vox.odbc.plex.com` |
 | `PLEX_SERVER_DATASOURCE` | `ReportDataSource` | TBD — confirm with Plex support |
 | `PLEX_PORT` | `19995` | `19995` |
 
@@ -159,7 +159,7 @@ gcloud run jobs update plex-etl \
 gcloud run jobs executions list \
   --job=plex-etl \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Describe a specific execution (get details on a run)
@@ -167,7 +167,7 @@ gcloud run jobs executions list \
 ```bash
 gcloud run jobs executions describe <execution-name> \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 > Get the execution name from `executions list` above. Looks like `plex-etl-abc12`.
@@ -181,7 +181,7 @@ gcloud run jobs executions describe <execution-name> \
 ```bash
 gcloud scheduler jobs list \
   --location=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Trigger the job immediately (same as the scheduled trigger)
@@ -189,7 +189,7 @@ gcloud scheduler jobs list \
 ```bash
 gcloud scheduler jobs run plex-daily-sync \
   --location=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Pause the schedule (stops auto-runs, keeps everything deployed)
@@ -197,7 +197,7 @@ gcloud scheduler jobs run plex-daily-sync \
 ```bash
 gcloud scheduler jobs pause plex-daily-sync \
   --location=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Resume the schedule
@@ -205,7 +205,7 @@ gcloud scheduler jobs pause plex-daily-sync \
 ```bash
 gcloud scheduler jobs resume plex-daily-sync \
   --location=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Change the cron schedule (easier via Terraform)
@@ -237,23 +237,23 @@ gcloud auth configure-docker us-central1-docker.pkg.dev
 ```bash
 gcloud artifacts repositories list \
   --location=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### List images in the repo
 
 ```bash
 gcloud artifacts docker images list \
-  us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline \
-  --project=parasoldatalake
+  us-central1-docker.pkg.dev/voxdatalake/plex-pipeline \
+  --project=voxdatalake
 ```
 
 ### Delete an old image (cleanup)
 
 ```bash
 gcloud artifacts docker images delete \
-  us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:old-tag \
-  --project=parasoldatalake --quiet
+  us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:old-tag \
+  --project=voxdatalake --quiet
 ```
 
 ---
@@ -263,21 +263,21 @@ gcloud artifacts docker images delete \
 ### List service accounts
 
 ```bash
-gcloud iam service-accounts list --project=parasoldatalake
+gcloud iam service-accounts list --project=voxdatalake
 ```
 
 ### Check what roles a service account has
 
 ```bash
-gcloud projects get-iam-policy parasoldatalake \
+gcloud projects get-iam-policy voxdatalake \
   --flatten="bindings[].members" \
-  --filter="bindings.members:plex-etl-sa@parasoldatalake.iam.gserviceaccount.com"
+  --filter="bindings.members:plex-etl-sa@voxdatalake.iam.gserviceaccount.com"
 ```
 
 ### Grant a role to your own account (requires Owner)
 
 ```bash
-gcloud projects add-iam-policy-binding parasoldatalake \
+gcloud projects add-iam-policy-binding voxdatalake \
   --member="user:emilio.dominguez@parasolgroupinc.com" \
   --role="roles/owner"
 ```
@@ -291,7 +291,7 @@ gcloud projects add-iam-policy-binding parasoldatalake \
 ```bash
 gcloud beta run jobs executions tail-logs <execution-name> \
   --region=us-central1 \
-  --project=parasoldatalake
+  --project=voxdatalake
 ```
 
 ### Read recent logs from the plex-etl job
@@ -299,7 +299,7 @@ gcloud beta run jobs executions tail-logs <execution-name> \
 ```bash
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --limit=50 \
   --format="table(timestamp,textPayload)"
 ```
@@ -309,7 +309,7 @@ gcloud logging read \
 ```bash
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl AND severity>=ERROR" \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --limit=20 \
   --format="table(timestamp,textPayload)"
 ```
@@ -319,7 +319,7 @@ gcloud logging read \
 ```bash
 gcloud logging read \
   "resource.type=cloud_run_job AND labels.\"run.googleapis.com/execution_name\"=plex-etl-abc12" \
-  --project=parasoldatalake \
+  --project=voxdatalake \
   --limit=100 \
   --format="table(timestamp,textPayload)"
 ```
@@ -375,27 +375,27 @@ Use when `terraform apply` fails with 409 "Already Exists" — the resource exis
 ```bash
 # Secrets
 terraform import google_secret_manager_secret.access_token \
-  projects/parasoldatalake/secrets/plex-access-token
+  projects/voxdatalake/secrets/plex-access-token
 
 terraform import google_secret_manager_secret.odbc_user \
-  projects/parasoldatalake/secrets/plex-odbc-user
+  projects/voxdatalake/secrets/plex-odbc-user
 
 terraform import google_secret_manager_secret.odbc_password \
-  projects/parasoldatalake/secrets/plex-odbc-password
+  projects/voxdatalake/secrets/plex-odbc-password
 
 terraform import google_secret_manager_secret.company_code \
-  projects/parasoldatalake/secrets/plex-company-code
+  projects/voxdatalake/secrets/plex-company-code
 
 # BigQuery dataset
-terraform import google_bigquery_dataset.plex parasoldatalake/plex_sandbox
+terraform import google_bigquery_dataset.plex voxdatalake/PlexTest
 
 # Service account
 terraform import google_service_account.etl \
-  projects/parasoldatalake/serviceAccounts/plex-etl-sa@parasoldatalake.iam.gserviceaccount.com
+  projects/voxdatalake/serviceAccounts/plex-etl-sa@voxdatalake.iam.gserviceaccount.com
 
 # Artifact Registry repo
 terraform import google_artifact_registry_repository.etl \
-  projects/parasoldatalake/locations/us-central1/repositories/plex-pipeline
+  projects/voxdatalake/locations/us-central1/repositories/plex-pipeline
 ```
 
 ### Remove a resource from state (without deleting it from GCP)
@@ -425,20 +425,20 @@ terraform output
 
 ```bash
 # From repo root (not terraform/)
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 ```
 
 ### Push to Artifact Registry
 
 ```bash
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 ### Build and push in one go
 
 ```bash
-docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest . && \
-docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest . && \
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 ### Run locally (Phase 1 — writes CSVs to ./output/)
@@ -454,14 +454,14 @@ docker compose build && docker compose up
 
 ```bash
 docker compose run --rm etl \
-  -e PLEX_HOST=vox.odbc.plex.com
+  -e PLEX_HOST=vox.test.odbc.plex.com
 ```
 
 ### Check what's inside the built image (debugging)
 
 ```bash
 docker run --rm -it \
-  us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest \
+  us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest \
   /bin/bash
 ```
 
@@ -484,39 +484,39 @@ docker image prune -f
 ### Count rows in the parts table
 
 ```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT COUNT(*) AS part_count FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\`"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT COUNT(*) AS part_count FROM \`voxdatalake.PlexTest.raw_Part_v_Part\`"
 ```
 
 ### Preview the parts table
 
 ```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT Part_No, Name, Part_Status FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\` LIMIT 10"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT Part_No, Name, Part_Status FROM \`voxdatalake.PlexTest.raw_Part_v_Part\` LIMIT 10"
 ```
 
 ### Check recent sync metadata
 
 ```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT * FROM \`parasoldatalake.plex_sandbox.sync_metadata\` ORDER BY synced_at DESC LIMIT 5"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT * FROM \`voxdatalake.PlexTest.sync_metadata\` ORDER BY synced_at DESC LIMIT 5"
 ```
 
 ### List tables in the dataset
 
 ```bash
-bq ls parasoldatalake:plex_sandbox
+bq ls voxdatalake:PlexTest
 ```
 
 ### Show a table's schema
 
 ```bash
-bq show parasoldatalake:plex_sandbox.raw_materials_parts
+bq show voxdatalake:PlexTest.raw_Part_v_Part
 ```
 
 ### GCP Console path
 
-Console → **BigQuery** → `parasoldatalake` → `plex_sandbox` → click any table → **Preview** tab for data, **Schema** tab for columns.
+Console → **BigQuery** → `voxdatalake` → `PlexTest` → click any table → **Preview** tab for data, **Schema** tab for columns.
 
 ---
 
@@ -527,14 +527,14 @@ Use these when something seems wrong.
 ### Is the Plex token stored?
 
 ```bash
-gcloud secrets versions list plex-access-token --project=parasoldatalake
+gcloud secrets versions list plex-access-token --project=voxdatalake
 # Expect: at least one version with state "enabled"
 ```
 
 ### What env vars does Cloud Run have?
 
 ```bash
-gcloud run jobs describe plex-etl --region=us-central1 --project=parasoldatalake
+gcloud run jobs describe plex-etl --region=us-central1 --project=voxdatalake
 # Look for the "Env vars:" section near the bottom
 ```
 
@@ -542,7 +542,7 @@ gcloud run jobs describe plex-etl --region=us-central1 --project=parasoldatalake
 
 ```bash
 gcloud run jobs executions list \
-  --job=plex-etl --region=us-central1 --project=parasoldatalake \
+  --job=plex-etl --region=us-central1 --project=voxdatalake \
   --limit=5
 # Look at COMPLETION_STATUS column — EXECUTION_SUCCEEDED or EXECUTION_FAILED
 ```
@@ -550,15 +550,15 @@ gcloud run jobs executions list \
 ### What's actually in BigQuery right now?
 
 ```bash
-bq query --project_id=parasoldatalake --nouse_legacy_sql \
-  "SELECT COUNT(*) FROM \`parasoldatalake.plex_sandbox.raw_materials_parts\`"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.raw_Part_v_Part\`"
 ```
 
 ### Is the scheduler enabled?
 
 ```bash
 gcloud scheduler jobs describe plex-daily-sync \
-  --location=us-central1 --project=parasoldatalake
+  --location=us-central1 --project=voxdatalake
 # Look for "state: ENABLED" or "state: PAUSED"
 ```
 
@@ -566,9 +566,9 @@ gcloud scheduler jobs describe plex-daily-sync \
 
 ```bash
 echo "=== Token ===" && \
-gcloud secrets versions list plex-access-token --project=parasoldatalake && \
+gcloud secrets versions list plex-access-token --project=voxdatalake && \
 echo "=== Last 3 executions ===" && \
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=parasoldatalake --limit=3 && \
+gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=voxdatalake --limit=3 && \
 echo "=== Scheduler state ===" && \
-gcloud scheduler jobs describe plex-daily-sync --location=us-central1 --project=parasoldatalake --format="value(state)"
+gcloud scheduler jobs describe plex-daily-sync --location=us-central1 --project=voxdatalake --format="value(state)"
 ```

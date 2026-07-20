@@ -101,11 +101,11 @@ Open [config/odbc.ini](config/odbc.ini) and check the `[PlexProduction]` section
 
 ```ini
 [PlexProduction]
-Host = odbc.plex.com     ← confirm this with Plex support
-Port = 19995             ← confirm this with Plex support
+Host = vox.odbc.plex.com     ← confirmed production host
+Port = 19995                ← confirmed for both environments
 ```
 
-If Plex support gave you a different hostname or port, update those values now.
+If Plex support gave you a different hostname or port for your account, update those values now.
 
 If you are connecting to the Plex **test environment**, set `PLEX_DSN=PlexTest` in `.env` and verify the `[PlexTest]` section in `odbc.ini` as well.
 

@@ -97,7 +97,7 @@ unixODBC driver manager  (/etc/odbcinst.ini registers the driver)
 DataDirect OpenAccess SDK 8.1  (/usr/oaodbc81/lib64/ivoa27.so)
     │  TLS encrypted (Encrypted=1)
     ▼
-Plex ERP ODBC endpoint  (vox.odbc.plex.com:19995 or odbc.plex.com:19995)
+Plex ERP ODBC endpoint  (vox.odbc.plex.com:19995 prod, vox.test.odbc.plex.com:19995 test)
 ```
 
 ### Why driver-direct instead of DSN
@@ -110,7 +110,7 @@ The fix is to pass all connection attributes directly in the connection string u
 
 ```
 DRIVER={/usr/oaodbc81/lib64/ivoa27.so};
-HOST=vox.odbc.plex.com;
+HOST=vox.odbc.plex.com;   ← production; use vox.test.odbc.plex.com for test
 PORT=19995;
 ServerDataSource=ReportDataSource;
 Encrypted=1;
@@ -123,7 +123,7 @@ CustomProperties=authmethod=iam; accesstoken=<token>
 
 `UID` follows Plex's `username.company` login format. The IAM token authenticates the user; `UID` identifies which company context to open.
 
-> **Test vs production host:** `ServerDataSource=ReportDataSource` is confirmed working on `vox.odbc.plex.com` (test host). The production host `odbc.plex.com` returns error `HY000 10300` with this service name. Confirm the correct `ServerDataSource` with Plex support before switching to production.
+> **Test vs production host:** `ServerDataSource=ReportDataSource` works on both `vox.test.odbc.plex.com` (test) and `vox.odbc.plex.com` (production) as of 2026-07-20. Production ODBC access has a history of environment-specific issues unrelated to this setting (a `ServerDataSource` lookup failure, then a separate account/session authorization issue) — see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the full incident history if a new one surfaces.
 
 ### Username/password connection string (fallback)
 
@@ -176,8 +176,8 @@ When Plex releases a new driver version (e.g. from `ivoa27` to `ivoa28`):
 4. Rebuild and push the Docker image:
 
    ```bash
-   docker build -t us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest .
-   docker push us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl:latest
+   docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+   docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
    ```
 
 5. Run the job to verify connectivity
@@ -222,11 +222,11 @@ Changes in this table take effect after `terraform apply` (~30 seconds). No Dock
 ```bash
 # Rotate the Plex IAM token
 echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 
 # Rotate the SendGrid API key
 echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
-  --data-file=- --project=parasoldatalake
+  --data-file=- --project=voxdatalake
 ```
 
 ### Changes that DO require a Docker rebuild
@@ -285,7 +285,7 @@ Cloud Run always pulls `:latest` at the start of each execution — no Terraform
 | Plex view | `Part_v_Part` |
 | Filter | `WHERE Part_Type = 'Raw Materials'` |
 | Sync strategy | Full refresh — no date column, table replaced each run |
-| `BQ_TABLE` | `raw_materials_parts` |
+| `BQ_TABLE` | `raw_Part_v_Part` |
 | `PLEX_DATE_COL` | `""` (empty — no incremental tracking) |
 
 Plex exposes its data through views following the naming convention `{Module}_v_{ObjectName}`. To find a view name, look up the data source in the Plex UI and ask Plex support to confirm the ODBC view name and whether your ODBC user has read access.

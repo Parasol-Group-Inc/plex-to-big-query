@@ -12,7 +12,7 @@
 |---|---|---|
 | Cloud Run job (`plex-etl`) | Terraform | `terraform destroy` |
 | Cloud Scheduler job (`plex-daily-sync`) | Terraform | `terraform destroy` |
-| BigQuery dataset (`plex_sandbox`) + all tables | Terraform | `terraform destroy` (after unlocking) |
+| BigQuery dataset (`PlexTest`) + all tables | Terraform | `terraform destroy` (after unlocking) |
 | Artifact Registry repo (`plex-pipeline`) | Terraform | `terraform destroy` (after clearing images) |
 | Secret Manager containers (4 secrets) | Terraform | `terraform destroy` |
 | Secret versions (the actual token values) | Manual | Deleted with the container |
@@ -20,7 +20,7 @@
 | IAM role bindings | Terraform | `terraform destroy` |
 | GCP APIs enabled | Terraform | Left enabled (harmless, free) |
 | Docker image layers | Manual | Must clear before destroy |
-| `raw_materials_parts` BQ table | ETL job (not Terraform) | Must delete manually first |
+| `raw_Part_v_Part` BQ table | ETL job (not Terraform) | Must delete manually first |
 
 ---
 
@@ -30,7 +30,7 @@ Stop any new runs from starting while you tear things down:
 
 ```bash
 gcloud scheduler jobs pause plex-daily-sync \
-  --location=us-central1 --project=parasoldatalake
+  --location=us-central1 --project=voxdatalake
 ```
 
 ---
@@ -92,27 +92,27 @@ Terraform cannot delete a repository that still has images in it. Clear the imag
 ```bash
 # Delete the ETL image
 gcloud artifacts docker images delete \
-  us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline/etl \
-  --delete-tags --quiet --project=parasoldatalake
+  us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl \
+  --delete-tags --quiet --project=voxdatalake
 
 # Verify the repo is empty
 gcloud artifacts docker images list \
-  us-central1-docker.pkg.dev/parasoldatalake/plex-pipeline \
-  --project=parasoldatalake
+  us-central1-docker.pkg.dev/voxdatalake/plex-pipeline \
+  --project=voxdatalake
 # Should return no rows
 ```
 
 ---
 
-## Step 4 — Delete the raw_materials_parts table
+## Step 4 — Delete the raw_Part_v_Part table
 
-The `raw_materials_parts` table is created by the ETL job loading data, not by Terraform, so `terraform destroy` won't touch it. Delete it manually first so the dataset can be dropped:
+The `raw_Part_v_Part` table is created by the ETL job loading data, not by Terraform, so `terraform destroy` won't touch it. Delete it manually first so the dataset can be dropped:
 
 ```bash
-bq rm -f parasoldatalake:plex_sandbox.raw_materials_parts
+bq rm -f voxdatalake:PlexTest.raw_Part_v_Part
 ```
 
-Or in GCP Console: **BigQuery** → `plex_sandbox` → `raw_materials_parts` → three-dot menu → **Delete**.
+Or in GCP Console: **BigQuery** → `PlexTest` → `raw_Part_v_Part` → three-dot menu → **Delete**.
 
 ---
 
@@ -133,7 +133,7 @@ Destroy complete! Resources: 18 destroyed.
 **Verify in GCP Console:**
 - **Secret Manager** → the 4 plex secrets should be gone
 - **Cloud Run** → **Jobs** → `plex-etl` should be gone
-- **BigQuery** → `plex_sandbox` dataset should be gone
+- **BigQuery** → `PlexTest` dataset should be gone
 - **Artifact Registry** → `plex-pipeline` repo should be gone
 - **IAM & Admin** → **Service Accounts** → `plex-etl-sa` should be gone
 

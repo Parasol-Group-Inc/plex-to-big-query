@@ -25,7 +25,15 @@ without issue. This is conclusively an account/session-level restriction on
 the production OpenAccess SDK service, not a network, driver, or client
 configuration issue on our end.
 
-This is now confirmed and ready to send to Plex Support.
+**Update 2026-07-20 (second token test):** generated a brand new IAM access
+token and repeated the local test. The new token succeeds cleanly against
+`vox.test.odbc.plex.com` (47 rows fetched from `Part_v_Part` in ~2 seconds)
+and fails with the **identical** `2404 Session refused by service` error
+against `vox.odbc.plex.com`. This rules out token validity/expiry as a
+factor entirely — two different tokens both work on test and both fail
+identically on production.
+
+This is now confirmed beyond doubt and ready to send to Plex Support.
 
 Subject
 -------
@@ -72,12 +80,16 @@ declines to open a session).
 5. We confirmed this is not a network/firewall/IP-allowlist issue — we
    reproduced the identical failure from two independent networks (Google
    Cloud Run in us-central1, and a separate office/home network), both
-   using the same account and token. We are confident this is a
-   server-side, account-level restriction specific to production ODBC
-   report access — could you confirm whether ODBC/OpenAccess SDK reporting
-   access is enabled for `edominguez.parasol` on the production instance?
-   (Regular Plex application login and reporting work fine for this
-   account on production — only the ODBC/OpenAccess SDK path is affected.)
+   using the same account and token.
+6. We confirmed this is not a token issue — a newly generated IAM access
+   token shows the identical pattern (works on test, refused on
+   production).
+   We are confident this is a server-side, account-level restriction
+   specific to production ODBC report access — could you confirm whether
+   ODBC/OpenAccess SDK reporting access is enabled for `edominguez.parasol`
+   on the production instance? (Regular Plex application login and
+   reporting work fine for this account on production — only the
+   ODBC/OpenAccess SDK path is affected.)
 
 Thank you,
 [Your Name]

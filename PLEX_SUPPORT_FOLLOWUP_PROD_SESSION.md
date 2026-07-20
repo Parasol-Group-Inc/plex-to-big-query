@@ -2,9 +2,15 @@ Plex Support Follow-Up — Production ODBC Session Refused
 ==========================================================
 
 Context: this follows up on the earlier ServerDataSource/HY000 10300 issue on
-our production endpoint. That error is gone, but a new one has appeared —
-use this if the DataDirect trial-license angle in OPERATIONS doesn't
-resolve it, or send now if you'd rather have Plex confirm in parallel.
+our production endpoint. That error is gone, but a new one has appeared.
+
+**Update 2026-07-20:** we confirmed our DataDirect OEM SDK Client driver
+license (Serial 004193623) was NOT applied — the Dockerfile never ran the
+vendor installer. We applied it properly (ran the real `unixpi.ksh`
+installer, generated a valid `OAODBC64.LIC`, rebuilt and redeployed) and
+re-tested against production. **The identical error persists** even with a
+correctly licensed driver, ruling out client-side licensing as the cause.
+This is now confirmed to need Plex Support — ready to send as-is.
 
 Subject
 -------
@@ -45,6 +51,11 @@ declines to open a session).
    OpenAccess SDK gateway that differs from test? Our egress IPs are from
    Google Cloud Run (us-central1) — happy to provide the exact IP range
    if useful.
+4. We confirmed this is not a client-side driver licensing issue — our
+   DataDirect OEM SDK Client license (Serial 004193623) is correctly
+   applied and the identical error persists. Please treat this as a
+   server-side/account-level issue on the production OpenAccess SDK
+   service.
 
 Thank you,
 [Your Name]

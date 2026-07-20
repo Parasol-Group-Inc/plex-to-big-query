@@ -100,8 +100,8 @@ Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md).
 | GCP infrastructure | ✅ Deployed — `voxdatalake`, Terraform-managed |
 | Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
 | Sales Orders — test | ✅ Live and verified — 16-field view, dates confirmed as real DATEs (2026-07-15) |
-| Sales Orders — prod | 🔴 **Failing since 2026-07-19** — ODBC error 2404 "Session refused by service" |
+| Sales Orders — prod | 🔴 **Failing since 2026-07-19** — ODBC error 2404 "Session refused by service"; confirmed NOT a driver/license/code issue — needs Plex Support: [PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md](PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md) |
 | Work Orders (prod + test) | ✅ Live — test data fully confirmed; prod `Job`/`Job_Op` still empty on the Plex side |
 | Code review (2026-07-14) | ✅ All findings fixed and verified — [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
-| DataDirect ODBC license | 🔴 Driver has been running **unlicensed** the whole time (installer never ran) — real license found, apply-steps: [docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md). If that doesn't fix the prod outage above: [PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md](PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md) |
+| DataDirect ODBC license | ✅ Applied (driver was running unlicensed — see [docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md)) — ruled out as the cause of the prod outage above |
 | SendGrid domain auth | ⚠ Pending — Gmail shows "couldn't verify" on report emails until CNAME records added |

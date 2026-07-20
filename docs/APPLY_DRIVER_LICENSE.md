@@ -117,6 +117,23 @@ gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
    still fails with error 2404 after this, the license was not the cause —
    send `PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md` to Plex Support next.
 
+## Outcome (2026-07-20)
+
+Completed steps 1-7 end to end: ran the real installer (User Name `Emilio
+Dominguez`, Company `Vox Nutrition`, Serial `004193623`, Key `35057920`),
+generated a valid `OAODBC64.LIC`, uploaded it to
+`gs://voxdatalake-build-assets/plex-odbc-driver/` (the bucket Cloud Build's
+`fetch-driver` step actually reads — the local gitignored `driver/` folder
+never reaches Cloud Build's source upload), rebuilt, redeployed, and
+re-tested production.
+
+**Result: the identical `2404 Session refused by service` error persisted,
+even on retry.** This rules out client-side driver licensing as the cause of
+the production outage. The license is correctly applied and should stay
+applied (it's a real license the company owns), but it did not fix the
+"session refused" error — that is a Plex-side account/session authorization
+issue on production. See `PLEX_SUPPORT_FOLLOWUP_PROD_SESSION.md`.
+
 ## Note on the 32-bit package
 
 `zipfiles/` also contains a 32-bit driver/license pair. Our container is

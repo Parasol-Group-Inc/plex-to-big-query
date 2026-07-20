@@ -49,9 +49,16 @@ base + system deps, but doesn't touch the actual pipeline image):
 
 ```bash
 cd "f:/Desktop/Parasol/plex-to-big-query/zipfiles/extracted_64_tar"
-docker run -it --rm -v "$(pwd):/install" -w /install \
+MSYS_NO_PATHCONV=1 docker run -it --rm -v "$(pwd):/install" -w //install \
   --platform linux/amd64 debian:bookworm-slim bash
 ```
+
+> **Git Bash (MINGW64) note:** without `MSYS_NO_PATHCONV=1` and the
+> double-slash in `-w //install`, MSYS rewrites `/install` into a Windows
+> path before Docker ever sees it (e.g. `the working directory
+> 'C:/Program Files/Git/install' is invalid`). Both the env var and the
+> double slash are belt-and-suspenders for the same MSYS path-mangling
+> issue — keep both.
 
 **2. Inside the container**, install what the installer needs and run it:
 

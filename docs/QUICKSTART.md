@@ -28,7 +28,23 @@ Before you start, collect these things. Some require waiting on other people, so
   - Download the Windows AMD64 zip, extract `terraform.exe`, put it in `C:\tools\`
   - Add `C:\tools\` to your PATH in System Settings → Environment Variables
 
-### Things to get from Plex support (request these early, may take a day or two)
+### If you're joining the existing team project (most common)
+
+The Plex ODBC driver (already licensed), credentials, and IAM token all
+already exist for `voxdatalake` — you don't need to request anything from
+Plex support. You need:
+
+- [ ] **GCP access to the `voxdatalake` project** — ask whoever manages GCP
+  access to grant you a role (see the team guide's access section for which
+  role you need for what)
+- [ ] `gcloud` CLI installed and authenticated (`gcloud auth login`)
+
+Then skip straight to Step 2 below — the driver comes from a shared GCS
+bucket, not from Plex support.
+
+### If you're setting up a brand-new Plex integration (rare)
+
+Only needed if there is no existing `voxdatalake`-style project yet:
 
 - [ ] **Plex ODBC credentials:** username, password, CompanyCode
 - [ ] **Linux ODBC driver files:** a `.zip` or `.tar` file containing the driver
@@ -55,9 +71,15 @@ cd plex-to-big-query
 
 ### Step 2 · Put the ODBC driver files in the right place
 
-The Plex ODBC driver is a set of Linux binary files that the Docker container uses to talk to Plex. You get these from Plex support — they come as a `.zip` or `.tar` archive.
+The Plex ODBC driver is a set of Linux binary files that the Docker container uses to talk to Plex. The `driver/` folder is gitignored — you populate it locally.
 
-Create a `driver/` folder in the repo root and extract the files there. When done, you should have:
+**If you're joining the existing team project**, pull the already-licensed driver from the shared GCS bucket (same files Cloud Build uses):
+
+```bash
+gcloud storage cp -r gs://voxdatalake-build-assets/plex-odbc-driver/* driver/
+```
+
+When done, you should have:
 
 ```
 driver/
@@ -67,13 +89,18 @@ driver/
   etc/
     lang/
       usenglish.msg
+  OAODBC64.LIC      ← driver license — only present via the GCS path above
 ```
 
-If Plex gave you a `.tar` file inside the archive called `ivoaLinux64.tar`, extract it:
+**If you're setting up from scratch** (no shared bucket yet), extract the
+driver package Plex support gave you into `driver/` instead. If it contains
+a `.tar` file called `ivoaLinux64.tar`, extract it:
 
 ```bash
 tar -xf driver/etc/tar/ivoaLinux64.tar -C driver/ lib64/
 ```
+
+This path does not include a license file — see [LOCAL_SETUP.md](../LOCAL_SETUP.md) and [docs/APPLY_DRIVER_LICENSE.md](APPLY_DRIVER_LICENSE.md) if you need to apply one.
 
 **How to check it worked:**
 ```bash

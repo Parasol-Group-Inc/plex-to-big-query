@@ -21,8 +21,9 @@ Before you start, confirm you have everything:
   - ODBC username
   - ODBC password
   - CompanyCode
-- [ ] **Plex ODBC driver** — Linux 64-bit `.so` files from Plex support
-  - See [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) for the request email template
+- [ ] **Plex ODBC driver** — see Step 1 below for the fast path (shared GCS bucket)
+  - Only if that bucket isn't available: Linux 64-bit `.so` files from Plex support — see [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) for the request email template
+- [ ] **GCP account with access to `voxdatalake`** — needed for Step 1's fast path and for Phase 2 later
 
 ---
 
@@ -43,9 +44,36 @@ driver/
     lang/
       usenglish.msg
       msg.dat
+  OAODBC64.LIC         ← driver license (see below)
 ```
 
-**How to get there:**
+### Fast path — pull the already-licensed driver from GCS (recommended)
+
+The team maintains a licensed copy in Cloud Storage — same files Cloud Build
+uses, already includes the applied license (`OAODBC64.LIC`), no re-licensing
+needed:
+
+```bash
+gcloud storage cp -r gs://voxdatalake-build-assets/plex-odbc-driver/* driver/
+```
+
+Verify:
+```bash
+ls driver/lib64/        # Must show: ivoa27.so and ddtrc27.so
+ls driver/OAODBC64.LIC   # Must exist
+```
+
+If you don't have `gcloud` access to `voxdatalake` yet, ask whoever manages
+GCP access for this project to grant you `roles/storage.objectViewer` on the
+`voxdatalake-build-assets` bucket — see the team guide's access section.
+
+### Fallback path — extract from a fresh Plex driver package
+
+Only needed if the GCS bucket is unavailable, or you're installing a new
+driver version. This path does **not** include a license — see
+[docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md) afterward if you
+need one (the container prints a cosmetic warning without it; only escalates
+to a hard error if Plex disables unlicensed ODBC access).
 
 1. Get the Linux 64-bit driver package from Plex support (a `.zip` or `.tar` file).
 2. Extract the archive into the `driver/` folder.
@@ -63,9 +91,11 @@ driver/
    # Must show: ivoa27.so and ddtrc27.so
    ```
 
-6. Remove installer artifacts that are not needed in the image:
+6. Remove installer artifacts that are not needed in the image (**skip this
+   if you plan to apply a license per docs/APPLY_DRIVER_LICENSE.md** — that
+   process needs `unixpi.ksh` and `makelic64`):
    ```powershell
-   # These are safe to delete after extraction
+   # These are safe to delete after extraction, once licensed
    Remove-Item driver\etc\tar -Recurse -Force
    Remove-Item driver\unixpi.ksh, driver\makelic64, driver\install.pi,
                driver\product.dat, driver\ddprocinfo -ErrorAction SilentlyContinue

@@ -10,25 +10,25 @@
 (Forgotten password, disabled 2FA device, account compromised, offboarded,
 etc. — but the **GCP project `voxdatalake` itself still exists**.)
 
-**This is fully recoverable IF a second person has Owner/Editor access.**
-Check now, before you need it:
+**This is fully recoverable — confirmed 2026-07-20.** A second human already
+holds `roles/owner` on the project:
+
+```
+roles/owner   user:emilio.dominguez@parasolgroupinc.com
+roles/owner   user:jennilyn.tockstein@parasolgroupinc.com
+```
+
+If Emilio's account is ever lost, Jennilyn can grant a replacement person
+Owner/Editor access immediately in IAM & Admin → IAM — no Google Workspace
+Super Admin or org-level recovery needed. Re-check this periodically
+(people leave, roles get cleaned up):
 
 ```bash
 gcloud projects get-iam-policy voxdatalake --format="table(bindings.role,bindings.members)" --flatten="bindings[]" | grep -i "owner\|editor"
 ```
 
-- **If someone else is listed**: they grant a new/replacement person the
-  right role in IAM & Admin → IAM, and everything below (code, state,
-  secrets, driver) is already in place. No further action needed.
-- **If Emilio is the only Owner/Editor**: the org needs a backstop. Check
-  whether `parasolgroupinc.com` has a **Google Workspace org** with a Super
-  Admin — they can reset IAM policy on any project in the org even without
-  the original Owner's cooperation. If there's no Workspace org (this is a
-  personal/individual GCP account with no org backing it), there is
-  **no way back in** if that one account is lost — Google will not
-  transfer ownership without proof of account control. **This is worth
-  confirming and fixing now, independent of any actual emergency** — add a
-  second human Owner today.
+If this ever comes back showing only one Owner, add a second one before it
+becomes urgent.
 
 ---
 

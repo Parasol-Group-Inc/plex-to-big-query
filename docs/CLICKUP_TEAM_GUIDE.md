@@ -64,6 +64,7 @@ Raw tables (prefix `raw_`) hold unprocessed Plex data — query the **views**, n
 | Identity | Type | Access |
 |---|---|---|
 | `emilio.dominguez@parasolgroupinc.com` | Human — pipeline owner | Project Owner (full admin) |
+| `jennilyn.tockstein@parasolgroupinc.com` | Human — second Owner | Project Owner (full admin) — confirmed 2026-07-20; can recover access for the team if Emilio's account is ever lost |
 | `plex-etl-sa@voxdatalake.iam.gserviceaccount.com` | Service account (the pipeline itself) | BigQuery Data Editor + Job User, Secret Accessor, Artifact Registry Reader, Run Invoker, Storage Object Viewer on the config bucket |
 
 **Email report recipients:** emilio.dominguez@, jennilyn.tockstein@, marketing@ (parasolgroupinc.com)

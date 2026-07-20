@@ -4,13 +4,28 @@ Plex Support Follow-Up — Production ODBC Session Refused
 Context: this follows up on the earlier ServerDataSource/HY000 10300 issue on
 our production endpoint. That error is gone, but a new one has appeared.
 
-**Update 2026-07-20:** we confirmed our DataDirect OEM SDK Client driver
-license (Serial 004193623) was NOT applied — the Dockerfile never ran the
-vendor installer. We applied it properly (ran the real `unixpi.ksh`
-installer, generated a valid `OAODBC64.LIC`, rebuilt and redeployed) and
-re-tested against production. **The identical error persists** even with a
-correctly licensed driver, ruling out client-side licensing as the cause.
-This is now confirmed to need Plex Support — ready to send as-is.
+**Update 2026-07-20 (driver license):** we confirmed our DataDirect OEM SDK
+Client driver license (Serial 004193623) was NOT applied — the Dockerfile
+never ran the vendor installer. We applied it properly (ran the real
+`unixpi.ksh` installer, generated a valid `OAODBC64.LIC`, rebuilt and
+redeployed) and re-tested against production. **The identical error
+persists** even with a correctly licensed driver, ruling out client-side
+licensing as the cause.
+
+**Update 2026-07-20 (network isolation test):** we then reproduced this
+error from a SECOND, completely independent network — running the exact
+same account, token, driver, and connection parameters locally (outside
+Google Cloud entirely) directly against `vox.odbc.plex.com`. **Identical
+failure, in under one second, from a different IP/network.** This rules out
+Google Cloud Run's egress IP/network as the cause. Two independent client
+environments (Google Cloud Run in us-central1, and a separate
+office/home network) are both refused identically by production, while the
+same account and token succeed against `vox.test.odbc.plex.com` every day
+without issue. This is conclusively an account/session-level restriction on
+the production OpenAccess SDK service, not a network, driver, or client
+configuration issue on our end.
+
+This is now confirmed and ready to send to Plex Support.
 
 Subject
 -------
@@ -53,9 +68,16 @@ declines to open a session).
    if useful.
 4. We confirmed this is not a client-side driver licensing issue — our
    DataDirect OEM SDK Client license (Serial 004193623) is correctly
-   applied and the identical error persists. Please treat this as a
-   server-side/account-level issue on the production OpenAccess SDK
-   service.
+   applied and the identical error persists.
+5. We confirmed this is not a network/firewall/IP-allowlist issue — we
+   reproduced the identical failure from two independent networks (Google
+   Cloud Run in us-central1, and a separate office/home network), both
+   using the same account and token. We are confident this is a
+   server-side, account-level restriction specific to production ODBC
+   report access — could you confirm whether ODBC/OpenAccess SDK reporting
+   access is enabled for `edominguez.parasol` on the production instance?
+   (Regular Plex application login and reporting work fine for this
+   account on production — only the ODBC/OpenAccess SDK path is affected.)
 
 Thank you,
 [Your Name]

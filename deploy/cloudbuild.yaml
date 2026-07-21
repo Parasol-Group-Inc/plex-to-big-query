@@ -31,12 +31,16 @@ steps:
   # ── 1. Fetch driver files from GCS into the build workspace ─────────────────
   # driver/ is gitignored so it's absent from the source tarball.
   # mkdir first — both cp and rsync require the destination to already exist.
-  - name: "gcr.io/cloud-builders/gsutil"
+  # Uses the same cloud-sdk image as the deploy/smoke-test steps below —
+  # gsutil is being phased out of the default gcloud CLI bundle (Google
+  # announced removal starting March 2027); gcloud storage is the
+  # supported replacement and shares auth with the rest of this pipeline.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "fetch-driver"
     entrypoint: "bash"
     args:
       - "-c"
-      - "mkdir -p driver && gsutil -m cp -r gs://${PROJECT_ID}-build-assets/plex-odbc-driver/* driver/"
+      - "mkdir -p driver && gcloud storage cp -r gs://${PROJECT_ID}-build-assets/plex-odbc-driver/* driver/"
     waitFor: ["-"]                   # start immediately
 
   # ── 2. Build Docker image ────────────────────────────────────────────────────

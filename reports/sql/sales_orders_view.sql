@@ -1,8 +1,8 @@
 -- sales_orders_report — 16-field Vox Nutrition sales orders report
 --
 -- HOW TO EDIT (no deployment required):
---   Edit this file in Google Cloud Storage Console or with gsutil:
---     gsutil cp reports/sql/sales_orders_view.sql gs://voxdatalake-report-configs/sql/
+--   Edit this file in Google Cloud Storage Console or with gcloud:
+--     gcloud storage cp reports/sql/sales_orders_view.sql gs://voxdatalake-report-configs/sql/
 --   The next pipeline run will recreate the view with the updated SQL.
 --   You can also edit the BigQuery view directly in the BigQuery Console —
 --   your changes persist until the next pipeline run overwrites them.

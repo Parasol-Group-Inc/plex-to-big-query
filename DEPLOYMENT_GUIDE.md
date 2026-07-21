@@ -165,10 +165,23 @@ terraform import google_secret_manager_secret.company_code projects/voxdatalake/
 terraform import google_bigquery_dataset.plex voxdatalake/PlexTest
 ```
 
-Then re-run `terraform apply`. If the state file is badly corrupted (references the wrong project entirely), delete it and reimport everything:
+Then re-run `terraform apply`. If the state is badly corrupted (references the wrong project entirely):
+
+**State lives in a shared GCS backend** (`gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate`), not a local file — there is no `terraform.tfstate` to delete locally anymore. The bucket has **object versioning enabled**, so the safer first move is rolling back to a previous version rather than wiping it:
 
 ```bash
-rm terraform.tfstate terraform.tfstate.backup   # wipe stale state
+# List previous versions of the state object
+gcloud storage ls -a gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate
+
+# Restore a specific earlier version (copy it back over the live object)
+gcloud storage cp gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate#GENERATION_NUMBER \
+  gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate
+```
+
+Only as a last resort, wipe it entirely and reimport everything:
+```bash
+gcloud storage rm gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate
+terraform init   # recreates an empty state at the same backend path
 # then run all imports above before apply
 ```
 

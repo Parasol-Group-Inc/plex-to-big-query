@@ -406,8 +406,11 @@ terraform state rm google_cloud_run_v2_job.etl
 
 ### Wipe all state (nuclear option — only if state is hopelessly corrupted)
 
+State lives in `gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate` (GCS backend, versioning enabled) — not a local file. Try rolling back to a previous object version first (`gcloud storage ls -a gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate`) before wiping outright:
+
 ```bash
-rm terraform.tfstate terraform.tfstate.backup
+gcloud storage rm gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate
+terraform init
 # Then re-import everything above, then apply
 ```
 

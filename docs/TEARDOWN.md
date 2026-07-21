@@ -140,14 +140,17 @@ Destroy complete! Resources: 18 destroyed.
 
 ---
 
-## Step 6 — Clean up local state files
+## Step 6 — Clean up the Terraform state bucket (optional, full teardown only)
 
-The Terraform state files on your machine now describe a destroyed world. Remove them so they don't cause confusion when redeploying:
+Terraform state lives in a shared GCS backend (`gs://voxdatalake-terraform-state`), not a local file — there's nothing to clean up on your machine. A successful `terraform destroy` leaves that bucket's state object empty (no resources), which is fine to leave as-is if you might redeploy later.
+
+The state bucket itself is **not** managed by Terraform (it's created manually, outside the config it stores — this avoids Terraform ever being able to delete the very bucket holding its own state). If you want to remove it too as part of a full teardown:
 
 ```bash
-cd terraform
-rm terraform.tfstate terraform.tfstate.backup
+gcloud storage rm -r gs://voxdatalake-terraform-state --project=voxdatalake
 ```
+
+Only do this if you're certain no one will need this project's Terraform history again.
 
 ---
 

@@ -285,6 +285,7 @@ Check the email — subject will be `[Plex ETL] Purchasing Orders Test — SUCCE
 |---|---|---|
 | Sales Orders job | `plex-etl` (2 AM UTC) | `plex-etl-test` (3 AM UTC) |
 | Work Orders job | `plex-etl-work-orders` (4 AM UTC) | `plex-etl-work-orders-test` (5 AM UTC) |
+| Failure retry (all 4 jobs) | 6 AM Mountain daily — see [Failure Retry](#failure-retry-6-am-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report Config bucket | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -323,6 +324,60 @@ Every run sends an email with one of three status badges:
 For known error signatures (e.g. a specific ODBC error code), the Errors section adds a short 💡 hint in blue explaining what it means and whether it needs Plex Support or a config fix on our side — see `_KNOWN_ERROR_HINTS` in `email_utils.py` to add more as new error patterns get diagnosed.
 
 > A PARTIAL run is not a silent failure — the email lists every failed extraction in the Errors section. Any rows that did succeed are still in BigQuery. The BigQuery VIEW still runs against whatever data is available. If the VIEW was refreshed while some extractions failed, the Events list includes an explicit warning that some source tables hold stale data.
+
+---
+
+## Failure Retry (6 AM Mountain)
+
+All 4 jobs have a second Cloud Scheduler trigger that fires daily at **6 AM
+`America/Denver`** (handles the MST/MDT switch automatically — no manual
+adjustment needed):
+
+| Retry scheduler | Retries |
+|---|---|
+| `plex-daily-sync-retry` | `plex-etl` (sales, prod) |
+| `plex-daily-sync-test-retry` | `plex-etl-test` (sales, test) |
+| `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
+| `plex-work-orders-sync-test-retry` | `plex-etl-work-orders-test` (test) |
+
+**How it decides whether to actually do anything:** the retry trigger
+re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution
+env override — the job definition itself is untouched). At startup, the job
+checks a `job_run_log` BigQuery table (in the same dataset it already
+writes to) for the most recent **scheduled**-mode run logged today:
+
+- **FAILED** → proceeds with a full real run, same as any other execution
+- **SUCCESS or PARTIAL** → already covered for today; the job exits cleanly
+  without doing any real work and **without sending an email** (a silent
+  no-op, to avoid inbox noise from a trigger that had nothing to do)
+
+Only a genuine **FAILED** run triggers a retry — **PARTIAL** does not,
+since that's a different severity tier (some data got through) and isn't
+treated as "the run needs to happen again."
+
+**Checking what happened:**
+```sql
+SELECT job_name, run_date, status, run_mode, logged_at
+FROM `voxdatalake.PlexProd.job_run_log`   -- or PlexTest for the test jobs
+ORDER BY logged_at DESC
+LIMIT 20
+```
+`job_name` is the Cloud Run job name (`plex-etl`, `plex-etl-test`, etc. —
+from the `CLOUD_RUN_JOB` env var Cloud Run sets automatically). `run_mode`
+is `scheduled` or `retry`; `status` is `success`/`partial`/`failed`, or
+`skipped` for a retry that no-op'd.
+
+**Pausing a retry temporarily** (e.g. during planned maintenance), without
+touching Terraform:
+```bash
+gcloud scheduler jobs pause plex-daily-sync-retry --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-daily-sync-retry --location=us-central1 --project=voxdatalake
+```
+
+**Changing the retry time/timezone:** edit `retry_scheduler_cron` /
+`retry_time_zone` in `terraform.tfvars` (defaults: `"0 6 * * *"` /
+`"America/Denver"`) — applies to all 4 jobs at once — then
+`terraform apply`.
 
 ---
 

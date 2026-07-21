@@ -98,6 +98,12 @@ graph LR
     GCS -->|"test/sales_orders.yaml"| TJ
 ```
 
+> **Failure retry:** all 4 jobs (sales + work orders, prod + test) also have
+> a second scheduler firing daily at **6 AM `America/Denver`** that retries
+> the same job if today's scheduled run genuinely FAILED (not PARTIAL). See
+> [docs/OPERATIONS.md → Failure Retry](docs/OPERATIONS.md#failure-retry-6-am-mountain)
+> for how it works and how to check `job_run_log`.
+
 > **Both environments active.** Test (`plex-etl-test` → `vox.test.odbc.plex.com` → `PlexTest`) is validated with live data. Prod (`plex-etl` → `vox.odbc.plex.com` → `PlexProd`) is ready — trigger `plex-etl` for the first production run.
 
 ## Active Reports

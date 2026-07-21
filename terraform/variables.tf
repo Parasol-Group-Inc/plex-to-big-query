@@ -228,3 +228,17 @@ variable "report_config_gcs_path_test" {
   description = "GCS URI of the report config YAML for the test Cloud Run job (gs://bucket/path)"
   default     = ""
 }
+
+# ── Failure retry (all 4 jobs) ─────────────────────────────────────────────────
+
+variable "retry_scheduler_cron" {
+  type        = string
+  description = "Cron schedule for the failure-retry trigger — fires daily regardless; the job itself no-ops if today's scheduled run already succeeded/partial"
+  default     = "0 6 * * *"
+}
+
+variable "retry_time_zone" {
+  type        = string
+  description = "Time zone for the retry scheduler (IANA name — Cloud Scheduler handles DST automatically)"
+  default     = "America/Denver"
+}

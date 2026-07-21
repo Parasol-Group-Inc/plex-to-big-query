@@ -2,6 +2,7 @@ import os
 import re
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 import pyodbc
 import pandas as pd
@@ -42,6 +43,13 @@ SECRET_TOKEN     = os.environ.get("SECRET_ACCESS_TOKEN",  "plex-access-token")
 # When set, the job runs all extractions defined in the YAML instead of the
 # single-view PLEX_VIEW env var.  Leave empty for legacy single-view mode.
 REPORT_CONFIG_GCS_PATH = os.environ.get("REPORT_CONFIG_GCS_PATH", "")
+
+# "scheduled" (default, always runs) or "retry" — set by the 6 AM Mountain
+# retry Cloud Scheduler trigger. In retry mode the job first checks whether
+# today's scheduled run already succeeded/partial; if so it no-ops instead
+# of running the full ETL again. See docs/OPERATIONS.md for the design.
+RUN_MODE          = os.environ.get("RUN_MODE", "scheduled")
+JOB_RUN_LOG_TABLE = os.environ.get("JOB_RUN_LOG_TABLE", "job_run_log")
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -182,6 +190,60 @@ def ensure_metadata_table(bq: bigquery.Client):
         # permission denied) must propagate with their original message.
         table = bigquery.Table(table_ref, schema=schema)
         bq.create_table(table)
+
+
+def ensure_job_run_log_table(bq: bigquery.Client):
+    """
+    Create the job run log table if it doesn't exist yet. One row per
+    completed run (scheduled or retry) — lets a retry trigger check whether
+    today's scheduled run already succeeded/partial before doing real work.
+    """
+    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
+    schema = [
+        bigquery.SchemaField("job_name",  "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("run_date",  "DATE",      mode="REQUIRED"),
+        bigquery.SchemaField("status",    "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("run_mode",  "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("logged_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    try:
+        bq.get_table(table_ref)
+    except gcp_exceptions.NotFound:
+        bq.create_table(bigquery.Table(table_ref, schema=schema))
+
+
+def get_todays_run_status(bq: bigquery.Client, job_name: str) -> Optional[str]:
+    """Return the most recent SCHEDULED run's status logged today, or None."""
+    query = f"""
+        SELECT status
+        FROM `{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`
+        WHERE job_name = @job_name
+          AND run_date = CURRENT_DATE()
+          AND run_mode = 'scheduled'
+        ORDER BY logged_at DESC
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("job_name", "STRING", job_name)]
+    )
+    rows = list(bq.query(query, job_config=job_config).result())
+    return rows[0].status if rows else None
+
+
+def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str):
+    """Record this run's outcome so a future retry trigger can check it."""
+    now = datetime.now(timezone.utc)
+    row = [{
+        "job_name":  job_name,
+        "run_date":  now.date().isoformat(),
+        "status":    status,
+        "run_mode":  run_mode,
+        "logged_at": now.isoformat(),
+    }]
+    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
+    errors = bq.insert_rows_json(table_ref, row)
+    if errors:
+        log.warning(f"Failed to log job run status: {errors}")
 
 
 def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
@@ -375,10 +437,45 @@ def main():
         try:
             bq = bigquery.Client(project=GCP_PROJECT)
             ensure_metadata_table(bq)
+            ensure_job_run_log_table(bq)
             events.append("Initialized BigQuery and metadata table")
         except Exception as exc:
             log.exception("Failed to initialize BigQuery client or metadata table.")
             raise RuntimeError(f"BigQuery initialization failed: {exc}") from exc
+
+        # Retry trigger (6 AM Mountain): only do real work if today's
+        # scheduled run actually failed. A success/partial already covers
+        # today, so a bare retry fire is a clean no-op, not a failure.
+        job_identity = os.environ.get("CLOUD_RUN_JOB") or report_name
+        if RUN_MODE == "retry":
+            todays_status = get_todays_run_status(bq, job_identity)
+            if todays_status in ("success", "partial"):
+                log.info(
+                    f"Retry trigger fired for {job_identity}, but today's "
+                    f"scheduled run already completed with status={todays_status} "
+                    f"— skipping."
+                )
+                return {
+                    "rows_fetched":           0,
+                    "rows_written":           0,
+                    "events":                 [f"Retry skipped — today's scheduled run already {todays_status}"],
+                    "partial_errors":         [],
+                    "gcp_project":            GCP_PROJECT,
+                    "bq_dataset":             BQ_DATASET,
+                    "bq_table":               email_bq_table,
+                    "report_name":            report_name,
+                    "plex_view":              email_plex_view,
+                    "plex_filter":            email_plex_filter,
+                    "plex_host":              PLEX_HOST,
+                    "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
+                    "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
+                    "job_identity":           job_identity,
+                    "skipped":                True,
+                }
+            log.info(
+                f"Retry trigger fired for {job_identity} (today's status: "
+                f"{todays_status or 'not logged'}) — proceeding with a full run."
+            )
     else:
         bq = None
         log.info("LOCAL MODE — skipping BigQuery, full extract.")
@@ -603,8 +700,18 @@ def run_and_report():
         "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
+    job_identity = os.environ.get("CLOUD_RUN_JOB") or REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+
     try:
         result = main()
+        if result.get("skipped"):
+            log.info(f"Run skipped (retry no-op) for {job_identity}.")
+            if OUTPUT_MODE == "bigquery":
+                try:
+                    log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE)
+                except Exception:
+                    log.exception("Failed to log skipped run status.")
+            return result
         partial_errors = result.get("partial_errors", [])
         if partial_errors:
             status = "partial"
@@ -617,6 +724,12 @@ def run_and_report():
         error = exc
         status = "failed"
         errors = [str(exc)]
+
+    if OUTPUT_MODE == "bigquery":
+        try:
+            log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE)
+        except Exception:
+            log.exception("Failed to log job run status.")
 
     end_time = datetime.now(timezone.utc)
     report = {

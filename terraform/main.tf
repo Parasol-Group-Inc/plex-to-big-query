@@ -93,8 +93,8 @@ resource "google_storage_bucket_iam_member" "etl_config_reader" {
 
 # Upload initial report config files (Terraform manages the initial copy only).
 # After initial setup, edit files directly in GCS Console or via:
-#   gsutil cp reports/sales_orders.yaml gs://${var.report_configs_bucket}/reports/
-#   gsutil cp reports/sql/sales_orders_view.sql gs://${var.report_configs_bucket}/sql/
+#   gcloud storage cp reports/sales_orders.yaml gs://${var.report_configs_bucket}/reports/
+#   gcloud storage cp reports/sql/sales_orders_view.sql gs://${var.report_configs_bucket}/sql/
 
 resource "google_storage_bucket_object" "sales_orders_config_prod" {
   name         = "reports/sales_orders.yaml"
@@ -340,6 +340,33 @@ resource "google_cloud_scheduler_job" "etl" {
   }
 }
 
+# Retries the same job if today's scheduled run failed. Fires every day at
+# the same time regardless — main.py checks job_run_log and no-ops if
+# today's scheduled run already succeeded/partial.
+resource "google_cloud_scheduler_job" "etl_retry" {
+  name        = "${var.scheduler_job}-retry"
+  description = "Retries the sales orders ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
 # ── Test environment ── same image, test Plex host, PlexTest dataset ──────────
 
 resource "google_bigquery_dataset" "plex_test" {
@@ -518,6 +545,30 @@ resource "google_cloud_scheduler_job" "etl_test" {
   }
 }
 
+resource "google_cloud_scheduler_job" "etl_test_retry" {
+  name        = "${var.scheduler_job_test}-retry"
+  description = "Retries the sales orders ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
 # ── Work Orders report — GCS config files ─────────────────────────────────────
 
 resource "google_storage_bucket_object" "work_orders_config_prod" {
@@ -673,6 +724,30 @@ resource "google_cloud_scheduler_job" "etl_work_orders" {
   }
 }
 
+resource "google_cloud_scheduler_job" "etl_work_orders_retry" {
+  name        = "plex-work-orders-sync-retry"
+  description = "Retries the work orders ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
 # ── Work Orders report — test (PlexTest, 5 AM UTC) ───────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_work_orders_test" {
@@ -798,6 +873,30 @@ resource "google_cloud_scheduler_job" "etl_work_orders_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders_test.name}:run"
     body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_work_orders_test_retry" {
+  name        = "plex-work-orders-sync-test-retry"
+  description = "Retries the work orders ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email

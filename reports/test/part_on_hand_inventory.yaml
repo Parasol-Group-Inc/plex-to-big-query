@@ -1,0 +1,21 @@
+report_name: part_on_hand_inventory_test
+description: "Part on-hand inventory (Available Inventory) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/part_on_hand_inventory.yaml.
+
+extractions:
+  - plex_view: Part_v_Container
+    bq_table: raw_Part_v_Container
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Container_Status
+    bq_table: raw_Part_v_Container_Status
+    filter: ""
+    date_col: ""
+
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+
+bq_view:
+  name: part_on_hand_inventory_report
+  sql_file: gs://voxdatalake-report-configs/sql/part_on_hand_inventory_view.sql

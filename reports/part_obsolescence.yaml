@@ -2,8 +2,8 @@ report_name: part_obsolescence
 description: "VOX | Products to be discontinued (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
-# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# DEPLOYED (2026-08-10/11) — plex-etl-part-obsolescence(-test), 8/9 AM UTC.
+# Schema confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
 # docs/NETSUITE_REPORT_BUILD_PLAN.md (#77) for the confirmation log.
 #
 # Simpler than expected: Part_v_Part.Part_Status is an INLINE text column

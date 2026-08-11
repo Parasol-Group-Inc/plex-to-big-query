@@ -2,8 +2,8 @@ report_name: inventory_activity
 description: "Inventory Activity Detail Usage Per Month (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
-# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# DEPLOYED (2026-08-10/11) — plex-etl-inventory-activity(-test), 10/11 AM UTC.
+# Schema confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
 # docs/NETSUITE_REPORT_BUILD_PLAN.md (#29) for the confirmation log.
 #
 # No raw view named "Inventory_Activity" exists (only a GlobalAllow:false

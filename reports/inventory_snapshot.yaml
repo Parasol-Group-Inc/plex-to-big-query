@@ -2,8 +2,8 @@ report_name: inventory_snapshot
 description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ Transaction) (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
-# and join chain CONFIRMED LIVE against vox.test.odbc.plex.com on 2026-08-10 —
+# DEPLOYED (2026-08-10/11) — plex-etl-inventory-snapshot(-test), 12/1 PM UTC.
+# Schema and join chain CONFIRMED LIVE against vox.test.odbc.plex.com on 2026-08-10 —
 # see docs/NETSUITE_REPORT_BUILD_PLAN.md (#15 / #73 / #74) for the full log.
 #
 # bq_view below is a LIST — main.py now supports multiple views built from

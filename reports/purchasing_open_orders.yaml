@@ -2,15 +2,15 @@ report_name: purchasing_open_orders
 description: "Vox | Open Purchase Orders (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
-# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# DEPLOYED (2026-08-10/11) — plex-etl-purchasing-open-orders(-test), 6/7 AM UTC.
+# Schema confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
 # docs/NETSUITE_REPORT_BUILD_PLAN.md (#75) for the confirmation log.
 #
 # This is the supplier-side mirror of reports/sales_orders.yaml: Purchasing_v_*
-# views instead of Sales_v_*. Also worth checking whether the already-enabled
-# "Purchase Order Releases Due" report (which explicitly replaces "Open
-# Purchase Orders" per its own description in mapping/enabled-reports.md)
-# already covers this need before deploying.
+# views instead of Sales_v_*. An already-enabled Plex UI report ("Purchase
+# Order Releases Due") covers similar ground, but per [[feedback-plex-ui-
+# reports-reference-only]] that's never a reason to skip building this —
+# Plex UI reports aren't a queryable data source for this pipeline.
 #
 # HOW TO EDIT THIS REPORT (once deployed, no deployment required):
 #   Add a view    → add a new entry to extractions[], save this file to GCS

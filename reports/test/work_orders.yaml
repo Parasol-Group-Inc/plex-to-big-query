@@ -76,3 +76,5 @@ bq_view:
     sql_file: gs://voxdatalake-report-configs/sql/work_orders_view.sql
   - name: mfg_job_schedule_report
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_view.sql
+  - name: labeling_open_work_orders_report
+    sql_file: gs://voxdatalake-report-configs/sql/labeling_open_work_orders_view.sql

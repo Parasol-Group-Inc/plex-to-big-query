@@ -100,11 +100,14 @@ extractions:
 # Do not add Part_v_Part here — two WRITE_TRUNCATEs on the same table
 # from different pipelines risk silently emptying it on a 0-row Plex response.
 
-# Two BigQuery reporting views over the same extractions above:
-#   work_orders_report      — original, unchanged (job/op/workcenter/hours)
-#   mfg_job_schedule_report — added 2026-08-11: status text, operator name,
-#                             lot, QC checksheet status, equipment, room.
-#                             See docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md.
+# Three BigQuery reporting views over the same extractions above:
+#   work_orders_report              — original, unchanged (job/op/workcenter/hours)
+#   mfg_job_schedule_report         — added 2026-08-11: status text, operator
+#                                     name, lot, QC checksheet status, equipment,
+#                                     room. See docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md.
+#   labeling_open_work_orders_report — added 2026-08-11: Plex-native rebuild of
+#                                     NetSuite's "Labeling | Open WO: Results"
+#                                     saved search. See reports-list/production.md.
 # The SQL files are loaded from GCS at runtime so they can be edited
 # independently without touching this YAML. {gcp_project} and {dataset} in
 # the SQL are replaced at runtime with the GCP_PROJECT and BQ_DATASET env vars.
@@ -113,3 +116,5 @@ bq_view:
     sql_file: gs://voxdatalake-report-configs/sql/work_orders_view.sql
   - name: mfg_job_schedule_report
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_view.sql
+  - name: labeling_open_work_orders_report
+    sql_file: gs://voxdatalake-report-configs/sql/labeling_open_work_orders_view.sql

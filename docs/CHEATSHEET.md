@@ -208,11 +208,15 @@ plex-to-big-query/
 │   ├── plex_catalog_index.md   ← Master index — start here
 │   └── plex_*_views_catalog.md ← One per Plex database (Sales, Part, ...)
 │
-└── mapping/                    ← Plex UI report catalog + data-sources catalog (reference data)
-    ├── available-reports.*     ← All 1,153 Plex UI reports (md/csv/json)
-    ├── enabled-reports.*       ← 152 reports enabled for this tenant
-    ├── data-sources*.*         ← 14,350 CustomerDataSourceManager stored procs (+ accessible shortlist)
-    └── netsuite-report-mapping.md ← NetSuite saved-search → Plex report mapping (first pass)
+├── mapping/                     ← Plex UI report catalog + data-sources catalog (reference data)
+│   ├── available-reports.*     ← All 1,153 Plex UI reports (md/csv/json)
+│   ├── enabled-reports.*       ← 152 reports enabled for this tenant
+│   ├── data-sources*.*         ← 14,350 CustomerDataSourceManager stored procs (+ accessible shortlist)
+│   └── netsuite-report-mapping.md ← NetSuite saved-search → Plex report mapping (first pass)
+│
+└── spreadsheets/                ← Human-maintained Google Sheets → BigQuery report catalog
+    ├── SPREADSHEET_CATALOG.md   ← Hub — start here
+    └── *.md                     ← One per spreadsheet: findings, gaps, Plex references
 ```
 
 ---

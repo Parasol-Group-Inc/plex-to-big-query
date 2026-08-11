@@ -214,9 +214,13 @@ plex-to-big-query/
 │   ├── data-sources*.*         ← 14,350 CustomerDataSourceManager stored procs (+ accessible shortlist)
 │   └── netsuite-report-mapping.md ← NetSuite saved-search → Plex report mapping (first pass)
 │
-└── spreadsheets/                ← Human-maintained Google Sheets → BigQuery report catalog
-    ├── SPREADSHEET_CATALOG.md   ← Hub — start here
-    └── *.md                     ← One per spreadsheet: findings, gaps, Plex references
+├── spreadsheets/                 ← Human-maintained Google Sheets → BigQuery report catalog
+│   ├── SPREADSHEET_CATALOG.md   ← Hub — start here
+│   └── *.md                     ← One per spreadsheet: findings, gaps, Plex references
+│
+└── reports-list/                 ← Company-wide report inventory (all depts, all source systems)
+    ├── REPORTS_LIST_CATALOG.md  ← Hub — start here
+    └── *.md                      ← One per department tab: Production, Quality, Supply Chain, Sales, Warehouse, NS Reference
 ```
 
 ---

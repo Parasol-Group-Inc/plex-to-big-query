@@ -4,19 +4,40 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report / Scheduling
 - **Departments:** Production, Planning
-- **Status:** ⏳ Pending — awaiting sheet content
-- **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — a lead, not a confirmed source
+- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weakest-but-most-plausible fit of the 4 Daily Reports, see verdict below**
 
-## What's needed to start
+## What it is
 
-A CSV export or full column list of the actual sheet (same as was done for
-[MFG Job Schedule](mfg_job_schedule.md)) — a name and category aren't
-enough to map columns to Plex views. Once available, follow the working
-pattern in [SPREADSHEET_CATALOG.md](SPREADSHEET_CATALOG.md#working-pattern-established-on-mfg-job-schedule).
+`Blending Daily Report - Template.csv`: a grid of dates × stations
+(Pre-Weigh 1/2/3, Blending 2/3/4 (1500L)/5). Each station block has 2
+Operator slots, Start Up Time, Planned projected, Actual, Additional Notes.
+Bottom rollup: Daily Weigh-Out Goal/Total, Daily Blending Goal/Total,
+Actual vs Projected %, Call Outs, OFF, per-station Capacity %, and a named
+employee roster with call-out tracking.
 
-Note: this sheet's category includes "Scheduling" (unlike the other two
-Daily Reports) — it may also overlap with `mfg_job_schedule_report`'s
-blending workcenter/operation data once real workcenter naming is
-confirmed (see [mfg_job_schedule.md](mfg_job_schedule.md)'s
-Blending-vs-Encapsulation gap note). Worth checking for overlap before
-building a separate pipeline.
+Confirms real workcenter naming ("Blending 2", "Blending 4 (1500L)") that
+matches [mfg_job_schedule.md](mfg_job_schedule.md)'s live-confirmed
+`Workcenter.Name` finding (`'Blend 2'`, `Workcenter_Type = 'Batch'`) — same
+naming family, good independent confirmation.
+
+## Production Yield fit — weakest-but-most-plausible
+
+The only one of the 4 Daily Reports with a genuine weighing workflow
+("Pre-Weigh" stations, "Daily Weigh-Out Goal/Total") — Production Yield is
+also weight-centric, so this is the closest conceptual overlap of the four.
+Still unconfirmed, and still missing the operator/attendance half entirely.
+See [plex_production_yield_reference.md](plex_production_yield_reference.md)
+for the full cross-sheet verdict.
+
+## Better lead (unconfirmed)
+
+`Part_v_Job_Op`/`Part_v_Cell_Production.Quantity` aggregated by date +
+workcenter, same as the other 3 Daily Reports — plus, given the confirmed
+"Blend N" workcenter naming, this is the sheet where a
+Blending-vs-Encapsulation workcenter classification (flagged as a gap in
+[mfg_job_schedule.md](mfg_job_schedule.md)) would matter most.
+
+## What's needed next
+
+Real (non-template) data to confirm any correlation before building.

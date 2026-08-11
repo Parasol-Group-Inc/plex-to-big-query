@@ -14,15 +14,22 @@ This is a different catalog from the other two in this repo:
 - `spreadsheets/` (this folder) — external, human-maintained Google Sheets
   that this project is turning into (or cross-referencing against) BigQuery
   reports
+- [`reports-list/`](../reports-list/) — a wider, company-wide inventory of
+  *every* report across departments regardless of source system (NetSuite,
+  DataNinja, Monday.com, Excel, Google Sheets). Most rows there are out of
+  scope for this pipeline; it's where new candidates for this folder get
+  surfaced from
 
 ## Catalog
 
 | Spreadsheet | Type | Category | Departments | Plex Reference | Status | Detail Doc |
 |---|---|---|---|---|---|---|
 | [MFG Job Schedule](https://docs.google.com/spreadsheets/d/1xqccqPwPA37291vJOpxNZhBGiyy_xbp4TPoW0UMyozA/edit) | Google Sheet | Product Release Tracking / Forecasting | Production, Supply Chain, Sales, Quality | — (built from raw ODBC views directly) | ✅ Built | [mfg_job_schedule.md](mfg_job_schedule.md) |
-| [Packaging Daily Report](https://docs.google.com/spreadsheets/d/14Qazm-rH26O66BLcnVZi5GahsPQ-TL5P2WLlSG6eFJc/edit) | Google Sheet | Daily Numbers Report | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) | ⏳ Pending — awaiting sheet content | [packaging_daily_report.md](packaging_daily_report.md) |
-| [Labeling Daily Report](https://docs.google.com/spreadsheets/d/1gVZe3_8wbexYIiQNtYdtCCvsJqUgj7zXrdTzVXl8XLI/edit) | Google Sheet | Daily Numbers Report | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) | ⏳ Pending — awaiting sheet content | [labeling_daily_report.md](labeling_daily_report.md) |
-| [Blending Daily Report](https://docs.google.com/spreadsheets/d/1NyJOe2PUyNElJkHz1kYknGGQC8fKaFd9l32nPFJJjNQ/edit) | Google Sheet | Daily Numbers Report / Scheduling | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) | ⏳ Pending — awaiting sheet content | [blending_daily_report.md](blending_daily_report.md) |
+| [Bottling Job Schedule](https://docs.google.com/spreadsheets/d/1m6ZmBMBCQHTsc4S7W-FicIaE63AOfxvobbnEDRwmqAk/edit) | Google Sheet | Scheduling bottling jobs | Production, Planning, Sales | — (same views as MFG Job Schedule) | 🔍 Mapped | [bottling_job_schedule.md](bottling_job_schedule.md) |
+| [Packaging Daily Report](https://docs.google.com/spreadsheets/d/14Qazm-rH26O66BLcnVZi5GahsPQ-TL5P2WLlSG6eFJc/edit) | Google Sheet | Daily Numbers Report | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) — **weak fit** | 🔍 Mapped | [packaging_daily_report.md](packaging_daily_report.md) |
+| [Labeling Daily Report](https://docs.google.com/spreadsheets/d/1gVZe3_8wbexYIiQNtYdtCCvsJqUgj7zXrdTzVXl8XLI/edit) | Google Sheet | Daily Numbers Report | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) — **weak fit** | 🔍 Mapped | [labeling_daily_report.md](labeling_daily_report.md) |
+| [Blending Daily Report](https://docs.google.com/spreadsheets/d/1NyJOe2PUyNElJkHz1kYknGGQC8fKaFd9l32nPFJJjNQ/edit) | Google Sheet | Daily Numbers Report / Scheduling | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) — **weakest-but-most-plausible** | 🔍 Mapped | [blending_daily_report.md](blending_daily_report.md) |
+| [Encap Daily Report](https://docs.google.com/spreadsheets/d/105iiQ_fFqNRg_6hpP0nI5CreuKeKL35bk2piIO2Gd5c/edit) | Google Sheet | Encap Scheduling / Planning | Production, Planning | Production Yield (Inventory Tracking, ActionKey 7346) — **worst fit** | 🔍 Mapped | [encap_daily_report.md](encap_daily_report.md) |
 
 ## Status legend
 

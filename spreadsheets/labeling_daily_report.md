@@ -4,12 +4,36 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** ⏳ Pending — awaiting sheet content
-- **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — a lead, not a confirmed source
+- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
-## What's needed to start
+## What it is
 
-A CSV export or full column list of the actual sheet (same as was done for
-[MFG Job Schedule](mfg_job_schedule.md)) — a name and category aren't
-enough to map columns to Plex views. Once available, follow the working
-pattern in [SPREADSHEET_CATALOG.md](SPREADSHEET_CATALOG.md#working-pattern-established-on-mfg-job-schedule).
+`Labeling Daily Report - Template.csv`: a grid of dates × lines (Line 1–6,
+"Line 3 Bottling", "Line 4 Bottling", "Blank & Tables"). Each line block has
+Front/End counters, Start Up Time, three shift-checkpoint timestamps
+(6:30 AM / 8:45 AM / 12:15 PM), Planned projected, Actual, Additional Notes.
+Bottom rollup: Daily Projection/Total, Actual vs Projected %, Call Outs,
+OFF, # Of Orders Complete, Cap/Day.
+
+Same daily goal-vs-actual-per-line shape as
+[Packaging Daily Report](packaging_daily_report.md), with shift checkpoints
+instead of a single Start Up Time.
+
+## Production Yield fit — weak
+
+Same verdict as Packaging — see
+[plex_production_yield_reference.md](plex_production_yield_reference.md).
+No operator/shift-checkpoint concept on Production Yield; it's a
+per-container weighing report, not a per-line labeling-count log.
+
+## Better lead (unconfirmed)
+
+Same as Packaging: `Part_v_Job_Op`/`Part_v_Cell_Production.Quantity`
+aggregated by date + workcenter is a more plausible source for "Actual"
+than Production Yield. The three shift-checkpoint timestamps and "# Of
+Orders Complete" have no obvious Plex analog identified yet.
+
+## What's needed next
+
+Real (non-template) data to confirm any correlation before building.

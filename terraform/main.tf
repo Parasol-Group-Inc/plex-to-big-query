@@ -2279,6 +2279,16 @@ resource "google_storage_bucket_object" "mfg_job_schedule_view_sql" {
   content_type = "text/plain"
 }
 
+# labeling_open_work_orders_report SQL — third bq_view on the same
+# plex-etl-work-orders(-test) job, Plex-native rebuild of NetSuite's
+# "Labeling | Open WO: Results". See reports-list/production.md.
+resource "google_storage_bucket_object" "labeling_open_work_orders_view_sql" {
+  name         = "sql/labeling_open_work_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/labeling_open_work_orders_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Quality Non-Conformance report — GCS config files ────────────────────────
 
 resource "google_storage_bucket_object" "quality_nonconformance_config_prod" {

@@ -41,6 +41,15 @@
 --     part/operation-level QC, not specifically "raw material received" QC.
 --   Maintenance_v_Equipment  — Workcenter_Key -> asset ID for that operation
 --   Common_v_Building        — Job.Building_Key -> room/building
+--   Part_v_Job_Type          — Job.Job_Type_Key -> text (Stock/Service/
+--     Pre-Production/Rework). Candidate Stock-vs-Custom signal for the
+--     manually maintained "Custom or Stock" column seen on the FG Testing
+--     Pending tab — NOT asserted as the definitive mapping, just exposed
+--     as-is. Unconfirmed against real data (0 rows on test tenant).
+--   Part_v_Job_Distribution  — Job_Key -> Release_Key. A job with a
+--     distribution row is plausibly fulfilling a specific customer order;
+--     exposed as a row count + first Release_Key, not collapsed into a
+--     boolean, since the concept is unconfirmed against real data.
 
 WITH
 
@@ -58,6 +67,18 @@ latest_checksheet AS (
       ORDER BY SAFE_CAST(CAST(Inspection_Date AS STRING) AS TIMESTAMP) DESC
     ) AS rn
   FROM `{gcp_project}.{dataset}.raw_Quality_v_Checksheet`
+),
+
+-- One row per job — Job_Distribution can have multiple rows per job (e.g.
+-- fulfilling several releases), so this collapses to a count + one sample
+-- Release_Key rather than fanning out the main query's grain.
+job_distribution_summary AS (
+  SELECT
+    SAFE_CAST(Job_Key AS INT64) AS Job_Key,
+    COUNT(*)                    AS distribution_count,
+    MIN(Release_Key)            AS sample_release_key
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Job_Distribution`
+  GROUP BY SAFE_CAST(Job_Key AS INT64)
 )
 
 SELECT
@@ -112,7 +133,12 @@ SELECT
   cs_status.Checksheet_Status                     AS checksheet_status,
   SAFE_CAST(cs_status.Approved AS INT64)          AS checksheet_is_approved,
   SAFE_CAST(cs_status.Rejected AS INT64)          AS checksheet_is_rejected,
-  SAFE_CAST(lc.Out_Of_Spec AS INT64)              AS checksheet_out_of_spec
+  SAFE_CAST(lc.Out_Of_Spec AS INT64)              AS checksheet_out_of_spec,
+
+  -- ── Stock-vs-Custom leads (unconfirmed — see header comment) ────────────────
+  jt.Job_Type                                     AS job_type,
+  jds.distribution_count                          AS job_distribution_count,
+  jds.sample_release_key                          AS job_distribution_sample_release_key
 
 FROM `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
 
@@ -157,3 +183,12 @@ LEFT JOIN latest_checksheet lc
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Quality_v_Checksheet_Status` cs_status
   ON SAFE_CAST(lc.Checksheet_Status_Key AS INT64) = cs_status.Checksheet_Status_Key
+
+-- SAFE_CAST both sides: raw_Part_v_Job_Type/raw_Part_v_Job_Distribution are
+-- both empty on this tenant, same all-STRING-schema situation as the
+-- Lot/Lot_Shelf_Life/Equipment joins above.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Type` jt
+  ON SAFE_CAST(j.Job_Type_Key AS INT64) = SAFE_CAST(jt.Job_Type_Key AS INT64)
+
+LEFT JOIN job_distribution_summary jds
+  ON SAFE_CAST(j.Job_Key AS INT64) = jds.Job_Key

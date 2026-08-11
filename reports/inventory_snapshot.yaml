@@ -1,0 +1,72 @@
+report_name: inventory_snapshot
+description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ Transaction) (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
+# and join chain CONFIRMED LIVE against vox.test.odbc.plex.com on 2026-08-10 —
+# see docs/NETSUITE_REPORT_BUILD_PLAN.md (#15 / #73 / #74) for the full log.
+#
+# bq_view below is a LIST — main.py now supports multiple views built from
+# one extraction run (added specifically for this report, see main.py's
+# bq_view_configs/validate_bq_view). Both views read the same three raw
+# tables extracted once below; each is created independently, so one
+# view failing doesn't block the other.
+#
+# IMPORTANT CAVEAT: this is a STANDARD-COST SNAPSHOT (per-part cost component
+# values at a point in time, from Plex's Advanced Standard Costing engine —
+# matches "Inventory Snapshots"'s actual module placement in Plex), NOT a
+# physical on-hand quantity count. If the NetSuite report's real intent is
+# "quantity on hand, valued", this is the closest Plex mechanism found but
+# may not be a full semantic match — confirm with the report requester what
+# "Current Inventory Snapshot" needs to actually show.
+#
+# JOIN CHAIN (all confirmed live 2026-08-10):
+#   Part_v_Snapshot                          → header: Snapshot_Key, Snapshot_Date, Cost_Model_Key
+#   Part_v_Snapshot_Cost_Sub_Type_Breakdown  → pointer: (Snapshot_Key, Change_Key) — NO inline values
+#   Part_v_Cost_Sub_Type_Breakdown_History   → resolves Change_Key to: Part_Key, Cost_Sub_Type_Key, Cost, Change_Date
+# Verified this join returns real rows (10/10 test rows had matching Part_Key/Cost).
+#
+# Two views come out of this one extraction run:
+#   inventory_snapshot_report            — detail, one row per (snapshot, part,
+#                                           cost sub-type) — covers #15 and #74
+#                                           "... Summary Transaction"
+#   inventory_valuation_summary_report   — SUM(Cost) per (snapshot, part) — covers #73
+#
+# UNRESOLVED: Cost_Sub_Type_Key (13687/13688/13690/...) has no confirmed
+# label lookup view yet (Part_v_Cost_Sub_Type doesn't exist under that name) —
+# exposed as a raw key for now.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/inventory_snapshot_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  # Snapshot header — one row per costing snapshot event (roughly hourly + daily)
+  - plex_view: Part_v_Snapshot
+    bq_table: raw_Part_v_Snapshot
+    filter: ""
+    date_col: Snapshot_Date
+
+  # Pointer table — (Snapshot_Key, Change_Key), no inline values
+  - plex_view: Part_v_Snapshot_Cost_Sub_Type_Breakdown
+    bq_table: raw_Part_v_Snapshot_Cost_Sub_Type_Breakdown
+    filter: ""
+    date_col: ""
+
+  # Resolves Change_Key to real Part_Key / Cost_Sub_Type_Key / Cost / Change_Date
+  - plex_view: Part_v_Cost_Sub_Type_Breakdown_History
+    bq_table: raw_Part_v_Cost_Sub_Type_Breakdown_History
+    filter: ""
+    date_col: Change_Date
+
+# Part_v_Part is intentionally NOT extracted here — it's owned by the
+# sales_orders pipeline. Reuse raw_Part_v_Part in the JOIN view instead of
+# re-extracting (same shared-table rule as work_orders.yaml).
+
+bq_view:
+  - name: inventory_snapshot_report
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_snapshot_view.sql
+  - name: inventory_valuation_summary_report
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_summary_view.sql

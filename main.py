@@ -144,6 +144,46 @@ def validate_extraction(extraction: dict) -> str:
     return ""
 
 
+def bq_view_configs(config: dict) -> list:
+    """
+    Normalize a report's bq_view entry to a list.
+
+    Most reports define a single mapping (`bq_view: {name: ..., sql_file: ...}`).
+    A report may also define a list of mappings when it needs to create more
+    than one view from the same extraction run — e.g. a detail view and a
+    separate aggregated rollup over the same raw tables. Missing entirely
+    returns an empty list rather than erroring, since extractions-only
+    reports (no view) are valid.
+    """
+    raw = config.get("bq_view")
+    if raw is None:
+        return []
+    return raw if isinstance(raw, list) else [raw]
+
+
+def validate_bq_view(view_cfg) -> str:
+    """
+    Validate one bq_view entry before its name is interpolated into DDL and
+    its SQL is loaded. Returns an error message, or "" if valid.
+
+    Same untrusted-YAML-boundary rationale as validate_extraction: the config
+    lives in GCS and is editable outside code review, and `name` is
+    interpolated directly into `CREATE OR REPLACE VIEW` DDL.
+    """
+    if not isinstance(view_cfg, dict):
+        return f"bq_view entry is not a mapping: {view_cfg!r}"
+    name     = view_cfg.get("name", "")
+    sql      = view_cfg.get("sql", "")
+    sql_file = view_cfg.get("sql_file", "")
+    if not name:
+        return f"bq_view entry missing required key 'name': {view_cfg}"
+    if not _PLEX_IDENTIFIER_RE.match(name):
+        return f"bq_view name '{name}' is not a valid identifier (letters/digits/_ only)"
+    if not sql and not sql_file:
+        return f"bq_view '{name}' has neither 'sql' nor 'sql_file'"
+    return ""
+
+
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
 def update_last_sync(
     bq: bigquery.Client,
@@ -489,7 +529,8 @@ def main():
             extractions = config.get("extractions", [])
             email_plex_view   = report_name
             email_plex_filter = f"{len(extractions)} extractions — see Events"
-            email_bq_table    = config.get("bq_view", {}).get("name", report_name)
+            view_names        = [v.get("name", "?") for v in bq_view_configs(config) if isinstance(v, dict)]
+            email_bq_table    = ", ".join(view_names) if view_names else report_name
             events.append(f"Loaded report config: {report_name} ({len(extractions)} extractions)")
         except Exception as exc:
             log.exception("Failed to load report config.")
@@ -574,37 +615,52 @@ def main():
                 "check that Plex is returning data for this environment"
             )
 
-        # Create/replace the BigQuery JOIN view if defined in config
-        if OUTPUT_MODE == "bigquery" and "bq_view" in config:
-            view_cfg = config["bq_view"]
-            view_sql = view_cfg.get("sql", "")
-            if not view_sql and "sql_file" in view_cfg:
-                try:
-                    raw_sql  = load_gcs_text(view_cfg["sql_file"])
-                    view_sql = raw_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
-                except Exception as exc:
-                    log.exception(f"Failed to load view SQL from {view_cfg['sql_file']}: {exc}")
-                    events.append(f"ERROR: Could not load view SQL: {exc}")
-                    partial_errors.append(f"view SQL load: {exc}")
-            elif view_sql:
-                view_sql = view_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
+        # Create/replace the BigQuery JOIN view(s) if defined in config.
+        # A report may define one view (the common case) or a list of views
+        # built from the same extracted raw tables (see bq_view_configs).
+        # Each view is created independently — one bad/failing view must not
+        # block the others from applying.
+        if OUTPUT_MODE == "bigquery":
+            views_applied = 0
+            for view_cfg in bq_view_configs(config):
+                problem = validate_bq_view(view_cfg)
+                if problem:
+                    log.error(f"Skipping invalid bq_view entry: {problem}")
+                    events.append(f"ERROR: invalid bq_view config skipped: {problem}")
+                    partial_errors.append(f"bq_view config: {problem}")
+                    continue
 
-            if view_sql:
+                view_name = view_cfg["name"]
+                view_sql  = view_cfg.get("sql", "")
+                if not view_sql and view_cfg.get("sql_file"):
+                    try:
+                        raw_sql  = load_gcs_text(view_cfg["sql_file"])
+                        view_sql = raw_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
+                    except Exception as exc:
+                        log.exception(f"Failed to load view SQL for {view_name} from {view_cfg['sql_file']}: {exc}")
+                        events.append(f"ERROR: Could not load view SQL for {view_name}: {exc}")
+                        partial_errors.append(f"view SQL load ({view_name}): {exc}")
+                        continue
+                elif view_sql:
+                    view_sql = view_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
+
                 try:
-                    create_or_replace_bq_view(bq, BQ_DATASET, view_cfg["name"], view_sql)
-                    events.append(f"Applied BigQuery view {BQ_DATASET}.{view_cfg['name']}")
-                    if partial_errors:
-                        # The view SQL was refreshed, but one or more source
-                        # tables failed to update — flag it so the email
-                        # doesn't read as a clean run.
-                        events.append(
-                            f"WARNING: view applied despite {len(partial_errors)} "
-                            f"extraction error(s) — some source tables hold stale data"
-                        )
+                    create_or_replace_bq_view(bq, BQ_DATASET, view_name, view_sql)
+                    events.append(f"Applied BigQuery view {BQ_DATASET}.{view_name}")
+                    views_applied += 1
                 except Exception as exc:
-                    log.exception(f"Failed to create/update BigQuery view: {exc}")
-                    events.append(f"ERROR: BigQuery view update failed: {exc}")
-                    partial_errors.append(f"view {view_cfg.get('name', '?')}: {exc}")
+                    log.exception(f"Failed to create/update BigQuery view {view_name}: {exc}")
+                    events.append(f"ERROR: BigQuery view update failed for {view_name}: {exc}")
+                    partial_errors.append(f"view {view_name}: {exc}")
+
+            if views_applied and partial_errors:
+                # At least one view was refreshed, but something else in this
+                # run failed (an extraction, another view, or config
+                # validation) — flag it so the email doesn't read as a clean run.
+                events.append(
+                    f"WARNING: {views_applied} view(s) applied despite "
+                    f"{len(partial_errors)} error(s) this run — some tables/views may hold stale data"
+                )
 
     # ── Legacy single-view mode ───────────────────────────────────────────────
     else:

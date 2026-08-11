@@ -1,0 +1,28 @@
+report_name: inventory_snapshot_test
+description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ Transaction) — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/inventory_snapshot.yaml — see that file for
+# the confirmed join chain and the standard-cost-vs-quantity caveat.
+# bq_view is a list — two views built from this one extraction run.
+
+extractions:
+  - plex_view: Part_v_Snapshot
+    bq_table: raw_Part_v_Snapshot
+    filter: ""
+    date_col: Snapshot_Date
+
+  - plex_view: Part_v_Snapshot_Cost_Sub_Type_Breakdown
+    bq_table: raw_Part_v_Snapshot_Cost_Sub_Type_Breakdown
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Cost_Sub_Type_Breakdown_History
+    bq_table: raw_Part_v_Cost_Sub_Type_Breakdown_History
+    filter: ""
+    date_col: Change_Date
+
+bq_view:
+  - name: inventory_snapshot_report
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_snapshot_view.sql
+  - name: inventory_valuation_summary_report
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_summary_view.sql

@@ -23,7 +23,7 @@ gs://voxdatalake-report-configs/
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
-- `bq_view` — optional BigQuery VIEW definition (the SQL that JOINs raw tables into the report)
+- `bq_view` — optional BigQuery VIEW definition (the SQL that JOINs raw tables into the report). Usually a single mapping (`{name, sql_file}`), but can also be a **list** of mappings when one extraction run should produce more than one view (e.g. a detail view and a separate aggregated rollup over the same raw tables — see `reports/inventory_snapshot.yaml`). Each view in the list is validated and created independently; one bad/failing view doesn't block the others.
 
 The Cloud Run Job reads the YAML at startup on every run. The `REPORT_CONFIG_GCS_PATH` env var tells it which YAML to load.
 
@@ -426,10 +426,24 @@ extractions:                  # required — list of Plex views to extract
     filter: string            # optional — SQL WHERE clause, e.g. "WHERE Active = 1"
     date_col: string          # optional — ORDER BY + sync watermark (identifier chars only)
 
-bq_view:                      # optional — BigQuery VIEW to create after extraction
+bq_view:                      # optional — BigQuery VIEW(s) to create after extraction
   name: string                # VIEW name in BigQuery
   sql_file: string            # gs:// URI to a .sql file (uses {gcp_project}/{dataset})
   sql: string                 # inline SQL alternative (same placeholders)
+
+# bq_view may also be a LIST of the above mappings, to create more than one
+# view from a single extraction run (e.g. a detail view + an aggregated
+# rollup over the same raw tables):
+#
+# bq_view:
+#   - name: detail_report
+#     sql_file: gs://.../detail_view.sql
+#   - name: summary_report
+#     sql_file: gs://.../summary_view.sql
+#
+# Each entry is validated and created independently — a bad name or missing
+# sql/sql_file on one entry doesn't block the others. See
+# reports/inventory_snapshot.yaml for a real example.
 ```
 
 ---

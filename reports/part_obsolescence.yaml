@@ -1,0 +1,36 @@
+report_name: part_obsolescence
+description: "VOX | Products to be discontinued (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
+# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# docs/NETSUITE_REPORT_BUILD_PLAN.md (#77) for the confirmation log.
+#
+# Simpler than expected: Part_v_Part.Part_Status is an INLINE text column
+# (e.g. 'Active', 'Obsolete') — there is no Part_Status_Key FK on Part_v_Part
+# at all (confirmed: querying one throws "Column not found"). No join needed;
+# Part_v_Part_Status is only a reference table for valid status values/flags.
+#
+# Confirmed full Part_Status value list (live, Vox tenant): '', 'Initial Setup',
+# 'Pending Approval', 'Active', 'Phase Out', 'Rejected', 'Obsolete'. NetSuite's
+# "Products to be discontinued" plausibly wants 'Phase Out' (soon) in addition
+# to 'Obsolete' (already) — confirm intent with the report requester before
+# finalizing the filter below.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Change filter → update the filter field below, save this file to GCS
+#   Change SQL    → edit reports/sql/part_obsolescence_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  # Part master, filtered to obsolete/phase-out parts only — same view the
+  # sales_orders pipeline extracts in full; this is a separate filtered copy
+  # (not a shared table) since the filter differs from that pipeline's needs.
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part_Obsolescence
+    filter: "WHERE Part_Status IN ('Obsolete', 'Phase Out')"
+    date_col: ""
+
+bq_view:
+  name: part_obsolescence_report
+  sql_file: gs://voxdatalake-report-configs/sql/part_obsolescence_view.sql

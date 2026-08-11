@@ -131,8 +131,8 @@ resource "google_artifact_registry_repository" "etl" {
 }
 
 resource "google_bigquery_table" "sync_metadata" {
-  dataset_id         = google_bigquery_dataset.plex.dataset_id
-  table_id           = var.metadata_table
+  dataset_id          = google_bigquery_dataset.plex.dataset_id
+  table_id            = var.metadata_table
   deletion_protection = false
 
   schema = jsonencode([
@@ -182,21 +182,21 @@ resource "google_secret_manager_secret" "sendgrid_api_key" {
 
 # Username/password auth — kept for fallback / future use
 resource "google_secret_manager_secret" "odbc_user" {
-  secret_id  = var.secret_odbc_user
+  secret_id = var.secret_odbc_user
   replication {
     auto {}
   }
 }
 
 resource "google_secret_manager_secret" "odbc_password" {
-  secret_id  = var.secret_odbc_password
+  secret_id = var.secret_odbc_password
   replication {
     auto {}
   }
 }
 
 resource "google_secret_manager_secret" "company_code" {
-  secret_id  = var.secret_company_code
+  secret_id = var.secret_company_code
   replication {
     auto {}
   }
@@ -902,4 +902,1363 @@ resource "google_cloud_scheduler_job" "etl_work_orders_test_retry" {
       service_account_email = google_service_account.etl.email
     }
   }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NetSuite parity reports (docs/NETSUITE_REPORT_BUILD_PLAN.md) — added 2026-08-10/11
+#
+# All 4 reports below (Purchasing Open Orders, Part Obsolescence, Inventory
+# Activity, Inventory Snapshot/Valuation Summary) are live. The first three
+# use a single bq_view mapping and were deployed 2026-08-10 against the
+# then-current image. Inventory Snapshot's report.yaml has a LIST-form
+# bq_view (2 views from 1 extraction run) — deployment was held until the
+# new main.py (bq_view_configs/validate_bq_view) was built, pushed, and
+# smoke-tested via Cloud Build on 2026-08-11.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Purchasing Open Orders report — GCS config files ─────────────────────────
+
+resource "google_storage_bucket_object" "purchasing_open_orders_config_prod" {
+  name         = "reports/purchasing_open_orders.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/purchasing_open_orders.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "purchasing_open_orders_config_test" {
+  name         = "test/purchasing_open_orders.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/purchasing_open_orders.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "purchasing_open_orders_view_sql" {
+  name         = "sql/purchasing_open_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/purchasing_open_orders_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Purchasing Open Orders — prod (PlexProd, 6 AM UTC) ───────────────────────
+
+resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
+  name     = "plex-etl-purchasing-open-orders"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/purchasing_open_orders.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_open_orders" {
+  name        = "plex-purchasing-open-orders-sync"
+  description = "Triggers Plex to BigQuery purchasing open orders ETL job"
+  schedule    = "0 6 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_retry" {
+  name        = "plex-purchasing-open-orders-sync-retry"
+  description = "Retries the purchasing open orders ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Purchasing Open Orders — test (PlexTest, 7 AM UTC) ───────────────────────
+
+resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
+  name     = "plex-etl-purchasing-open-orders-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/purchasing_open_orders.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_test" {
+  name        = "plex-purchasing-open-orders-sync-test"
+  description = "Triggers Plex to BigQuery purchasing open orders ETL job (test)"
+  schedule    = "0 7 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_test_retry" {
+  name        = "plex-purchasing-open-orders-sync-test-retry"
+  description = "Retries the purchasing open orders ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Part Obsolescence report — GCS config files ──────────────────────────────
+
+resource "google_storage_bucket_object" "part_obsolescence_config_prod" {
+  name         = "reports/part_obsolescence.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/part_obsolescence.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_obsolescence_config_test" {
+  name         = "test/part_obsolescence.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/part_obsolescence.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_obsolescence_view_sql" {
+  name         = "sql/part_obsolescence_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_obsolescence_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Part Obsolescence — prod (PlexProd, 8 AM UTC) ─────────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
+  name     = "plex-etl-part-obsolescence"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/part_obsolescence.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_obsolescence" {
+  name        = "plex-part-obsolescence-sync"
+  description = "Triggers Plex to BigQuery part obsolescence ETL job"
+  schedule    = "0 8 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_obsolescence_retry" {
+  name        = "plex-part-obsolescence-sync-retry"
+  description = "Retries the part obsolescence ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Part Obsolescence — test (PlexTest, 9 AM UTC) ─────────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
+  name     = "plex-etl-part-obsolescence-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/part_obsolescence.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_obsolescence_test" {
+  name        = "plex-part-obsolescence-sync-test"
+  description = "Triggers Plex to BigQuery part obsolescence ETL job (test)"
+  schedule    = "0 9 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_obsolescence_test_retry" {
+  name        = "plex-part-obsolescence-sync-test-retry"
+  description = "Retries the part obsolescence ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Inventory Activity report — GCS config files ─────────────────────────────
+
+resource "google_storage_bucket_object" "inventory_activity_config_prod" {
+  name         = "reports/inventory_activity.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/inventory_activity.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_activity_config_test" {
+  name         = "test/inventory_activity.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/inventory_activity.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_activity_view_sql" {
+  name         = "sql/inventory_activity_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_activity_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Inventory Activity — prod (PlexProd, 10 AM UTC) ───────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_inventory_activity" {
+  name     = "plex-etl-inventory-activity"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/inventory_activity.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_activity" {
+  name        = "plex-inventory-activity-sync"
+  description = "Triggers Plex to BigQuery inventory activity ETL job"
+  schedule    = "0 10 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_activity_retry" {
+  name        = "plex-inventory-activity-sync-retry"
+  description = "Retries the inventory activity ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Inventory Activity — test (PlexTest, 11 AM UTC) ───────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
+  name     = "plex-etl-inventory-activity-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/inventory_activity.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_activity_test" {
+  name        = "plex-inventory-activity-sync-test"
+  description = "Triggers Plex to BigQuery inventory activity ETL job (test)"
+  schedule    = "0 11 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_activity_test_retry" {
+  name        = "plex-inventory-activity-sync-test-retry"
+  description = "Retries the inventory activity ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Inventory Snapshot / Valuation Summary report. Its report.yaml has a
+# list-form bq_view (2 views from 1 extraction run) — requires the bq_view-
+# list support in main.py (bq_view_configs/validate_bq_view). Enabled
+# 2026-08-11 after that main.py was built, pushed, and deployed to
+# plex-etl/plex-etl-test via Cloud Build (smoke test passed).
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "inventory_snapshot_config_prod" {
+  name         = "reports/inventory_snapshot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/inventory_snapshot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_snapshot_config_test" {
+  name         = "test/inventory_snapshot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/inventory_snapshot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_snapshot_view_sql" {
+  name         = "sql/inventory_snapshot_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_snapshot_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_valuation_summary_view_sql" {
+  name         = "sql/inventory_valuation_summary_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_valuation_summary_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
+  name     = "plex-etl-inventory-snapshot"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/inventory_snapshot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_snapshot" {
+  name        = "plex-inventory-snapshot-sync"
+  description = "Triggers Plex to BigQuery inventory snapshot ETL job"
+  schedule    = "0 12 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
+    body        = base64encode("{}")
+    oauth_token { service_account_email = google_service_account.etl.email }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_snapshot_retry" {
+  name        = "plex-inventory-snapshot-sync-retry"
+  description = "Retries the inventory snapshot ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+    oauth_token { service_account_email = google_service_account.etl.email }
+  }
+}
+
+resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
+  name     = "plex-etl-inventory-snapshot-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/inventory_snapshot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_snapshot_test" {
+  name        = "plex-inventory-snapshot-sync-test"
+  description = "Triggers Plex to BigQuery inventory snapshot ETL job (test)"
+  schedule    = "0 13 * * *"
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot_test.name}:run"
+    body        = base64encode("{}")
+    oauth_token { service_account_email = google_service_account.etl.email }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_inventory_snapshot_test_retry" {
+  name        = "plex-inventory-snapshot-sync-test-retry"
+  description = "Retries the inventory snapshot ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+    oauth_token { service_account_email = google_service_account.etl.email }
+  }
+}
+
+# sales_orders_open_report SQL — new view added to the existing sales_orders
+# report's bq_view list (reports/sales_orders.yaml). Requires the bq_view-list
+# support in main.py, deployed 2026-08-11 — see block comment further up.
+resource "google_storage_bucket_object" "sales_orders_open_view_sql" {
+  name         = "sql/sales_orders_open_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_open_view.sql"
+  content_type = "text/plain"
 }

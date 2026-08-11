@@ -1,0 +1,15 @@
+report_name: part_obsolescence_test
+description: "VOX | Products to be discontinued — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/part_obsolescence.yaml — see that file for
+# schema confirmation notes and the Obsolete/Phase Out filter question.
+
+extractions:
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part_Obsolescence
+    filter: "WHERE Part_Status IN ('Obsolete', 'Phase Out')"
+    date_col: ""
+
+bq_view:
+  name: part_obsolescence_report
+  sql_file: gs://voxdatalake-report-configs/sql/part_obsolescence_view.sql

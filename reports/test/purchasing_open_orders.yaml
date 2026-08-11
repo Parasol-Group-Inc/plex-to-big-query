@@ -1,0 +1,40 @@
+report_name: purchasing_open_orders_test
+description: "Vox | Open Purchase Orders — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/purchasing_open_orders.yaml — see that file
+# for schema confirmation notes and deployment status (not yet deployed).
+
+extractions:
+  - plex_view: Purchasing_v_PO
+    bq_table: raw_Purchasing_v_PO
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_PO_Status
+    bq_table: raw_Purchasing_v_PO_Status
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_PO_Type
+    bq_table: raw_Purchasing_v_PO_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_Release
+    bq_table: raw_Purchasing_v_Release
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_Line_Item
+    bq_table: raw_Purchasing_v_Line_Item
+    filter: ""
+    date_col: ""
+
+  - plex_view: Common_v_Supplier
+    bq_table: raw_Common_v_Supplier
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: purchasing_open_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql

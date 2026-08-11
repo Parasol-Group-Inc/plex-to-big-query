@@ -3,6 +3,14 @@
 All Plex database spaces visible in the SQL Development Environment tree.
 Individual catalog files live in this `docs/` folder.
 
+> This catalog documents raw ODBC **views** (`{Database}_v_{ViewName}`) — the
+> objects `reports/*.yaml` extractions query directly. For the Plex UI
+> **report** catalog (1,153 report screens) and the **stored-procedure**
+> data-sources catalog (14,350 objects, parameterized — not plain
+> `SELECT`-able), see [`mapping/`](../mapping/) and
+> [`docs/PLEX_REPORTS_CATALOG.md`](../docs/PLEX_REPORTS_CATALOG.md). Those are
+> a different layer and don't share names with the views below.
+
 | Database | Catalog File | Purpose | ETL Priority |
 |---|---|---|---|
 | **Sales** | [plex_sales_views_catalog.md](plex_sales_views_catalog.md) | Customer orders, quotes, pricing, shipping | ⭐ Primary |

@@ -108,12 +108,21 @@ graph LR
 
 ## Active Reports
 
-| Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View |
+| Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View(s) |
 |---|---|---|---|---|---|
-| **Sales Orders** | `plex-etl` | `plex-etl-test` | 2 AM / 3 AM UTC | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report` |
+| **Sales Orders** | `plex-etl` | `plex-etl-test` | 2 AM / 3 AM UTC | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
 | **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 4 AM / 5 AM UTC | 4 Part DB views (Job, Job_Op, Workcenter, Workcenter_Log) | `work_orders_report` |
+| **Purchasing Open Orders** | `plex-etl-purchasing-open-orders` | `-test` | 6 AM / 7 AM UTC | 6 Purchasing + Common + Part | `purchasing_open_orders_report` |
+| **Part Obsolescence** | `plex-etl-part-obsolescence` | `-test` | 8 AM / 9 AM UTC | 1 Part_v_Part (filtered) | `part_obsolescence_report` |
+| **Inventory Activity** | `plex-etl-inventory-activity` | `-test` | 10 AM / 11 AM UTC | 2 Part DB views (Cell_Production, Cell_Depletion) | `inventory_activity_report` |
+| **Inventory Snapshot** | `plex-etl-inventory-snapshot` | `-test` | 12 PM / 1 PM UTC | 3 Part DB views (Snapshot, Snapshot_Cost_Sub_Type_Breakdown, Cost_Sub_Type_Breakdown_History) | `inventory_snapshot_report`, `inventory_valuation_summary_report` |
 
-> `raw_Part_v_Part` is **shared** between both reports — owned by the Sales Orders pipeline (runs first). Work Orders references it in its JOIN view without re-extracting it.
+> `raw_Part_v_Part` is **shared** across several reports — owned by the Sales Orders pipeline (runs first); others reference it in their JOIN view without re-extracting it.
+>
+> The 4 NetSuite-parity reports above (added 2026-08-10/11, see
+> [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md)) all
+> use the failure-retry pattern too — `-retry` schedulers exist for each,
+> same as Sales/Work Orders.
 
 ---
 
@@ -187,11 +196,19 @@ plex-to-big-query/
 │   ├── TROUBLESHOOTING.md
 │   ├── API_REFERENCE.md
 │   ├── TEARDOWN.md
+│   ├── PLEX_REPORTS_CATALOG.md      ← Plex UI reports & data-sources catalog (vs. ODBC views)
+│   ├── NETSUITE_REPORT_BUILD_PLAN.md ← NetSuite→Plex report migration plan
 │   └── CODE_REVIEW_2026-07-14.md
 │
-└── catalog/                    ← Plex ODBC view catalogs (reference data)
-    ├── plex_catalog_index.md   ← Master index — start here
-    └── plex_*_views_catalog.md ← One per Plex database (Sales, Part, ...)
+├── catalog/                    ← Plex ODBC view catalogs (reference data)
+│   ├── plex_catalog_index.md   ← Master index — start here
+│   └── plex_*_views_catalog.md ← One per Plex database (Sales, Part, ...)
+│
+└── mapping/                    ← Plex UI report catalog + data-sources catalog (reference data)
+    ├── available-reports.*     ← All 1,153 Plex UI reports (md/csv/json)
+    ├── enabled-reports.*       ← 152 reports enabled for this tenant
+    ├── data-sources*.*         ← 14,350 CustomerDataSourceManager stored procs (+ accessible shortlist)
+    └── netsuite-report-mapping.md ← NetSuite saved-search → Plex report mapping (first pass)
 ```
 
 ---

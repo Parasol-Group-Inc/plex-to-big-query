@@ -1,0 +1,52 @@
+report_name: inventory_activity
+description: "Inventory Activity Detail Usage Per Month (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
+# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# docs/NETSUITE_REPORT_BUILD_PLAN.md (#29) for the confirmation log.
+#
+# No raw view named "Inventory_Activity" exists (only a GlobalAllow:false
+# stored procedure, unusable by this pipeline). Container_Transaction /
+# Inventory_Receipt / Inventory_Shipment_Depletion were all one hop short of
+# Part_Key. Part_v_Cell_Production and Part_v_Cell_Depletion, by contrast,
+# have Part_Key + Quantity + Production_Date directly — no extra join needed.
+#
+# CAVEAT: these views live under Plex's "Advanced Inventory Traceability —
+# Product Genealogy" feature (already-enabled reports "Actual Depletion
+# Including Cells", "Upstream Traceability" use this same data), which
+# tracks genealogy at the individual cell/serial level — it is NOT the same
+# module as "Inventory Activity" (Inventory / Inventory Tracking). Aggregating
+# Cell_Depletion.Quantity by part/month plausibly reconstructs "usage per
+# month," but this is inference, not a confirmed 1:1 source — confirm with
+# the report requester that this data matches what they expect before
+# treating it as final. Both views were EMPTY (0 rows) on the test tenant,
+# so no live sample data was available to sanity-check actual values.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/inventory_activity_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  # Production events — one row per cell produced, with Quantity + Part_Key + date
+  - plex_view: Part_v_Cell_Production
+    bq_table: raw_Part_v_Cell_Production
+    filter: ""
+    date_col: Production_Date
+
+  # Depletion (usage/consumption) events — one row per cell depleted, with
+  # Quantity + Part_Key + date; Cell_Production_Key links back to what was produced
+  - plex_view: Part_v_Cell_Depletion
+    bq_table: raw_Part_v_Cell_Depletion
+    filter: ""
+    date_col: Production_Date
+
+# Part_v_Part is intentionally NOT extracted here — it's owned by the
+# sales_orders pipeline. Reuse raw_Part_v_Part in the JOIN view instead of
+# re-extracting (same shared-table rule as work_orders.yaml).
+
+bq_view:
+  name: inventory_activity_report
+  sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql

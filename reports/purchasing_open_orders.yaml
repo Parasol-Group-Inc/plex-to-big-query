@@ -1,0 +1,64 @@
+report_name: purchasing_open_orders
+description: "Vox | Open Purchase Orders (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ NOT YET DEPLOYED (not in terraform/main.tf, not uploaded to GCS). Schema
+# confirmed live against vox.test.odbc.plex.com on 2026-08-10 — see
+# docs/NETSUITE_REPORT_BUILD_PLAN.md (#75) for the confirmation log.
+#
+# This is the supplier-side mirror of reports/sales_orders.yaml: Purchasing_v_*
+# views instead of Sales_v_*. Also worth checking whether the already-enabled
+# "Purchase Order Releases Due" report (which explicitly replaces "Open
+# Purchase Orders" per its own description in mapping/enabled-reports.md)
+# already covers this need before deploying.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/purchasing_open_orders_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  # Purchase order header — one row per supplier PO
+  - plex_view: Purchasing_v_PO
+    bq_table: raw_Purchasing_v_PO
+    filter: ""
+    date_col: ""
+
+  # PO status lookup — mirrors Sales_v_PO_Status
+  - plex_view: Purchasing_v_PO_Status
+    bq_table: raw_Purchasing_v_PO_Status
+    filter: ""
+    date_col: ""
+
+  # PO type lookup — mirrors Sales_v_PO_Type
+  - plex_view: Purchasing_v_PO_Type
+    bq_table: raw_Purchasing_v_PO_Type
+    filter: ""
+    date_col: ""
+
+  # Release schedule — qty/due date per line (mirrors Sales_v_Release)
+  - plex_view: Purchasing_v_Release
+    bq_table: raw_Purchasing_v_Release
+    filter: ""
+    date_col: ""
+
+  # Line items — confirmed live: Purchasing_v_Line_Item.PO_Key joins directly
+  # back to Purchasing_v_PO (no separate "PO_Line" view on this side)
+  - plex_view: Purchasing_v_Line_Item
+    bq_table: raw_Purchasing_v_Line_Item
+    filter: ""
+    date_col: ""
+
+  # Supplier master — mirrors Common_v_Customer
+  - plex_view: Common_v_Supplier
+    bq_table: raw_Common_v_Supplier
+    filter: ""
+    date_col: ""
+
+# Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
+# from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
+
+bq_view:
+  name: purchasing_open_orders_report
+  sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql

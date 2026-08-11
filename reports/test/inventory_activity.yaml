@@ -1,0 +1,20 @@
+report_name: inventory_activity_test
+description: "Inventory Activity Detail Usage Per Month — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/inventory_activity.yaml — see that file for
+# the genealogy-vs-activity caveat and confirmation notes.
+
+extractions:
+  - plex_view: Part_v_Cell_Production
+    bq_table: raw_Part_v_Cell_Production
+    filter: ""
+    date_col: Production_Date
+
+  - plex_view: Part_v_Cell_Depletion
+    bq_table: raw_Part_v_Cell_Depletion
+    filter: ""
+    date_col: Production_Date
+
+bq_view:
+  name: inventory_activity_report
+  sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql

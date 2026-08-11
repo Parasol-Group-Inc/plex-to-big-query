@@ -96,10 +96,22 @@ extractions:
     filter: ""
     date_col: ""
 
-# BigQuery reporting view that JOINs the raw tables above into the 16-field report.
-# The SQL file is loaded from GCS at runtime so it can be edited independently
-# without touching this YAML.  {gcp_project} and {dataset} in the SQL are
-# replaced at runtime with the GCP_PROJECT and BQ_DATASET env var values.
+# BigQuery reporting view(s) that JOIN the raw tables above. The SQL files
+# are loaded from GCS at runtime so they can be edited independently without
+# touching this YAML. {gcp_project} and {dataset} in the SQL are replaced at
+# runtime with the GCP_PROJECT and BQ_DATASET env var values.
+#
+# bq_view is a LIST (main.py supports this — see main.py's bq_view_configs/
+# validate_bq_view): sales_orders_open_report was added 2026-08-10 for the
+# NetSuite "Vox | Open Sales Orders" parity report (#76 in
+# docs/NETSUITE_REPORT_BUILD_PLAN.md) — same raw tables, status-based open
+# filter (excludes Closed/Cancelled), confirmed with the report requester.
+# ⚠ Requires main.py's bq_view-list support to be deployed BEFORE this list
+# form reaches production — the currently-deployed container predates that
+# change and calls .get() on bq_view assuming a single mapping, which would
+# crash on a list. Deploy code and this config change together.
 bq_view:
-  name: sales_orders_report
-  sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql
+  - name: sales_orders_report
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql
+  - name: sales_orders_open_report
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_open_view.sql

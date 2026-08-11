@@ -7,6 +7,25 @@
 - **Status:** ✅ Built — 3 reports deployed to GCP, verified live
 - **Technical build log:** [docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md](../docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md)
 
+## Tabs in this spreadsheet
+
+This is a multi-tab spreadsheet — this doc covers the **"Open"** tab only.
+Other tabs are tracked separately since a tab can have its own grain, its
+own gaps, and even feed a different downstream report than the main tab.
+
+| Tab | Status | Detail Doc |
+|---|---|---|
+| Open | ✅ Built | this doc |
+| YTD Gate Stats | 🔍 Mapped | [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md) |
+| FG Testing Pending | ⏳ Pending | — |
+| YTD List | ⏳ Pending | — |
+| READ ME | — (documentation tab, not data) | — |
+| Done YTD | ⏳ Pending | — |
+| Done 2025 | ⏳ Pending | — |
+| 2025 List | ⏳ Pending | — |
+| Success | ⏳ Pending | — |
+| Inventory Availability | ⏳ Pending | — |
+
 ## What it is
 
 A manually maintained production board (tab: "MFG Job Schedule - Open")

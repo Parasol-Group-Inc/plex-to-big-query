@@ -38,6 +38,19 @@ this tenant except lookups noted:
   `Part_v_Inventory_Receipt`, `Part_v_Active_Rejection_Container`,
   `Part_v_FIFO_Container` also confirmed to exist.
 
+**Update 2026-08-11 — Stock vs. Custom job classification: dead end.**
+Checked while mapping the "YTD Gate Stats" tab (see
+`spreadsheets/mfg_job_schedule_ytd_gate_stats.md`), which needs a way to
+split jobs into Stock/Custom. Two leads tested live, both failed:
+`Part_v_Job.Job_Type` — **column does not exist** (confirmed via live
+query error, not just absent from a column list); `Part_v_Part.Part_Type`
+— column exists, **has rows**, but values are `Components`, `Finished
+Goods`, `Inspection`, `Raw Materials`, `Semi-Finished Goods`, `Supply`,
+`WIP` — a part-category taxonomy, unrelated to make-to-stock vs.
+make-to-order. `Part_v_Job` itself still has 0 rows on this tenant as of
+this date. No live Plex source found yet for Stock/Custom — flag as an
+open gap, don't assume `Part_Type` is the answer.
+
 ## ⭐ Critical for Sales Orders Pipeline
 
 | ODBC Name | Purpose |

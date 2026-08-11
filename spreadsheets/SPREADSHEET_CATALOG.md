@@ -43,6 +43,18 @@ This is a different catalog from the other two in this repo:
   deployed.
 - ✅ **Built** — deployed to GCP, verified against real BigQuery.
 
+## Multi-tab spreadsheets
+
+A spreadsheet in this catalog can have several tabs, and a tab is not
+automatically the same grain as the sheet's main tab — it can have its own
+gaps, and can even feed a different downstream report. When a spreadsheet
+has more than one tab worth mapping, its detail doc gets a "Tabs in this
+spreadsheet" tracker table (see [mfg_job_schedule.md](mfg_job_schedule.md))
+listing every tab with a status and a link to a per-tab doc
+(`<spreadsheet>_<tab_name>.md`) once mapped. The hub table below still has
+one row per **spreadsheet**, not per tab — tab-level tracking lives inside
+each spreadsheet's own detail doc.
+
 ## Working pattern (established on MFG Job Schedule)
 
 1. Get the spreadsheet's actual content (CSV export or full screenshot of

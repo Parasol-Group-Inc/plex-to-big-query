@@ -8,6 +8,33 @@ stock levels at each plant/location.
 
 ---
 
+## Confirmed Live (2026-08-11)
+
+`Warehouse_v_Part_Quantity` and `Warehouse_v_Part_Quantity_Summary` (guessed
+names below) do **not** exist — queried against `vox.test.odbc.plex.com` and
+got `Base table ... not found`. On-hand inventory in this Plex tenant actually
+lives under the **Part** module, not Warehouse:
+
+- **`Part_v_Container`** ⭐ — the real on-hand-inventory carrier. Confirmed
+  columns include `Part_Key`, `Quantity`, `Location`, `Container_Status`,
+  `Lot_Key`, `Active`, `Job_Op_Key`, `Add_Date`. One row per physical
+  container/pallet/tote; sum `Quantity` grouped by `Part_Key` (filtering
+  `Active = 1` and an OK-type `Container_Status`, per
+  `Part_v_Container_Status.OK_Status`) to get on-hand quantity by part.
+- `Part_v_Container_Status` — status lookup with `OK_Status`, `Defective`,
+  `Scrap`, `Rejectable` flags for filtering which containers count as
+  available stock.
+- `Part_v_Container_Track`, `Part_v_Inventory_Allocation`,
+  `Part_v_Inventory_Classification`, `Part_v_Inventory_Receipt`,
+  `Part_v_Active_Rejection_Container`, `Part_v_FIFO_Container` — all exist,
+  live-confirmed columns, all empty on this tenant at check time.
+
+See `catalog/plex_part_views_catalog.md` — this entire Warehouse catalog file
+may be a naming-convention artifact; the actual queryable views for these
+concepts live under `Part_v_{ViewName}`, not `Warehouse_v_{ViewName}`.
+
+---
+
 ## Estimated Views
 
 ### Inventory / Part Quantities

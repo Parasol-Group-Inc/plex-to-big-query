@@ -10,6 +10,14 @@ locations, shipping, currencies, departments, metrics, and reference codes.
 It does **not** contain Part master, Customer_Part pricing, or Part_Product_Type/Group
 — those belong to other databases (Part, Personnel, or Sales).
 
+## Confirmed Live (2026-08-11)
+
+Queried against `vox.test.odbc.plex.com` — both **have rows**:
+- `Common_v_Building` — `Building_Key`, `Building_Code`, `Name`, `Active`.
+- `Common_v_Location` — `Location_Key`, `Building_Key`, `Location`,
+  `Location_Type`, `Active`, `Shippable`. This is the "Room #" analog for a
+  manual production tracker — `Building_Key` FK joins to `Common_v_Building`.
+
 ## Relevance to Sales Orders Pipeline
 
 - `Customer` ⭐ — customer name lookup (join via `Sales_v_PO.Customer_No`)

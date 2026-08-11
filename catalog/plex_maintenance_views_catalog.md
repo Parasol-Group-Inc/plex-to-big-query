@@ -8,6 +8,21 @@ Lower priority for the sales orders pipeline but useful for operational efficien
 
 ---
 
+## Confirmed Live (2026-08-11)
+
+Queried against `vox.test.odbc.plex.com`. `Maintenance_v_{ViewName}` is the
+real prefix (matches the pattern of every other confirmed catalog).
+
+- `Maintenance_v_Equipment` — asset master. Confirmed columns: `Equipment_ID`,
+  `Description`, `Asset_No`, `Building_Key`, `Workcenter_Key`, `Location`,
+  `Equipment_Status`, `Equipment_Type_Key`, `Serial_No`. Empty on this
+  tenant at check time. `Workcenter_Key` FK lets you resolve an "Asset #" to
+  the same workcenter used on `Part_v_Job_Op`.
+- `Maintenance_v_Equipment_Type` — exists, empty.
+- `Maintenance_v_Equipment_Status` — lookup, **has rows**.
+
+---
+
 ## Estimated Views
 
 ### Equipment / Assets

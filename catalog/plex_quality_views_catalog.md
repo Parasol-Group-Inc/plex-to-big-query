@@ -10,6 +10,26 @@ RFQ responses), in-house inspection (Checksheets, Control Plans, Gauges), non-
 conformance (Problems, Corrective Actions, Cost Recovery, Deviations), FMEA/APQP,
 continuous improvement, and warranty management.
 
+## Confirmed Live (2026-08-11)
+
+Queried against `vox.test.odbc.plex.com`. All exist; all empty on this tenant
+except the lookup tables noted:
+
+- `Quality_v_Problem` — the NC record itself. Columns include `Problem_No`,
+  `Part_Key`, `Problem_Date`, `Problem_Status`, `Problem_Category`,
+  `Corrective_Action`, `Closed_Date`, `Quantity_Rejected`.
+- `Quality_v_Problem_Nonconformance`, `Quality_v_Problem_Category`,
+  `Quality_v_Problem_Status` — lookup tables, **have rows**.
+- `Quality_v_Sample_Plan` — **has rows**; `Sample_Plan`, `Sample_Size`,
+  `Sample_Plan_Type_Key`.
+- `Quality_v_Checksheet` — inspection/test record; `Part_Key`,
+  `Inspection_Date`, `Job_Op_Key`, `Checksheet_Status_Key`, `Out_Of_Spec`.
+- `Quality_v_Checksheet_Status` — lookup, **has rows**;
+  `Awaiting_Approval`/`Rejected`/`Approved`/`Expired` flags — this is the
+  closest confirmed analog to a manual tracker's "Raw Material in Testing" /
+  "Raws Released" status column, though it's a status-flag join, not a
+  literal matching field name.
+
 ## Relevance to Sales Orders Pipeline
 
 Indirect — but valuable for business analytics:

@@ -9,6 +9,35 @@ Plex Part is the core manufacturing database: part master, BOM, routing, operati
 containers, inventory, jobs, tools, workcenters, and — critically — customer part
 pricing. This is a large, central module.
 
+## Confirmed Live (2026-08-11) — MFG job-schedule fields
+
+Queried against `vox.test.odbc.plex.com`, driven by mapping the manually
+maintained "MFG Job Schedule" tracker to real Plex views. All exist; empty on
+this tenant except lookups noted:
+
+- **Lot**: `Part_v_Lot` (`Lot_No`, `Part_Key`, `Manufactured_Date`,
+  `Supplier_Lot_No`), `Part_v_Lot_Attribute`, `Part_v_Lot_Shelf_Life`
+  (`Shelf_Life_Type_Key`, `Lot_Shelf_Life` — likely the expiration-date
+  source), `Part_v_Lot_Trace`, `Part_v_Lot_Format` (**has rows**).
+  `Part_v_Job.Lot_Key` FK links a job straight to its lot.
+- **BOM / formulation**: `Part_v_BOM` (**has rows** — `Component_Part_Key`,
+  `Quantity`, `Depletion_Unit` per part/operation; this is the likely source
+  for "MG Per Cap"-style dosage, via component quantity), `Part_v_BOM_Yield_Factor`
+  (`Yield_Percentage`, `Fixed_Loss`), `Part_v_Cost_BOM` (**has rows**).
+- **Attributes**: `Part_v_Part_Attribute` (**has rows** — generic
+  `Attribute_Key`/`Value` pairs, likely where "Cap Specs" like "00 Veggy"
+  live) and `Part_v_Part_Attributes` (**has rows** — fixed-schema part
+  properties, different table despite the near-identical name).
+- **Containers / on-hand inventory**: `Part_v_Container` ⭐ — the real
+  on-hand-inventory carrier (see `catalog/plex_warehouse_views_catalog.md`
+  "Confirmed Live" note — this is where "Available Inventory" actually
+  comes from, not a Warehouse-module view). `Part_v_Container_Status`
+  **has rows** (OK/Defective/Scrap/Rejectable flags for filtering which
+  containers count as available stock). `Part_v_Container_Track`,
+  `Part_v_Inventory_Allocation`, `Part_v_Inventory_Classification`,
+  `Part_v_Inventory_Receipt`, `Part_v_Active_Rejection_Container`,
+  `Part_v_FIFO_Container` also confirmed to exist.
+
 ## ⭐ Critical for Sales Orders Pipeline
 
 | ODBC Name | Purpose |

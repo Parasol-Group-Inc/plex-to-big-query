@@ -37,7 +37,7 @@ plus adds new ones:
 | Input needed | Status | Detail |
 |---|---|---|
 | Total # Jobs per month | ✅ Buildable | `Part_v_Job` grouped by month — but which date defines "the month" (Add_Date vs. `Job_Op.Start_Date` vs `.Complete_Date`) is ambiguous from the sheet alone; needs Emilio's confirmation once real data exists |
-| Stock vs. Custom job classification | ❌ **Checked live, no source found** | Tested 2 leads against `vox.test.odbc.plex.com` 2026-08-11: (1) `Part_v_Job.Job_Type` — **column doesn't exist**, confirmed via live query error; (2) `Part_v_Part.Part_Type` — column exists but values are `Components / Finished Goods / Inspection / Raw Materials / Semi-Finished Goods / Supply / WIP` — a part-category taxonomy, not a make-to-stock vs. make-to-order flag. Also tried `Accelerated_v_Job_v` (a "likely" view name from `catalog/plex_accelerated_views_catalog.md`'s speculative list) — **table doesn't exist**. No live source found yet for Stock/Custom. This is a genuinely open gap, not a guess. |
+| Stock vs. Custom job classification | 🔍 **Corrected 2026-08-11 — real lead found, unconfirmed against data** | First pass wrongly called this a dead end (see history below). Mapping the "FG Testing Pending" tab turned up the real join: `Part_v_Job.Job_Type_Key` → `Part_v_Job_Type` (4 configured types: `Stock`/`Service`/`Pre-Production`/`Rework`, no literal "Custom") and `Part_v_Job_Distribution.Release_Key` (populated = tied to a customer order = custom; null = stock). Both schema-confirmed live, both still 0 rows on the test tenant — can't validate the actual stock/custom split until real job data exists. See `spreadsheets/mfg_job_schedule_fg_testing_pending.md` and `catalog/plex_part_views_catalog.md`. |
 | Yield (Stock Avg / Custom Avg) | ⏳ Inherited gap, still unconfirmed | Same lead flagged in `mfg_job_schedule.md`/`plex_production_yield_reference.md`: `Job_Op.Quantity` (actual) vs. `Job.Quantity` (planned). **`Part_v_Job` still has 0 rows on the test tenant as of 2026-08-11** — re-confirmed live — so this can't be tested until real production data exists on either tenant. |
 | # Stock/Custom Jobs with Deviation/NCs | ⏳ Inherited gap, still unconfirmed | Same "NC-to-job correlation" gap already flagged in `mfg_job_schedule.md`: `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key` FK — linking an NC to a specific job (and by extension, to that job's month/Stock-or-Custom bucket) needs a part+date match, not a join key. This blocks the second column depending on it. |
 | TAT (Stock/Custom Avg, days) | 🔍 Plausible, needs definition + real data | Worth explicitly distinguishing from the "Days in WIP"/"Days Left" columns on the Open tab, which are flagged **manual-only** there (hand-updated while a job is still in progress). This TAT is a **historical rollup over completed jobs**, plausibly `Job_Op.Complete_Date − Start_Date`, or possibly the broader `Job.Complete_Date − Add_Date` if "TAT" means order-entry-to-done rather than shop-floor time. Which date pair is correct is Emilio's call, not guessable — and either way, `Job_Op` has no completed rows on the test tenant yet to validate against. |
@@ -54,17 +54,18 @@ production data that doesn't exist on the test tenant yet (Yield, TAT), or
 requires a business-rule definition only Emilio can supply ("Successful").
 
 This tab is a good forcing function for prioritizing 2 things once real
-production data lands: (1) getting Emilio's exact definition of Stock vs.
-Custom (it may not be a Plex field at all — could be inferred from
-`Part_No` prefix/pattern, a `Part_Group`, or something entirely outside
-Plex), and (2) confirming the Yield calculation against real `Job_Op`
-activity, since that same gap now blocks two downstream reports, not one.
+production data lands: (1) validating the Stock/Custom leads above
+(`Job_Type_Key`/`Job_Distribution.Release_Key`) against real jobs — the
+"FG Testing Pending" tab shows this is a hand-typed column today, so even
+a partial match would let it stop being manual — and (2) confirming the
+Yield calculation against real `Job_Op` activity, since that same gap now
+blocks two downstream reports, not one.
 
 ## What's needed next
 
-1. Emilio's definition of Stock vs. Custom (Plex field, part-number
-   pattern, or external classification) and of "Successful" (composite
-   pass/fail logic across Yield/Deviations/TAT).
+1. Real job data to test the Stock/Custom leads, and Emilio's definition
+   of "Successful" (composite pass/fail logic across Yield/Deviations/TAT)
+   — the latter can't come from data at all, only from Emilio.
 2. Real (non-empty) `Part_v_Job`/`Part_v_Job_Op` data on either tenant, to
    test the Yield and TAT reconstructions.
 3. Once both are resolved, this becomes a `GROUP BY month` aggregate query

@@ -38,18 +38,33 @@ this tenant except lookups noted:
   `Part_v_Inventory_Receipt`, `Part_v_Active_Rejection_Container`,
   `Part_v_FIFO_Container` also confirmed to exist.
 
-**Update 2026-08-11 — Stock vs. Custom job classification: dead end.**
-Checked while mapping the "YTD Gate Stats" tab (see
-`spreadsheets/mfg_job_schedule_ytd_gate_stats.md`), which needs a way to
-split jobs into Stock/Custom. Two leads tested live, both failed:
-`Part_v_Job.Job_Type` — **column does not exist** (confirmed via live
-query error, not just absent from a column list); `Part_v_Part.Part_Type`
-— column exists, **has rows**, but values are `Components`, `Finished
-Goods`, `Inspection`, `Raw Materials`, `Semi-Finished Goods`, `Supply`,
-`WIP` — a part-category taxonomy, unrelated to make-to-stock vs.
-make-to-order. `Part_v_Job` itself still has 0 rows on this tenant as of
-this date. No live Plex source found yet for Stock/Custom — flag as an
-open gap, don't assume `Part_Type` is the answer.
+**Update 2026-08-11 — Stock vs. Custom job classification: corrected.**
+First pass (mapping the "YTD Gate Stats" tab) tested `Part_v_Job.Job_Type`
+(no such column) and `Part_v_Part.Part_Type` (real column, but a
+part-category taxonomy — Components/Finished Goods/Raw Materials/etc —
+unrelated to make-to-stock vs. make-to-order) and wrongly called this a
+dead end. Mapping the next tab ("FG Testing Pending") turned up the real
+join, confirmed live against `vox.test.odbc.plex.com`:
+
+- `Part_v_Job.Job_Type_Key` (a real column, missed on the first pass) →
+  `Part_v_Job_Type.Job_Type_Key` — a 31-column lookup view, **has rows**,
+  4 configured job types: `Stock` (flagged `Default_Job_Type=1`),
+  `Service`, `Pre-Production`, `Rework`. No literal `Custom` value exists
+  — the working hypothesis is `Job_Type = 'Stock'` → sheet's "stock";
+  anything else (or possibly relying on the lead below instead) → sheet's
+  "custom". Unconfirmed against real data — `Part_v_Job` still has 0 rows
+  on this tenant.
+- `Part_v_Job_Distribution` (`Job_Key`, `Target_Job_Key`, `Release_Key`,
+  `Quantity`, `Fulfilled`) — a job tied to a `Release_Key` is fulfilling a
+  specific customer order (custom); no distribution record → stock
+  replenishment. Also a candidate source for the "Customer" column seen on
+  the FG Testing Pending tab. `Part_v_Release` (the expected join target)
+  doesn't exist under that name — the actual Sales-side view is
+  unconfirmed. Also 0 rows on this tenant.
+
+Both leads are schema-confirmed but data-unconfirmed (empty table on test
+tenant) — upgrade from "dead end" to "plausible, needs real data," not yet
+"buildable." See `spreadsheets/mfg_job_schedule_fg_testing_pending.md`.
 
 ## ⭐ Critical for Sales Orders Pipeline
 

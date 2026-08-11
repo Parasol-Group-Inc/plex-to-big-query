@@ -1,0 +1,16 @@
+report_name: quality_nonconformance_test
+description: "Quality non-conformance (NC) records — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/quality_nonconformance.yaml.
+
+extractions:
+  - plex_view: Quality_v_Problem
+    bq_table: raw_Quality_v_Problem
+    filter: ""
+    date_col: ""
+
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+
+bq_view:
+  name: quality_nonconformance_report
+  sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql

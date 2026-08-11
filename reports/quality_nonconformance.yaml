@@ -1,0 +1,39 @@
+report_name: quality_nonconformance
+description: "VOX | Quality non-conformance (NC) records — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ORIGIN: built to cover the "NC #" column of a manually maintained "MFG Job
+# Schedule" tracking spreadsheet. See docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md.
+#
+# Schema confirmed live against vox.test.odbc.plex.com 2026-08-11.
+# Problem_Category, Problem_Status, Problem_Type, and Defect_Type are all
+# INLINE text columns directly on Quality_v_Problem — same pattern already
+# confirmed on Part_v_Part.Part_Status (no "_Key" suffix = inline text, not
+# a foreign key). Quality_v_Problem_Category / _Problem_Status /
+# _Problem_Nonconformance are standalone reference tables of valid values
+# (like Part_v_Part_Status), not per-record join targets — so no extra
+# lookup extraction is needed here.
+#
+# LIMITATION: Quality_v_Problem has no Job_Key / Job_Op_Key column — an NC
+# record links to a Part (and optionally a Workcenter/Building), not to a
+# specific job. Cross-referencing an NC to a row on the manual job schedule
+# requires matching by part_no + date proximity, not a join key — same
+# caveat as the NetSuite Job # correlation documented in the build plan.
+#
+# HOW TO EDIT THIS REPORT (no deployment required):
+#   Change filter → update the filter field below, save this file to GCS
+#   Change SQL    → edit reports/sql/quality_nonconformance_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  - plex_view: Quality_v_Problem
+    bq_table: raw_Quality_v_Problem
+    filter: ""
+    date_col: ""
+
+# Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
+# from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
+
+bq_view:
+  name: quality_nonconformance_report
+  sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql

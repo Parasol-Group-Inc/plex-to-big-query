@@ -37,6 +37,14 @@ employee Call Outs/OFF roster look like genuinely manual/scheduling inputs
 with no Plex analog — same category as MFG Job Schedule's manual-only
 columns.
 
+**Update 2026-08-11:** the workcenters this sheet's "Lines" plausibly map
+to are now confirmed live — `Bottling Line 1` through `Bottling Line 6`,
+plus `Liquid Line`, `Powder Line`, `Bulk Room` (see
+`reports-list/production.md`). The sheet's own "Line" numbering
+(1–5/Bulk/Gummy Line-6/Powder Line/Liquid Line) doesn't map 1:1 to
+`Bottling Line N` — needs real filled-in data to confirm which sheet
+"Line" corresponds to which Plex workcenter before aggregating anything.
+
 ## What's needed next
 
 Real (non-template) data — a filled-in week or month of this sheet — to

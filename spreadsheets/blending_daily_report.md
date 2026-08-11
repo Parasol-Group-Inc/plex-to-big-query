@@ -38,6 +38,12 @@ workcenter, same as the other 3 Daily Reports — plus, given the confirmed
 Blending-vs-Encapsulation workcenter classification (flagged as a gap in
 [mfg_job_schedule.md](mfg_job_schedule.md)) would matter most.
 
+**Update 2026-08-11:** the gap is now resolved — `Blend 2` through `Blend
+5` AND `Preweigh 1` through `Preweigh 3` (plus `Pre-Weigh Planning`) are
+all confirmed live `Workcenter_Type = 'Batch'` (see
+`reports-list/production.md`), matching this sheet's "Pre-Weigh 1/2/3" and
+"Blending 2/3/4/5" sections almost exactly.
+
 ## What's needed next
 
 Real (non-template) data to confirm any correlation before building.

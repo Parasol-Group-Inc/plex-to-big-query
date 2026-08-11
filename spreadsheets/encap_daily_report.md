@@ -38,7 +38,13 @@ workcenters — which is exactly the "Encap"-naming gap flagged in
 live-confirmed, "Encap"-style names are not yet). Confirming real Encap
 workcenter names would resolve both gaps at once.
 
+**Update 2026-08-11:** resolved — `Encapsulation 1` through `Encapsulation
+10` (full word, not the sheet's abbreviated "Encap N") are confirmed live,
+`Workcenter_Type = 'Primary'` (see `reports-list/production.md`). Note:
+this template only has stations for 1, 2, 4, 5, 7, 8, 9, 10 (skipping 3 and
+6) — worth confirming with real data whether those two are decommissioned,
+renamed, or just not yet added to the sheet, rather than assuming either.
+
 ## What's needed next
 
-Real (non-template) data, and ideally the actual Encap workcenter names
-from a live Plex query, before building.
+Real (non-template) data to confirm the aggregation before building.

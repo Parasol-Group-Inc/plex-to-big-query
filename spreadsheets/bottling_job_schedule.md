@@ -66,3 +66,9 @@ Live schema confirmation of `Job_Op` start/complete timestamps and
 `Quantity` against real production data (both were empty on the test
 tenant during the MFG Job Schedule build) to validate the Run Time /
 # Completed reconstruction lead, before building any report.
+
+**Update 2026-08-11:** the bottling-relevant workcenters are now confirmed
+live — `Bottling Line 1` through `Bottling Line 6` (see
+`reports-list/production.md`) — so once real `Job_Op` activity exists, the
+Run Time/# Completed reconstruction can be scoped to those specific
+workcenters rather than all of Job_Op.

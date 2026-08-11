@@ -50,6 +50,19 @@ a much closer match to "how much did Line 2 pack today" than a
 weighing-event report. Unconfirmed, but a more promising starting point
 than Production Yield for any of these four.
 
+**Update 2026-08-11 — the workcenters for all 4 exist and are now
+confirmed live** (found while building `labeling_open_work_orders_report`,
+see `reports-list/production.md`): `Bottling Line 1-6` (Packaging),
+`Labeling Line 1-6` + `Label Approval`/`Label Design` (Labeling — the
+latter two are artwork approval, a different step), `Blend 2-5` +
+`Preweigh 1-3` (Blending), `Encapsulation 1-10` (Encap), plus `Liquid
+Line`/`Powder Line`/`Printing`/`Roll Compaction`/`Manufacture Rework`/`Bulk
+Room`. This means the "aggregate by workcenter" lead above can now be
+filtered precisely (e.g. `workcenter LIKE 'Labeling Line%'`) instead of
+guessed at — still needs real Job_Op activity on these workcenters to
+validate the aggregation itself, which the test tenant didn't have at
+check time.
+
 - **Module / Report:** Inventory → Inventory Tracking → Production Yield
 - **ReportKey / ActionKey:** 5919 / 7346 (confirmed in `mapping/available-reports.csv` row 516)
 - **URL pattern:** `https://vox.on.plex.com/VisionPlex/screen?__actionKey=7346`

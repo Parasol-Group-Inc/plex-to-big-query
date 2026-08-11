@@ -34,6 +34,16 @@ aggregated by date + workcenter is a more plausible source for "Actual"
 than Production Yield. The three shift-checkpoint timestamps and "# Of
 Orders Complete" have no obvious Plex analog identified yet.
 
+**Update 2026-08-11:** `Labeling Line 1` through `Labeling Line 6` are now
+confirmed live workcenter names (see `reports-list/production.md`) — a
+direct match to this sheet's own "Line 1–6" numbering, better than
+Packaging's mismatch. This same workcenter set is already used by
+`labeling_open_work_orders_report` (a Plex-native rebuild of NetSuite's
+"Labeling | Open WO: Results"), which counts open jobs per Labeling Line —
+"# Of Orders Complete" here is conceptually the closed-job counterpart of
+that same query. Worth checking directly once real (non-template) data
+exists.
+
 ## What's needed next
 
 Real (non-template) data to confirm any correlation before building.

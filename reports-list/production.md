@@ -18,7 +18,48 @@ most rows here already have (or now have) their own detail doc there.
 | Rolling TAT Report | NetSuite + GSheet | ❌ Out of scope (hybrid) | Turn-around-time reporting, NetSuite-primary. The GSheet portion is unclear from this row alone — would need its own investigation if ever prioritized |
 | Monthly TAT Report | NetSuite + GSheet | ❌ Out of scope (hybrid) | Same as above; used for bonuses per the Function column |
 | Vox \| RUSH Open Sos | NetSuite | ❌ Out of scope | Native NetSuite report, no Google Sheet layer |
-| Labeling l Open WO: Results | NetSuite | ❌ Out of scope | Native NetSuite saved search |
+| **Labeling l Open WO: Results** | NetSuite | ✅ **Rebuilt Plex-native** | Reconsidered 2026-08-11 after seeing its actual NetSuite criteria (Type=Work Order, Status IN Released/In Process, Item:Class=Labeling) — the underlying question ("which jobs are open and need labeling") maps directly to Plex's own Job/Job_Op + Workcenter data. Built as `labeling_open_work_orders_report`, a 3rd `bq_view` on the existing `work_orders` pipeline — no NetSuite access needed at all. See below and `reports/sql/labeling_open_work_orders_view.sql`. |
+
+## "Labeling | Open WO: Results" — reconsidered, not out of scope
+
+Initially marked NetSuite-native and out of scope. A screenshot of the
+actual saved-search criteria changed that: `Type = Work Order`,
+`Status IN (Released, In Process)`, `Main Line = true`, `Item:Name NOT
+CONTAINS 'lot traced'`, `Item:Class = Labeling`. The business question
+underneath — "which jobs are open and need labeling" — doesn't require
+NetSuite at all; Plex already tracks job status and workcenter assignment
+independently.
+
+**What made this buildable:** querying the `raw_Part_v_Workcenter` and
+`raw_Part_v_Job_Status` tables already sitting in BigQuery from earlier
+test runs (no new Plex query needed) surfaced the **full live workcenter
+roster** for this tenant — confirming names that were previously only
+tree-guessed or partially seen:
+
+`Blend 2-5` (Batch), `Bottling Line 1-6` (Primary), `Bulk Room` (Primary),
+`Encapsulation 1-10` (Primary), `First 48 #1` (Primary), `Label Approval` /
+`Label Design` (Simplified — artwork approval, a *different* step from
+physical labeling), `Labeling Line 1-6` (Primary), `Liquid Line`
+(Primary), `Manufacture Rework` (Batch), `Powder Line` (Simplified),
+`Pre-Weigh Planning` / `Preweigh 1-3` (Batch), `Printing` (Primary), `Roll
+Compaction` (Batch).
+
+And confirmed `Job_Status` values: `New`, `Production`, `Completed`,
+`Hold`, `Cancelled`, `Scheduled` — each with proper
+`Completed_Status`/`Cancelled_Status`/`Hold_Status` boolean flags, so
+"open" can be expressed as the inverse of those three rather than a
+brittle text match.
+
+**This resolves the previously-flagged gap** in
+`spreadsheets/mfg_job_schedule.md` and `spreadsheets/plex_production_yield_reference.md`
+("Encap-style workcenter naming has zero live evidence") — see those docs'
+updated notes.
+
+**What's still an open gap, not guessed:** NetSuite's `Item:Name NOT
+CONTAINS 'lot traced'` exclusion has no confirmed Plex equivalent and was
+deliberately left out of the SQL rather than approximated. The
+Released/In-Process → Scheduled/Production status mapping is inferred by
+concept, not NetSuite-confirmed.
 
 ## Overall Production Yield verdict
 

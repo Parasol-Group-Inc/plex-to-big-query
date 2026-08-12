@@ -47,6 +47,15 @@ Running list across all tabs of this spreadsheet — kept in one place so
 there's a single list to bring to that conversation rather than one per
 tab. Full context for each lives in the linked tab doc.
 
+**New to the terminology?** Start with
+[mfg_job_schedule_open_questions_explained.md](mfg_job_schedule_open_questions_explained.md)
+— a plain-language walkthrough of every item below (what it means, why it
+matters, what a good answer looks like), plus a short glossary for terms
+like Job Operation, Yield, TAT, and foreign key. It also calls out one
+important gap that isn't numbered below: `Quality_v_Problem` has no
+foreign key to a job, which blocks the Deviation/NC gate structurally,
+not just for lack of data.
+
 1. Is "TAT Stats & Success" (named in the READ ME's automation
    description) the same tab as "YTD Gate Stats," an old/renamed version
    of it, or a distinct tab not yet seen? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)

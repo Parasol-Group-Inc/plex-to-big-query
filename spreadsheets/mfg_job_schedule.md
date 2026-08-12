@@ -19,12 +19,39 @@ own gaps, and even feed a different downstream report than the main tab.
 | YTD Gate Stats | 🔍 Mapped | [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md) |
 | FG Testing Pending | 🔍 Mapped | [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md) |
 | YTD List | 🔍 Mapped | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
-| READ ME | — (documentation tab, not data) | — |
+| READ ME | 📄 Reviewed — not data, but confirmed/corrected several findings | [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md) |
 | Done YTD | ⏳ Pending | — |
 | Done 2025 | ⏳ Pending | — |
 | 2025 List | ⏳ Pending | — |
 | Success | ⏳ Pending | — |
 | Inventory Availability | ⏳ Pending | — |
+
+## ❓ Open Questions for the Data Architect/Scientist
+
+Running list across all tabs of this spreadsheet — kept in one place so
+there's a single list to bring to that conversation rather than one per
+tab. Full context for each lives in the linked tab doc.
+
+1. Is "TAT Stats & Success" (named in the READ ME's automation
+   description) the same tab as "YTD Gate Stats," an old/renamed version
+   of it, or a distinct tab not yet seen? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
+2. Confirm the Yield formula (`Caps Made ÷ Capsule Count`) holds for
+   Blending-only jobs with no encapsulation step. — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
+3. Confirm "Days to Mfg" = `FG Testing Released − Date Entered`, and
+   whether the 2 negative values seen in real data are known bad rows. — [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md)
+4. Confirm the job-level "Successful" threshold in Gate Stats' Table 1 —
+   perfect 3/3 Success Rating, or a lower bar? — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
+5. Confirm the exact TAT goal boundary (evidence points to ≤84 days /
+   12 weeks; no sample row lands on 85 to pin it exactly). — [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md)
+6. Is it worth automating Custom/Stock from Plex (`Job_Type_Key`/
+   `Job_Distribution.Release_Key`, both unvalidated against real data) —
+   given it's currently a manual SKU-column convention, not a system
+   field? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
+7. How should the 95%/92%/84-day goal thresholds be stored if this ever
+   gets built, given they're editable in the sheet and explicitly
+   non-retroactive? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
+8. Locate a real Plex source for "Blender" (batch size, e.g. `2000L`) —
+   checked `Part_v_Job_Material`, wrong table. — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
 
 ## What it is
 

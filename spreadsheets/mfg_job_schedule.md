@@ -22,7 +22,7 @@ own gaps, and even feed a different downstream report than the main tab.
 | READ ME | 📄 Reviewed — not data, but confirmed/corrected several findings | [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md) |
 | Done YTD | 🔍 Mapped | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
 | Done 2025 | 🔍 Mapped | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
-| 2025 List | ⏳ Pending | — |
+| 2025 List | 🔍 Mapped | [mfg_job_schedule_2025_list.md](mfg_job_schedule_2025_list.md) |
 | Success | ⏳ Pending | — |
 | Inventory Availability | ⏳ Pending | — |
 

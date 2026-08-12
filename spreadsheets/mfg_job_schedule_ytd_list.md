@@ -76,7 +76,7 @@ matches, not inferred.
 
 | Column | Status | Detail |
 |---|---|---|
-| Date | 🔍 Plausible | `Job_Op.Complete_Date` or `Job.Completed_Date` — which one is the same open question as the "Days to Mfg" date pair above. |
+| Date | ✅ **Resolved 2026-08-11** | Confirmed = `FG Testing Released` by exact cross-match against `mfg_job_schedule_done_2025.md` (2 independent matches). Already buildable via `Quality_v_Checksheet`/`_Status`, same source as the Open tab's "FG Testing Released" column. See `mfg_job_schedule_2025_list.md`. |
 | Product | ✅ Buildable | `Part_v_Part.Name` |
 | Yield | ⏳ Inherited gap | Same reconstruction lead as `mfg_job_schedule_ytd_gate_stats.md`: actual (`Job_Op.Quantity`) ÷ planned (`Job.Quantity`). Real values here (>100%, as low as 43%) are strong behavioral confirmation the formula is a straightforward ratio, not a bounded percentage — but `Part_v_Job_Op` is still empty on the test tenant, so it's unconfirmed against live data. |
 | Product Type (stock/custom) | 🔍 Same open lead | Confirms (again) this is a per-batch manual label matching "Custom or Stock" on other tabs. See the `Job_Type_Key`/`Job_Distribution.Release_Key` leads in `catalog/plex_part_views_catalog.md` — committed, not yet deployed. |

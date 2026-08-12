@@ -47,10 +47,15 @@ has no way to derive it, though: see the corrected finding in
 `mfg_job_schedule_ytd_gate_stats.md` — `Part_v_Job.Job_Type_Key` →
 `Part_v_Job_Type` (`Stock`/`Service`/`Pre-Production`/`Rework`) and
 `Part_v_Job_Distribution.Release_Key` (populated = tied to a customer
-order) are both schema-confirmed live leads, just unconfirmed against
-real data (both tables still empty on the test tenant). Worth testing
-once real jobs exist — this hand-typed column is a good replacement
-candidate, not a permanent gap.
+order) are both real leads, added to `mfg_job_schedule_view.sql` as
+`job_type`/`job_distribution_count`/`job_distribution_sample_release_key`
+(committed `6c3b1c7`, **not yet deployed** — batching with the rest of
+this spreadsheet's tabs per Emilio's call). Local BigQuery test already
+partially validated the first lead: 2 leftover job records resolved
+`job_type = 'Stock'` through the new join. `Job_Distribution` is still
+empty on the test tenant, so the second lead remains untested. This
+hand-typed column is a real replacement candidate once more job data
+exists, not a permanent gap.
 
 **New finding — "Customer" column is a plausible new lead:** values are
 either a real customer name (`Nutricost Manufacturing, LLC`) for custom

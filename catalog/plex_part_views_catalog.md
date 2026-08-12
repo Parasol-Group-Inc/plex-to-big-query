@@ -62,9 +62,16 @@ join, confirmed live against `vox.test.odbc.plex.com`:
   doesn't exist under that name — the actual Sales-side view is
   unconfirmed. Also 0 rows on this tenant.
 
-Both leads are schema-confirmed but data-unconfirmed (empty table on test
-tenant) — upgrade from "dead end" to "plausible, needs real data," not yet
-"buildable." See `spreadsheets/mfg_job_schedule_fg_testing_pending.md`.
+Both leads were added to `mfg_job_schedule_view.sql` as `job_type`,
+`job_distribution_count`, `job_distribution_sample_release_key` (committed
+2026-08-11, not yet deployed to GCP — Emilio wants to batch this with the
+rest of the spreadsheet's tabs). Local BigQuery test against `PlexTest`
+partially validated the first lead already: 2 job records left over from
+a prior extraction (Plex itself returns 0 rows right now) both resolved
+`job_type = 'Stock'` through the new join — join mechanics confirmed on
+real data, not just schema. `Part_v_Job_Distribution` is genuinely empty
+on this tenant, so the second lead is still untested. See
+`spreadsheets/mfg_job_schedule_fg_testing_pending.md`.
 
 ## ⭐ Critical for Sales Orders Pipeline
 

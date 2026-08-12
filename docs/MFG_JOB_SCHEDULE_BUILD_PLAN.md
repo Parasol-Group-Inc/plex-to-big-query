@@ -126,6 +126,36 @@ against a scratch copy of each report YAML with `sql_file` pointed at the
 local `reports/sql/` path instead of `gs://`. All scratch files were deleted
 after use; nothing scratch-only was committed.
 
+## Round 3 (2026-08-11): multi-tab mapping — this spreadsheet has 10 tabs
+
+The "Open" tab covered above is one of 10 tabs on this spreadsheet (see
+`spreadsheets/mfg_job_schedule.md`'s "Tabs in this spreadsheet" tracker).
+Each tab gets its own mapping doc (`spreadsheets/mfg_job_schedule_<tab>.md`):
+
+- **YTD Gate Stats** — a monthly Stock/Custom success-rate rollup (Yield +
+  Deviations/NCs + TAT). Not buildable — Emilio's own call, given how many
+  gaps it inherits (NC-to-job correlation, unconfirmed Yield, an undefined
+  "Successful" composite rule). Syncing with the data architect on these
+  separately rather than building around guesses.
+- **FG Testing Pending** — same job-level grain as Open, filtered to jobs
+  awaiting FG testing release. Mostly reuses Open's confirmed sources.
+  Real data on this tab corrected an earlier mistake: `Part_v_Job.Job_Type`
+  (checked on the YTD Gate Stats pass) doesn't exist, but
+  `Part_v_Job.Job_Type_Key` does, joining to a real `Part_v_Job_Type`
+  lookup (`Stock`/`Service`/`Pre-Production`/`Rework`) — missed on the
+  first pass. `Part_v_Job_Distribution.Release_Key` is a second,
+  independent lead for the same Stock-vs-Custom question.
+
+Both leads were added to `mfg_job_schedule_view.sql` as `job_type`,
+`job_distribution_count`, `job_distribution_sample_release_key` — exposed
+as raw signal, not collapsed into an asserted Stock/Custom boolean, since
+`Job_Distribution` is still empty on the test tenant. Local BigQuery test
+against `PlexTest` partially validated this already: 2 job records left
+over from a prior extraction (Plex itself returns 0 rows right now) both
+resolved `job_type = 'Stock'` through the new join — the join mechanics
+work on real data, not just schema. Committed (`6c3b1c7`) but
+**intentionally not yet deployed** — see Deployment note below.
+
 ## Deployment
 
 Terraform: `mfg_job_schedule_report` needs no new Cloud Run job (rides the
@@ -136,3 +166,11 @@ tracks those files by content hash. `quality_nonconformance` and
 `part_on_hand_inventory` are new Cloud Run jobs + schedulers, scheduled
 14/15 and 16/17 UTC respectively (next free slots after the existing 4–13
 UTC block). See `terraform/main.tf` for the exact resources.
+
+**⚠ Round 3's `Part_v_Job_Type`/`Part_v_Job_Distribution` additions are
+committed but not deployed** — `terraform plan` confirmed a clean 3-object
+update (`work_orders_config_prod`/`_test`, `mfg_job_schedule_view_sql`, 0
+add/0 destroy), but Emilio asked to hold off applying until all MFG Job
+Schedule tabs are mapped, so this ships as one batch rather than
+per-tab. Next step before deploying: re-run `terraform plan` with the same
+3 targets to confirm nothing else drifted, then apply.

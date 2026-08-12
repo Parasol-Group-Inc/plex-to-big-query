@@ -1,0 +1,114 @@
+# MFG Job Schedule — "Inventory Availability" tab
+
+- **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
+  "Tabs in this spreadsheet" tracker)
+- **Status:** 🔍 Mapped — real data analyzed (~90 SKU rows). A completely
+  different grain from every other tab (one row per SKU, not per job) —
+  this is the reorder-point/inventory dashboard that the "Available
+  Inventory"/"Days Left" columns on the Open/FG Testing Pending/Done
+  tabs were always pointing back to. Confirms several exact formulas;
+  checked live for the 2 remaining gaps and ruled out the obvious leads.
+
+## What it is
+
+One row per SKU (not per job), including both capsule finished goods
+(`13001`, `13056`, etc.) and bulk/blend powders (`13157 - Blend`,
+`13188 - Blend`, etc. — confirms the `" - Blend"` SKU suffix pattern
+noticed in `mfg_job_schedule_done_ytd.md`/`done_2025.md` is specifically
+for bulk/powder products, not a random formatting artifact). Columns:
+Description, Reorder Point, Current QTY Available, At Reorder Point?,
+Days to Reorder Point, Avg Daily, On Order, In MFG/Bottling/Ordered?,
+(Reorder Point again), ROUT, % Left, Days on Hand, Quantity On Hand,
+Reorder Point Days on Hand.
+
+## Confirmed exact formulas
+
+Spot-checked against real values, including a literal `#DIV/0!` error in
+the raw data that pins one formula exactly:
+
+- **% Left = Current QTY Available ÷ ROUT.** Confirmed by the
+  `Garcinia Cambogia Pure` row: `ROUT = 0` produces the literal text
+  `#DIV/0!` in the `% Left` column — the sheet's own division-by-zero
+  error, not a data quality issue to "fix."
+- **Days on Hand = Current QTY Available ÷ Avg Daily.** Exact match:
+  `B-12 Bulk Liquid` → `332 ÷ 2 = 166`, matches the shown value exactly.
+- **Reorder Point Days on Hand = Reorder Point ÷ Avg Daily.** Exact
+  match: `Vitamin C Serum` → `563 ÷ 7 = 80.42857143`, matches to the
+  decimal.
+- **Days to Reorder Point ≈ (Current QTY Available − Reorder Point) ÷
+  Avg Daily**, sign convention confirmed (negative = already at/past the
+  reorder point, matching `At Reorder Point? = Yes`) — the exact
+  coefficient doesn't reproduce to the decimal because `Avg Daily` is
+  displayed rounded to a whole number; the underlying precision is
+  higher than what's visible in the export.
+
+## The long-standing "Days Left" gap chain — resolved to one final input
+
+Every prior tab (`mfg_job_schedule.md`'s Open tab, `fg_testing_pending.md`,
+`done_ytd.md`, `done_2025.md`) flagged "Days Left"/"Days on hand when
+completed" as a derived days-of-supply metric with an unconfirmed
+usage-rate component. **This tab is that metric's actual source** — it's
+literally `Current QTY Available ÷ Avg Daily`, computed here and almost
+certainly just referenced/copied into the job-level tabs. This closes the
+formula question. What's left is exactly one missing input:
+
+**`Avg Daily` (average daily usage rate) — checked live, no Plex source
+found.** Checked `Part_v_Part_Planning_Parameters` (real view, has rows,
+but its columns are MRP/scheduling flags — `Finished_Part_Buffer`,
+`Level_Scheduled`, `Process_Days`, etc. — not a usage rate). Speculative
+view names `Material_v_Planning_Parameter`, `Material_v_Safety_Stock`,
+`Material_v_Reorder_Point`, `Part_v_Reorder_Point` all **don't exist**
+(confirmed via live query errors, not just absent from a name list). No
+confirmed Plex source for either `Avg Daily` or `Reorder Point` — most
+likely computed in the sheet from historical shipment/production data,
+or sourced from NetSuite/a demand-planning tool outside this pipeline's
+scope. Genuinely open, not guessed at.
+
+## New lead, checked and mostly ruled out: Current QTY Available vs. Quantity On Hand
+
+These are two *different* numbers per row (e.g. `B-12 Bulk Liquid`:
+`Current QTY Available = 332`, `Quantity On Hand = 370`) — the natural
+hypothesis is `Current QTY Available = Quantity On Hand (raw
+`Part_v_Container`) − allocated/committed quantity`. Checked
+`Part_v_Inventory_Allocation` live: it's a real view with rows, but only
+4 columns (`PCN`, `Allocation_Key`, `Container_Serial_No`, `PO_Line_Key`)
+— **no `Quantity` or `Part_Key` column**, so it can't be summed per part
+directly. Would need a join through `Part_v_Container` by a serial-number
+column to backtrack to `Part_Key`, and `Part_v_Container` doesn't have an
+obviously-matching column either (checked, not found). **Quantity On
+Hand** itself is buildable now (`Part_v_Container`, same source as
+`part_on_hand_inventory_report`) — **Current QTY Available's netting
+logic is not**, flagged as a gap rather than assumed solved.
+
+## Buildable from Plex (same confirmed sources)
+
+| Column | Plex source |
+|---|---|
+| Description | `Part_v_Part.Name` |
+| Quantity On Hand | `Part_v_Container` (`part_on_hand_inventory_report`) |
+| On Order | `purchasing_open_orders_report` (already live) |
+
+## Manual-only / process context, not data
+
+A short legend at the bottom of the sheet (`Over 100 days`, `Looking at
+capsules usage and inventory`, `Contacting vendors/placing POs`,
+`Product in testing`, `Adding to MFG`, `It should be in MFG — if not,
+talk to Purchasing`) is a human escalation workflow tied to how far a SKU
+is from its reorder point — a business process guide, not a data column.
+
+## Verdict
+
+Meaningfully de-risked a gap that's been open since the very first MFG
+Job Schedule pass: the "days of supply" formula is now known exactly, and
+the one remaining unknown (`Avg Daily`'s source) has been actively
+checked against the most plausible Plex candidates and ruled out, not
+left unexamined. Worth raising with the data architect directly — this
+may simply live outside Plex (NetSuite demand planning, or a
+sheet-side historical average).
+
+## What's needed next
+
+Ask Emilio/the data architect directly where `Avg Daily` and `Reorder
+Point` actually come from — the obvious Plex candidates are checked and
+ruled out, so this needs a person who knows the process, not another
+schema guess.

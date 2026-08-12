@@ -23,8 +23,12 @@ own gaps, and even feed a different downstream report than the main tab.
 | Done YTD | 🔍 Mapped | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
 | Done 2025 | 🔍 Mapped | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
 | 2025 List | 🔍 Mapped | [mfg_job_schedule_2025_list.md](mfg_job_schedule_2025_list.md) |
-| Success | ⏳ Pending | — |
-| Inventory Availability | ⏳ Pending | — |
+| Success | ✅ Fully resolved | [mfg_job_schedule_success.md](mfg_job_schedule_success.md) |
+| Inventory Availability | 🔍 Mapped | [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md) |
+
+**All 10 tabs now reviewed.** See the Open Questions list below for what's
+still genuinely open across the whole spreadsheet — everything else has
+either been built, confirmed, or explicitly ruled out.
 
 ## ❓ Open Questions for the Data Architect/Scientist
 
@@ -43,9 +47,10 @@ tab. Full context for each lives in the linked tab doc.
    rows, not bad data. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
 4. Confirm the job-level "Successful" threshold in Gate Stats' Table 1 —
    perfect 3/3 Success Rating, or a lower bar? — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
-5. ✅ **Resolved 2026-08-11**: TAT goal is exactly `Total Days ≤ 84` —
-   2 independent real rows land exactly on 85 and both fail the TAT gate,
-   confirming the boundary with no contradictions across ~330 real rows. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
+5. ✅ **Resolved 2026-08-11**: TAT goal is exactly `Total Days ≤ 84` for
+   both stock and custom — confirmed by real-data inference (2 rows
+   landing exactly on 85, both failing) **and** by the literal source
+   config in the "Success" tab, which states `84` outright. — [mfg_job_schedule_success.md](mfg_job_schedule_success.md)
 6. Is it worth automating Custom/Stock from Plex (`Job_Type_Key`/
    `Job_Distribution.Release_Key`, both unvalidated against real data) —
    given it's currently a manual SKU-column convention, not a system
@@ -69,6 +74,16 @@ tab. Full context for each lives in the linked tab doc.
 12. What does "BR Ready for MFG" actually represent? Real values are
     small integers (1-3) and occasionally a comma-pair like `2,5` — no
     clear pattern against any other mapped column. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
+13. Where do "Avg Daily" (usage rate) and "Reorder Point" actually come
+    from? Checked the obvious Plex candidates live and ruled all of them
+    out (`Part_v_Part_Planning_Parameters` has the wrong columns; 4
+    speculative Material-module view names don't exist) — likely outside
+    Plex entirely (NetSuite demand planning, or a sheet-side historical
+    average). — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
+14. Is "Current QTY Available" = "Quantity On Hand" minus something
+    allocated/committed? `Part_v_Inventory_Allocation` exists but has no
+    `Quantity`/`Part_Key` column to net against — checked, not a direct
+    join. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
 
 ## What it is
 
@@ -102,14 +117,15 @@ equipment/room, and a running free-text commentary log per job.
 | Blending vs. Encapsulation classification | **Resolved 2026-08-11** — both `Blend 2-5` and `Encapsulation 1-10` workcenter names confirmed live (see `reports-list/production.md`). No hardcoded classification is built into the SQL yet (still exposes raw `workcenter`/`workcenter_type` columns), but a `WHERE workcenter LIKE 'Encapsulation%'`/`'Blend %'` filter is now known to work — ask if you want this formalized into named columns. |
 | MG Per Cap, Cap Specs (e.g. "00 Veggy") | `Part_v_BOM` / `Part_v_Part_Attribute` are plausible sources, but turning BOM component quantities into an actual per-capsule dosage needs a unit conversion (mg/g/kg) not reliably inferable from schema alone. Not built — flagged as a follow-up. |
 | NC-to-job correlation | `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key` — an NC links to a part, not a specific job. Cross-referencing to a schedule row needs a part+date match, not a join key. |
+| Days Left | **Corrected 2026-08-11** — moved out of manual-only. Mapping the "Inventory Availability" tab found its exact formula (`Current QTY Available ÷ Avg Daily`, confirmed against real data), but the one input it needs — `Avg Daily` (average daily usage rate) — has no confirmed Plex source. Checked `Part_v_Part_Planning_Parameters` (real view, wrong columns — MRP/scheduling flags, not a usage rate) and 4 speculative view names (all don't exist). See `mfg_job_schedule_inventory_availability.md`. |
 
 **Manual-only — never in any ERP, deliberately not built:**
 
 Job # (these are **NetSuite** WO numbers, e.g. `WO0046335` — no FK to Plex
 `Job_No`; correlating the two systems needs a SKU+date match, and NetSuite
 isn't a data source this pipeline reads from at all), Date Entered, Days in
-WIP, Days Left, BR Ready for MFG, Sign Off, and the free-text Notes column
-(a running human commentary log).
+WIP, BR Ready for MFG, Sign Off, and the free-text Notes column (a
+running human commentary log).
 
 ## Reports produced
 

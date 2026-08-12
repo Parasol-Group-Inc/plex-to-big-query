@@ -21,7 +21,7 @@ own gaps, and even feed a different downstream report than the main tab.
 | YTD List | 🔍 Mapped | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
 | READ ME | 📄 Reviewed — not data, but confirmed/corrected several findings | [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md) |
 | Done YTD | 🔍 Mapped | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
-| Done 2025 | ⏳ Pending | — |
+| Done 2025 | 🔍 Mapped | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
 | 2025 List | ⏳ Pending | — |
 | Success | ⏳ Pending | — |
 | Inventory Availability | ⏳ Pending | — |
@@ -43,8 +43,9 @@ tab. Full context for each lives in the linked tab doc.
    rows, not bad data. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
 4. Confirm the job-level "Successful" threshold in Gate Stats' Table 1 —
    perfect 3/3 Success Rating, or a lower bar? — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
-5. Confirm the exact TAT goal boundary (evidence points to ≤84 days /
-   12 weeks; no sample row lands on 85 to pin it exactly). — [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md)
+5. ✅ **Resolved 2026-08-11**: TAT goal is exactly `Total Days ≤ 84` —
+   2 independent real rows land exactly on 85 and both fail the TAT gate,
+   confirming the boundary with no contradictions across ~330 real rows. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
 6. Is it worth automating Custom/Stock from Plex (`Job_Type_Key`/
    `Job_Distribution.Release_Key`, both unvalidated against real data) —
    given it's currently a manual SKU-column convention, not a system
@@ -58,6 +59,16 @@ tab. Full context for each lives in the linked tab doc.
    columns (Entered→POs Received, etc.)? Real data shows year-typo rows
    producing million-day intervals — the source sheet doesn't guard
    against this either. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
+10. What's the actual archiving boundary between "Done YTD" and
+    "Done 2025"? Not determinable from the data — some late-2025
+    completions appear in Done 2025 while Done YTD starts 9/17/2025. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
+11. Should rework rows be included in monthly stats consistently? Real
+    data shows both practices today: some rework rows get a deliberately
+    deleted date ("not in stats, this is a rework"), others are left in
+    with a negative Total Days. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
+12. What does "BR Ready for MFG" actually represent? Real values are
+    small integers (1-3) and occasionally a comma-pair like `2,5` — no
+    clear pattern against any other mapped column. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
 
 ## What it is
 

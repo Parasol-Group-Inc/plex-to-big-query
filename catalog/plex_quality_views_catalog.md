@@ -29,6 +29,24 @@ except the lookup tables noted:
   closest confirmed analog to a manual tracker's "Raw Material in Testing" /
   "Raws Released" status column, though it's a status-flag join, not a
   literal matching field name.
+- `Quality_v_Claim` — **confirmed live 2026-08-12** (schema only, empty on
+  test tenant — "No Records Were Found"). Distinct entity from
+  `Quality_v_Problem`, not an alias for it. 34 columns: `Claim_Key`,
+  `Claim_No`, `Claim_Type_Key`, `Claim_Status_Key`, `Claim_Date`,
+  `Customer_No`, `Customer_Address_No`, **`Job_Key`, `Part_Key`,
+  `Service_Job_Key`**, `Supplier_No`, `Found_By`, `Brief_Description`,
+  `Description`, `Emergency_Description`/`_Completed_By`/`_Date`, `Cause`,
+  `Responsible_Note`, `Resolution_Type_Key`/`Resolution`/`_By`/`_Date`,
+  `Approved_By`/`_Date`, `Note`, `Added_Date`/`_By`, `Updated_Date`/`_By`,
+  `Approval_Note`, `Claim_Group_Key`, `Delivery_Date`, `Term_Of_Usage`.
+  **Potentially significant**: unlike `Problem`, `Claim` carries `Job_Key`
+  directly — a possible fix for the long-standing NC-to-job correlation gap
+  (see `mfg_job_schedule.md`), *if* the sheet's "NC #" column actually
+  tracks a Claim rather than a Problem. Reads as formal customer/supplier
+  complaint intake (`Customer_No`, `Emergency_*`, `Approved_By`) rather than
+  a shop-floor NC, so the two may not be 1:1 — unconfirmed, not assumed.
+  Same blocker as everything else: empty on the test tenant, so the
+  `Job_Key` lead can't be tested against real data yet.
 
 ## Relevance to Sales Orders Pipeline
 

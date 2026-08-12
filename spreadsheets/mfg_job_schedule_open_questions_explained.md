@@ -60,6 +60,16 @@ it's a person deciding on a matching rule (e.g. "same part number within
 ±3 days of the job" is a reasonable rule, but it's a judgment call, not
 something obviously correct).
 
+**Update 2026-08-12:** a possible real fix surfaced, not just a matching
+rule. `Quality_v_Claim` — a different Plex table from `Quality_v_Problem`
+— carries a `Job_Key` directly, confirmed live against the schema. It's
+empty on the test tenant right now, so it can't be tested yet, and it's
+not confirmed whether the sheet's "NC #" column even refers to a Claim
+(this looks like formal customer/supplier complaint intake, not
+necessarily the same thing as a shop-floor NC). But if it turns out the
+sheet means Claim, this closes the gap with a real join key instead of a
+judgment-call matching rule. See `catalog/plex_quality_views_catalog.md`.
+
 ## The numbered list, in plain language
 
 Grouped by theme rather than in list order, since a few of these are

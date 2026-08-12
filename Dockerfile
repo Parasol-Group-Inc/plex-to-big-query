@@ -45,7 +45,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 WORKDIR /app
 COPY main.py .
 COPY email_utils.py .
+COPY extract_schema_catalog.py .
 COPY templates/ templates/
+COPY catalog/ catalog/
 COPY entrypoint.sh /entrypoint.sh
 RUN mkdir -p /output && chmod +x /entrypoint.sh
 

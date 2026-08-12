@@ -20,7 +20,7 @@ own gaps, and even feed a different downstream report than the main tab.
 | FG Testing Pending | 🔍 Mapped | [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md) |
 | YTD List | 🔍 Mapped | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
 | READ ME | 📄 Reviewed — not data, but confirmed/corrected several findings | [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md) |
-| Done YTD | ⏳ Pending | — |
+| Done YTD | 🔍 Mapped | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
 | Done 2025 | ⏳ Pending | — |
 | 2025 List | ⏳ Pending | — |
 | Success | ⏳ Pending | — |
@@ -37,8 +37,10 @@ tab. Full context for each lives in the linked tab doc.
    of it, or a distinct tab not yet seen? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
 2. Confirm the Yield formula (`Caps Made ÷ Capsule Count`) holds for
    Blending-only jobs with no encapsulation step. — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
-3. Confirm "Days to Mfg" = `FG Testing Released − Date Entered`, and
-   whether the 2 negative values seen in real data are known bad rows. — [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md)
+3. ✅ **Resolved 2026-08-11**: "Days to Mfg"/"Total Days" =
+   `FG Testing Released − Date Entered`, confirmed by exact match against
+   real data; the 2 negative values are legitimate rework/partial-batch
+   rows, not bad data. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
 4. Confirm the job-level "Successful" threshold in Gate Stats' Table 1 —
    perfect 3/3 Success Rating, or a lower bar? — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
 5. Confirm the exact TAT goal boundary (evidence points to ≤84 days /
@@ -52,6 +54,10 @@ tab. Full context for each lives in the linked tab doc.
    non-retroactive? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
 8. Locate a real Plex source for "Blender" (batch size, e.g. `2000L`) —
    checked `Part_v_Job_Material`, wrong table. — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
+9. Should any future build sanity-bound the 8 stage-to-stage interval
+   columns (Entered→POs Received, etc.)? Real data shows year-typo rows
+   producing million-day intervals — the source sheet doesn't guard
+   against this either. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
 
 ## What it is
 

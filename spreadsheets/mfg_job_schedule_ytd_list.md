@@ -63,15 +63,14 @@ requires — this row-level Success Rating is fractional (0/33.3/66.7/100%),
 so Gate Stats' binary "Successful" could mean `= 100%` (all 3 gates) or
 `≥ some threshold` (e.g. 66.7%+). Needs Emilio's confirmation, not a guess.
 
-**Also unconfirmed:** the exact date pair behind "Days to Mfg" itself.
-Negative values exist (`Female Enhancement` −20, `Neuro Plus...` −4) and
-both are comfortably within-goal — consistent with a due-date-relative
-metric (`Due_Date − Complete_Date`, negative = finished late, positive =
-finished early, or vice versa) rather than a simple elapsed-duration field
-(which can't go negative). This reframes "Days to Mfg" as likely NOT the
-same concept as "TAT (days)" in Gate Stats Table 2 unless Gate Stats
-computes an absolute value — worth clarifying with Emilio before building
-either.
+**Resolved 2026-08-11 (see `mfg_job_schedule_done_ytd.md`):** "Days to
+Mfg" = `FG Testing Released − Date Entered`, confirmed by exact match
+against Done YTD's `Total Days` column for the same jobs (`Female
+Enhancement Plus`, 73 days, exact). The 2 negative values are **not** bad
+data or a signed due-date metric — they're rework/partial-batch rows
+where the FG Testing Released date is inherited from an earlier run that
+predates the new row's Date Entered. Confirmed with 2 independent exact
+matches, not inferred.
 
 ## Findings — column-by-column
 

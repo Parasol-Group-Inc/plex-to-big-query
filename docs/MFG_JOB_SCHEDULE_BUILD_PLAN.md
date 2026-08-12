@@ -153,8 +153,39 @@ as raw signal, not collapsed into an asserted Stock/Custom boolean, since
 against `PlexTest` partially validated this already: 2 job records left
 over from a prior extraction (Plex itself returns 0 rows right now) both
 resolved `job_type = 'Stock'` through the new join — the join mechanics
-work on real data, not just schema. Committed (`6c3b1c7`) but
-**intentionally not yet deployed** — see Deployment note below.
+work on real data, not just schema. Committed (`6c3b1c7`), **deployed
+2026-08-11** alongside Round 4 below (see Deployment note).
+
+## Round 4 (2026-08-11): exploratory goal-check columns, once all 10 tabs were mapped
+
+After every tab was reviewed (see `spreadsheets/mfg_job_schedule.md`'s
+tracker), Emilio asked what's buildable without waiting on the data
+architect conversation. Answer: the "Success" tab is a literal 4×4 config
+table (Yield ≥95%/92% stock/custom, Total Days ≤84, weighted 1/3 each) —
+confirmed thresholds, not inference. Added to `mfg_job_schedule_view.sql`:
+
+- `yield_pct` — `Job_Op.Quantity ÷ Job.Quantity`, mirrors the confirmed
+  `Caps Made ÷ Capsule Count` formula from the sheet, computed per
+  operation row (not isolated to a specific "final output" operation).
+- `yield_meets_goal` — `yield_pct` vs. 0.95/0.92, threshold picked by the
+  unconfirmed `job_type = 'Stock'` lead.
+- `job_add_date` — `Part_v_Job.Add_Date`, a stand-in for the sheet's
+  manually-typed "Date Entered" (no Plex equivalent exists at all).
+- `total_days_from_job_creation` / `tat_meets_goal` — `job_add_date` to
+  the most recent QC checksheet's `Inspection_Date` (itself an
+  approximate analog for "FG Testing Released"), checked against the
+  confirmed 84-day threshold.
+
+All explicitly flagged in the SQL header as **exploratory** — two of the
+three formula inputs are themselves speculative stand-ins, so these
+columns don't reproduce the sheet's actual Success Rating/Grade, just
+approximate it using Plex-native dates. The query was restructured around
+a `base` CTE so these derived columns reference plain values instead of
+repeating BigQuery's raw date-conversion expressions three times each.
+Tested against real BigQuery under a scratch view name before deploying —
+compiled cleanly, `job_add_date` resolved a real date (`2026-07-17`) from
+Plex, and every derived column returned `NULL` gracefully where an input
+was missing.
 
 ## Deployment
 
@@ -167,10 +198,12 @@ tracks those files by content hash. `quality_nonconformance` and
 14/15 and 16/17 UTC respectively (next free slots after the existing 4–13
 UTC block). See `terraform/main.tf` for the exact resources.
 
-**⚠ Round 3's `Part_v_Job_Type`/`Part_v_Job_Distribution` additions are
-committed but not deployed** — `terraform plan` confirmed a clean 3-object
-update (`work_orders_config_prod`/`_test`, `mfg_job_schedule_view_sql`, 0
-add/0 destroy), but Emilio asked to hold off applying until all MFG Job
-Schedule tabs are mapped, so this ships as one batch rather than
-per-tab. Next step before deploying: re-run `terraform plan` with the same
-3 targets to confirm nothing else drifted, then apply.
+**Round 3 + Round 4 deployed together, 2026-08-11** — held per Emilio's
+request until all 10 tabs were mapped, then batched into one
+`terraform apply` (`work_orders_config_prod`/`_test`,
+`mfg_job_schedule_view_sql` — clean 3-object update, 0 add/0 destroy) once
+he confirmed which buildable-now items to ship. Verified live: triggered
+`gcloud run jobs execute plex-etl-work-orders-test --wait` (succeeded),
+then queried the deployed `PlexTest.mfg_job_schedule_report` directly to
+confirm `job_type`, `job_add_date`, and the other new columns are present
+and computing correctly in production, not just in the scratch test.

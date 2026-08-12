@@ -30,6 +30,17 @@ own gaps, and even feed a different downstream report than the main tab.
 still genuinely open across the whole spreadsheet — everything else has
 either been built, confirmed, or explicitly ruled out.
 
+**Built and deployed 2026-08-11, without waiting on the open questions
+below:** `job_type`/`job_distribution_count`/`job_distribution_sample_release_key`
+(the Stock/Custom leads), plus exploratory `yield_pct`/`yield_meets_goal`
+and `job_add_date`/`total_days_from_job_creation`/`tat_meets_goal` (using
+the confirmed Success-tab thresholds, with two speculative stand-in
+inputs — see `docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md` Round 4). All live on
+`mfg_job_schedule_report`, verified against real BigQuery. Deviation
+couldn't be added the same way — the NC-to-job correlation gap (Open
+Question, `Quality_v_Problem` has no job FK) blocks it structurally, not
+just for lack of data.
+
 ## ❓ Open Questions for the Data Architect/Scientist
 
 Running list across all tabs of this spreadsheet — kept in one place so

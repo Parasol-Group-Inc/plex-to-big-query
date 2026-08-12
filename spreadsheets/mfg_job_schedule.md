@@ -18,7 +18,7 @@ own gaps, and even feed a different downstream report than the main tab.
 | Open | ✅ Built | this doc |
 | YTD Gate Stats | 🔍 Mapped | [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md) |
 | FG Testing Pending | 🔍 Mapped | [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md) |
-| YTD List | ⏳ Pending | — |
+| YTD List | 🔍 Mapped | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
 | READ ME | — (documentation tab, not data) | — |
 | Done YTD | ⏳ Pending | — |
 | Done 2025 | ⏳ Pending | — |

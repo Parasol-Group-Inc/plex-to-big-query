@@ -41,7 +41,7 @@ plus adds new ones:
 | Yield (Stock Avg / Custom Avg) | ⏳ Inherited gap, still unconfirmed | Same lead flagged in `mfg_job_schedule.md`/`plex_production_yield_reference.md`: `Job_Op.Quantity` (actual) vs. `Job.Quantity` (planned). **`Part_v_Job` still has 0 rows on the test tenant as of 2026-08-11** — re-confirmed live — so this can't be tested until real production data exists on either tenant. |
 | # Stock/Custom Jobs with Deviation/NCs | ⏳ Inherited gap, still unconfirmed | Same "NC-to-job correlation" gap already flagged in `mfg_job_schedule.md`: `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key` FK — linking an NC to a specific job (and by extension, to that job's month/Stock-or-Custom bucket) needs a part+date match, not a join key. This blocks the second column depending on it. |
 | TAT (Stock/Custom Avg, days) | 🔍 Plausible, needs definition + real data | Worth explicitly distinguishing from the "Days in WIP"/"Days Left" columns on the Open tab, which are flagged **manual-only** there (hand-updated while a job is still in progress). This TAT is a **historical rollup over completed jobs**, plausibly `Job_Op.Complete_Date − Start_Date`, or possibly the broader `Job.Complete_Date − Add_Date` if "TAT" means order-entry-to-done rather than shop-floor time. Which date pair is correct is Emilio's call, not guessable — and either way, `Job_Op` has no completed rows on the test tenant yet to validate against. |
-| "Successful" composite definition | ❌ Business rule, not a data gap | Needs Emilio to define how Yield/Deviations/TAT combine into pass/fail per job. Can't be inferred from the sheet. |
+| "Successful" composite definition | 🔍 **Reverse-engineered 2026-08-11, needs Emilio's yes/no** | Mapping the "YTD List" tab (the row-level data behind this one) found a formula that matches ~15+ real rows with zero contradictions: `Success Rating = (gates passed) / 3`, gates = Yield ≥ goal (95%/92%), Deviation/NCs = NO, Days to Mfg ≤ ~84. See `mfg_job_schedule_ytd_list.md`. Still open: what makes a job "Successful" (binary) in *this* tab's Table 1 — `= 100%` on that fractional score, or some lower threshold. |
 | Goal thresholds (75%, 95%, 92%) | Not a gap | Once the above metrics exist, these are just comparison constants, not something to source from Plex. |
 
 ## Verdict
@@ -49,9 +49,11 @@ plus adds new ones:
 **Not buildable today.** Only "Total # Jobs per month" is independently
 buildable right now — everything else in this tab either has no confirmed
 Plex source (Stock/Custom classification), is blocked by a gap already
-flagged in the parent tab (NC-to-job correlation), needs real (non-empty)
-production data that doesn't exist on the test tenant yet (Yield, TAT), or
-requires a business-rule definition only Emilio can supply ("Successful").
+flagged in the parent tab (NC-to-job correlation), or needs real
+(non-empty) production data that doesn't exist on the test tenant yet
+(Yield, TAT). The "Successful" business rule that looked undefinable is
+now a reverse-engineered hypothesis pending Emilio's confirmation, not an
+open-ended gap — see `mfg_job_schedule_ytd_list.md`.
 
 This tab is a good forcing function for prioritizing 2 things once real
 production data lands: (1) validating the Stock/Custom leads above

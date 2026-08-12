@@ -434,9 +434,11 @@ def main():
     rows_fetched   = 0
     rows_written   = 0
     report_name      = _default_report_name()
+    report_category   = ""
     email_plex_view   = PLEX_VIEW
     email_plex_filter = PLEX_FILTER or "none"
     email_bq_table    = BQ_TABLE
+    email_reports_detail = []
 
     # Fetch credentials — IAM token takes priority over username/password
     log.info("Fetching credentials...")
@@ -504,6 +506,8 @@ def main():
                     "bq_dataset":             BQ_DATASET,
                     "bq_table":               email_bq_table,
                     "report_name":            report_name,
+                    "report_category":        report_category,
+                    "reports_detail":         email_reports_detail,
                     "plex_view":              email_plex_view,
                     "plex_filter":            email_plex_filter,
                     "plex_host":              PLEX_HOST,
@@ -526,11 +530,20 @@ def main():
         try:
             config = load_report_config(REPORT_CONFIG_GCS_PATH)
             report_name = config.get("report_name", REPORT_CONFIG_GCS_PATH)
+            report_category = config.get("category", "")
             extractions = config.get("extractions", [])
             email_plex_view   = report_name
             email_plex_filter = f"{len(extractions)} extractions — see Events"
-            view_names        = [v.get("name", "?") for v in bq_view_configs(config) if isinstance(v, dict)]
+            view_cfgs         = [v for v in bq_view_configs(config) if isinstance(v, dict)]
+            view_names        = [v.get("name", "?") for v in view_cfgs]
             email_bq_table    = ", ".join(view_names) if view_names else report_name
+            # Peer reports produced by this one shared pipeline, named per the
+            # Reports List (not just the raw BQ view name) — see the
+            # display_name comment in reports/work_orders.yaml.
+            email_reports_detail = [
+                {"display_name": v.get("display_name", v.get("name", "?")), "table_name": v.get("name", "?")}
+                for v in view_cfgs
+            ]
             events.append(f"Loaded report config: {report_name} ({len(extractions)} extractions)")
         except Exception as exc:
             log.exception("Failed to load report config.")
@@ -730,6 +743,8 @@ def main():
         "bq_dataset":             BQ_DATASET,
         "bq_table":               email_bq_table,
         "report_name":            report_name,
+        "report_category":        report_category,
+        "reports_detail":         email_reports_detail,
         "plex_view":              email_plex_view,
         "plex_filter":            email_plex_filter,
         "plex_host":              PLEX_HOST,
@@ -749,6 +764,8 @@ def run_and_report():
         "bq_dataset":             BQ_DATASET,
         "bq_table":               BQ_TABLE,
         "report_name":            _default_report_name(),
+        "report_category":        "",
+        "reports_detail":         [],
         "plex_view":              PLEX_VIEW,
         "plex_filter":            PLEX_FILTER,
         "plex_host":              PLEX_HOST,
@@ -805,6 +822,8 @@ def run_and_report():
         "plex_host":        result.get("plex_host",      PLEX_HOST),
         "execution_name":   result.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "")),
         "report_name":      result.get("report_name",    _default_report_name()),
+        "report_category":  result.get("report_category", ""),
+        "reports_detail":   result.get("reports_detail",  []),
     }
 
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))

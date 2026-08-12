@@ -1,5 +1,15 @@
 report_name: work_orders
+category: Production
 description: "Work orders by workcenter — Vox Nutrition production report (PlexProd dataset)"
+
+# `category` and each bq_view's `display_name` below map back to the
+# company Reports List (reports-list/production.md) — "Work Orders" itself
+# has no Reports List entry (it's this pipeline's original, internal
+# deliverable), while MFG Job Schedule and Labeling | Open WO: Results are
+# both named, tracked entries there. All three are peer reports produced by
+# this one shared extraction — none of them is the "general" one the others
+# hang off of. See docs/OPERATIONS.md if this ever needs its own dedicated
+# Cloud Run job instead of riding along here.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HOW TO EDIT THIS REPORT (no deployment required):
@@ -131,8 +141,11 @@ extractions:
 # the SQL are replaced at runtime with the GCP_PROJECT and BQ_DATASET env vars.
 bq_view:
   - name: work_orders_report
+    display_name: "Work Orders"
     sql_file: gs://voxdatalake-report-configs/sql/work_orders_view.sql
   - name: mfg_job_schedule_report
+    display_name: "MFG Job Schedule"
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_view.sql
   - name: labeling_open_work_orders_report
+    display_name: "Labeling | Open WO: Results"
     sql_file: gs://voxdatalake-report-configs/sql/labeling_open_work_orders_view.sql

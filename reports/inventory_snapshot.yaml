@@ -1,4 +1,5 @@
 report_name: inventory_snapshot
+category: Inventory
 description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ Transaction) (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +68,8 @@ extractions:
 
 bq_view:
   - name: inventory_snapshot_report
+    display_name: "Current Inventory Snapshot"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_snapshot_view.sql
   - name: inventory_valuation_summary_report
+    display_name: "Vox | Inventory Valuation Summary"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_summary_view.sql

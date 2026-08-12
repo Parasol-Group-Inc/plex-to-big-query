@@ -1,4 +1,5 @@
 report_name: sales_orders_test
+category: Sales
 description: "16-field sales orders report — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/sales_orders.yaml.
@@ -76,6 +77,8 @@ extractions:
 # this reaches the test Cloud Run job) applies here too.
 bq_view:
   - name: sales_orders_report
+    display_name: "Sales Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql
   - name: sales_orders_open_report
+    display_name: "Vox | Open Sales Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_open_view.sql

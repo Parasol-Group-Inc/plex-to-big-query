@@ -1,4 +1,5 @@
 report_name: work_orders_test
+category: Production
 description: "Work orders by workcenter — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/work_orders.yaml.
@@ -84,8 +85,11 @@ extractions:
 
 bq_view:
   - name: work_orders_report
+    display_name: "Work Orders"
     sql_file: gs://voxdatalake-report-configs/sql/work_orders_view.sql
   - name: mfg_job_schedule_report
+    display_name: "MFG Job Schedule"
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_view.sql
   - name: labeling_open_work_orders_report
+    display_name: "Labeling | Open WO: Results"
     sql_file: gs://voxdatalake-report-configs/sql/labeling_open_work_orders_view.sql

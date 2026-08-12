@@ -1,4 +1,5 @@
 report_name: sales_orders
+category: Sales
 description: "16-field Vox Nutrition sales orders report — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +113,8 @@ extractions:
 # crash on a list. Deploy code and this config change together.
 bq_view:
   - name: sales_orders_report
+    display_name: "Sales Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_view.sql
   - name: sales_orders_open_report
+    display_name: "Vox | Open Sales Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_open_view.sql

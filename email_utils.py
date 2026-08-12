@@ -183,14 +183,31 @@ def send_report(report: Dict[str, object]) -> bool:
         )
         logs_url_label = "View in Cloud Console"
 
+    # A pipeline can produce more than one named report in a single run (e.g.
+    # the work_orders pipeline also produces MFG Job Schedule and Labeling |
+    # Open WO: Results) — those are peer reports sharing a pipeline, not a
+    # "general" report with side extras, so the subject lists each by its
+    # real Reports List name rather than just the internal pipeline name.
+    report_category = str(report.get("report_category", ""))
+    reports_detail   = report.get("reports_detail") or []
+    display_names    = [
+        str(r.get("display_name", "")) for r in reports_detail
+        if isinstance(r, dict) and r.get("display_name")
+    ]
+
     # Subject includes report name so each pipeline gets its own Gmail thread.
     # e.g. "[Plex ETL] Work Orders Test — SUCCESS — 2026-07-14"
     # REPORT_SUBJECT env var overrides entirely when set to a non-default value.
     report_name_raw     = str(report.get("report_name", ""))
     report_name_display = report_name_raw.replace("_", " ").title() if report_name_raw else ""
+    if display_names:
+        joined = ", ".join(display_names)
+        subject_label = f"{report_category}: {joined}" if report_category else joined
+    else:
+        subject_label = report_name_display
     default_subject = (
-        f"[Plex ETL] {report_name_display} — {status.upper()} — {run_date}"
-        if report_name_display
+        f"[Plex ETL] {subject_label} — {status.upper()} — {run_date}"
+        if subject_label
         else f"[Plex ETL] {status.upper()} — {company_name} — {run_date}"
     )
     subject_override = os.environ.get("REPORT_SUBJECT", "")
@@ -199,6 +216,25 @@ def send_report(report: Dict[str, object]) -> bool:
         if subject_override and subject_override != "Plex to BigQuery ETL Report"
         else default_subject
     )
+
+    # Peer-report breakdown — only rendered when a pipeline actually produced
+    # more than one named report this run (single-view/legacy reports have
+    # no reports_detail, so this section disappears rather than showing
+    # "None" on every email).
+    reports_detail_lines = [
+        f"{r.get('display_name', '?')} — {r.get('table_name', '?')}"
+        for r in reports_detail if isinstance(r, dict)
+    ]
+    if reports_detail_lines:
+        section_label = f"Reports Produced — {report_category}" if report_category else "Reports Produced This Run"
+        reports_section_html = (
+            f'<tr><td colspan="2" class="section-label">{html.escape(section_label)}</td></tr>'
+            f'<tr><td colspan="2" style="padding: 10px;">{_list_to_html(reports_detail_lines)}</td></tr>'
+        )
+        reports_section_text = f"{section_label.upper()}\n{_list_to_text(reports_detail_lines)}\n\n"
+    else:
+        reports_section_html = ""
+        reports_section_text = ""
 
     context = {
         "status": status.upper(),
@@ -221,6 +257,7 @@ def send_report(report: Dict[str, object]) -> bool:
         "repo_url": repo_url,
         "events_html": _list_to_html(events),
         "errors_html": _errors_to_html(errors),
+        "reports_section_html": reports_section_html,
     }
 
     html_template = _load_template(template_name)
@@ -229,6 +266,7 @@ def send_report(report: Dict[str, object]) -> bool:
         f"Status: {context['status']}\n"
         f"Date: {context['run_date']}  Time: {context['run_time']} UTC\n"
         f"Duration: {context['duration_seconds']} seconds\n\n"
+        f"{reports_section_text}"
         f"SOURCE\n"
         f"  Host:         {context['plex_host']}\n"
         f"  View/Report:  {context['plex_view']}\n"

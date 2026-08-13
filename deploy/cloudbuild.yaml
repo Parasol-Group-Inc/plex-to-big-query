@@ -15,6 +15,14 @@ substitutions:
   _CR_JOB_TEST:   "plex-etl-test"    # smoke test runs HERE, never on prod
   _IMAGE_NAME:    "etl"
   _ENV:           "prod"             # prod | test
+  # Every plex-etl-* job shares this one image (main.py/email_utils.py are
+  # identical across pipelines — only each job's REPORT_CONFIG_GCS_PATH env
+  # var differs, set by Terraform). One build updates all of them. Keep this
+  # list in sync with the google_cloud_run_v2_job resources in
+  # terraform/main.tf — each of those has a `lifecycle { ignore_changes }`
+  # on its image field specifically so this step is the thing that moves
+  # it, not a stray `terraform apply`.
+  _ALL_JOBS: "plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test plex-etl-part-obsolescence plex-etl-part-obsolescence-test plex-etl-inventory-activity plex-etl-inventory-activity-test plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test"
 
 # Full image URL derived from substitutions
 # e.g. us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:abc123
@@ -72,30 +80,24 @@ steps:
     waitFor:
       - "build"
 
-  # ── 4. Update Cloud Run jobs with new image ──────────────────────────────────
+  # ── 4. Update every plex-etl-* Cloud Run job with the new image ──────────────
+  # One shared image, one deploy step, all jobs — this (not Terraform) is
+  # the sole path that moves a job onto a new image; see the ignore_changes
+  # note on _ALL_JOBS above and on each job resource in terraform/main.tf.
+  # Always the immutable SHA tag, never ":latest" (that tag is pushed for
+  # convenience/manual `docker pull` only — nothing deployed ever reads it).
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    id: "deploy"
-    entrypoint: "gcloud"
+    id: "deploy-all"
+    entrypoint: "bash"
     args:
-      - "run"
-      - "jobs"
-      - "update"
-      - "${_CR_JOB}"
-      - "--image=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_GCP_REGION}"
-    waitFor:
-      - "push-sha"
-
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    id: "deploy-test"
-    entrypoint: "gcloud"
-    args:
-      - "run"
-      - "jobs"
-      - "update"
-      - "${_CR_JOB_TEST}"
-      - "--image=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_GCP_REGION}"
+      - "-c"
+      - |
+        set -e
+        IMAGE="${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
+        for job in ${_ALL_JOBS}; do
+          echo "=== Updating $job -> $IMAGE ==="
+          gcloud run jobs update "$job" --image="$IMAGE" --region="${_GCP_REGION}"
+        done
     waitFor:
       - "push-sha"
 
@@ -114,7 +116,7 @@ steps:
       - "--region=${_GCP_REGION}"
       - "--wait"                      # block until job completes or fails
     waitFor:
-      - "deploy-test"
+      - "deploy-all"
 
 # ── Final image references ────────────────────────────────────────────────────
 images:

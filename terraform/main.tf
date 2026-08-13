@@ -320,6 +320,22 @@ resource "google_cloud_run_v2_job" "etl" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl" {
@@ -525,6 +541,22 @@ resource "google_cloud_run_v2_job" "etl_test" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_test" {
@@ -704,6 +736,22 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_work_orders" {
@@ -859,6 +907,22 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -1051,6 +1115,22 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_purchasing_open_orders" {
@@ -1206,6 +1286,22 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -1386,6 +1482,22 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_part_obsolescence" {
@@ -1541,6 +1653,22 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -1721,6 +1849,22 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_inventory_activity" {
@@ -1876,6 +2020,22 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -2067,6 +2227,22 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_inventory_snapshot" {
@@ -2214,6 +2390,22 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -2424,6 +2616,22 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_quality_nonconformance" {
@@ -2573,6 +2781,22 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -2747,6 +2971,22 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
       timeout     = "600s"
     }
   }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory" {
@@ -2896,6 +3136,22 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
       max_retries = 1
       timeout     = "600s"
     }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 

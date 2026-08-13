@@ -116,7 +116,19 @@ variable "artifact_registry_repo" {
 
 variable "image_url" {
   type        = string
-  description = "Full container image URL in Artifact Registry"
+  description = <<-EOT
+    Full container image URL in Artifact Registry, e.g.
+    us-central1-docker.pkg.dev/PROJECT/REPO/etl:<git-short-sha>.
+
+    Always pin this to an immutable commit-SHA tag — never ":latest". Every
+    google_cloud_run_v2_job resource has a `lifecycle { ignore_changes }` on
+    its image field, so this value only matters on first creation of a job;
+    deploy/cloudbuild.yaml (or a manual `gcloud run jobs update --image=...`)
+    is what actually moves a job to a new image afterward. Keeping this
+    pinned rather than floating means a from-scratch `terraform apply`
+    always creates jobs on a known-good build instead of whatever ":latest"
+    happens to resolve to at apply time.
+  EOT
 }
 
 # ── Plex query config ─────────────────────────────────────────────────────────

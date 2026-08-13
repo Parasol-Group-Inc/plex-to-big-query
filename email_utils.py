@@ -207,8 +207,17 @@ def send_report(report: Dict[str, object]) -> bool:
     environment = "TEST" if "test" in bq_dataset.lower() else ("PRODUCTION" if bq_dataset else "")
 
     # Subject includes report name so each pipeline gets its own Gmail thread.
-    # e.g. "[Plex ETL] Work Orders — SUCCESS — 2026-07-14"
+    # e.g. "[Plex ETL] Production: Work Orders, MFG Job Schedule — 2026-08-13"
     # REPORT_SUBJECT env var overrides entirely when set to a non-default value.
+    #
+    # Deliberately NO status (SUCCESS/PARTIAL/FAILED) in the subject: a
+    # pipeline can produce several peer reports in one run, and only one of
+    # them failing would make an aggregate status in the subject line
+    # misleading ("FAILED" reads as "nothing worked" when 2 of 3 reports are
+    # fine). Status is per-run truth, not per-category truth, so it belongs
+    # in the body (see status badge) where it can sit next to the actual
+    # events/errors that explain it — same reasoning that already moved
+    # PRODUCTION/TEST out of the subject above.
     report_name_raw = str(report.get("report_name", ""))
     # Strip a trailing "_test" so even a report with no category/display_name
     # set (falling back to the bare report_name) doesn't leak the environment
@@ -221,9 +230,9 @@ def send_report(report: Dict[str, object]) -> bool:
     else:
         subject_label = report_name_display
     default_subject = (
-        f"[Plex ETL] {subject_label} — {status.upper()} — {run_date}"
+        f"[Plex ETL] {subject_label} — {run_date}"
         if subject_label
-        else f"[Plex ETL] {status.upper()} — {company_name} — {run_date}"
+        else f"[Plex ETL] {company_name} — {run_date}"
     )
     subject_override = os.environ.get("REPORT_SUBJECT", "")
     subject = (

@@ -203,7 +203,11 @@ The ODBC driver is **not in git** — it must be present in `driver/` on your ma
 
 ### What "rebuilding" means
 
-Cloud Run always pulls `:latest` at the start of each execution. Once you push a new image, the next job run automatically uses it. No Terraform apply needed after a push-only change.
+**Not true as of 2026-08-13** — pushing a new image does NOT get picked up automatically. Cloud Run Jobs resolve the image to a digest at *update* time, not at each execution, and every job's Terraform resource now has `lifecycle { ignore_changes = [image] }` specifically so a routine `terraform apply` can't silently move it either. After pushing, explicitly redeploy each job you want on the new build:
+```bash
+gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
+```
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 16 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
 
 You only need to rebuild when **code or files inside the image change**:
 - `main.py`, `email_utils.py`, `templates/report.html` — Python logic or email design
@@ -221,16 +225,21 @@ Run from the **repo root** (not the `terraform/` folder):
 # Authenticate Docker to your Artifact Registry region
 gcloud auth configure-docker us-central1-docker.pkg.dev --project=voxdatalake
 
-# Build the image
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+# Tag with the current commit SHA — never ":latest" (see variables.tf's
+# image_url description). ":latest" is still pushed alongside for
+# convenience/manual `docker pull` only; nothing deployed ever reads it.
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 
-# Push to Artifact Registry
+# Push both tags to Artifact Registry
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
 > First push takes 3–8 minutes because of the ODBC driver files (~40 MB). Subsequent pushes are faster — Docker reuses cached layers for anything that didn't change.
 
-Then re-apply Terraform so the Cloud Run job picks up the now-real image:
+Set `image_url` in `terraform.tfvars` to that same `:$SHA` tag, then apply — this is what creates the Cloud Run job on this first pass. On every later rebuild, this `terraform apply` step does **not** redeploy anything by itself (each job's `lifecycle { ignore_changes }` on `image` sees to that) — you'd explicitly `gcloud run jobs update JOB_NAME --image=...` instead, or let `deploy/cloudbuild.yaml`'s `deploy-all` step do it for all jobs at once:
 
 ```bash
 cd terraform

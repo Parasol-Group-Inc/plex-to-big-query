@@ -71,7 +71,7 @@ Flow inside `send_report()`:
 1. Check `SENDGRID_ENABLED` — exit early if `false`
 2. Fetch API key: checks `SENDGRID_API_KEY` env var first, then falls back to Secret Manager using the secret named by `SECRET_SENDGRID_KEY`
 3. Build the template context — pulls project, dataset, table, Plex view, host, execution name, and constructs the Cloud Run logs URL automatically
-4. Build the email subject: `[Plex ETL] SUCCESS — Vox Nutrition — 2026-06-19`. Can be overridden with `REPORT_SUBJECT` env var
+4. Build the email subject — one shape per report `category` (e.g. `[Plex ETL] Sales: Sales Orders — 2026-08-13`), or `[Plex ETL] {company_name} — DATE` if the report has no category set. Status (SUCCESS/PARTIAL/FAILED) and PRODUCTION/TEST are deliberately never in the subject — both live in the body only. Can be overridden with `REPORT_SUBJECT` env var
 5. Load `templates/report.html`, substitute `{{placeholders}}`, send via `SendGridAPIClient`
 
 **`_render_template(template, context)`** — simple string replacement for `{{key}}` → value. No external template engine needed.
@@ -240,7 +240,11 @@ echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
 | `driver/` (new ODBC driver version) | `docker build … && docker push …` |
 | `config/odbcinst.ini` or `config/odbc.ini` | `docker build … && docker push …` |
 
-Cloud Run always pulls `:latest` at the start of each execution — no Terraform apply needed after a push.
+**Not true as of 2026-08-13** — pushing a new image alone does NOT update any deployed job. Cloud Run Jobs resolve their image to a digest at *update* time, not per-execution, and every `google_cloud_run_v2_job` now has `lifecycle { ignore_changes = [image] }` so Terraform won't pick it up either. After pushing, you must explicitly run:
+```bash
+gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
+```
+for every job you want on the new image — `deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 16 in one go. Always use a commit-SHA tag, never `:latest`.
 
 ---
 
@@ -272,8 +276,8 @@ Cloud Run always pulls `:latest` at the start of each execution — no Terraform
 | `SECRET_SENDGRID_KEY` | `sendgrid-api-key` | apply | Secret Manager secret name for SendGrid key |
 | `REPORT_FROM_EMAIL` | `""` | apply | Verified sender address |
 | `REPORT_TO_EMAILS` | `""` | apply | Comma-separated recipients |
-| `REPORT_SUBJECT` | `""` | apply | Override for auto subject. Empty = `[Plex ETL] STATUS — COMPANY — DATE` |
-| `COMPANY_NAME` | `Parasol` | apply | Company name in email subject |
+| `REPORT_SUBJECT` | `""` | apply | Override for auto subject. Empty = `[Plex ETL] {category}: {report names} — DATE`, or `[Plex ETL] {company_name} — DATE` with no category set. Status and PRODUCTION/TEST are never in the subject — body only |
+| `COMPANY_NAME` | `Parasol` | apply | Company name in the subject's no-category fallback only |
 | `CLOUD_RUN_EXECUTION` | set by GCP | — | Execution ID (auto, used to build logs link) |
 
 ---

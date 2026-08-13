@@ -275,7 +275,7 @@ gcloud run jobs execute plex-etl-purchasing-test \
 # SELECT * FROM `voxdatalake.PlexTest.purchasing_orders_report` LIMIT 10
 ```
 
-Check the email — subject will be `[Plex ETL] Purchasing Orders Test — SUCCESS — DATE`.
+Check the email — subject will be `[Plex ETL] {category}: {display_name} — DATE` (from the `category`/`display_name` fields in the report's YAML — set those before deploying so the subject isn't just the bare report_name). Status and PRODUCTION/TEST are never in the subject — check the body for those.
 
 ---
 

@@ -185,7 +185,7 @@ variable "secret_sendgrid_key" {
 
 variable "company_name" {
   type        = string
-  description = "Company name shown in email subject line: [Plex ETL] STATUS — {company_name} — DATE"
+  description = "Company name shown in the email subject's fallback shape, [Plex ETL] {company_name} — DATE, used only when a report has no category set. A report with a category gets [Plex ETL] {category}: {report names} — DATE instead. Status and PRODUCTION/TEST never appear in the subject."
   default     = "Parasol"
 }
 

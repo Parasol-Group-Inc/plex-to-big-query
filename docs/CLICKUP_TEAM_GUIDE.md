@@ -107,7 +107,7 @@ gcloud run jobs execute plex-etl-test --region=us-central1 --project=voxdatalake
 
 ### Reading the email report
 
-Every run emails a summary. Subject format: `[Plex ETL] Sales Orders — SUCCESS — 2026-07-15`
+Every run emails a summary. Subject format: `[Plex ETL] Sales: Sales Orders, Vox | Open Sales Orders — 2026-08-13` (one subject per category, identical for prod/test — status is NOT in the subject, see below).
 
 | Badge | Meaning | What to do |
 |---|---|---|
@@ -177,7 +177,7 @@ High level: **two files in GCS + one Terraform block**. Full walkthrough with co
    ```bash
    cd terraform && terraform apply -var-file=terraform.tfvars
    ```
-6. **Run the test job, verify, then enable prod.** The email subject automatically becomes `[Plex ETL] Your Report Name — STATUS — DATE`.
+6. **Run the test job, verify, then enable prod.** Add `category: YourCategory` and a `display_name` on each `bq_view` entry in the YAML so the email subject reads `[Plex ETL] YourCategory: Your Report Name — DATE` — the same shape every day, identical between prod and test (status is never in the subject, only in the body).
 
 ---
 

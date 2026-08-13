@@ -286,11 +286,18 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 # From project root
 gcloud auth configure-docker us-central1-docker.pkg.dev --project=voxdatalake
 
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
-Cloud Run always pulls `:latest` on the next execution — no Terraform apply needed after a push.
+**Not "no Terraform apply needed" — nothing at all picks this up automatically.** Cloud Run Jobs resolve their image at *update* time, not per-execution, and every job's Terraform resource has `lifecycle { ignore_changes = [image] }` so `terraform apply` won't move it either. You must explicitly redeploy:
+```bash
+gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
+```
+or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 16 jobs in one build.
 
 ### `denied: Unauthenticated request`
 

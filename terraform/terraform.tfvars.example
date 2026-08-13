@@ -8,6 +8,12 @@
 #   terraform init
 #   terraform apply -var-file=terraform.tfvars
 #
+# BACK UP your real terraform.tfvars after every edit — it exists only on
+# your machine, unlike everything else here which is either in git or in
+# Terraform state. Same versioned GCS bucket the state backend already
+# uses, under a distinct object name:
+#   gcloud storage cp terraform.tfvars gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup
+#
 # This file mirrors every variable actually used by the live deployment as
 # of 2026-07-20 (4 Cloud Run jobs: sales orders + work orders, prod + test;
 # multi-report GCS config; SendGrid email reports). If you're rebuilding
@@ -106,7 +112,10 @@ plex_date_col = ""   # empty = full refresh; set to column name for incremental
 sendgrid_enabled  = "true"
 report_from_email = "you@example.com"   # must be a verified sender in your SendGrid account
 report_to_emails  = "you@example.com, teammate@example.com"
-report_subject    = ""   # leave empty to use the auto subject: [Plex ETL] STATUS — COMPANY — DATE
+report_subject    = ""   # leave empty to use the auto subject: [Plex ETL] {category}: {report names} — DATE
+                          # (falls back to [Plex ETL] COMPANY — DATE if the report has no category set)
+                          # Status (SUCCESS/PARTIAL/FAILED) and PRODUCTION/TEST are never in the
+                          # subject — both are body-only. See docs/EMAIL_SCHEDULE.md.
 company_name      = "Your Company"
 
 # ── IAM / infrastructure ──────────────────────────────────────────────────────

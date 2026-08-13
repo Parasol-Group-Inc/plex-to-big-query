@@ -55,9 +55,20 @@ a `display_name`. `email_utils.py` uses these to build the subject —
 **one subject shape per category, identical for prod and test** — e.g.:
 
 ```
-[Plex ETL] Production: Work Orders, MFG Job Schedule, Labeling | Open WO: Results — SUCCESS — 2026-08-13
-[Plex ETL] Quality: Quality Nonconformance — SUCCESS — 2026-08-13
+[Plex ETL] Production: Work Orders, MFG Job Schedule, Labeling | Open WO: Results — 2026-08-13
+[Plex ETL] Quality: Quality Nonconformance — 2026-08-13
 ```
+
+**Updated 2026-08-13, same day:** status (SUCCESS/PARTIAL/FAILED) was removed
+from the subject entirely, not just environment. A pipeline can produce
+several peer reports in one run, and one aggregate status in the subject
+was misleading when only some of them failed — e.g. a labeling view
+failing while work_orders/mfg_job_schedule succeeded would show "FAILED"
+and read as "nothing worked." Status now lives in the body only (next to
+the Events/Errors that explain it), same reasoning that already moved
+PRODUCTION/TEST out of the subject. This also means the subject is now
+100% identical between a category's prod and test run on the same day —
+not just "one shape," literally the same string.
 
 PRODUCTION vs TEST no longer appears in the subject at all — it shows as a
 colored badge next to the status badge in the email body (blue
@@ -136,9 +147,15 @@ retry-skip logic):
   target. Real risk for a purely cosmetic gain, given naming already reads
   fine in context (it's the original/sales-orders job, predates the
   `-work-orders`/`-inventory-snapshot` naming convention).
-- The image-tag cosmetic drift (`:f46d93e` vs. Terraform's declared
-  `:latest`) noted in `docs/DEPLOYMENT_STATE`-style memory still applies to
-  all 16 jobs now, not just the original 2 — same digest either way,
-  deliberately left unresolved pending a decision on which deploy mechanism
-  (Cloud Build's SHA-pinning vs. Terraform's `:latest`) should be the
-  source of truth.
+- ~~The image-tag cosmetic drift...~~ **Resolved 2026-08-13.** Every
+  `google_cloud_run_v2_job` now has `lifecycle { ignore_changes = [image,
+  client, client_version] }` — Terraform no longer tracks the deployed
+  image at all, so it can't drift *or* get silently reverted by an
+  unrelated `terraform apply`. `image_url` in `terraform.tfvars` is now
+  always a pinned commit SHA (never `:latest`) and only matters for
+  first-time job creation; `deploy/cloudbuild.yaml`'s single `deploy-all`
+  step (all 16 jobs, one loop) — or a manual `gcloud run jobs update
+  --image=...`— is the only thing that ever moves a job onto a new image.
+  Verified live: `terraform plan` shows `No changes` immediately after a
+  real `gcloud run jobs update`, both right after adding the lifecycle
+  block and again after a full rebuild+redeploy to commit `2f235d2`.

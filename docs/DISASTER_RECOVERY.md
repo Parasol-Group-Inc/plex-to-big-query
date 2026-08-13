@@ -88,28 +88,47 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform apply -var-file=terraform.tfvars
 
-# 5. Restore secret VALUES (from your backed-up copies, not from GCP --
-# they're gone)
-echo -n 'PLEX_TOKEN'    | gcloud secrets versions add plex-access-token --data-file=- --project=NEW-PROJECT-ID
-echo -n 'SENDGRID_KEY'  | gcloud secrets versions add sendgrid-api-key  --data-file=- --project=NEW-PROJECT-ID
-echo -n 'COMPANY_CODE'  | gcloud secrets versions add plex-company-code --data-file=- --project=NEW-PROJECT-ID
+# 5. Restore ALL FIVE secret VALUES (from your backed-up copies, not from
+# GCP -- they're gone). Missing any one of these will make its owning job(s)
+# fail credential fetch.
+echo -n 'PLEX_TOKEN'      | gcloud secrets versions add plex-access-token  --data-file=- --project=NEW-PROJECT-ID
+echo -n 'SENDGRID_KEY'    | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=NEW-PROJECT-ID
+echo -n 'ODBC_USER'       | gcloud secrets versions add plex-odbc-user     --data-file=- --project=NEW-PROJECT-ID
+echo -n 'ODBC_PASSWORD'   | gcloud secrets versions add plex-odbc-password --data-file=- --project=NEW-PROJECT-ID
+echo -n 'COMPANY_CODE'    | gcloud secrets versions add plex-company-code  --data-file=- --project=NEW-PROJECT-ID
 
 # 6. Build and push the image (driver must be in driver/ locally, from
-# the build-assets bucket restored in step 3)
+# the build-assets bucket restored in step 3). Tag with a commit SHA, never
+# ":latest" — set that SHA as image_url in terraform.tfvars before the
+# re-apply below.
 gcloud storage cp -r gs://NEW-PROJECT-ID-build-assets/plex-odbc-driver/* driver/
-docker build -t us-central1-docker.pkg.dev/NEW-PROJECT-ID/plex-pipeline/etl:latest .
-docker push us-central1-docker.pkg.dev/NEW-PROJECT-ID/plex-pipeline/etl:latest
-terraform apply -var-file=terraform.tfvars   # picks up the real image_url
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/NEW-PROJECT-ID/plex-pipeline/etl:$SHA .
+docker push us-central1-docker.pkg.dev/NEW-PROJECT-ID/plex-pipeline/etl:$SHA
+# Update terraform.tfvars: image_url = ".../etl:$SHA"
+terraform apply -var-file=terraform.tfvars
+# This apply DOES set the image — every job's `lifecycle { ignore_changes }`
+# only blocks CHANGES to an already-existing resource, not its initial
+# value at creation. On any LATER rebuild, this step stops working and you
+# need an explicit `gcloud run jobs update JOB --image=...` per job instead
+# (or deploy/cloudbuild.yaml's deploy-all step) — see docs/TROUBLESHOOTING.md
+# § "Full rebuild procedure."
 
-# 7. Upload report configs (YAML + SQL) — these ARE in git, in reports/
-gcloud storage cp reports/sales_orders.yaml gs://NEW-PROJECT-ID-report-configs/reports/
-gcloud storage cp reports/test/sales_orders.yaml gs://NEW-PROJECT-ID-report-configs/test/
+# 7. Upload ALL 8 report YAML pairs + SQL files — these ARE in git, in reports/
+for report in sales_orders work_orders purchasing_open_orders part_obsolescence \
+              inventory_activity inventory_snapshot quality_nonconformance part_on_hand_inventory; do
+  gcloud storage cp "reports/${report}.yaml" "gs://NEW-PROJECT-ID-report-configs/reports/"
+  gcloud storage cp "reports/test/${report}.yaml" "gs://NEW-PROJECT-ID-report-configs/test/"
+done
 gcloud storage cp reports/sql/*.sql gs://NEW-PROJECT-ID-report-configs/sql/
-gcloud storage cp reports/work_orders.yaml gs://NEW-PROJECT-ID-report-configs/reports/
-gcloud storage cp reports/test/work_orders.yaml gs://NEW-PROJECT-ID-report-configs/test/
 
-# 8. Test before trusting it
-gcloud run jobs execute plex-etl-test --region=us-central1 --project=NEW-PROJECT-ID --wait
+# 8. Test before trusting it — loop all 8 *-test jobs, not just one
+for job in plex-etl-test plex-etl-work-orders-test plex-etl-purchasing-open-orders-test \
+           plex-etl-part-obsolescence-test plex-etl-inventory-activity-test \
+           plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance-test \
+           plex-etl-part-on-hand-inventory-test; do
+  gcloud run jobs execute "$job" --region=us-central1 --project=NEW-PROJECT-ID --wait
+done
 ```
 
 Everything in steps 1, 2, 4 (config), 7, and 8 comes entirely from git —
@@ -117,3 +136,11 @@ zero dependency on any one person or machine. Steps 3, 5, and 6 are the
 parts that currently depend on backups that don't yet exist outside this
 laptop — closing those three gaps is the real work, not writing this
 runbook.
+
+**One more thing not in the table above:** `terraform.tfvars` itself
+(gitignored, local-only) is backed up to
+`gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`
+— same bucket as Terraform state, so it survives exactly as well as state
+does (gone if the whole project is deleted, fine if only Emilio's laptop
+is lost). Re-upload it after every edit; see the file's own header for the
+command.

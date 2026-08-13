@@ -117,6 +117,7 @@ Edit `reports/purchasing_orders.yaml`:
 
 ```yaml
 report_name: purchasing_orders
+category: Purchasing            # required for a correct email subject — see docs/TECHNICAL_REFERENCE.md
 description: "Daily purchasing orders — Vox Nutrition (PlexProd dataset)"
 
 extractions:
@@ -132,8 +133,11 @@ extractions:
 
 bq_view:
   name: purchasing_orders_report
+  display_name: "Purchasing Orders"   # what recipients actually see — not the raw view name
   sql_file: gs://voxdatalake-report-configs/sql/purchasing_orders_view.sql
 ```
+
+> **Don't skip `category`/`display_name`.** Without them, the email subject falls back to a generic `[Plex ETL] {company_name} — DATE` with no report name in it at all, and the body has no "Reports Produced" breakdown. Pick `category` from [`reports-list/`](../reports-list/) (the department the report belongs to — Sales, Production, Quality, Supply Chain, ...) and `display_name` from the report's real name as your stakeholders know it, not the internal `bq_table`/`report_name` identifiers.
 
 Edit `reports/test/purchasing_orders.yaml` — change only `report_name` to `purchasing_orders_test`:
 

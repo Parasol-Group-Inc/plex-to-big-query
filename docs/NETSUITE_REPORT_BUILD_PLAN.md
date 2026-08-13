@@ -73,15 +73,106 @@ happened in the two batches described above rather than one pass.
 | 29 | Inventory Activity Detail Usage Per Month | ✅ **Deployed, one open validation item** | `plex-etl-inventory-activity(-test)`, schedule 10/11 AM UTC. Verified: runs cleanly against empty source tables — genealogy-vs-activity mapping still needs a real-data sanity check once `Part_v_Cell_Production`/`Cell_Depletion` have rows (can't be resolved by more querying against empty test tables). |
 
 All prod jobs will run on their own schedule going forward — only the
-`-test` variants were manually triggered to verify. See
-`docs/NETSUITE_REPORT_BUILD_PLAN.md`'s Terraform for the exact schedule
-times, and `docs/CHEATSHEET.md`'s Active Reports table (not yet updated
-with these 4 — worth doing as a follow-up).
+`-test` variants were manually triggered to verify. Full enumerated
+schedule (all 16 jobs, not just these 7): [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
-All 7 of the original High-confidence NetSuite reports have a scaffolded
-pipeline and every design question has an answer. **None are deployed** —
-no GCS upload, no Terraform Cloud Run job. That's the only thing left (see
-"Suggested sequencing").
+> **Note on the two paragraphs above:** an earlier draft of this doc said
+> "None are deployed" here, written before Round 4 and never updated after
+> it shipped — a live example of exactly the doc-drift step 14 of the
+> checklist below exists to prevent. All 7 are deployed; "Suggested
+> sequencing" further down is historical (what the sequencing *was*), not a
+> pending to-do list.
+
+---
+
+## Tackling the next NetSuite report — step by step
+
+For any of the ~71 remaining names in
+[`mapping/netsuite-report-mapping.md`](../mapping/netsuite-report-mapping.md)
+not yet in the table above. Same process that built all 7 done so far,
+written as an ordered checklist instead of a narrative — follow it top to
+bottom, don't skip to scaffolding before the investigation steps.
+
+1. **Pick a candidate.** Start from the confidence tiers in
+   `mapping/netsuite-report-mapping.md` (High first) — a name that closely
+   matches a Plex concept is the best bet, same reasoning that picked the
+   original 7.
+2. **Get the real criteria, not just the name.** A NetSuite report's name
+   alone doesn't tell you if it's buildable — seeing #75/#76's actual saved
+   -search criteria (`Type`/`Status`/`Class` filters) is what flipped them
+   from "looks out of scope" to "buildable," and pinned down exactly what
+   "open" meant for each. Ask the report requester for a screenshot of the
+   saved search or its filter/column list before doing anything else.
+3. **Find plausible Plex source view(s).** Check
+   [`catalog/plex_catalog_index.md`](../catalog/plex_catalog_index.md) and
+   [`catalog/full_schema_catalog.csv`](../catalog/full_schema_catalog.csv)
+   first — confirmed live columns for ~2,800 views already sitting in the
+   repo, usually faster than a fresh query. Fall back to Plex SQL
+   Developer's tree browser only for what isn't catalogued yet.
+4. **Confirm schema live if it isn't already catalogued.** `SELECT TOP 0 *`
+   (schema only) or `SELECT TOP 5 *` (real sample) against
+   `vox.test.odbc.plex.com`. Import `main` as a module rather than running
+   the packaged container if the table might be empty — the packaged CSV
+   writer skips output entirely on 0 rows, which hides column names for a
+   genuinely-empty view (see "How this was confirmed" below).
+5. **Trace the full join chain with live data, hop by hop.** Don't assume a
+   join works from schema/FK-naming alone — #15/#73/#74's `Change_Key`
+   chain looked like a dead end until traced with a real query, and turned
+   out to unlock all three at once. Note explicitly which views are empty
+   on the test tenant; that's a real limit on what you can verify this
+   pass, not something to paper over or guess past.
+6. **Surface business-rule ambiguities as questions, not guesses.** "Open"
+   meant a status-flag combination for #75 and a status-exclusion list for
+   #76 — neither was inferable from schema alone. Write the ambiguity down
+   and get the report requester's actual answer, the way Round 3 resolved
+   #76/#77's filter logic and #15's data-semantics question, rather than
+   picking the plausible-sounding option yourself.
+7. **Decide: new pipeline, or another `bq_view` on an existing one?** If the
+   new report needs raw data another pipeline already extracts, add it as
+   another `bq_view` list entry on that pipeline (see #73's
+   `inventory_snapshot.yaml`) instead of re-extracting the same Plex views
+   twice. Different Plex views needed → new report family, new YAML, new
+   Cloud Run job.
+8. **Scaffold the YAML(s) + SQL.** `reports/{name}.yaml` +
+   `reports/test/{name}.yaml` + `reports/sql/{name}_view.sql` — copy
+   `reports/work_orders.yaml` as a template (full mechanics in
+   [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report"). **Set
+   `category` and `display_name` from day one** — `category` from the
+   department in [`reports-list/`](../reports-list/) this report actually
+   belongs to, `display_name` from the report's real name (usually the
+   NetSuite report name itself, e.g. `"Vox | Open Sales Orders"`) — not the
+   internal `bq_table`/`report_name` identifier. See
+   `docs/TECHNICAL_REFERENCE.md` § "Report YAML config format" for why this
+   matters for the email.
+9. **Watch the deploy-ordering hazard if editing an already-running
+   pipeline's YAML.** A currently-deployed image may not support the
+   change you're about to push — exactly what would have happened pushing
+   #76's list-form `bq_view` to `sales_orders.yaml` before the `main.py`
+   supporting it was deployed. Ship the code change first, verify it, only
+   then push the YAML change. Never the reverse.
+10. **Add Terraform resources if it's a new pipeline.** Copy an existing
+    job's `google_cloud_run_v2_job` + `google_cloud_scheduler_job` (+ retry
+    scheduler) blocks in `terraform/main.tf` — copying inherits the
+    `lifecycle { ignore_changes }` image-drift protection automatically.
+    Pick an unused hour for prod (test = prod hour + 1, by convention —
+    see `docs/EMAIL_SCHEDULE.md` for what's taken).
+11. **Deploy in the right order:** build+push the image only if code
+    changed → `gcloud run jobs update` (or `deploy/cloudbuild.yaml`'s
+    `deploy-all`) if so → `terraform apply` for the Terraform changes →
+    upload the new YAML/SQL to GCS.
+12. **Verify live, not just "ran without erroring."** Trigger the `-test`
+    job with `--wait`, confirm success, then query the actual BigQuery view
+    for real rows and sane values — a clean run against an empty source
+    table (like #29's `Cell_Production`/`Cell_Depletion`) still needs a
+    second look once real data exists, per the open item below.
+13. **Check the email, not just the BigQuery result.** Confirm the subject
+    shows the right category/report name and the body's "Reports Produced"
+    section lists it correctly — a report deployed without `category` set
+    still runs fine and still looks wrong in every email it sends.
+14. **Update the tracking docs.** A row in this doc's status table, in
+    `docs/EMAIL_SCHEDULE.md`'s schedule table, and in `docs/CHEATSHEET.md`'s
+    active-reports table. Skipping this step is exactly how this doc ended
+    up contradicting itself above.
 
 ---
 
@@ -271,7 +362,11 @@ Scaffold: [`reports/inventory_activity.yaml`](../reports/inventory_activity.yaml
 
 ---
 
-## Suggested sequencing
+## Suggested sequencing (historical — this is what happened, not a to-do list)
+
+Kept for the deploy-ordering lesson it demonstrates (see step 9 of the
+checklist above), not as pending work — all 7 reports are deployed as of
+Round 4.
 
 1. **Code review the `main.py` change** (Round 2) — the `bq_view` list
    support and its validation/error-isolation. Not yet run against real
@@ -283,12 +378,14 @@ Scaffold: [`reports/inventory_activity.yaml`](../reports/inventory_activity.yaml
    (#15/#73/#74 combined pipeline, #29, #75, #77) don't have this hazard
    since they're new Cloud Run jobs, not edits to an already-running one —
    but still need Terraform additions (new job + scheduler) per
-   [docs/CHEATSHEET.md § How to Add a New Report](CHEATSHEET.md#how-to-add-a-new-report).
+   [docs/OPERATIONS.md § Add a Brand-New Report](OPERATIONS.md#add-a-brand-new-report).
 3. **Code review all seven** — schema-confirmed and design-confirmed now;
    get a second pair of eyes on the draft SQL before deploying.
 4. Once test/prod data exists, spot-check #29's actual output against what
    the report requester expects (see below) — it's the one built entirely
-   from empty tables with no live sample to validate against.
+   from empty tables with no live sample to validate against. **Still
+   genuinely open** — not resolved by Round 4's deploy, since it needs real
+   data that didn't exist at deploy time either.
 
 ## Business decisions — resolved (2026-08-10)
 

@@ -1,5 +1,14 @@
 # GCP Deployment Guide — Phase 2
 
+> **Scope check:** this walks through bootstrapping the pipeline **from
+> zero** — the original single-view job (`plex-etl` / `Part_v_Part`), one
+> Cloud Run job, one schedule. It's the right doc for a first-time setup
+> (a new GCP project, disaster recovery) or for understanding how the
+> pieces fit together. If you're adding a **new report to an
+> already-running deployment**, this isn't that doc — see
+> [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" instead
+> (referenced again at the bottom of this guide).
+
 ## What this gets you
 
 By the end of this guide:
@@ -447,7 +456,7 @@ Then update `terraform.tfvars` to match so the next `terraform apply` doesn't re
 **Tear down all infrastructure** (move to a different GCP project):
 See [docs/TEARDOWN.md](docs/TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table:**
-1. Add a new `query_plex()` variant (or make the view name configurable via env var)
-2. Create a second Cloud Run job in Terraform pointing at the new table name
-3. Define the BigQuery schema for the new table explicitly
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the *original* single-view pipeline (`plex-etl` / `Part_v_Part`) from zero — it's not the process for adding to an already-running deployment. The project has since grown to 8 report families (16 Cloud Run jobs, prod+test) driven by YAML configs in GCS rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+- **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
+- **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
+- **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

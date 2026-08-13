@@ -2,7 +2,7 @@
 
 Quick-reference commands for every common error. Copy-paste ready — substitute your project values where shown.
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl` — one of **16** live jobs (8 report families × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -405,18 +405,35 @@ Use this when you've changed Python code, the email template, or Python dependen
 
 ```bash
 # 1. Make your code changes
-# 2. Rebuild and push the image
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+# 2. Rebuild and push the image, tagged with the current commit SHA — never ":latest"
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 
-# 3. (Optional) Apply any terraform.tfvars changes at the same time
+# 3. Explicitly redeploy every job you want on the new image — pushing alone
+# does nothing (every job's `lifecycle { ignore_changes = [image] }` means
+# terraform apply won't do this either). Loop over all 16, or use
+# deploy/cloudbuild.yaml's deploy-all step instead of steps 2-3 entirely:
+for job in plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test \
+           plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test \
+           plex-etl-part-obsolescence plex-etl-part-obsolescence-test \
+           plex-etl-inventory-activity plex-etl-inventory-activity-test \
+           plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test \
+           plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test \
+           plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test; do
+  gcloud run jobs update "$job" --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
+done
+
+# 4. (Separately) apply any terraform.tfvars changes, if you made any
 cd terraform && terraform apply -var-file=terraform.tfvars
 
-# 4. Run manually to verify
+# 5. Run manually to verify
 gcloud run jobs execute plex-etl \
   --region=us-central1 --project=voxdatalake --wait
 
-# 5. Check logs
+# 6. Check logs
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
   --project=voxdatalake --limit=50 \
@@ -432,15 +449,13 @@ These only need `terraform apply` (takes ~30 seconds):
 | What you're changing | Variable in tfvars |
 |---|---|
 | Plex host (test vs production) | `plex_host` |
-| Which Plex view to query | `plex_view` |
-| SQL filter | `plex_filter` |
-| Timestamp column for incremental sync | `plex_date_col` |
-| Target BigQuery table name | `bq_table` |
 | Email on/off | `sendgrid_enabled` |
 | Sender email | `report_from_email` |
 | Recipients | `report_to_emails` |
-| Company name in email subject | `company_name` |
+| Company name (subject's no-category fallback) | `company_name` |
 | How far back to backfill | `backfill_minutes` |
+
+**`plex_view`/`plex_filter`/`plex_date_col`/`bq_table` are legacy single-view-mode fallbacks — no live job uses them.** Every real job sets `REPORT_CONFIG_GCS_PATH`, which bypasses these entirely. To change what a report queries or filters, edit that report's `reports/*.yaml` (`extractions[]`) and push it to GCS instead — no `terraform apply` needed for that, it's picked up on the report's next run. See `docs/TECHNICAL_REFERENCE.md` § "Hot-updatable configuration."
 
 Secrets (token, API key, password) can be rotated with a single `gcloud secrets versions add` command — no Terraform apply, no rebuild.
 
@@ -448,33 +463,43 @@ Secrets (token, API key, password) can be rotated with a single `gcloud secrets 
 
 ## Nuke and redeploy to a new project
 
-Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary:
+Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire 16-job stack**, not one job:
 
 ```bash
 # 1. Destroy all GCP resources (run from terraform/)
-#    First: manually set delete_contents_on_destroy = true in main.tf
-#    and deletion_protection = false on the sync_metadata table
 terraform destroy -var-file=terraform.tfvars
 
-# 2. Update terraform.tfvars with the new project ID
+# 2. Update terraform.tfvars with the new project ID and a real (not :latest) image tag
 #    gcp_project = "new-project-id"
-#    image_url   = "us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:latest"
+#    image_url   = "us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA"
 
-# 3. Re-deploy
+# 3. Re-deploy — creates all 16 jobs referencing image_url, which doesn't exist yet
 terraform apply -var-file=terraform.tfvars
 
-# 4. Push the image to the new project's registry
+# 4. Push the image to the new project's registry — tag with a commit SHA, never ":latest"
 gcloud auth configure-docker us-central1-docker.pkg.dev --project=new-project-id
-docker build -t us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:latest .
-docker push us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:latest
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA .
+docker push us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA
+# Re-apply so this first-time creation picks up the now-real image (only
+# works because the jobs didn't exist yet at step 3 — on every later
+# rebuild, ignore_changes means apply won't touch the image; use
+# `gcloud run jobs update` instead, same as "Full rebuild procedure" above)
+terraform apply -var-file=terraform.tfvars
 
-# 5. Re-populate secrets in the new project
-echo -n 'TOKEN' | gcloud secrets versions add plex-access-token \
-  --data-file=- --project=new-project-id
-echo -n 'SG.key' | gcloud secrets versions add sendgrid-api-key \
-  --data-file=- --project=new-project-id
+# 5. Re-populate ALL FIVE secrets in the new project
+echo -n 'TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=new-project-id
+echo -n 'SG.key'   | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=new-project-id
+echo -n 'USER'     | gcloud secrets versions add plex-odbc-user     --data-file=- --project=new-project-id
+echo -n 'PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=new-project-id
+echo -n 'CODE'     | gcloud secrets versions add plex-company-code  --data-file=- --project=new-project-id
 
-# 6. Run to verify
+# 6. Re-upload all 8 report YAML pairs + their SQL files (not shown — see
+# docs/DISASTER_RECOVERY.md, which has the full loop) — the Cloud Run jobs
+# exist now, but each one reads its config from GCS at runtime and there's
+# nothing there yet on a brand-new report_configs bucket.
+
+# 7. Run each job to verify — at minimum, loop the *-test variants:
 gcloud run jobs execute plex-etl \
   --region=us-central1 --project=new-project-id --wait
 ```

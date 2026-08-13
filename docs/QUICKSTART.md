@@ -6,11 +6,24 @@
 
 ## What are we building?
 
-A pipeline that automatically pulls parts data from **Plex ERP** and stores it in **Google BigQuery** every morning at 2 AM. Once set up, it runs on its own forever — you don't touch it again unless something needs to change.
+A pipeline that automatically pulls data from **Plex ERP** and stores it in **Google BigQuery** on a schedule. Once set up, it runs on its own forever — you don't touch it again unless something needs to change.
 
 There are two phases:
-1. **Local test** — get the data pull working on your laptop (proves the connection works before deploying anything to the cloud)
-2. **Cloud deploy** — move it to Google Cloud so it runs automatically on a schedule
+1. **Local test** — get a single data pull working on your laptop (proves the connection works before deploying anything to the cloud). Pulls `Part_v_Part` by default — a simple, single-view example, not the actual production report.
+2. **Cloud deploy** — provisions the real GCP infrastructure via Terraform.
+
+> **Reality check before you start:** `terraform apply` in Phase 2 doesn't
+> create just one job — `terraform/main.tf` defines all **16** Cloud Run
+> jobs (8 report families × prod/test) with no conditional gating, so one
+> `apply` stands up the entire stack at once. And the specific job this
+> guide walks through testing, `plex-etl`, is wired via
+> `report_config_gcs_path` (already set in `terraform.tfvars.example`) to
+> run the **Sales Orders** pipeline (`reports/sales_orders.yaml` — 13 Plex
+> views) — **not** a simple `Part_v_Part` puller. Phase 1's local test and
+> Phase 2's actual deployed job are two different things pulling two
+> different Plex views; that's intentional (Phase 1 proves basic
+> connectivity with the simplest possible example), but don't expect
+> Phase 2 to produce a `raw_Part_v_Part` table — see Steps 9/13 below.
 
 ---
 
@@ -209,11 +222,17 @@ Open `terraform.tfvars` and confirm these values are correct:
 ```hcl
 gcp_project    = "voxdatalake"
 bq_dataset     = "PlexTest"
-bq_table       = "raw_Part_v_Part"
+bq_table       = "raw_Part_v_Part"       # unused today — plex-etl runs sales_orders.yaml instead, see below
 plex_host      = "vox.test.odbc.plex.com"
 plex_odbc_user = "edominguez.parasol"
-image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
+image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"  # bootstrap only — pin to a commit SHA once you push a real build, never leave this as :latest long-term
 ```
+
+> `bq_table`/`plex_view` only take effect if `report_config_gcs_path` is
+> empty. `terraform.tfvars.example` already sets it to
+> `gs://voxdatalake-report-configs/reports/sales_orders.yaml` — so unless
+> you deliberately blank that out, `plex-etl` runs the Sales Orders
+> pipeline (13 Plex views) regardless of what `bq_table`/`plex_view` say.
 
 ### Step 9 · Create the GCP infrastructure
 
@@ -224,15 +243,15 @@ terraform init
 terraform apply -var-file=terraform.tfvars
 ```
 
-Type `yes` when it asks. This takes **2–5 minutes** and creates:
-- A service account (the "identity" Cloud Run uses)
-- BigQuery dataset and metadata table
+Type `yes` when it asks. **This creates the entire 8-report-family, 16-job stack in one pass** — `terraform/main.tf` defines all 16 `google_cloud_run_v2_job` resources with no conditional gating, not just `plex-etl`. Takes **2–5 minutes**. Among what it creates:
+- A service account (the "identity" every Cloud Run job uses)
+- `PlexProd`/`PlexTest` BigQuery datasets and the `sync_metadata`/`job_run_log` tables
 - An Artifact Registry repository (where your Docker image lives)
-- Four Secret Manager secrets (empty containers — you'll fill one in the next step)
-- A Cloud Run job definition
-- A Cloud Scheduler cron job
+- **Five** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`
+- All 16 Cloud Run job definitions (8 report families × prod/test)
+- All 32 Cloud Scheduler jobs — one daily trigger + one 6 AM Mountain retry trigger per Cloud Run job
 
-**Check it worked:** In GCP Console → **Secret Manager**, you should see 4 secrets listed.
+**Check it worked:** In GCP Console → **Secret Manager**, you should see 5 secrets listed.
 
 > **If you see errors:** See [DEPLOYMENT_GUIDE.md Step 1.4](../DEPLOYMENT_GUIDE.md) for how to recover from state issues.
 
@@ -260,19 +279,24 @@ cd ..
 # Allow Docker to push to your GCP registry
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# Build
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+# Tag with the current commit SHA — never ":latest" for anything deployed
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 
-# Push (this uploads the image to GCP — takes 3–8 minutes first time)
+# Push both tags (this uploads the image to GCP — takes 3–8 minutes first time)
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
-Then re-run Terraform so it picks up the now-real image:
+Set `image_url` in `terraform.tfvars` to that `:$SHA` tag and apply — this is what actually creates `plex-etl` on a real image (it errors if triggered before this point):
 
 ```bash
 cd terraform
 terraform apply -var-file=terraform.tfvars
 ```
+
+**This is the only time in this walkthrough that `terraform apply` moves an image onto a job.** Every job has `lifecycle { ignore_changes = [image] }` specifically so a *later* `terraform apply` (for something unrelated) can never silently swap the image out. On any later rebuild, pushing a new image does nothing by itself — you'd explicitly run `gcloud run jobs update plex-etl --image=...:$SHA --region=us-central1` (or `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 16 jobs from one build).
 
 ### Step 12 · Run the job manually to test
 
@@ -280,7 +304,7 @@ terraform apply -var-file=terraform.tfvars
 gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
 ```
 
-This runs the exact same job that will run automatically every morning. `--wait` keeps your terminal open and shows you the exit status.
+This runs the exact same job that will run automatically every day. `--wait` keeps your terminal open and shows you the exit status.
 
 **Check the logs:**
 ```bash
@@ -295,21 +319,21 @@ Or in GCP Console: **Cloud Run** → **Jobs** → `plex-etl` → click the execu
 
 ### Step 13 · Verify data is in BigQuery
 
-In GCP Console: **BigQuery** → `voxdatalake` → `PlexTest` → `raw_Part_v_Part` → **Preview** tab.
+`plex-etl` runs the Sales Orders pipeline (see the note under Step 8), so look for its actual output tables — not `raw_Part_v_Part`:
 
-You should see rows with part numbers, names, and statuses.
+In GCP Console: **BigQuery** → `voxdatalake` → `PlexTest` → `raw_Sales_v_PO` → **Preview** tab. You should also see `sales_orders_report` and `sales_orders_open_report` as queryable views once the run completes.
 
 ---
 
 ## You're done
 
-The pipeline now runs automatically every morning at 2 AM UTC. You don't need to do anything else.
+`plex-etl` (Sales Orders) now runs daily at 2 AM UTC; `plex-etl-test` at 3 AM UTC. The other 14 jobs Step 9 created run on their own staggered schedules through the day — full list in [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). You don't need to do anything else.
 
-**To check on a specific day's run:** GCP Console → **Cloud Run** → **Jobs** → `plex-etl` → **Executions** tab shows each run with its status.
+**To check on a specific day's run:** GCP Console → **Cloud Run** → **Jobs** → `plex-etl` (or any other job) → **Executions** tab shows each run with its status.
 
-**If a run fails:** The job retries automatically up to 3 times. Check the logs for the error. See [DEPLOYMENT_GUIDE.md Troubleshooting](../DEPLOYMENT_GUIDE.md#troubleshooting) for common fixes.
+**If a run fails:** `max_retries` on the job itself is 1, not 3 — the real safety net is a separate scheduler that fires at 6 AM Mountain (`RUN_MODE=retry`) and re-runs the job only if today's scheduled run didn't already succeed. Check the logs for the original error. See [DEPLOYMENT_GUIDE.md Troubleshooting](../DEPLOYMENT_GUIDE.md#troubleshooting) for common fixes.
 
-**To make changes to the query or logic:** Edit `main.py`, rebuild and push the image (Step 11 again), no Terraform changes needed.
+**To make changes to the query or logic:** Edit `main.py`, rebuild and push the image (Step 11's build/push commands), then explicitly `gcloud run jobs update plex-etl --image=...:$SHA --region=us-central1` — pushing alone does nothing, and no further Terraform changes are needed for a code-only change.
 
 ---
 

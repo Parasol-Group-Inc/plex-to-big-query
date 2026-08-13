@@ -1,4 +1,5 @@
 report_name: inventory_activity
+category: Supply Chain
 description: "Inventory Activity Detail Usage Per Month (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -49,4 +50,5 @@ extractions:
 
 bq_view:
   name: inventory_activity_report
+  display_name: "Inventory Activity Detail Usage Per Month"
   sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql

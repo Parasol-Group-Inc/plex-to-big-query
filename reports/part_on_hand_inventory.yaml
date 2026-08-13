@@ -1,4 +1,5 @@
 report_name: part_on_hand_inventory
+category: Supply Chain
 description: "VOX | Part on-hand inventory (Available Inventory) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -34,4 +35,5 @@ extractions:
 
 bq_view:
   name: part_on_hand_inventory_report
+  display_name: "Part On-Hand Inventory"
   sql_file: gs://voxdatalake-report-configs/sql/part_on_hand_inventory_view.sql

@@ -15,6 +15,8 @@
   .badge-success { background: #dcfce7; color: #166534; }
   .badge-warning { background: #fef9c3; color: #854d0e; }
   .badge-error { background: #fee2e2; color: #991b1b; }
+  .badge-env-prod { background: #dbeafe; color: #1e40af; }
+  .badge-env-test { background: #fef3c7; color: #92400e; }
   .grid { width: 100%; border-collapse: collapse; margin-top: 8px; }
   .grid td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
   .grid td:first-child { width: 200px; color: #6b7280; }
@@ -42,7 +44,7 @@
     </div>
 
     <div class="body">
-      <span class="badge {{status_class}}">{{status}}</span>
+      <span class="badge {{status_class}}">{{status}}</span>{{environment_badge_html}}
 
       <table class="grid">
 

@@ -1,4 +1,5 @@
 report_name: part_obsolescence_test
+category: Supply Chain
 description: "VOX | Products to be discontinued — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/part_obsolescence.yaml — see that file for
@@ -12,4 +13,5 @@ extractions:
 
 bq_view:
   name: part_obsolescence_report
+  display_name: "Vox | Products to be Discontinued"
   sql_file: gs://voxdatalake-report-configs/sql/part_obsolescence_view.sql

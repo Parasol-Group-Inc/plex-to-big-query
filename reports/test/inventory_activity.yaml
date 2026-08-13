@@ -1,4 +1,5 @@
 report_name: inventory_activity_test
+category: Supply Chain
 description: "Inventory Activity Detail Usage Per Month — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/inventory_activity.yaml — see that file for
@@ -17,4 +18,5 @@ extractions:
 
 bq_view:
   name: inventory_activity_report
+  display_name: "Inventory Activity Detail Usage Per Month"
   sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql

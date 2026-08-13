@@ -1,4 +1,5 @@
 report_name: purchasing_open_orders_test
+category: Supply Chain
 description: "Vox | Open Purchase Orders — TEST environment (vox.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/purchasing_open_orders.yaml — see that file
@@ -37,4 +38,5 @@ extractions:
 
 bq_view:
   name: purchasing_open_orders_report
+  display_name: "Vox | Open Purchase Orders"
   sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql

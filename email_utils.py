@@ -1,4 +1,5 @@
 import os
+import re
 import html
 import logging
 from pathlib import Path
@@ -195,11 +196,25 @@ def send_report(report: Dict[str, object]) -> bool:
         if isinstance(r, dict) and r.get("display_name")
     ]
 
+    # PRODUCTION vs TEST is deliberately kept OUT of the subject — every
+    # report in a category gets exactly one subject shape regardless of
+    # environment, so prod and test threads don't fork into separate-looking
+    # emails. The distinction still needs to be obvious to the reader, so it
+    # shows up as a badge/line in the body instead (see environment_badge_html
+    # below). Derived from bq_dataset (PlexProd/PlexTest), not report_name,
+    # since every real pipeline's category+display_name already made
+    # report_name's "_test" suffix irrelevant to the subject.
+    environment = "TEST" if "test" in bq_dataset.lower() else ("PRODUCTION" if bq_dataset else "")
+
     # Subject includes report name so each pipeline gets its own Gmail thread.
-    # e.g. "[Plex ETL] Work Orders Test — SUCCESS — 2026-07-14"
+    # e.g. "[Plex ETL] Work Orders — SUCCESS — 2026-07-14"
     # REPORT_SUBJECT env var overrides entirely when set to a non-default value.
-    report_name_raw     = str(report.get("report_name", ""))
-    report_name_display = report_name_raw.replace("_", " ").title() if report_name_raw else ""
+    report_name_raw = str(report.get("report_name", ""))
+    # Strip a trailing "_test" so even a report with no category/display_name
+    # set (falling back to the bare report_name) doesn't leak the environment
+    # into the subject the way every real pipeline above no longer does.
+    report_name_for_subject = re.sub(r"_test$", "", report_name_raw, flags=re.IGNORECASE)
+    report_name_display = report_name_for_subject.replace("_", " ").title() if report_name_for_subject else ""
     if display_names:
         joined = ", ".join(display_names)
         subject_label = f"{report_category}: {joined}" if report_category else joined
@@ -216,6 +231,9 @@ def send_report(report: Dict[str, object]) -> bool:
         if subject_override and subject_override != "Plex to BigQuery ETL Report"
         else default_subject
     )
+
+    env_class = "badge-env-test" if environment == "TEST" else "badge-env-prod" if environment == "PRODUCTION" else ""
+    environment_badge_html = f' <span class="badge {env_class}">{html.escape(environment)}</span>' if environment else ""
 
     # Peer-report breakdown — only rendered when a pipeline actually produced
     # more than one named report this run (single-view/legacy reports have
@@ -258,12 +276,15 @@ def send_report(report: Dict[str, object]) -> bool:
         "events_html": _list_to_html(events),
         "errors_html": _errors_to_html(errors),
         "reports_section_html": reports_section_html,
+        "environment_badge_html": environment_badge_html,
     }
 
     html_template = _load_template(template_name)
     html_content = _render_template(html_template, context)
+    environment_line = f"Environment: {environment}\n" if environment else ""
     text_content = (
         f"Status: {context['status']}\n"
+        f"{environment_line}"
         f"Date: {context['run_date']}  Time: {context['run_time']} UTC\n"
         f"Duration: {context['duration_seconds']} seconds\n\n"
         f"{reports_section_text}"

@@ -1,4 +1,5 @@
 report_name: part_on_hand_inventory_test
+category: Supply Chain
 description: "Part on-hand inventory (Available Inventory) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
 
 # Same extraction list as reports/part_on_hand_inventory.yaml.
@@ -18,4 +19,5 @@ extractions:
 
 bq_view:
   name: part_on_hand_inventory_report
+  display_name: "Part On-Hand Inventory"
   sql_file: gs://voxdatalake-report-configs/sql/part_on_hand_inventory_view.sql

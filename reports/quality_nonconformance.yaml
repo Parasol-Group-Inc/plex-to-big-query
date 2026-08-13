@@ -1,4 +1,5 @@
 report_name: quality_nonconformance
+category: Quality
 description: "VOX | Quality non-conformance (NC) records — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,4 +37,5 @@ extractions:
 
 bq_view:
   name: quality_nonconformance_report
+  display_name: "Quality Nonconformance"
   sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql

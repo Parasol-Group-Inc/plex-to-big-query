@@ -4,6 +4,13 @@
 
 By the end of this guide you will have the ETL container running on your machine, connecting to real Plex via ODBC, and writing CSV files to `./output/`. No GCP account required.
 
+> **Which mode does this test?** This guide walks through the legacy
+> single-view mode (`PLEX_VIEW`/`BQ_TABLE` env vars) — good for a quick
+> "does the ODBC connection even work" check, but **no live Cloud Run job
+> actually runs this way today**. Every real job sets `REPORT_CONFIG_GCS_PATH`
+> instead and reads a multi-report YAML from GCS. See Step 4 below for how
+> to locally test that path instead once basic connectivity is confirmed.
+
 When the CSVs look correct — right columns, reasonable row counts, no obvious nulls — you are ready for [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
 ---
@@ -111,7 +118,17 @@ cp .env.example .env
 
 Open `.env` and fill in the **Section 1** and **Section 2** fields. Leave the BigQuery and Secret Manager fields blank — they are not used in local mode.
 
-Minimum required values for local mode:
+Minimum required values for local mode — **IAM token auth (primary method, recommended)**:
+
+```env
+PLEX_ACCESS_TOKEN=your_plex_iam_token
+PLEX_ODBC_USER=yourname.company
+PLEX_HOST=vox.test.odbc.plex.com
+PLEX_VIEW=Sales_v_PO
+BQ_TABLE=production_orders
+```
+
+If you don't have an IAM token, the username/password DSN fallback still works:
 
 ```env
 PLEX_ODBC_USER=your_plex_username
@@ -131,9 +148,13 @@ Open [config/odbc.ini](config/odbc.ini) and check the `[PlexProduction]` section
 
 ```ini
 [PlexProduction]
-Host = vox.odbc.plex.com     ← confirmed production host
+Host = odbc.plex.com         ← confirmed production host (no "vox." prefix)
 Port = 19995                ← confirmed for both environments
 ```
+
+> **Common mix-up:** `vox.odbc.plex.com` (with the `vox.` prefix) is the
+> **test** host, under `[PlexTest]` — not production. Double-check which
+> section you're editing.
 
 If Plex support gave you a different hostname or port for your account, update those values now.
 
@@ -141,46 +162,37 @@ If you are connecting to the Plex **test environment**, set `PLEX_DSN=PlexTest` 
 
 ---
 
-## Step 4 — Update the SQL query
+## Step 4 — Point it at a real Plex view
 
-The `query_plex()` function in [main.py](main.py) contains a placeholder query. You must replace it with the actual Plex view or report name and columns before the pipeline will extract real data.
-
-Find this section in `main.py` (around line 150):
+There's no query to hand-edit anymore — `query_plex()` in [main.py](../main.py) builds `SELECT * FROM {view}{filter}{order_by}` from three env vars, not a hardcoded column list:
 
 ```python
-def query_plex(conn: pyodbc.Connection, last_sync: datetime) -> pd.DataFrame:
-    sql = f"""
-        SELECT
-            P.Plexus_Customer_No,
-            P.Part_No,
-            P.Part_Name,
-            P.Quantity,
-            P.Status,
-            P.Modified_Date
-        FROM
-            Production_Order_v_Production_Order AS P
-        WHERE
-            P.Modified_Date > ?
-        ORDER BY
-            P.Modified_Date ASC
-    """
+def query_plex(conn, plex_view=None, plex_filter=None, plex_date_col=None) -> pd.DataFrame:
+    view     = plex_view     if plex_view     is not None else PLEX_VIEW
+    filt     = plex_filter   if plex_filter   is not None else PLEX_FILTER
+    date_col = plex_date_col if plex_date_col is not None else PLEX_DATE_COL
+    sql = f"SELECT * FROM {view}{filter_clause}{order_clause}"
 ```
 
-**What to change:**
-- Replace `Production_Order_v_Production_Order` with the actual Plex view or report name (get this from your Plex support contact)
-- Replace the column list with the actual columns available in that view
+Set these in `.env` instead of editing any code:
 
-**What NOT to change:**
-- Keep `WHERE P.Modified_Date > ?` — this is what drives incremental loading. Replace `Modified_Date` with the correct timestamp column name if it differs in your view.
-- Keep `ORDER BY P.Modified_Date ASC` (or the equivalent timestamp column)
-
-Also update the reference on the line after the query that handles timezone conversion:
-
-```python
-if not df.empty and "Modified_Date" in df.columns:
+```env
+PLEX_VIEW=Sales_v_PO          # always {Database}_v_{ViewName} — no aliases
+PLEX_FILTER=                 # a WHERE clause (include the word WHERE), or leave empty
+PLEX_DATE_COL=                # a timestamp column for incremental sync, or leave empty for a full extract
 ```
 
-Change `"Modified_Date"` to match whatever your timestamp column is actually called.
+**Every real deployed job actually runs a different mode entirely** — see
+the note at the top of this file. Setting `PLEX_VIEW` here only exercises
+this single-view fallback path (fine for a quick connectivity check of one
+view); to reproduce what a real job does, set `REPORT_CONFIG_GCS_PATH` to
+a local/scratch YAML instead (copy an existing `reports/*.yaml` as a
+template) and leave `PLEX_VIEW` unset.
+
+There is no `last_sync`/incremental-filtering logic to preserve here —
+every local-mode run is a full extract regardless of `PLEX_DATE_COL`
+(that only matters for the BigQuery `WRITE_APPEND` path, which local mode
+never takes).
 
 ---
 
@@ -213,11 +225,11 @@ docker compose up
 The container will run once and exit. Watch the logs for these key lines:
 
 ```
-[INFO] LOCAL MODE — skipping BigQuery, full extract from epoch.
-[INFO] Connecting to Plex via DSN: PlexProduction
+[INFO] LOCAL MODE — skipping BigQuery, full extract.
+[INFO] Connecting driver-direct to vox.test.odbc.plex.com:19995 (IAM token auth)
 [INFO] ODBC connection established.
-[INFO] Querying Plex for records modified after 1970-01-01 00:00:00+00:00...
-[INFO] Fetched 1234 rows from Plex.
+[INFO] Querying Plex [Sales_v_PO]...
+[INFO] Fetched 1234 rows from Plex [Sales_v_PO].
 [INFO] Wrote 1234 rows to /output/production_orders_20260519T020000Z.csv
 ```
 

@@ -106,17 +106,18 @@ retry-skip logic):
    Terraform — **zero orphans found**, nothing to delete. The 2
    `monday-daily-sync*` schedulers in the same project are a different
    system entirely.
-4. Pushed the 5 new config files to GCS via `gcloud storage cp` (Terraform
-   apply wasn't available in that session) — functionally identical to a
-   Terraform-applied upload, but it sets `content_type: text/plain` where
-   Terraform's own uploads leave `application/octet-stream`. That attribute
-   is `ForceNew` on `google_storage_bucket_object`, so `terraform plan` now
-   shows those 5 report configs (prod+test = 10 objects) as **replace**, not
-   update. Harmless — content is correct and confirmed live — but real
-   drift. Fix properly by either pinning `content_type` explicitly on these
-   resources in `terraform/main.tf`, or by making `terraform apply` the only
-   sanctioned way to push a report config edit (never `gcloud storage cp`
-   directly). Not yet fixed.
+4. Pushed the 5 new config files to GCS via `gcloud storage cp` (a
+   `terraform apply` attempt was blocked mid-session) — functionally
+   correct (content confirmed live and matching), but `gcloud storage cp`
+   with no `--content-type` flag reset those objects' remote content-type
+   to `application/octet-stream`. Terraform's config had *already*
+   correctly declared `content_type = "text/plain"` for all 16 report-config
+   objects the whole time — this wasn't a missing Terraform setting, just
+   `gcloud` overwriting metadata Terraform already wanted right.
+   **Resolved same session**: `terraform apply -target=...` on the 10
+   affected objects reconciled it (10 destroyed, 10 recreated with correct
+   content-type, same content). `terraform plan` now shows 0 add/0 destroy
+   — only the pre-existing image-tag cosmetic drift remains (see below).
 
 ## Worth deciding (not changed — needs a call, not a guess)
 

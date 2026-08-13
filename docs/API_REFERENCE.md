@@ -2,7 +2,7 @@
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Job:** `plex-etl`
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl` — one of **16** live jobs (8 report families × prod/test). Substitute any other job name in the commands below the same way.
 
 ---
 
@@ -136,6 +136,8 @@ gcloud run jobs update plex-etl \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com
 ```
 
+> **This is a temporary/drifting change unless mirrored in `terraform.tfvars`.** Every job's `lifecycle { ignore_changes }` only covers the `image`/`client`/`client_version` fields — env vars are still fully Terraform-managed, so the next `terraform apply` will silently revert this back to whatever `terraform.tfvars` says. Use this for a quick live test only; make the durable change in `terraform.tfvars` (and re-upload its GCS backup) if you want it to stick.
+
 ### Update multiple environment variables at once
 
 ```bash
@@ -149,6 +151,7 @@ gcloud run jobs update plex-etl \
 
 | Variable | Test value | Production value |
 |---|---|---|
+| `REPORT_CONFIG_GCS_PATH` | `gs://voxdatalake-report-configs/test/{report}.yaml` | `gs://voxdatalake-report-configs/reports/{report}.yaml` — **the variable that actually determines which reports a job runs**; every live job sets this, the legacy `PLEX_VIEW`/`BQ_TABLE` path below is dead code unless this is empty |
 | `PLEX_HOST` | `vox.test.odbc.plex.com` | `vox.odbc.plex.com` |
 | `PLEX_SERVER_DATASOURCE` | `ReportDataSource` | TBD — confirm with Plex support |
 | `PLEX_PORT` | `19995` | `19995` |
@@ -200,6 +203,11 @@ gcloud scheduler jobs pause plex-daily-sync \
   --project=voxdatalake
 ```
 
+> **Every job also has a separate 6 AM Mountain retry scheduler** (e.g. `plex-daily-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
+> ```bash
+> gcloud scheduler jobs pause plex-daily-sync-retry --location=us-central1 --project=voxdatalake
+> ```
+
 ### Resume the schedule
 
 ```bash
@@ -207,6 +215,7 @@ gcloud scheduler jobs resume plex-daily-sync \
   --location=us-central1 \
   --project=voxdatalake
 ```
+Resume the paired `-retry` scheduler too, if you paused it.
 
 ### Change the cron schedule (easier via Terraform)
 
@@ -356,6 +365,11 @@ terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
+After any edit to `terraform.tfvars` itself (not just after applying it), back it up — it's gitignored and only ever exists on your machine:
+```bash
+gcloud storage cp terraform.tfvars gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup
+```
+
 ### List all resources in state
 
 ```bash
@@ -386,8 +400,12 @@ terraform import google_secret_manager_secret.odbc_password \
 terraform import google_secret_manager_secret.company_code \
   projects/voxdatalake/secrets/plex-company-code
 
-# BigQuery dataset
-terraform import google_bigquery_dataset.plex voxdatalake/PlexTest
+# BigQuery datasets — .plex is PROD (PlexProd), .plex_test is TEST (PlexTest).
+# Importing PlexTest into .plex (as an earlier version of this doc showed)
+# imports the wrong dataset into the wrong resource address and will fail
+# or corrupt state — match the resource to the right dataset:
+terraform import google_bigquery_dataset.plex voxdatalake/PlexProd
+terraform import google_bigquery_dataset.plex_test voxdatalake/PlexTest
 
 # Service account
 terraform import google_service_account.etl \
@@ -424,25 +442,37 @@ terraform output
 
 ## 9. Docker
 
+> **Building and pushing an image is not a complete deploy by itself.** Every `google_cloud_run_v2_job` has `lifecycle { ignore_changes = [image, ...] }` — no job ever auto-picks up a new image, not per-execution and not via `terraform apply`. After pushing, you must explicitly redeploy (see the last command below), or use `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 16 jobs from one build.
+
 ### Build the image
 
 ```bash
-# From repo root (not terraform/)
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+# From repo root (not terraform/). Tag with the commit SHA — never ":latest"
+# for anything that gets deployed; ":latest" is still built for convenience/
+# manual `docker pull` only.
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 ```
 
 ### Push to Artifact Registry
 
 ```bash
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
-### Build and push in one go
+### Build, push, and redeploy in one go
 
 ```bash
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest . && \
-docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest . && \
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA && \
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest && \
+gcloud run jobs update plex-etl --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
+Repeat the last `gcloud run jobs update` per job, or loop over all 16 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the full loop), or just run `gcloud builds submit --config deploy/cloudbuild.yaml` instead — it does all of this in one call.
 
 ### Run locally (Phase 1 — writes CSVs to ./output/)
 

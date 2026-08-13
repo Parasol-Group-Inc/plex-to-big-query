@@ -14,7 +14,7 @@ This pipeline **copies Plex ERP data into BigQuery** so your data team can query
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report configuration files — edit them to change what gets extracted, no code deployment needed
 
-The pipeline runs **automatically every night at 2 AM UTC**, or you can trigger it manually any time.
+The pipeline is actually 8 report families (16 Cloud Run jobs, prod+test) on staggered schedules from **2 AM through 5 PM UTC** — `plex-etl` (Sales Orders) at 2 AM UTC is just the first one. Full schedule: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be triggered manually any time.
 
 ---
 
@@ -66,6 +66,9 @@ graph TB
     CR -->|"7. send report"| EMAIL
 ```
 
+*Shown: the Sales Orders pipeline (`plex-etl`), as a worked example — the
+same shape repeats for all 8 report families (16 jobs total).*
+
 ---
 
 ## Environments: Prod vs Test
@@ -98,20 +101,21 @@ graph LR
     GCS -->|"test/sales_orders.yaml"| TJ
 ```
 
-> **Failure retry:** all 4 jobs (sales + work orders, prod + test) also have
-> a second scheduler firing daily at **6 AM `America/Denver`** that retries
-> the same job if today's scheduled run genuinely FAILED (not PARTIAL). See
+> **Failure retry:** every one of the 16 jobs (all 8 report families, prod +
+> test) has a second scheduler firing daily at **6 AM `America/Denver`**
+> that retries the same job if today's scheduled run genuinely FAILED (not
+> PARTIAL). See
 > [docs/OPERATIONS.md → Failure Retry](docs/OPERATIONS.md#failure-retry-6-am-mountain)
 > for how it works and how to check `job_run_log`.
 
-> **Both environments active.** Test (`plex-etl-test` → `vox.test.odbc.plex.com` → `PlexTest`) is validated with live data. Prod (`plex-etl` → `vox.odbc.plex.com` → `PlexProd`) is ready — trigger `plex-etl` for the first production run.
+> **Both environments active and running.** Test (`plex-etl-test` → `vox.test.odbc.plex.com` → `PlexTest`) and prod (`plex-etl` → `vox.odbc.plex.com` → `PlexProd`) both run on their daily schedule today — see `docs/EMAIL_SCHEDULE.md` for real run history across all 16 jobs.
 
 ## Active Reports
 
 | Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View(s) |
 |---|---|---|---|---|---|
 | **Sales Orders** | `plex-etl` | `plex-etl-test` | 2 AM / 3 AM UTC | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
-| **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 4 AM / 5 AM UTC | 12 Part/Quality/Personnel/Common/Maintenance views | `work_orders_report`, `mfg_job_schedule_report` |
+| **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 4 AM / 5 AM UTC | 12 Part/Quality/Personnel/Common/Maintenance views | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report` |
 | **Purchasing Open Orders** | `plex-etl-purchasing-open-orders` | `-test` | 6 AM / 7 AM UTC | 6 Purchasing + Common + Part | `purchasing_open_orders_report` |
 | **Part Obsolescence** | `plex-etl-part-obsolescence` | `-test` | 8 AM / 9 AM UTC | 1 Part_v_Part (filtered) | `part_obsolescence_report` |
 | **Inventory Activity** | `plex-etl-inventory-activity` | `-test` | 10 AM / 11 AM UTC | 2 Part DB views (Cell_Production, Cell_Depletion) | `inventory_activity_report` |
@@ -119,6 +123,8 @@ graph LR
 | **Quality Non-Conformance** | `plex-etl-quality-nonconformance` | `-test` | 2 PM / 3 PM UTC | 1 Quality_v_Problem + Part | `quality_nonconformance_report` |
 | **Part On-Hand Inventory** | `plex-etl-part-on-hand-inventory` | `-test` | 4 PM / 5 PM UTC | 2 Part_v_Container(_Status) + Part | `part_on_hand_inventory_report` |
 
+> Each report's `category`/`display_name` (in its `reports/*.yaml`) drives its email subject — Sales Orders/Purchasing Open Orders/etc. are `category` values, and each BQ View listed above has its own `display_name` shown in the email (not always the same as the raw view name). See `docs/EMAIL_SCHEDULE.md` for the exact subject format.
+>
 > `raw_Part_v_Part` is **shared** across several reports — owned by the Sales Orders pipeline (runs first); others reference it in their JOIN view without re-extracting it.
 >
 > The 4 NetSuite-parity reports above (added 2026-08-10/11, see
@@ -171,15 +177,17 @@ plex-to-big-query/
 ├── docker-compose.yml          ← Local runner (writes CSVs to ./output/)
 ├── .env.example                ← Credential template — copy to .env
 │
-├── reports/                    ← REPORT DEFINITIONS — edit these to change what runs
+├── reports/                    ← REPORT DEFINITIONS — edit these to change what runs (8 report families total, see Active Reports above)
 │   ├── sales_orders.yaml       ← Prod report: 13 views → PlexProd
-│   ├── work_orders.yaml        ← Prod report: 4 Part DB views → PlexProd (4 AM UTC)
+│   ├── work_orders.yaml        ← Prod report: 12 Part/Quality/Personnel/Common/Maintenance views → PlexProd (4 AM UTC)
 │   ├── test/
 │   │   ├── sales_orders.yaml   ← Test report: same views → PlexTest
 │   │   └── work_orders.yaml    ← Test work orders → PlexTest (5 AM UTC)
 │   └── sql/
-│       ├── sales_orders_view.sql  ← BigQuery JOIN SQL for the 16-field report ✏
-│       └── work_orders_view.sql   ← BigQuery JOIN SQL for work orders report ✏
+│       ├── sales_orders_view.sql, sales_orders_open_view.sql   ← 2 peer reports ✏
+│       └── work_orders_view.sql, mfg_job_schedule_view.sql,
+│           labeling_open_work_orders_view.sql                  ← 3 peer reports ✏
+│       (+ 1-2 SQL files each for the other 6 report families — 12 SQL files total)
 │
 ├── config/
 │   ├── odbc.ini                ← DSN definitions (PlexProduction / PlexTest)
@@ -194,14 +202,17 @@ plex-to-big-query/
 │   └── terraform.tfvars        ← Your values (gitignored — copy from .example)
 │
 ├── docs/                       ← Deep-dive documentation
-│   ├── QUICKSTART.md
-│   ├── FRONTEND_GUIDE.md
+│   ├── QUICKSTART.md, DEPLOYMENT_GUIDE.md    ← Bootstrap-from-zero walkthroughs
+│   ├── FRONTEND_GUIDE.md       ← Architecture study guide with diagrams
+│   ├── TECHNICAL_REFERENCE.md  ← Full architecture/code/infra reference
 │   ├── OPERATIONS.md           ← How to add reports, configure SendGrid
-│   ├── TROUBLESHOOTING.md
-│   ├── API_REFERENCE.md
-│   ├── TEARDOWN.md
+│   ├── EMAIL_SCHEDULE.md       ← Full 16-job schedule + real run history
+│   ├── TROUBLESHOOTING.md, API_REFERENCE.md
+│   ├── DISASTER_RECOVERY.md, TEARDOWN.md
+│   ├── CLICKUP_TEAM_GUIDE.md   ← Condensed team-facing walkthrough
 │   ├── PLEX_REPORTS_CATALOG.md      ← Plex UI reports & data-sources catalog (vs. ODBC views)
-│   ├── NETSUITE_REPORT_BUILD_PLAN.md ← NetSuite→Plex report migration plan
+│   ├── NETSUITE_REPORT_BUILD_PLAN.md ← NetSuite→Plex report migration plan + next-report checklist
+│   ├── MFG_JOB_SCHEDULE_BUILD_PLAN.md, LOCAL_SETUP.md, APPLY_DRIVER_LICENSE.md
 │   └── CODE_REVIEW_2026-07-14.md
 │
 ├── catalog/                    ← Plex ODBC view catalogs (reference data)
@@ -275,16 +286,26 @@ plex-to-big-query/
 ### Deploy (after any code change)
 
 ```bash
-# Preferred: Cloud Build — builds, pushes, updates both jobs, and smoke-tests
-# the TEST job only (production is never executed automatically)
-gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
-  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+# Preferred: Cloud Build — builds, pushes, updates ALL 16 jobs (deploy-all
+# step loops the full job list), and smoke-tests the TEST job only
+# (production is never executed automatically). $SHORT_SHA is populated
+# automatically from the local git repo — don't override it manually.
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake .
 
-# Manual alternative: build and push locally
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+# Manual alternative: build, push, and redeploy every job yourself. Tag
+# with the commit SHA -- never ":latest" -- and don't skip the explicit
+# `gcloud run jobs update` per job: pushing an image alone changes nothing,
+# every job's lifecycle.ignore_changes on `image` means terraform apply
+# won't pick it up either. See docs/TROUBLESHOOTING.md's "Full rebuild
+# procedure" for the full 16-job loop.
+SHA=$(git rev-parse --short HEAD)
+docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
+             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
+docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
+gcloud run jobs update plex-etl --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 
-# Apply Terraform changes (new env vars, infrastructure)
+# Apply Terraform changes (new env vars, infrastructure — NOT the image)
 cd terraform
 terraform apply -var-file=terraform.tfvars
 ```
@@ -394,7 +415,10 @@ Quick version — no container rebuild needed. Only one `terraform apply` requir
 ```bash
 cp reports/work_orders.yaml reports/purchasing_orders.yaml
 cp reports/test/work_orders.yaml reports/test/purchasing_orders.yaml
-# Edit both: change report_name, extractions list, bq_view name
+# Edit both: change report_name, extractions list, bq_view name.
+# ALSO set category (department, e.g. "Purchasing") and each bq_view
+# entry's display_name — skip these and the email subject falls back to
+# a generic company-name-only line with no report name in it at all.
 ```
 
 ### Step 2 — Write the BigQuery SQL
@@ -445,6 +469,19 @@ resource "google_cloud_run_v2_job" "etl_purchasing" {
         env { name = "REPORT_SUBJECT";         value = var.report_subject }
       }
     }
+  }
+
+  # Required on every job — Terraform intentionally does NOT manage the
+  # deployed image (deploy/cloudbuild.yaml or a manual `gcloud run jobs
+  # update` does). Without this, the next unrelated `terraform apply`
+  # silently reverts this job to var.image_url, which may not be what's
+  # actually running. Copy this block onto every new job, no exceptions.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 }
 
@@ -568,7 +605,8 @@ echo -n 'PLEX_TOKEN_HERE' | gcloud secrets versions add plex-access-token \
 # You're missing the {Database}_v_ prefix.
 # Wrong:  PO
 # Right:  Sales_v_PO
-# Check the reports/sales_orders.yaml plex_view field.
+# Check the plex_view field on the relevant entry in that report's
+# extractions[] list (reports/*.yaml — each file has many entries, not one).
 ```
 
 ### BigQuery: `403 Access Denied`
@@ -603,7 +641,11 @@ gcloud projects add-iam-policy-binding voxdatalake \
 # Check if the Plex view is empty, or the filter is too restrictive.
 # NOTE: a 0-row response does NOT clear the BigQuery table — existing data
 # is preserved and a warning is logged (safety guard added 2026-07-14).
-# Run the job in local mode against the test host:
+# Run the job in local mode against the test host. This example uses the
+# legacy single-view env vars for a quick one-off check of ONE view — it
+# does NOT exercise the multi-report YAML path the failing job actually
+# runs. To reproduce the real failure, point REPORT_CONFIG_GCS_PATH at a
+# local/scratch copy of that job's YAML instead:
 docker run --env-file .env \
   -e OUTPUT_MODE=local \
   -e PLEX_VIEW=Sales_v_PO \

@@ -190,12 +190,12 @@ was missing.
 ## Deployment
 
 Terraform: `mfg_job_schedule_report` needs no new Cloud Run job (rides the
-existing `plex-etl-work-orders(-test)` schedule, 4/5 AM UTC) — only the new
+existing `plex-etl-work-orders(-test)` schedule, 4/5 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule)) — only the new
 `work_orders.yaml`/`test/work_orders.yaml` and the new SQL file need
 re-uploading to GCS, which `terraform apply` does automatically since it
 tracks those files by content hash. `quality_nonconformance` and
 `part_on_hand_inventory` are new Cloud Run jobs + schedulers, scheduled
-14/15 and 16/17 UTC respectively (next free slots after the existing 4–13
+14/15 and 16/17 UTC respectively (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule) (next free slots after the existing 4–13
 UTC block). See `terraform/main.tf` for the exact resources.
 
 **Round 3 + Round 4 deployed together, 2026-08-11** — held per Emilio's

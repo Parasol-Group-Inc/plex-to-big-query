@@ -203,7 +203,7 @@ gcloud scheduler jobs pause plex-daily-sync \
   --project=voxdatalake
 ```
 
-> **Every job also has a separate 6 AM Mountain retry scheduler** (e.g. `plex-daily-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
+> **Every job also has a separate 9:45 PM Mountain retry scheduler** (e.g. `plex-daily-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
 > ```bash
 > gcloud scheduler jobs pause plex-daily-sync-retry --location=us-central1 --project=voxdatalake
 > ```
@@ -221,7 +221,7 @@ Resume the paired `-retry` scheduler too, if you paused it.
 
 Edit `terraform/terraform.tfvars`:
 ```hcl
-scheduler_cron = "0 6 * * *"   # 6 AM UTC instead of 2 AM
+scheduler_cron = "30 19 * * *"   # 7:30 PM Mountain instead of 7:00 PM (scheduler_time_zone is now America/Denver)
 ```
 Then:
 ```bash

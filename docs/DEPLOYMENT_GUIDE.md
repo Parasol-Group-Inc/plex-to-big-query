@@ -49,7 +49,7 @@ If you're coming from frontend, here's a mental model for each service this pipe
 |---|---|---|
 | **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
 | **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
-| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run job daily at 2 AM UTC |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run job daily — this deployment's actual schedule cascades all 8 report categories through a 7:00 PM-9:45 PM America/Denver (Mountain) window, see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for the full per-category breakdown |
 | **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
 | **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
 | **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |
@@ -308,7 +308,7 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 
 ## Step 5 — Verify Cloud Scheduler
 
-Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily):
+Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily) — that's `variables.tf`'s generic default for a from-scratch deploy. This live project's `terraform.tfvars` overrides `scheduler_cron`/`scheduler_time_zone` to a 7:00 PM-9:45 PM `America/Denver` (Mountain) cascade across all 8 report categories, so `gcloud scheduler jobs list` against `voxdatalake` today won't show 2 AM UTC — see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for the actual per-category times:
 
 ```bash
 gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
@@ -422,8 +422,8 @@ cd terraform && terraform force-unlock <LOCK_ID>
 echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=- --project=voxdatalake
 ```
 
-**Change the sync schedule** (e.g. run at 6 AM UTC instead of 2 AM):
-Update `scheduler_cron = "0 6 * * *"` in `terraform.tfvars`, then:
+**Change the sync schedule** (e.g. run at a different Mountain-time hour instead of the current 7:00 PM cascade):
+Update `scheduler_cron` and `scheduler_time_zone` in `terraform.tfvars`, then:
 ```bash
 cd terraform
 terraform apply -var-file=terraform.tfvars

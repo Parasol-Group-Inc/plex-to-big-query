@@ -21,6 +21,15 @@ description: "VOX | Quality non-conformance (NC) records — prod (PlexProd data
 # requires matching by part_no + date proximity, not a join key — same
 # caveat as the NetSuite Job # correlation documented in the build plan.
 #
+# PARTIAL FIX added 2026-08-18: Quality_v_Deviation DOES carry Job_Key (via
+# junction tables Deviation_Job / _Problem / _Part / _Workcenter) — see
+# catalog/plex_quality_views_catalog.md "Deviations" section. Added below as
+# quality_deviation_report. UNCONFIRMED whether every Problem/NC gets a
+# linked Deviation, or only ones needing a documented workaround — validate
+# once real data lands (load begins 2026-08-24) before treating this as the
+# full NC-to-job answer. Until then, quality_nonconformance_report above
+# still has no job correlation of its own.
+#
 # HOW TO EDIT THIS REPORT (no deployment required):
 #   Change filter → update the filter field below, save this file to GCS
 #   Change SQL    → edit reports/sql/quality_nonconformance_view.sql and save to GCS
@@ -32,10 +41,70 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-08-18 for quality_deviation_report (see bq_view list below) ──
+  # The Deviation record itself: type/status keys, pieces affected, reason,
+  # approval dates. Job/Problem/Part/Workcenter correlation comes from the
+  # 4 junction tables below, not from columns on this view directly.
+  - plex_view: Quality_v_Deviation
+    bq_table: raw_Quality_v_Deviation
+    filter: ""
+    date_col: ""
+
+  # Deviation ↔ Job junction — the actual fix for the NC-to-job gap.
+  - plex_view: Quality_v_Deviation_Job
+    bq_table: raw_Quality_v_Deviation_Job
+    filter: ""
+    date_col: ""
+
+  # Deviation ↔ Problem (NC) junction.
+  - plex_view: Quality_v_Deviation_Problem
+    bq_table: raw_Quality_v_Deviation_Problem
+    filter: ""
+    date_col: ""
+
+  # Deviation ↔ Part junction.
+  - plex_view: Quality_v_Deviation_Part
+    bq_table: raw_Quality_v_Deviation_Part
+    filter: ""
+    date_col: ""
+
+  # Deviation ↔ Workcenter junction.
+  - plex_view: Quality_v_Deviation_Workcenter
+    bq_table: raw_Quality_v_Deviation_Workcenter
+    filter: ""
+    date_col: ""
+
+  # Deviation_Type_Key / Deviation_Status_Key are real FKs (unlike
+  # Quality_v_Problem's inline text columns) — both lookups needed.
+  - plex_view: Quality_v_Deviation_Type
+    bq_table: raw_Quality_v_Deviation_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Status
+    bq_table: raw_Quality_v_Deviation_Status
+    filter: ""
+    date_col: ""
+
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
+#
+# Part_v_Job and Part_v_Workcenter are also intentionally NOT extracted here
+# — quality_deviation_view.sql reuses raw_Part_v_Job / raw_Part_v_Workcenter,
+# both owned by the work_orders pipeline, same shared-table rule.
 
+# bq_view is a LIST — quality_turnaround_time_report added 2026-08-14, best-
+# criteria NetSuite parity for "Turn Around Time Report - Last Month" /
+# "Turn Around Time Report - Rolling" (mapping/netsuite-report-mapping.md
+# #69/#70). Same raw_Quality_v_Problem extraction as
+# quality_nonconformance_report.
 bq_view:
-  name: quality_nonconformance_report
-  display_name: "Quality Nonconformance"
-  sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql
+  - name: quality_nonconformance_report
+    display_name: "Quality Nonconformance"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql
+  - name: quality_turnaround_time_report
+    display_name: "Turn Around Time Report"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_turnaround_time_view.sql
+  - name: quality_deviation_report
+    display_name: "Quality Deviations"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_deviation_view.sql

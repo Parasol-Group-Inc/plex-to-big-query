@@ -41,6 +41,20 @@ couldn't be added the same way — the NC-to-job correlation gap (Open
 Question, `Quality_v_Problem` has no job FK) blocks it structurally, not
 just for lack of data.
 
+**Update 2026-08-18:** a real fix was found and built as its own report,
+not yet merged into `mfg_job_schedule_report` — `Quality_v_Deviation`
+carries `Job_Key` via junction tables (`Deviation_Job`/`_Problem`), giving
+a real `Problem → Deviation → Job` join with no fuzzy matching. Built as
+`quality_deviation_report` (see `reports/quality_nonconformance.yaml`,
+`reports/sql/quality_deviation_view.sql`, and
+`catalog/plex_quality_views_catalog.md` "Deviations" section for the full
+discovery). Not yet wired into `mfg_job_schedule_report`'s own Deviation
+gate — still unconfirmed whether every Problem/NC gets a linked Deviation
+record, or only ones needing a documented workaround, so the coverage
+needs validating against real data (load begins 2026-08-24) before this
+becomes the automated Deviation=NO/YES answer the Success Rating formula
+needs.
+
 ## ❓ Open Questions for the Data Architect/Scientist
 
 Running list across all tabs of this spreadsheet — kept in one place so
@@ -136,7 +150,7 @@ equipment/room, and a running free-text commentary log per job.
 |---|---|
 | Blending vs. Encapsulation classification | **Resolved 2026-08-11** — both `Blend 2-5` and `Encapsulation 1-10` workcenter names confirmed live (see `reports-list/production.md`). No hardcoded classification is built into the SQL yet (still exposes raw `workcenter`/`workcenter_type` columns), but a `WHERE workcenter LIKE 'Encapsulation%'`/`'Blend %'` filter is now known to work — ask if you want this formalized into named columns. |
 | MG Per Cap, Cap Specs (e.g. "00 Veggy") | `Part_v_BOM` / `Part_v_Part_Attribute` are plausible sources, but turning BOM component quantities into an actual per-capsule dosage needs a unit conversion (mg/g/kg) not reliably inferable from schema alone. Not built — flagged as a follow-up. |
-| NC-to-job correlation | `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key` — an NC links to a part, not a specific job. Cross-referencing to a schedule row needs a part+date match, not a join key. **New lead, confirmed live 2026-08-12**: `Quality_v_Claim` is a distinct Quality entity that carries `Job_Key`/`Part_Key`/`Service_Job_Key` directly — schema confirmed against the live tenant, but the view is empty ("No Records Were Found"), so the `Job_Key` join can't be tested yet. Also unconfirmed whether the sheet's "NC #" column actually refers to a Claim rather than a Problem — `Claim` reads as formal customer/supplier complaint intake, not necessarily 1:1 with a shop-floor NC. See `catalog/plex_quality_views_catalog.md`. |
+| NC-to-job correlation | `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key` — an NC links to a part, not a specific job. Cross-referencing to a schedule row needs a part+date match, not a join key. `Quality_v_Claim` also carries `Job_Key` directly but reads as formal customer/supplier complaint intake, not necessarily 1:1 with a shop-floor NC, and is empty on test. **Built 2026-08-18 instead**: `Quality_v_Deviation` correlates to Job via junction tables (`Deviation_Job`/`_Problem`) — a real `Problem → Deviation → Job` join, no fuzzy matching, and "Deviation" matches this sheet's own Success Rating terminology. Shipped as its own report, `quality_deviation_report` — not yet merged into this report's own Deviation gate, since it's still unconfirmed whether every Problem gets a linked Deviation record. See `catalog/plex_quality_views_catalog.md` "Deviations" section and `reports/sql/quality_deviation_view.sql`. |
 | Days Left | **Corrected 2026-08-11** — moved out of manual-only. Mapping the "Inventory Availability" tab found its exact formula (`Current QTY Available ÷ Avg Daily`, confirmed against real data), but the one input it needs — `Avg Daily` (average daily usage rate) — has no confirmed Plex source. Checked `Part_v_Part_Planning_Parameters` (real view, wrong columns — MRP/scheduling flags, not a usage rate) and 4 speculative view names (all don't exist). See `mfg_job_schedule_inventory_availability.md`. |
 
 **Manual-only — never in any ERP, deliberately not built:**

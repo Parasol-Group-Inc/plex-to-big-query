@@ -14,7 +14,7 @@ This pipeline **copies Plex ERP data into BigQuery** so your data team can query
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report configuration files — edit them to change what gets extracted, no code deployment needed
 
-The pipeline is actually 8 report families (16 Cloud Run jobs, prod+test) on staggered schedules from **2 AM through 5 PM UTC** — `plex-etl` (Sales Orders) at 2 AM UTC is just the first one. Full schedule: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be triggered manually any time.
+The pipeline is actually 8 report families (16 Cloud Run jobs, prod+test) on a cascade of schedules from **7:00 PM through 9:30 PM Mountain (America/Denver)**, 10 minutes apart — `plex-etl` (Sales Orders) at 7:00 PM Mountain is just the first one. Full schedule: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be triggered manually any time.
 
 ---
 
@@ -52,7 +52,7 @@ graph TB
     end
 
     SM["🔑 Secret Manager\nIAM access token"]
-    SCHED["⏰ Cloud Scheduler\n2 AM UTC daily"]
+    SCHED["⏰ Cloud Scheduler\n7:00 PM Mountain daily"]
     EMAIL["📧 SendGrid\nrun report email"]
 
     SCHED -->|"HTTP POST trigger"| CR
@@ -79,7 +79,7 @@ graph LR
 
     subgraph PROD["🟢 Production"]
         PJ["Cloud Run Job\nplex-etl"]
-        PS["Scheduler\nplex-daily-sync\n2 AM UTC"]
+        PS["Scheduler\nplex-daily-sync\n7:00 PM Mountain"]
         PH["Plex Host\nvox.odbc.plex.com\n✅ confirmed"]
         PD["BigQuery\nPlexProd dataset"]
         PS --> PJ
@@ -89,7 +89,7 @@ graph LR
 
     subgraph TEST["🔵 Test"]
         TJ["Cloud Run Job\nplex-etl-test"]
-        TS["Scheduler\nplex-daily-sync-test\n3 AM UTC"]
+        TS["Scheduler\nplex-daily-sync-test\n7:10 PM Mountain"]
         TH["Plex Host\nvox.test.odbc.plex.com\n✅ active"]
         TD["BigQuery\nPlexTest dataset"]
         TS --> TJ
@@ -102,7 +102,7 @@ graph LR
 ```
 
 > **Failure retry:** every one of the 16 jobs (all 8 report families, prod +
-> test) has a second scheduler firing daily at **6 AM `America/Denver`**
+> test) has a second scheduler firing daily at **9:45 PM `America/Denver`**
 > that retries the same job if today's scheduled run genuinely FAILED (not
 > PARTIAL). See
 > [docs/OPERATIONS.md → Failure Retry](docs/OPERATIONS.md#failure-retry-6-am-mountain)
@@ -114,14 +114,14 @@ graph LR
 
 | Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View(s) |
 |---|---|---|---|---|---|
-| **Sales Orders** | `plex-etl` | `plex-etl-test` | 2 AM / 3 AM UTC | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
-| **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 4 AM / 5 AM UTC | 12 Part/Quality/Personnel/Common/Maintenance views | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report` |
-| **Purchasing Open Orders** | `plex-etl-purchasing-open-orders` | `-test` | 6 AM / 7 AM UTC | 6 Purchasing + Common + Part | `purchasing_open_orders_report` |
-| **Part Obsolescence** | `plex-etl-part-obsolescence` | `-test` | 8 AM / 9 AM UTC | 1 Part_v_Part (filtered) | `part_obsolescence_report` |
-| **Inventory Activity** | `plex-etl-inventory-activity` | `-test` | 10 AM / 11 AM UTC | 2 Part DB views (Cell_Production, Cell_Depletion) | `inventory_activity_report` |
-| **Inventory Snapshot** | `plex-etl-inventory-snapshot` | `-test` | 12 PM / 1 PM UTC | 3 Part DB views (Snapshot, Snapshot_Cost_Sub_Type_Breakdown, Cost_Sub_Type_Breakdown_History) | `inventory_snapshot_report`, `inventory_valuation_summary_report` |
-| **Quality Non-Conformance** | `plex-etl-quality-nonconformance` | `-test` | 2 PM / 3 PM UTC | 1 Quality_v_Problem + Part | `quality_nonconformance_report` |
-| **Part On-Hand Inventory** | `plex-etl-part-on-hand-inventory` | `-test` | 4 PM / 5 PM UTC | 2 Part_v_Container(_Status) + Part | `part_on_hand_inventory_report` |
+| **Sales Orders** | `plex-etl` | `plex-etl-test` | 7:00 PM / 7:10 PM Mountain | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
+| **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 7:20 PM / 7:30 PM Mountain | 12 Part/Quality/Personnel/Common/Maintenance views | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report` |
+| **Purchasing Open Orders** | `plex-etl-purchasing-open-orders` | `-test` | 7:40 PM / 7:50 PM Mountain | 6 Purchasing + Common + Part | `purchasing_open_orders_report` |
+| **Part Obsolescence** | `plex-etl-part-obsolescence` | `-test` | 8:00 PM / 8:10 PM Mountain | 1 Part_v_Part (filtered) | `part_obsolescence_report` |
+| **Inventory Activity** | `plex-etl-inventory-activity` | `-test` | 8:20 PM / 8:30 PM Mountain | 2 Part DB views (Cell_Production, Cell_Depletion) | `inventory_activity_report` |
+| **Inventory Snapshot** | `plex-etl-inventory-snapshot` | `-test` | 8:40 PM / 8:50 PM Mountain | 3 Part DB views (Snapshot, Snapshot_Cost_Sub_Type_Breakdown, Cost_Sub_Type_Breakdown_History) | `inventory_snapshot_report`, `inventory_valuation_summary_report` |
+| **Quality Non-Conformance** | `plex-etl-quality-nonconformance` | `-test` | 9:00 PM / 9:10 PM Mountain | 1 Quality_v_Problem + Part; 1 Quality_v_Deviation + 4 junction tables (Deviation_Job, _Problem, _Part, _Workcenter) + 2 lookup tables (_Type, _Status) | `quality_nonconformance_report`, `quality_turnaround_time_report`, `quality_deviation_report` |
+| **Part On-Hand Inventory** | `plex-etl-part-on-hand-inventory` | `-test` | 9:20 PM / 9:30 PM Mountain | 2 Part_v_Container(_Status) + Part | `part_on_hand_inventory_report` |
 
 > Each report's `category`/`display_name` (in its `reports/*.yaml`) drives its email subject — Sales Orders/Purchasing Open Orders/etc. are `category` values, and each BQ View listed above has its own `display_name` shown in the email (not always the same as the raw view name). See `docs/EMAIL_SCHEDULE.md` for the exact subject format.
 >
@@ -179,15 +179,27 @@ plex-to-big-query/
 │
 ├── reports/                    ← REPORT DEFINITIONS — edit these to change what runs (8 report families total, see Active Reports above)
 │   ├── sales_orders.yaml       ← Prod report: 13 views → PlexProd
-│   ├── work_orders.yaml        ← Prod report: 12 Part/Quality/Personnel/Common/Maintenance views → PlexProd (4 AM UTC)
+│   ├── work_orders.yaml        ← Prod report: 12 Part/Quality/Personnel/Common/Maintenance views → PlexProd (7:20 PM Mountain)
 │   ├── test/
 │   │   ├── sales_orders.yaml   ← Test report: same views → PlexTest
-│   │   └── work_orders.yaml    ← Test work orders → PlexTest (5 AM UTC)
+│   │   └── work_orders.yaml    ← Test work orders → PlexTest (7:30 PM Mountain)
 │   └── sql/
-│       ├── sales_orders_view.sql, sales_orders_open_view.sql   ← 2 peer reports ✏
+│       ├── sales_orders_view.sql, sales_orders_open_view.sql,
+│       │   sales_orders_pending_approval_view.sql, sales_orders_pending_accounting_approval_view.sql,
+│       │   sales_orders_aging_view.sql, sales_orders_over_10k_view.sql,
+│       │   sales_orders_over_10k_bottles_view.sql, sales_customers_by_rep_view.sql,
+│       │   sales_revenue_by_rep_view.sql                       ← 9 peer reports (sales_orders.yaml) ✏
 │       └── work_orders_view.sql, mfg_job_schedule_view.sql,
-│           labeling_open_work_orders_view.sql                  ← 3 peer reports ✏
-│       (+ 1-2 SQL files each for the other 6 report families — 12 SQL files total)
+│           labeling_open_work_orders_view.sql, printing_open_work_orders_view.sql
+│                                                                ← 4 peer reports (work_orders.yaml) ✏
+│       (purchasing_open_orders.yaml: 2 — purchasing_open_orders_view.sql,
+│        purchasing_po_pending_approval_view.sql · part_on_hand_inventory.yaml: 2 —
+│        part_on_hand_inventory_view.sql, inventory_risk_analysis_view.sql ·
+│        quality_nonconformance.yaml: 3 — quality_nonconformance_view.sql,
+│        quality_turnaround_time_view.sql, quality_deviation_view.sql ·
+│        inventory_snapshot.yaml: 2 — inventory_snapshot_view.sql,
+│        inventory_valuation_summary_view.sql · part_obsolescence.yaml and
+│        inventory_activity.yaml: 1 each)
 │
 ├── config/
 │   ├── odbc.ini                ← DSN definitions (PlexProduction / PlexTest)
@@ -537,7 +549,7 @@ To discover view names: open **Plex SQL Dev** → expand the database tree → r
 | GCP Service | What it is (in general) | What it does in this pipeline |
 |---|---|---|
 | **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery |
-| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers the Cloud Run Job at 2 AM UTC every night |
+| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers the Cloud Run Job at 7:00 PM Mountain every night (the first job in the cascade — see Active Reports above for the full per-job schedule) |
 | **BigQuery** | Serverless data warehouse — query terabytes with SQL, pay per query | Stores all raw Plex tables + the JOIN view your data team queries |
 | **Cloud Storage (GCS)** | Object storage — like S3, stores files | Holds the YAML report configs and SQL view definitions |
 | **Secret Manager** | Encrypted secret store | Stores the Plex IAM token and SendGrid API key |

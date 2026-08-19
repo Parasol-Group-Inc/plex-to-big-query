@@ -8,7 +8,7 @@
 
 ## What gets deleted
 
-As of 2026-08-13 there are **16 Cloud Run jobs** (8 report families × prod/test), **32 Cloud Scheduler jobs** (one daily + one 6 AM Mountain retry trigger per Cloud Run job), **5** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — not the single-job/single-dataset/4-secret setup this table used to describe. `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
+As of 2026-08-13 there are **16 Cloud Run jobs** (8 report families × prod/test), **32 Cloud Scheduler jobs** (one daily + one 9:45 PM Mountain retry trigger per Cloud Run job), **5** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — not the single-job/single-dataset/4-secret setup this table used to describe. `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
 
 | Resource | Managed by | Deleted how |
 |---|---|---|

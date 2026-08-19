@@ -757,7 +757,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
 resource "google_cloud_scheduler_job" "etl_work_orders" {
   name        = "plex-work-orders-sync"
   description = "Triggers Plex to BigQuery work orders ETL job"
-  schedule    = "0 4 * * *"
+  schedule    = "20 19 * * *" # 7:20 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -929,7 +929,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
 resource "google_cloud_scheduler_job" "etl_work_orders_test" {
   name        = "plex-work-orders-sync-test"
   description = "Triggers Plex to BigQuery work orders ETL job (test)"
-  schedule    = "0 5 * * *"
+  schedule    = "30 19 * * *" # 7:30 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -1136,7 +1136,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
 resource "google_cloud_scheduler_job" "etl_purchasing_open_orders" {
   name        = "plex-purchasing-open-orders-sync"
   description = "Triggers Plex to BigQuery purchasing open orders ETL job"
-  schedule    = "0 6 * * *"
+  schedule    = "40 19 * * *" # 7:40 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -1308,7 +1308,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
 resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_test" {
   name        = "plex-purchasing-open-orders-sync-test"
   description = "Triggers Plex to BigQuery purchasing open orders ETL job (test)"
-  schedule    = "0 7 * * *"
+  schedule    = "50 19 * * *" # 7:50 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -1503,7 +1503,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
 resource "google_cloud_scheduler_job" "etl_part_obsolescence" {
   name        = "plex-part-obsolescence-sync"
   description = "Triggers Plex to BigQuery part obsolescence ETL job"
-  schedule    = "0 8 * * *"
+  schedule    = "0 20 * * *" # 8:00 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -1675,7 +1675,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
 resource "google_cloud_scheduler_job" "etl_part_obsolescence_test" {
   name        = "plex-part-obsolescence-sync-test"
   description = "Triggers Plex to BigQuery part obsolescence ETL job (test)"
-  schedule    = "0 9 * * *"
+  schedule    = "10 20 * * *" # 8:10 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -1870,7 +1870,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
 resource "google_cloud_scheduler_job" "etl_inventory_activity" {
   name        = "plex-inventory-activity-sync"
   description = "Triggers Plex to BigQuery inventory activity ETL job"
-  schedule    = "0 10 * * *"
+  schedule    = "20 20 * * *" # 8:20 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2042,7 +2042,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
 resource "google_cloud_scheduler_job" "etl_inventory_activity_test" {
   name        = "plex-inventory-activity-sync-test"
   description = "Triggers Plex to BigQuery inventory activity ETL job (test)"
-  schedule    = "0 11 * * *"
+  schedule    = "30 20 * * *" # 8:30 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2248,7 +2248,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
 resource "google_cloud_scheduler_job" "etl_inventory_snapshot" {
   name        = "plex-inventory-snapshot-sync"
   description = "Triggers Plex to BigQuery inventory snapshot ETL job"
-  schedule    = "0 12 * * *"
+  schedule    = "40 20 * * *" # 8:40 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2412,7 +2412,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
 resource "google_cloud_scheduler_job" "etl_inventory_snapshot_test" {
   name        = "plex-inventory-snapshot-sync-test"
   description = "Triggers Plex to BigQuery inventory snapshot ETL job (test)"
-  schedule    = "0 13 * * *"
+  schedule    = "50 20 * * *" # 8:50 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2478,6 +2478,114 @@ resource "google_storage_bucket_object" "labeling_open_work_orders_view_sql" {
   name         = "sql/labeling_open_work_orders_view.sql"
   bucket       = google_storage_bucket.report_configs.name
   source       = "${path.module}/../reports/sql/labeling_open_work_orders_view.sql"
+  content_type = "text/plain"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Catch-up batch (2026-08-19): 12 bq_view SQL files that were added to an
+# EXISTING report's bq_view list (yaml already deployed) but never got a
+# matching google_storage_bucket_object resource here — so `terraform apply`
+# never actually uploaded them, and each one 404'd the first time its job
+# tried to load it from GCS ("Failed to load view SQL ... 404 ... No such
+# object"). Confirmed live 2026-08-19 against plex-etl-quality-nonconformance-test.
+# Uploaded manually via `gcloud storage cp` to unblock the same night's runs;
+# these resources make Terraform track them going forward like every other
+# SQL file. No new Cloud Run job/scheduler needed for any of these — all 12
+# ride on an existing job's periodic run.
+
+# printing_open_work_orders_report — 4th bq_view on plex-etl-work-orders(-test).
+resource "google_storage_bucket_object" "printing_open_work_orders_view_sql" {
+  name         = "sql/printing_open_work_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/printing_open_work_orders_view.sql"
+  content_type = "text/plain"
+}
+
+# purchasing_po_pending_approval_report — 2nd bq_view on
+# plex-etl-purchasing-open-orders(-test).
+resource "google_storage_bucket_object" "purchasing_po_pending_approval_view_sql" {
+  name         = "sql/purchasing_po_pending_approval_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/purchasing_po_pending_approval_view.sql"
+  content_type = "text/plain"
+}
+
+# inventory_risk_analysis_report — 2nd bq_view on
+# plex-etl-part-on-hand-inventory(-test).
+resource "google_storage_bucket_object" "inventory_risk_analysis_view_sql" {
+  name         = "sql/inventory_risk_analysis_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_risk_analysis_view.sql"
+  content_type = "text/plain"
+}
+
+# quality_turnaround_time_report — 2nd bq_view on
+# plex-etl-quality-nonconformance(-test), added 2026-08-14. This one had been
+# broken since that date, not just introduced by today's catch-up.
+resource "google_storage_bucket_object" "quality_turnaround_time_view_sql" {
+  name         = "sql/quality_turnaround_time_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_turnaround_time_view.sql"
+  content_type = "text/plain"
+}
+
+# quality_deviation_report — 3rd bq_view on plex-etl-quality-nonconformance(-test),
+# added 2026-08-19. See catalog/plex_quality_views_catalog.md "Deviations".
+resource "google_storage_bucket_object" "quality_deviation_view_sql" {
+  name         = "sql/quality_deviation_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_deviation_view.sql"
+  content_type = "text/plain"
+}
+
+# 6 additional bq_view entries on the existing plex-etl(-test) [sales_orders]
+# job — NetSuite parity reports, see docs/NETSUITE_REPORT_BUILD_PLAN.md.
+resource "google_storage_bucket_object" "sales_orders_pending_approval_view_sql" {
+  name         = "sql/sales_orders_pending_approval_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_pending_approval_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_pending_accounting_approval_view_sql" {
+  name         = "sql/sales_orders_pending_accounting_approval_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_pending_accounting_approval_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_aging_view_sql" {
+  name         = "sql/sales_orders_aging_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_aging_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_over_10k_view_sql" {
+  name         = "sql/sales_orders_over_10k_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_over_10k_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_over_10k_bottles_view_sql" {
+  name         = "sql/sales_orders_over_10k_bottles_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_over_10k_bottles_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_customers_by_rep_view_sql" {
+  name         = "sql/sales_customers_by_rep_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_customers_by_rep_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_revenue_by_rep_view_sql" {
+  name         = "sql/sales_revenue_by_rep_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_revenue_by_rep_view.sql"
   content_type = "text/plain"
 }
 
@@ -2637,7 +2745,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
 resource "google_cloud_scheduler_job" "etl_quality_nonconformance" {
   name        = "plex-quality-nonconformance-sync"
   description = "Triggers Plex to BigQuery quality non-conformance ETL job"
-  schedule    = "0 14 * * *"
+  schedule    = "0 21 * * *" # 9:00 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2803,7 +2911,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
 resource "google_cloud_scheduler_job" "etl_quality_nonconformance_test" {
   name        = "plex-quality-nonconformance-sync-test"
   description = "Triggers Plex to BigQuery quality non-conformance ETL job (test)"
-  schedule    = "0 15 * * *"
+  schedule    = "10 21 * * *" # 9:10 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -2992,7 +3100,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
 resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory" {
   name        = "plex-part-on-hand-inventory-sync"
   description = "Triggers Plex to BigQuery part on-hand inventory ETL job"
-  schedule    = "0 16 * * *"
+  schedule    = "20 21 * * *" # 9:20 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -3158,7 +3266,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
 resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_test" {
   name        = "plex-part-on-hand-inventory-sync-test"
   description = "Triggers Plex to BigQuery part on-hand inventory ETL job (test)"
-  schedule    = "0 17 * * *"
+  schedule    = "30 21 * * *" # 9:30 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 

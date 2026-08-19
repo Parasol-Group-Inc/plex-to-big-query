@@ -22,7 +22,7 @@
 3. IAM token fetched from Secret Manager; one `pyodbc` connection is opened and reused across every extraction in the file
 4. For each entry in `extractions[]`: `validate_extraction()` checks the view/table/filter/date_col are safe identifiers, then `SELECT * FROM {plex_view} {filter} [ORDER BY {date_col}]` runs and writes to its own raw BigQuery table (`WRITE_TRUNCATE` for full refresh, `WRITE_APPEND` + `sync_metadata` update if `date_col` is set) — one extraction failing is logged as a `partial_error` and does **not** stop the others
 5. For each entry in `bq_view` (via `bq_view_configs()`): `validate_bq_view()` checks the name/SQL are safe, the `.sql` file is downloaded from GCS, `{gcp_project}`/`{dataset}` placeholders are substituted, and `create_or_replace_bq_view()` runs a `CREATE OR REPLACE VIEW` — again, one bad view doesn't block the others
-6. `log_job_run()` writes one row to `job_run_log` recording this run's status — this is what the 6 AM Mountain retry trigger checks before deciding whether to actually do anything (see "Retry mechanism" below)
+6. `log_job_run()` writes one row to `job_run_log` recording this run's status — this is what the 9:45 PM Mountain retry trigger checks before deciding whether to actually do anything (see "Retry mechanism" below)
 7. `send_report()` in `email_utils.py` sends a SendGrid email if `SENDGRID_ENABLED=true`, listing every report this run produced by its real `display_name`, not just the raw table name
 
 ### Legacy single-view mode (`REPORT_CONFIG_GCS_PATH` unset — no live job uses this)
@@ -151,7 +151,7 @@ bq_view:                         # a single mapping, OR a list of mappings (see 
 
 ## Retry mechanism
 
-Every report family has 3 Cloud Scheduler triggers: prod (its own hour, UTC), test (prod hour + 1, UTC), and one shared retry trigger firing **6 AM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job.
+Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job.
 
 The retry trigger runs with `RUN_MODE=retry`. On every run, `run_and_report()`:
 1. Calls `get_todays_run_status(bq, job_identity)` — `job_identity` is `CLOUD_RUN_JOB` (auto-set by Cloud Run) or the report's `report_name` as a local-run fallback
@@ -347,7 +347,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `BQ_TABLE` | `plex_extract` | apply | Legacy single-view mode only — target table name |
 | `METADATA_TABLE` | `sync_metadata` | apply | Sync state tracking table |
 | `JOB_RUN_LOG_TABLE` | `job_run_log` | apply | Retry-tracking table — see "Retry mechanism" |
-| `RUN_MODE` | `""` | — | Set to `retry` by the 6 AM Mountain scheduler trigger; anything else runs as a normal scheduled execution |
+| `RUN_MODE` | `""` | — | Set to `retry` by the 9:45 PM Mountain scheduler trigger; anything else runs as a normal scheduled execution |
 | `REPORT_CONFIG_GCS_PATH` | `""` | — (edit the YAML instead) | GCS path to the multi-report YAML. Empty = legacy single-view mode using the vars below |
 | `PLEX_HOST` | `""` | apply | Plex ODBC hostname |
 | `PLEX_PORT` | `19995` | apply | Plex ODBC port |
@@ -378,7 +378,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **8 report families × prod/test = 16 Cloud Run jobs**, each on its own hourly-staggered schedule (2 AM through 5 PM UTC, prod/test pairs one hour apart), plus a shared 6 AM Mountain retry trigger for all of them. Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **8 report families × prod/test = 16 Cloud Run jobs**, each on its own 10-minute-staggered schedule within a 7:00 PM–9:30 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes — plus a shared 9:45 PM Mountain retry trigger for all of them. Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
 Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl`/`sales_orders.yaml`, since expanded to 13 extractions + 2 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 

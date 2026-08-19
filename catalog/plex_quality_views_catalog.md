@@ -47,6 +47,34 @@ except the lookup tables noted:
   a shop-floor NC, so the two may not be 1:1 — unconfirmed, not assumed.
   Same blocker as everything else: empty on the test tenant, so the
   `Job_Key` lead can't be tested against real data yet.
+- **`Deviation` family — built 2026-08-18, stronger candidate than `Claim`.**
+  `Quality_v_Deviation` (schema confirmed) has no `Job_Key` on the record
+  itself, but 4 junction tables do the correlation: `Quality_v_Deviation_Job`
+  (`Deviation_Key` ↔ `Job_Key`), `_Problem` (↔ `Problem_Key`), `_Part`
+  (↔ `Part_Key`), `_Workcenter` (↔ `Workcenter_Key`) — a real relational
+  join, `Problem → Deviation_Problem → Deviation → Deviation_Job → Job`,
+  no fuzzy part+date matching required. "Deviation" is also the literal
+  term the MFG Job Schedule sheet's own Success Rating formula already uses
+  ("Deviation = NO"), a tighter name match than `Claim`. Two lookup tables,
+  `Deviation_Status` (Approved/Rejected/Awaiting Approval flags) and
+  `Deviation_Type` (has a `Display_On_Checksheet` flag, tying it to the
+  inspection workflow), are real FKs off the main record (`_Key` suffix),
+  unlike Problem's inline text columns.
+  **Caveat, not yet resolved**: in quality-management terminology
+  (especially pharma/nutraceutical), "Deviation" classically means a
+  formally *approved, planned* exception to spec/process — the
+  `Approved_By`/`Effective_Date`/`Expiration_Date`/`FMEA_Review_*` columns
+  read that way — which may be a narrower concept than "any NC occurred."
+  The `Deviation_Problem` junction proves Vox *can* link a Deviation to a
+  Problem, not that every Problem gets one. Built as `quality_deviation_report`
+  (see `reports/quality_nonconformance.yaml` and
+  `reports/sql/quality_deviation_view.sql`) — validate `problem_nos`
+  coverage against real `Quality_v_Problem` volume once live data lands
+  (load begins 2026-08-24) before treating this as the full NC-to-job answer.
+  Ruled out in the same pass: `Quality_v_Problem_Job_Classification` looked
+  promising by name but has no `Job_Key` at all (just a classification
+  string) — a dead end. `Quality_v_Test_Job` has a real `Job_Key` +
+  `Test_Key` but belongs to the formal Test/PPAP domain, not NC tracking.
 
 ## Relevance to Sales Orders Pipeline
 

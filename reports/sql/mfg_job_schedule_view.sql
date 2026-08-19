@@ -34,6 +34,16 @@
 --   Part_v_Lot_Shelf_Life    — Lot_Key -> raw shelf-life value. Deliberately
 --     NOT converted into an expiration date: Shelf_Life_Type_Key's unit
 --     (days? a formatted duration?) is unconfirmed without live sample data.
+--     CONFIRMED live 2026-08-19: Lot_Shelf_Life is actually typed DATETIME,
+--     not a numeric duration as originally guessed — real data started
+--     populating this table and broke the FLOAT64 cast this view used to
+--     use (SAFE_CAST(DATETIME AS FLOAT64) has no defined cast path at all,
+--     so even SAFE_CAST fails at compile time, not just at runtime — same
+--     "cast through STRING first" principle as the DATE CONVERSION PATTERN
+--     below). Passed through as a raw STRING instead so the pipeline
+--     doesn't break either way; still unconfirmed what this value actually
+--     means business-wise — don't assume it's an expiration date without
+--     checking real sample values first.
 --   Quality_v_Checksheet(_Status) — Job_Op_Key -> most recent QC inspection
 --     result for that operation. Closest available analog to the manual
 --     tracker's "Raw Material in Testing" / "Raws Released" columns — it's
@@ -160,7 +170,7 @@ base AS (
       NULLIF(SAFE_CAST(CAST(lot.Manufactured_Date AS STRING) AS DATE), DATE '1970-01-01'),
       NULLIF(DATE(SAFE_CAST(CAST(lot.Manufactured_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
     )                                               AS lot_manufactured_date,
-    SAFE_CAST(shelf.Lot_Shelf_Life AS FLOAT64)      AS lot_shelf_life_raw,
+    CAST(shelf.Lot_Shelf_Life AS STRING)            AS lot_shelf_life_raw,
 
     -- ── QC / checksheet status (most recent inspection for this operation) ─
     lc.Checksheet_No                                AS checksheet_no,

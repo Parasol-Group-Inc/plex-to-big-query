@@ -41,12 +41,14 @@ Console: https://console.cloud.google.com/home/dashboard?project=voxdatalake
 
 ### The four pipelines
 
-| Job | What | Writes to | Schedule (UTC) |
+Note: this table predates several newer Cloud Run jobs added since 2026-07-20 (purchasing, part obsolescence, inventory activity/snapshot, quality nonconformance, part on-hand inventory) — see docs/EMAIL_SCHEDULE.md for the complete current picture of all 16 jobs.
+
+| Job | What | Writes to | Schedule (Mountain) |
 |---|---|---|---|
-| `plex-etl` | Sales Orders — **production** | `PlexProd` | 2 AM daily |
-| `plex-etl-test` | Sales Orders — test | `PlexTest` | 3 AM daily |
-| `plex-etl-work-orders` | Work Orders — **production** | `PlexProd` | 4 AM daily |
-| `plex-etl-work-orders-test` | Work Orders — test | `PlexTest` | 5 AM daily |
+| `plex-etl` | Sales Orders — **production** | `PlexProd` | 7:00 PM daily |
+| `plex-etl-test` | Sales Orders — test | `PlexTest` | 7:10 PM daily |
+| `plex-etl-work-orders` | Work Orders — **production** | `PlexProd` | 7:20 PM daily |
+| `plex-etl-work-orders-test` | Work Orders — test | `PlexTest` | 7:30 PM daily |
 
 ### The report views (what analysts should query)
 

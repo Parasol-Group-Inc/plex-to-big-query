@@ -249,7 +249,7 @@ Type `yes` when it asks. **This creates the entire 8-report-family, 16-job stack
 - An Artifact Registry repository (where your Docker image lives)
 - **Five** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`
 - All 16 Cloud Run job definitions (8 report families × prod/test)
-- All 32 Cloud Scheduler jobs — one daily trigger + one 6 AM Mountain retry trigger per Cloud Run job
+- All 32 Cloud Scheduler jobs — one daily trigger + one 9:45 PM Mountain retry trigger per Cloud Run job
 
 **Check it worked:** In GCP Console → **Secret Manager**, you should see 5 secrets listed.
 
@@ -327,11 +327,11 @@ In GCP Console: **BigQuery** → `voxdatalake` → `PlexTest` → `raw_Sales_v_P
 
 ## You're done
 
-`plex-etl` (Sales Orders) now runs daily at 2 AM UTC; `plex-etl-test` at 3 AM UTC. The other 14 jobs Step 9 created run on their own staggered schedules through the day — full list in [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). You don't need to do anything else.
+`plex-etl` (Sales Orders) now runs daily at 7:00 PM Mountain; `plex-etl-test` at 7:10 PM Mountain. The other 14 jobs Step 9 created run on their own staggered schedules through the evening cascade — full list in [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). You don't need to do anything else.
 
 **To check on a specific day's run:** GCP Console → **Cloud Run** → **Jobs** → `plex-etl` (or any other job) → **Executions** tab shows each run with its status.
 
-**If a run fails:** `max_retries` on the job itself is 1, not 3 — the real safety net is a separate scheduler that fires at 6 AM Mountain (`RUN_MODE=retry`) and re-runs the job only if today's scheduled run didn't already succeed. Check the logs for the original error. See [DEPLOYMENT_GUIDE.md Troubleshooting](../DEPLOYMENT_GUIDE.md#troubleshooting) for common fixes.
+**If a run fails:** `max_retries` on the job itself is 1, not 3 — the real safety net is a separate scheduler that fires at 9:45 PM Mountain (`RUN_MODE=retry`) and re-runs the job only if today's scheduled run didn't already succeed. Check the logs for the original error. See [DEPLOYMENT_GUIDE.md Troubleshooting](../DEPLOYMENT_GUIDE.md#troubleshooting) for common fixes.
 
 **To make changes to the query or logic:** Edit `main.py`, rebuild and push the image (Step 11's build/push commands), then explicitly `gcloud run jobs update plex-etl --image=...:$SHA --region=us-central1` — pushing alone does nothing, and no further Terraform changes are needed for a code-only change.
 

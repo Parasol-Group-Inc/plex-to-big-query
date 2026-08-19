@@ -84,6 +84,11 @@ cloud_run_job = "plex-etl"
 image_url = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest"
 
 # ── Cloud Scheduler ───────────────────────────────────────────────────────────
+# 2026-08-19: the live deployment moved off UTC entirely — all 16 jobs (8
+# categories x prod/test) now cascade through a 7-10 PM Mountain window, 10
+# min apart, so nothing lands in early-morning/odd-hour emails. See the real
+# terraform.tfvars and the per-category "schedule" literals in main.tf for
+# the actual values; UTC below is just this generic template's placeholder.
 scheduler_job       = "plex-daily-sync"
 scheduler_cron      = "0 2 * * *"   # 2 AM UTC daily — adjust to your needs
 scheduler_time_zone = "UTC"          # Any IANA tz name works and Cloud
@@ -92,7 +97,7 @@ scheduler_time_zone = "UTC"          # Any IANA tz name works and Cloud
                                       # for a real example) — UTC here is a
                                       # simplicity choice, not a requirement.
 
-# ── Failure retry (all 4 jobs) ────────────────────────────────────────────────
+# ── Failure retry (all 16 jobs) ───────────────────────────────────────────────
 # Fires daily regardless; the job itself no-ops if today's scheduled run
 # already succeeded/partial. Only a genuine FAILED run gets retried.
 retry_scheduler_cron = "0 6 * * *"

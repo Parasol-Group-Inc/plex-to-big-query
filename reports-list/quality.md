@@ -16,7 +16,7 @@ that don't exist yet. That's a ready-made roadmap, not a discovery task.
 | Customer Label Cert / NSF / Organic Cert | Google Docs, marked "New W Plex" | 🎯 Candidate | Regulatory cert tracking — no columns/schema known yet |
 | Discontinued Materials | "New W Plex" | 🎯 Candidate — likely already covered | Strong overlap with the already-built NetSuite parity report `part_obsolescence_report` (VOX \| Products to be discontinued) — check this first before treating as new work |
 | Monthly CofA Report / Prop 65 | Google Docs | 🔍 Candidate — Google Sheet | No content provided yet |
-| Deviation Open Closed Trending Area | Google Docs | 🔍 Candidate — Google Sheet | No content provided yet |
+| Deviation Open Closed Trending Area | Google Docs | 🔍 Candidate — Google Sheet, existing overlap | No content provided yet. Very plausibly the human-maintained counterpart to (or partially answered by) the newly-built `quality_deviation_report`, which correlates Quality Deviations to Jobs/Problems/Parts/Workcenters via `Quality_v_Deviation` and its junction tables — built 2026-08-19, see `catalog/plex_quality_views_catalog.md`'s "Deviations" section and `reports/sql/quality_deviation_view.sql` — worth comparing directly once content is available |
 | CAPA open closed trending area | Excel Log | ❌ Out of scope | Local file, not a Google Sheet |
 | Complaints | Google Docs | 🔍 Candidate — Google Sheet | No content provided yet |
 | **NC** | Google Docs | 🔍 Candidate — Google Sheet, strong existing overlap | "Internally Generated Nonconformance Tracking." Very plausibly the human-maintained counterpart to the already-built `quality_nonconformance_report` (from `Quality_v_Problem`) — worth comparing directly once content is available, could validate or replace it |

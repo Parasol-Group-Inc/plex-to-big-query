@@ -19,7 +19,7 @@ Plex exposes data through **ODBC** (an older database connection standard, like 
 ```mermaid
 graph TD
     subgraph "Every night — automated"
-        CS[⏰ Cloud Scheduler\n2 AM UTC daily]
+        CS[⏰ Cloud Scheduler\n7:00 PM Mountain daily]
     end
 
     subgraph "Google Cloud — voxdatalake"
@@ -42,9 +42,9 @@ graph TD
 worked example** — the same shape repeats 8 times (16 jobs total, prod +
 test), each with its own schedule and its own `Cloud Run Job` box reading
 its own YAML from the same `voxdatalake-report-configs` bucket. Not
-pictured: the daily scheduler shown here has a sibling 6 AM Mountain retry
+pictured: the daily scheduler shown here has a sibling 9:45 PM Mountain retry
 scheduler on every job, and `CRJ -->|creates JOIN views|` can fan out to
-several named reports from one job (Sales Orders → 2, Work Orders → 3),
+several named reports from one job (Sales Orders → 9, Work Orders → 4),
 not always exactly one.
 
 ---
@@ -75,7 +75,7 @@ Vercel:    deploy function → runs on HTTP request → exits
 Cloud Run: deploy container → runs on trigger     → exits
 ```
 
-Cloud Scheduler is the trigger — it fires an HTTP POST to Cloud Run at 2 AM UTC, like a GitHub Actions schedule.
+Cloud Scheduler is the trigger — it fires an HTTP POST to Cloud Run at 7:00 PM Mountain, like a GitHub Actions schedule.
 
 ### BigQuery = Supabase for analytics
 
@@ -210,7 +210,7 @@ graph LR
     GCS["gs://voxdatalake-report-configs"]
 
     subgraph PROD["🟢 Production"]
-        PJ["Cloud Run Job: plex-etl\nScheduler: 2 AM UTC"]
+        PJ["Cloud Run Job: plex-etl\nScheduler: 7:00 PM Mountain"]
         PH["vox.odbc.plex.com ✅"]
         PD["BigQuery: PlexProd"]
         PJ -->|ODBC| PH
@@ -218,7 +218,7 @@ graph LR
     end
 
     subgraph TEST["🔵 Test"]
-        TJ["Cloud Run Job: plex-etl-test\nScheduler: 3 AM UTC"]
+        TJ["Cloud Run Job: plex-etl-test\nScheduler: 7:10 PM Mountain"]
         TH["vox.test.odbc.plex.com ✅"]
         TD["BigQuery: PlexTest"]
         TJ -->|ODBC| TH
@@ -231,7 +231,7 @@ graph LR
 
 Same container image, same GCS bucket, different ODBC host and BigQuery dataset. Both use the same IAM token — it works on both endpoints.
 
-This diagram shows one report family (Sales Orders) — the other 7 follow the identical prod/test pattern, just with their own job names, schedules, and `REPORT_CONFIG_GCS_PATH`. Every job here also has a **third** scheduler not pictured: a shared 6 AM Mountain retry trigger (`RUN_MODE=retry`) that only actually re-runs the job if today's regular scheduled run failed — see `docs/EMAIL_SCHEDULE.md` for the full 16-job/32-scheduler picture.
+This diagram shows one report family (Sales Orders) — the other 7 follow the identical prod/test pattern, just with their own job names, schedules, and `REPORT_CONFIG_GCS_PATH`. Every job here also has a **third** scheduler not pictured: a shared 9:45 PM Mountain retry trigger (`RUN_MODE=retry`) that only actually re-runs the job if today's regular scheduled run failed — see `docs/EMAIL_SCHEDULE.md` for the full 16-job/32-scheduler picture.
 
 ---
 
@@ -496,7 +496,7 @@ Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container exec
 | GCP Service | What it does in this pipeline |
 |---|---|
 | **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 16 jobs total (8 report families × prod/test), all sharing one image |
-| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl` at 2 AM UTC (prod) / 3 AM UTC (test) as the running example, staggered hourly through 5 PM UTC across all 8 families, each job also with its own 6 AM Mountain retry trigger (32 scheduler jobs total) |
+| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl` at 7:00 PM Mountain (prod) / 7:10 PM Mountain (test) as the running example, staggered 10 minutes apart through 9:30 PM Mountain across all 8 families, each job also with its own retry trigger firing together at 9:45 PM Mountain (32 scheduler jobs total) |
 | **BigQuery** | Stores dozens of raw Plex tables across `PlexProd`/`PlexTest` + one or more named JOIN views per report family (`sales_orders_report` + `sales_orders_open_report` for this one) |
 | **Cloud Storage** | Holds YAML report configs and SQL view definitions — editable at runtime |
 | **Secret Manager** | Stores the Plex IAM token and SendGrid API key |

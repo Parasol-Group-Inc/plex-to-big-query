@@ -11,11 +11,11 @@ Reports are defined by **YAML files stored in Cloud Storage** — not hardcoded 
 ```
 gs://voxdatalake-report-configs/
 ├── reports/
-│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd (2 AM UTC)
-│   └── work_orders.yaml           ← prod: 4 Part DB views → PlexProd (4 AM UTC)
+│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd (7:00 PM Mountain)
+│   └── work_orders.yaml           ← prod: 4 Part DB views → PlexProd (7:20 PM Mountain)
 ├── test/
-│   ├── sales_orders.yaml          ← test: same views → PlexTest (3 AM UTC)
-│   └── work_orders.yaml           ← test: same views → PlexTest (5 AM UTC)
+│   ├── sales_orders.yaml          ← test: same views → PlexTest (7:10 PM Mountain)
+│   └── work_orders.yaml           ← test: same views → PlexTest (7:30 PM Mountain)
 └── sql/
     ├── sales_orders_view.sql      ← BigQuery JOIN SQL for 16-field sales report ✏
     └── work_orders_view.sql       ← BigQuery JOIN SQL for work orders report ✏
@@ -287,9 +287,9 @@ Check the email — subject will be `[Plex ETL] {category}: {display_name} — D
 
 | Setting | Production | Test |
 |---|---|---|
-| Sales Orders job | `plex-etl` (2 AM UTC) | `plex-etl-test` (3 AM UTC) |
-| Work Orders job | `plex-etl-work-orders` (4 AM UTC) | `plex-etl-work-orders-test` (5 AM UTC) |
-| Failure retry (all 4 jobs) | 6 AM Mountain daily — see [Failure Retry](#failure-retry-6-am-mountain) below | |
+| Sales Orders job | `plex-etl` (7:00 PM Mountain) | `plex-etl-test` (7:10 PM Mountain) |
+| Work Orders job | `plex-etl-work-orders` (7:20 PM Mountain) | `plex-etl-work-orders-test` (7:30 PM Mountain) |
+| Failure retry (all 16 jobs) | 9:45 PM Mountain daily — see [Failure Retry](#failure-retry-9-45-pm-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report Config bucket | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -331,9 +331,9 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 
 ---
 
-## Failure Retry (6 AM Mountain)
+## Failure Retry (9:45 PM Mountain)
 
-All 4 jobs have a second Cloud Scheduler trigger that fires daily at **6 AM
+All 16 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
 `America/Denver`** (handles the MST/MDT switch automatically — no manual
 adjustment needed):
 
@@ -379,8 +379,8 @@ gcloud scheduler jobs resume plex-daily-sync-retry --location=us-central1 --proj
 ```
 
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /
-`retry_time_zone` in `terraform.tfvars` (defaults: `"0 6 * * *"` /
-`"America/Denver"`) — applies to all 4 jobs at once — then
+`retry_time_zone` in `terraform.tfvars` (defaults: `"45 21 * * *"` /
+`"America/Denver"`) — applies to all 16 jobs at once — then
 `terraform apply`.
 
 ---

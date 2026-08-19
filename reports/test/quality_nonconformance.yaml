@@ -10,9 +10,54 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-08-18 for quality_deviation_report — see reports/quality_nonconformance.yaml
+  # (prod) for the full rationale. Same extraction list, test tenant.
+  - plex_view: Quality_v_Deviation
+    bq_table: raw_Quality_v_Deviation
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Job
+    bq_table: raw_Quality_v_Deviation_Job
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Problem
+    bq_table: raw_Quality_v_Deviation_Problem
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Part
+    bq_table: raw_Quality_v_Deviation_Part
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Workcenter
+    bq_table: raw_Quality_v_Deviation_Workcenter
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Type
+    bq_table: raw_Quality_v_Deviation_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Deviation_Status
+    bq_table: raw_Quality_v_Deviation_Status
+    filter: ""
+    date_col: ""
+
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+# raw_Part_v_Job and raw_Part_v_Workcenter are owned by the work_orders
+# pipeline — reused by quality_deviation_view.sql, same shared-table rule.
 
 bq_view:
-  name: quality_nonconformance_report
-  display_name: "Quality Nonconformance"
-  sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql
+  - name: quality_nonconformance_report
+    display_name: "Quality Nonconformance"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_nonconformance_view.sql
+  - name: quality_turnaround_time_report
+    display_name: "Turn Around Time Report"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_turnaround_time_view.sql
+  - name: quality_deviation_report
+    display_name: "Quality Deviations"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_deviation_view.sql

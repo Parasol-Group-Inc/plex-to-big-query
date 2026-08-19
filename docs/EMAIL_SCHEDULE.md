@@ -10,7 +10,7 @@ standardizing report naming across the whole pipeline (see
 - **16 Cloud Run Jobs** (8 report pipelines × prod/test), each running once
   a day, each sending exactly one email per run.
 - **Baseline: 16 emails/day** if nothing fails. A failed run adds a second
-  email that same day (its own failure notice + the 6 AM Mountain retry's
+  email that same day (its own failure notice + the 9:45 PM Mountain retry's
   outcome) — so the real ceiling is 32/day, only reached if every single
   job fails on the same day.
 - **Every email goes to the same 3 people, prod and test alike** —
@@ -26,26 +26,38 @@ standardizing report naming across the whole pipeline (see
 
 ## Full schedule
 
-All times UTC unless noted. Retry only fires *real* work (and a second
-email) if that day's scheduled run status was `failed` — a `success` or
-`partial` day makes the retry a silent no-op, no email sent. Retry itself
-always fires at the same instant for every job: `6 AM America/Denver`
-(handles MST/MDT automatically).
+**Updated 2026-08-19**: every time below is now Mountain time (`America/Denver`,
+handles MST/MDT automatically), not UTC — the whole cascade was moved off
+UTC specifically so nothing lands as an early-morning/odd-hour email.
+Retry only fires *real* work (and a second email) if that day's scheduled
+run status was `failed` — a `success` or `partial` day makes the retry a
+silent no-op, no email sent. Retry itself always fires at the same instant
+for every job: `9:45 PM America/Denver` (moved from 6 AM the same day —
+15 minutes after the last main job in the cascade below, so every job has
+had a chance to finish before the retry checks for failures).
 
 | Category | Reports produced (email body lists each by this name) | Prod job | Prod time | Test job | Test time |
 |---|---|---|---|---|---|
-| **Sales** | Sales Orders, Vox \| Open Sales Orders | `plex-etl` | 2 AM | `plex-etl-test` | 3 AM |
-| **Production** | Work Orders, MFG Job Schedule, Labeling \| Open WO: Results | `plex-etl-work-orders` | 4 AM | `plex-etl-work-orders-test` | 5 AM |
-| **Supply Chain** | Vox \| Open Purchase Orders | `plex-etl-purchasing-open-orders` | 6 AM | `plex-etl-purchasing-open-orders-test` | 7 AM |
-| **Supply Chain** | Vox \| Products to be Discontinued | `plex-etl-part-obsolescence` | 8 AM | `plex-etl-part-obsolescence-test` | 9 AM |
-| **Supply Chain** | Inventory Activity Detail Usage Per Month | `plex-etl-inventory-activity` | 10 AM | `plex-etl-inventory-activity-test` | 11 AM |
-| **Inventory** | Current Inventory Snapshot, Vox \| Inventory Valuation Summary | `plex-etl-inventory-snapshot` | 12 PM | `plex-etl-inventory-snapshot-test` | 1 PM |
-| **Quality** | Quality Nonconformance | `plex-etl-quality-nonconformance` | 2 PM | `plex-etl-quality-nonconformance-test` | 3 PM |
-| **Supply Chain** | Part On-Hand Inventory | `plex-etl-part-on-hand-inventory` | 4 PM | `plex-etl-part-on-hand-inventory-test` | 5 PM |
+| **Sales** | Sales Orders, Vox \| Open Sales Orders, Pending Approval Orders, Report for Orders Past 14 Days Old, Orders Over $10k, Orders Over 10k Bottles, Customer List by Sales Rep, Revenue per Sales Rep, Orders Pending Approval by Accounting | `plex-etl` | 7:00 PM | `plex-etl-test` | 7:10 PM |
+| **Production** | Work Orders, MFG Job Schedule, Labeling \| Open WO: Results, Printing Open Work Orders | `plex-etl-work-orders` | 7:20 PM | `plex-etl-work-orders-test` | 7:30 PM |
+| **Supply Chain** | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 7:40 PM | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
+| **Supply Chain** | Vox \| Products to be Discontinued | `plex-etl-part-obsolescence` | 8:00 PM | `plex-etl-part-obsolescence-test` | 8:10 PM |
+| **Supply Chain** | Inventory Activity Detail Usage Per Month | `plex-etl-inventory-activity` | 8:20 PM | `plex-etl-inventory-activity-test` | 8:30 PM |
+| **Inventory** | Current Inventory Snapshot, Vox \| Inventory Valuation Summary | `plex-etl-inventory-snapshot` | 8:40 PM | `plex-etl-inventory-snapshot-test` | 8:50 PM |
+| **Quality** | Quality Nonconformance, Turn Around Time Report, Quality Deviations | `plex-etl-quality-nonconformance` | 9:00 PM | `plex-etl-quality-nonconformance-test` | 9:10 PM |
+| **Supply Chain** | Part On-Hand Inventory, Inventory Risk Analysis | `plex-etl-part-on-hand-inventory` | 9:20 PM | `plex-etl-part-on-hand-inventory-test` | 9:30 PM |
 
-Prod/test pairs are staggered exactly 1 hour apart, on the hour, 2 AM
-through 5 PM — this pattern was already consistent before today's
-naming work; nothing needed fixing here.
+Prod/test pairs are staggered 10 minutes apart (was 1 hour), 7:00 PM
+through 9:30 PM Mountain — the whole cascade now fits inside a 7-10 PM
+window instead of spanning 2 AM-5 PM UTC (which landed as roughly 8 PM the
+prior day through 11 AM Mountain — i.e. squarely through the early-morning
+hours this change was meant to avoid).
+
+**Reports produced, updated 2026-08-19**: each category's report list above
+now reflects every `bq_view` actually deployed as of today, not just the
+original one per category — several categories quietly grew additional
+reports over time (7 new ones on Sales alone) whose SQL had never actually
+been pushed to GCS until today's deploy (see "What changed today" below).
 
 ## What "category" actually controls
 
@@ -129,6 +141,49 @@ retry-skip logic):
    affected objects reconciled it (10 destroyed, 10 recreated with correct
    content-type, same content). `terraform plan` now shows 0 add/0 destroy
    — only the pre-existing image-tag cosmetic drift remains (see below).
+
+## What changed 2026-08-19
+
+1. **Full schedule cascade moved from UTC to Mountain time.** All 32
+   Cloud Scheduler jobs (16 main + 16 retry) now fire between 7:00 PM and
+   9:45 PM `America/Denver` instead of scattered across 2 AM-5 PM UTC (main
+   jobs) and a fixed 6 AM Mountain (retry) — see "Full schedule" above for
+   the new per-category times. `scheduler_time_zone` changed from `UTC` to
+   `America/Denver` in `terraform.tfvars`; every per-category `schedule`
+   literal in `main.tf` was recomputed for the new window; `retry_scheduler_cron`
+   moved from `0 6 * * *` to `45 21 * * *`. Confirmed live via
+   `gcloud scheduler jobs list` — all 32 `plex-*` jobs on the new times, the
+   2 unrelated `monday-daily-sync*` jobs untouched.
+2. **`quality_deviation_report` added** — 3rd `bq_view` on
+   `plex-etl-quality-nonconformance(-test)`, correlating Quality Deviations
+   to Jobs/Problems/Parts/Workcenters. See
+   `catalog/plex_quality_views_catalog.md` "Deviations" section for the
+   schema discovery and `reports/sql/quality_deviation_view.sql` for the SQL.
+3. **12 previously-orphaned SQL files deployed for the first time.**
+   Terraform only tracks a GCS bucket-object per SQL file it has an explicit
+   resource for — it doesn't infer new files from a yaml's `bq_view` list.
+   Several bq_views added to already-deployed categories over time (7 on
+   `sales_orders`, 2 on `work_orders`, 1 each on `purchasing_open_orders`,
+   `part_on_hand_inventory`, and `quality_nonconformance` itself) never got
+   a matching `google_storage_bucket_object` resource, so their SQL sat in
+   the repo but was never actually pushed to GCS — `quality_turnaround_time_report`
+   had been silently broken this way since 2026-08-14. Fixed: uploaded all
+   12 files, added the missing Terraform resources (12 to add, 0 changed),
+   and verified every affected job's views build cleanly by executing each
+   test job directly. Two more real bugs turned up during that verification
+   (both fixed same session, not pre-existing-and-ignored):
+   - `quality_deviation_view.sql` compared an `INT64`-cast key against a
+     `STRING` key (both `raw_Part_v_Job` and `raw_Quality_v_Problem` are
+     currently empty ahead of Monday's real data load, so BigQuery typed
+     their key columns as STRING) — fixed with symmetric `SAFE_CAST` on
+     both sides of every join.
+   - `mfg_job_schedule_view.sql` broke from the opposite direction: real
+     data just started landing in `Part_v_Lot_Shelf_Life`, revealing it's
+     actually typed `DATETIME`, not the numeric duration originally
+     guessed — `SAFE_CAST(... AS FLOAT64)` has no valid cast path from
+     DATETIME at all, so it failed even with SAFE_CAST. Fixed by passing
+     it through as a raw STRING instead (still unconfirmed what the value
+     means business-wise — just no longer crashing the view).
 
 ## Worth deciding (not changed — needs a call, not a guess)
 

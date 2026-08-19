@@ -10,7 +10,7 @@ Pulls operational data from **Plex ERP** via ODBC and loads it into **Google Big
 
 ```mermaid
 graph LR
-    SCHED["⏰ Cloud Scheduler\n2 AM UTC"] -->|trigger| CR
+    SCHED["⏰ Cloud Scheduler\n7:00 PM Mountain"] -->|trigger| CR
     GCS["☁ GCS\nreport configs"] -->|YAML + SQL| CR
     SM["🔑 Secret Manager\nIAM token"] --> CR
 

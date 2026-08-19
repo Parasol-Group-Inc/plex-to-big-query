@@ -1,0 +1,33 @@
+report_name: purchasing_pending_requisitions_test
+category: Supply Chain
+description: "Vox | Purchasing | Pending Order Requisitions — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+# Same extraction list as reports/purchasing_pending_requisitions.yaml — see
+# that file and reports/sql/purchasing_pending_requisitions_view.sql for
+# schema confirmation notes and deployment status (not yet deployed).
+
+extractions:
+  - plex_view: Purchasing_v_Requisition
+    bq_table: raw_Purchasing_v_Requisition
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_Requisition_Status
+    bq_table: raw_Purchasing_v_Requisition_Status
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_Requisition_Type
+    bq_table: raw_Purchasing_v_Requisition_Type
+    filter: ""
+    date_col: ""
+
+  - plex_view: Purchasing_v_Req_PO_Release
+    bq_table: raw_Purchasing_v_Req_PO_Release
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: purchasing_pending_requisitions_report
+  display_name: "Vox | Purchasing | Pending Order Requisitions"
+  sql_file: gs://voxdatalake-report-configs/sql/purchasing_pending_requisitions_view.sql

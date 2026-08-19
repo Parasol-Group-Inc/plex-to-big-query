@@ -37,6 +37,9 @@ extractions:
     date_col: ""
 
 bq_view:
-  name: purchasing_open_orders_report
-  display_name: "Vox | Open Purchase Orders"
-  sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql
+  - name: purchasing_open_orders_report
+    display_name: "Vox | Open Purchase Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql
+  - name: purchasing_po_pending_approval_report
+    display_name: "Purchase Orders to Approve: Results"
+    sql_file: gs://voxdatalake-report-configs/sql/purchasing_po_pending_approval_view.sql

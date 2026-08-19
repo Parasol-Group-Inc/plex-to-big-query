@@ -1,0 +1,48 @@
+report_name: quality_supplier_returns
+category: Supply Chain
+description: "Vox | Approve Vendor Return Authorizations (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-14. NetSuite source: "Approve Vendor Return Authorizations"
+# (reports-list/supply-chain.md).
+#
+# ⚠ BUSINESS-RULE GAP, FLAGGED FOR DATA-SCIENTIST REVIEW: the expected
+# Approving/Approved boolean flags on Quality_v_Supplier_Return_Status exist
+# in the schema but are 0 on EVERY one of the 6 live statuses on this tenant
+# (New, Hold, OK to Ship, Shipped, Complete, Cancelled) — none is ever
+# "Approving". A naive Approving=1 filter would return zero rows forever.
+# reports/sql/quality_supplier_returns_pending_view.sql uses a status-
+# exclusion proxy instead (not yet Shipped/Complete/Cancelled) — see that
+# file's header for the full note. See docs/NETSUITE_REPORT_BUILD_PLAN.md
+# for the write-up of this gap.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/quality_supplier_returns_pending_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  - plex_view: Quality_v_Supplier_Return
+    bq_table: raw_Quality_v_Supplier_Return
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Supplier_Return_Status
+    bq_table: raw_Quality_v_Supplier_Return_Status
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Supplier_Return_Type
+    bq_table: raw_Quality_v_Supplier_Return_Type
+    filter: ""
+    date_col: ""
+
+# Common_v_Supplier is intentionally NOT extracted here — reuse
+# raw_Common_v_Supplier from the purchasing_open_orders pipeline.
+
+bq_view:
+  name: quality_supplier_returns_pending_report
+  display_name: "Approve Vendor Return Authorizations"
+  sql_file: gs://voxdatalake-report-configs/sql/quality_supplier_returns_pending_view.sql

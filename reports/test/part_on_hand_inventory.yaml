@@ -18,6 +18,9 @@ extractions:
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
 
 bq_view:
-  name: part_on_hand_inventory_report
-  display_name: "Part On-Hand Inventory"
-  sql_file: gs://voxdatalake-report-configs/sql/part_on_hand_inventory_view.sql
+  - name: part_on_hand_inventory_report
+    display_name: "Part On-Hand Inventory"
+    sql_file: gs://voxdatalake-report-configs/sql/part_on_hand_inventory_view.sql
+  - name: inventory_risk_analysis_report
+    display_name: "Inventory Risk Analysis"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_risk_analysis_view.sql

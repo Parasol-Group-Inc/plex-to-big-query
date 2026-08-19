@@ -65,12 +65,12 @@ happened in the two batches described above rather than one pass.
 | # | NetSuite Report | Status | Notes |
 |---|---|---|---|
 | 76 | Vox \| Open Sales Orders | ✅ **Deployed** | `sales_orders_open_report` — second entry in the live `sales_orders.yaml`'s `bq_view` list. Verified: 3 open / 4 total rows from a real Cloud Run execution. |
-| 75 | Vox \| Open Purchase Orders | ✅ **Deployed** | `plex-etl-purchasing-open-orders(-test)`, schedule 6/7 AM UTC. Verified: 3 rows, correctly excludes a Cancelled test PO. |
-| 77 | VOX \| Products to be discontinued | ✅ **Deployed** | `plex-etl-part-obsolescence(-test)`, schedule 8/9 AM UTC. Verified: runs cleanly (0 matching parts on test tenant currently). |
-| 15 | Current Inventory Snapshot | ✅ **Deployed** | `plex-etl-inventory-snapshot(-test)`, schedule 12/1 PM UTC — combined job also produces #73/#74. Verified: runs cleanly end-to-end. |
+| 75 | Vox \| Open Purchase Orders | ✅ **Deployed** | `plex-etl-purchasing-open-orders(-test)`, schedule 6/7 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule). Verified: 3 rows, correctly excludes a Cancelled test PO. |
+| 77 | VOX \| Products to be discontinued | ✅ **Deployed** | `plex-etl-part-obsolescence(-test)`, schedule 8/9 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule). Verified: runs cleanly (0 matching parts on test tenant currently). |
+| 15 | Current Inventory Snapshot | ✅ **Deployed** | `plex-etl-inventory-snapshot(-test)`, schedule 12/1 PM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule) — combined job also produces #73/#74. Verified: runs cleanly end-to-end. |
 | 74 | Vox \| Inventory Valuation Summary Transaction | ✅ **Same pipeline as #15** | — |
 | 73 | Vox \| Inventory Valuation Summary | ✅ **Deployed** | Second view in the #15 job — `inventory_valuation_summary_report`. |
-| 29 | Inventory Activity Detail Usage Per Month | ✅ **Deployed, one open validation item** | `plex-etl-inventory-activity(-test)`, schedule 10/11 AM UTC. Verified: runs cleanly against empty source tables — genealogy-vs-activity mapping still needs a real-data sanity check once `Part_v_Cell_Production`/`Cell_Depletion` have rows (can't be resolved by more querying against empty test tables). |
+| 29 | Inventory Activity Detail Usage Per Month | ✅ **Deployed, one open validation item** | `plex-etl-inventory-activity(-test)`, schedule 10/11 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule). Verified: runs cleanly against empty source tables — genealogy-vs-activity mapping still needs a real-data sanity check once `Part_v_Cell_Production`/`Cell_Depletion` have rows (can't be resolved by more querying against empty test tables). |
 
 All prod jobs will run on their own schedule going forward — only the
 `-test` variants were manually triggered to verify. Full enumerated
@@ -82,6 +82,134 @@ schedule (all 16 jobs, not just these 7): [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDUL
 > checklist below exists to prevent. All 7 are deployed; "Suggested
 > sequencing" further down is historical (what the sequencing *was*), not a
 > pending to-do list.
+
+---
+
+## Purchasing | Pending Order Requisitions → `purchasing_pending_requisitions_report` — 🛠 scaffolded, not deployed
+
+Not one of the original 7 — sourced from `reports-list/supply-chain.md` (the
+company-wide Reports List catalog, not `mapping/netsuite-report-mapping.md`).
+NetSuite source: Saved Transaction Search "Purchasing | Pending Order
+Requisitions" (`customsearch2935`, owner Adrian Palmar) — criteria: `Status =
+Requisition:Pending Order`, `Main Line = true`; results sorted by Order Type,
+columns Date/Document Number/Status. Priority: Critical (daily use).
+
+Confirmed live against `vox.test.odbc.plex.com` on 2026-08-13 — schema only,
+**0 real rows** in `Purchasing_v_Requisition`/`Requisition_Type`/
+`Req_PO_Release` on the test tenant, unlike #75/#76 which had real test data
+to verify against:
+
+| View | Role | Confirmed |
+|---|---|---|
+| `Purchasing_v_Requisition` | Requisition header/line (one row = one line, no separate line-item view) | ✅ schema only — `Requisition_No`, `Requisition_Status_Key`, `Requested_Date`, `Supplier_No`, `Item_Key`/`Part_Key` (both exist, which is live is unconfirmed), `Quantity`, `Due_Date` |
+| `Purchasing_v_Requisition_Status` | Status lookup | ✅ full 3-row workflow captured below, live data (not just schema) |
+| `Purchasing_v_Requisition_Type` | Type lookup | ⚠ schema only — 0 rows on test tenant |
+| `Purchasing_v_Req_PO_Release` | Requisition → PO bridge, joins via `Requisition_Key` | ⚠ schema only — 0 rows on test tenant |
+| `Common_v_Supplier` / `Part_v_Part` | Supplier/part names | Reused from `purchasing_open_orders`/`sales_orders` — not re-extracted |
+
+**Confirmed `Purchasing_v_Requisition_Status` workflow** (live, Vox test tenant, full list):
+
+| Key | Label | Approved | Allow_PO | Cancelled |
+|---|---|---|---|---|
+| 1565 | New | 0 | 0 | 0 |
+| 1566 | Approved | 1 | 1 | 0 |
+| 1567 | Cancelled | 0 | 0 | 1 |
+
+No literal "Pending Order" status — same shape of mismatch as #75's PO-side
+report. **Business rule (confirmed with report requester 2026-08-13):**
+"Pending Order" = `Requisition_Status.Approved = 1 AND Allow_PO = 1` (i.e.
+status = Approved) **AND no matching row in `Purchasing_v_Req_PO_Release`**
+for that `Requisition_Key` — approved and buyable, but not yet converted to
+a PO.
+
+> **Open item, not resolvable by more querying:** the test tenant has zero
+> real Requisition rows, so the `Item_Key` vs `Part_Key` choice and the
+> Approved+no-release filter are both unverified against real data (unlike
+> #75/#76's 3-real-PO confirmation). Re-run the live check once prod data
+> exists or against a test tenant with real requisitions before trusting
+> row counts.
+
+Scaffold: [`reports/purchasing_pending_requisitions.yaml`](../reports/purchasing_pending_requisitions.yaml),
+[`reports/test/purchasing_pending_requisitions.yaml`](../reports/test/purchasing_pending_requisitions.yaml),
+[`reports/sql/purchasing_pending_requisitions_view.sql`](../reports/sql/purchasing_pending_requisitions_view.sql).
+Not deployed — no Terraform resources, no GCS upload. Needs a real-data
+re-check before deploy, then steps 10-14 of the checklist below (Terraform,
+deploy, verify, update tracking docs).
+
+---
+
+## 2026-08-14 batch — reports-list-wide equivalent sweep
+
+Following the Requisitions build above, extended the same "find a real Plex
+equivalent" treatment across every other NetSuite-sourced row in
+`reports-list/` (Supply Chain's remaining rows, Production's, Sales's) —
+not just the mapping-doc's original 7. Live-confirmed against
+`vox.test.odbc.plex.com` on 2026-08-14 using the same `docker compose run`
++ `main` import method as the Requisitions build.
+
+**Built cleanly, no guesses needed** (status keys are Plex's own literal
+labels, already confirmed live in earlier rounds):
+- **Purchase Orders to Approve: Results** → `purchasing_po_pending_approval_report`
+  — `PO_Status_Key = 5559` ("Pending Approval-NS"), 2nd `bq_view` on
+  `purchasing_open_orders.yaml`.
+- **Printing Open Work Orders** → `printing_open_work_orders_report` — exact
+  mirror of `labeling_open_work_orders_report`, workcenter `'Printing%'`.
+- **Pending Approval Orders** → `sales_orders_pending_approval_report` —
+  `PO_Status_Key = 2585` ("Pending Sales Approval").
+
+**Built with best-criteria assumptions** (flagged in each SQL file's header,
+and in `reports-list/sales.md`'s "Needs discussion" table):
+`sales_orders_pending_accounting_approval_report` (2638 "Pending Payment
+Review"), `sales_orders_aging_report` (open + 14 days since `PO_Date`),
+`sales_orders_over_10k_report` and `sales_orders_over_10k_bottles_report`
+(no dollar/bottle-unit column exists at all — computed from the same
+price-join `sales_orders_report` already uses), `sales_customers_by_rep_report`
+and `sales_revenue_by_rep_report` (per-order rep assignment, no standing
+customer→rep field exists), `inventory_risk_analysis_report` (on-hand qty +
+days-since-container-activity, no risk threshold hardcoded — that's a
+business call), `quality_turnaround_time_report` (`Closed_Date -
+Problem_Date`, both rolling-window and monthly-bucket columns exposed,
+neither hardcoded).
+
+**Built but with a confirmed live contradiction worth flagging loudly:**
+`Approve Vendor Return Authorizations` → `quality_supplier_returns_pending_report`
+and `Open Quotes` → `sales_quotes_open_report` both looked like exact
+matches — both have a literal Approving/Approved or Open_Quote boolean flag
+in their status schema — but live confirmation showed **every configured
+status has that flag at 0**. Neither report can be built as originally
+planned; both ship instead with a status-exclusion proxy (same "not yet
+terminal" pattern used for every other "open" report in this repo) and a
+clear header comment saying so. `Open RMA's` → `sales_returns_open_report`
+used the same exclusion pattern but its status table's flags actually line
+up cleanly (Closed/Cancelled are real, distinct statuses) — no contradiction
+there, just an unconfirmed report-name-to-definition mapping.
+
+**No Plex match found at all:**
+- **Reorder Multiple Search** — the only candidate, `Material_v_Reorder_Point`,
+  was tree-guessed only; confirmed live it doesn't exist ("Base table not
+  found").
+- **SO's with discounts** — discount columns exist only on the Quote side
+  (`Sales_v_Quote_Part`/`_Price_Cost`); no `Quote_Key` link from an order
+  back to its quote, so there's no reliable join to the order side at all.
+- **Inventory consumption**, **Allocation reports**, **Revenue for Vox** —
+  no matching view or stored procedure found; the first two were also never
+  more than a bare name (no description to search against).
+- **Vox | RUSH Open Sos** — `Sales_v_Priority` (the lookup a "Rush" flag
+  would live in) returned 0 rows live; can't confirm the label exists at all
+  on this tenant.
+
+**Deliberately not built:** *Orders Pending Approval by Sales Rep* — may be
+an exact duplicate of "Pending Approval Orders" under a different name, or a
+genuinely different report. Building a guessed variant risked shipping a
+silent duplicate; needs either a screenshot or data-scientist confirmation
+first.
+
+None of this batch needed a new catch-all category — every report fits an
+existing department (`Supply Chain`, `Production`, `Sales`, `Quality`)
+already in use elsewhere in `reports/*.yaml`.
+
+Not deployed — no Terraform, no GCS upload for any of this batch. All new
+YAML/SQL sitting in git only, same as the Requisitions build.
 
 ---
 
@@ -194,7 +322,7 @@ or filtered in place.
 
 > ⚠ **Deploy-ordering hazard:** `reports/sales_orders.yaml` is the config
 > for an **already-deployed, currently-running** production report
-> (`plex-etl` / `plex-etl-test` Cloud Run jobs, 2 AM / 3 AM UTC). The
+> (`plex-etl` / `plex-etl-test` Cloud Run jobs, 2 AM / 3 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule)). The
 > currently-deployed container image predates the `bq_view`-list change —
 > its `main.py` calls `.get()` on `bq_view` assuming a single mapping, which
 > **would crash with an `AttributeError` on a list**. Do not push this YAML

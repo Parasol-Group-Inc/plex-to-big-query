@@ -1,0 +1,57 @@
+report_name: purchasing_pending_requisitions
+category: Supply Chain
+description: "Vox | Purchasing | Pending Order Requisitions (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-13, but the test tenant currently has ZERO rows in Purchasing_v_
+# Requisition / Requisition_Type / Req_PO_Release. See reports/sql/
+# purchasing_pending_requisitions_view.sql for the full confirmation log and
+# the "Pending Order" business-rule decision.
+#
+# NetSuite source: Saved Transaction Search "Purchasing | Pending Order
+# Requisitions" (customsearch2935, owner Adrian Palmar) — criteria: Status =
+# Requisition:Pending Order, Main Line = true. Cross-referenced in
+# reports-list/supply-chain.md.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/purchasing_pending_requisitions_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  # Requisition header/line — one row per requisition (no separate line-item view on this side)
+  - plex_view: Purchasing_v_Requisition
+    bq_table: raw_Purchasing_v_Requisition
+    filter: ""
+    date_col: ""
+
+  # Requisition status lookup — New / Approved / Cancelled on the test tenant (see SQL notes)
+  - plex_view: Purchasing_v_Requisition_Status
+    bq_table: raw_Purchasing_v_Requisition_Status
+    filter: ""
+    date_col: ""
+
+  # Requisition type lookup (display only — 0 rows on test tenant)
+  - plex_view: Purchasing_v_Requisition_Type
+    bq_table: raw_Purchasing_v_Requisition_Type
+    filter: ""
+    date_col: ""
+
+  # Requisition → PO release bridge — a matching row here means the requisition
+  # already became a PO, so it's no longer "pending order"
+  - plex_view: Purchasing_v_Req_PO_Release
+    bq_table: raw_Purchasing_v_Req_PO_Release
+    filter: ""
+    date_col: ""
+
+# Common_v_Supplier and Part_v_Part are intentionally NOT extracted here —
+# reuse raw_Common_v_Supplier (from purchasing_open_orders.yaml) and
+# raw_Part_v_Part (from sales_orders.yaml), same shared-table rule as those
+# pipelines.
+
+bq_view:
+  name: purchasing_pending_requisitions_report
+  display_name: "Vox | Purchasing | Pending Order Requisitions"
+  sql_file: gs://voxdatalake-report-configs/sql/purchasing_pending_requisitions_view.sql

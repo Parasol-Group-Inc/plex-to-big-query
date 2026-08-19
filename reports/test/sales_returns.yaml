@@ -1,0 +1,19 @@
+report_name: sales_returns_test
+category: Sales
+description: "Vox | Open RMA's — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+extractions:
+  - plex_view: Sales_v_Return
+    bq_table: raw_Sales_v_Return
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Return_Status
+    bq_table: raw_Sales_v_Return_Status
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: sales_returns_open_report
+  display_name: "Open RMA's"
+  sql_file: gs://voxdatalake-report-configs/sql/sales_returns_open_view.sql

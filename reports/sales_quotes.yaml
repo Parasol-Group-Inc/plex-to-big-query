@@ -1,0 +1,40 @@
+report_name: sales_quotes
+category: Sales
+description: "Vox | Open Quotes (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-14. NetSuite source: "Open Quotes" (reports-list/sales.md).
+#
+# ⚠ BUSINESS-RULE GAP, FLAGGED FOR DATA-SCIENTIST REVIEW: Sales_v_Quote_Status
+# has a literal Open_Quote boolean column — looked like an exact match — but
+# confirmed live, it is 0 on EVERY ONE of the 8 configured statuses (New,
+# Estimating, Quoted, Won, Lost, Approved, Cancelled, No Quote). A naive
+# Open_Quote=1 filter would return zero rows forever.
+# reports/sql/sales_quotes_open_view.sql uses a status-exclusion proxy
+# instead (not yet Won/Lost/Cancelled/No Quote) — see that file's header.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/sales_quotes_open_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  - plex_view: Sales_v_Quote
+    bq_table: raw_Sales_v_Quote
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Quote_Status
+    bq_table: raw_Sales_v_Quote_Status
+    filter: ""
+    date_col: ""
+
+# Common_v_Customer is intentionally NOT extracted here — reuse
+# raw_Common_v_Customer from the sales_orders pipeline.
+
+bq_view:
+  name: sales_quotes_open_report
+  display_name: "Open Quotes"
+  sql_file: gs://voxdatalake-report-configs/sql/sales_quotes_open_view.sql

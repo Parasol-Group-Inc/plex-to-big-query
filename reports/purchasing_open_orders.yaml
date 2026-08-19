@@ -60,7 +60,17 @@ extractions:
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
 
+# bq_view is a LIST (main.py supports this — see sales_orders.yaml's
+# sales_orders_open_report for precedent): purchasing_po_pending_approval_report
+# added 2026-08-14 for NetSuite parity with "Purchase Orders to Approve: Results"
+# (reports-list/supply-chain.md) — same raw tables, filtered to the confirmed
+# "Pending Approval-NS" status (key 5559) instead of the "open" filter.
+# ⚠ Requires main.py's bq_view-list support to already be deployed (it is —
+# see sales_orders.yaml/#76 deploy history) before this reaches production.
 bq_view:
-  name: purchasing_open_orders_report
-  display_name: "Vox | Open Purchase Orders"
-  sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql
+  - name: purchasing_open_orders_report
+    display_name: "Vox | Open Purchase Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/purchasing_open_orders_view.sql
+  - name: purchasing_po_pending_approval_report
+    display_name: "Purchase Orders to Approve: Results"
+    sql_file: gs://voxdatalake-report-configs/sql/purchasing_po_pending_approval_view.sql

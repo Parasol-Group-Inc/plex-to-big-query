@@ -1,0 +1,43 @@
+report_name: sales_returns
+category: Sales
+description: "Vox | Open RMA's (NetSuite parity) — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-14. NetSuite source: "Open RMA's" (reports-list/sales.md).
+#
+# CONFIRMED LIVE Sales_v_Return_Status workflow: New (2122), Received (2124),
+# Closed (2125), Cancelled (2126), Pending Approval (2181), Rejected (2182),
+# Released (2183), Under Review (2184). "Open" = NOT IN (Closed, Cancelled),
+# same exclusion-list pattern as sales_orders_open_report/
+# purchasing_open_orders_report — no business-rule guess needed for "open"
+# itself, though "Open RMA's" as a NetSuite report name was never screenshotted
+# to confirm this is the intended definition.
+#
+# Sales_v_Return had 0 rows on the test tenant at confirmation time — filter
+# is schema-confirmed only, not verified against real return records.
+#
+# HOW TO EDIT THIS REPORT (once deployed, no deployment required):
+#   Add a view    → add a new entry to extractions[], save this file to GCS
+#   Change filter → update the filter field on the relevant entry, save to GCS
+#   Change SQL    → edit reports/sql/sales_returns_open_view.sql and save to GCS
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  - plex_view: Sales_v_Return
+    bq_table: raw_Sales_v_Return
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Return_Status
+    bq_table: raw_Sales_v_Return_Status
+    filter: ""
+    date_col: ""
+
+# Common_v_Customer is intentionally NOT extracted here — reuse
+# raw_Common_v_Customer from the sales_orders pipeline.
+
+bq_view:
+  name: sales_returns_open_report
+  display_name: "Open RMA's"
+  sql_file: gs://voxdatalake-report-configs/sql/sales_returns_open_view.sql

@@ -1,0 +1,24 @@
+report_name: quality_supplier_returns_test
+category: Supply Chain
+description: "Vox | Approve Vendor Return Authorizations — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+extractions:
+  - plex_view: Quality_v_Supplier_Return
+    bq_table: raw_Quality_v_Supplier_Return
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Supplier_Return_Status
+    bq_table: raw_Quality_v_Supplier_Return_Status
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Supplier_Return_Type
+    bq_table: raw_Quality_v_Supplier_Return_Type
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: quality_supplier_returns_pending_report
+  display_name: "Approve Vendor Return Authorizations"
+  sql_file: gs://voxdatalake-report-configs/sql/quality_supplier_returns_pending_view.sql

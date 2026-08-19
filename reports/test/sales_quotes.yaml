@@ -1,0 +1,19 @@
+report_name: sales_quotes_test
+category: Sales
+description: "Vox | Open Quotes — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+extractions:
+  - plex_view: Sales_v_Quote
+    bq_table: raw_Sales_v_Quote
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Quote_Status
+    bq_table: raw_Sales_v_Quote_Status
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: sales_quotes_open_report
+  display_name: "Open Quotes"
+  sql_file: gs://voxdatalake-report-configs/sql/sales_quotes_open_view.sql

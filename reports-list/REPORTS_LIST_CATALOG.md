@@ -43,6 +43,10 @@ Every row across every tab gets one of:
   before any column mapping.
 - 💡 **Idea, no source yet** — listed as "Nice to have" with no real
   system backing it. Not a mapping target until it exists somewhere.
+- 🛠 **Parity build scaffolded** — sourced from NetSuite (so still technically
+  out of scope), but a real Plex ODBC equivalent was found and confirmed
+  live, and the `reports/*.yaml` + SQL have been scaffolded — not yet
+  deployed. See the linked build-plan section for status.
 
 ## Cross-references worth knowing
 

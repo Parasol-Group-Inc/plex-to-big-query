@@ -149,3 +149,6 @@ bq_view:
   - name: labeling_open_work_orders_report
     display_name: "Labeling | Open WO: Results"
     sql_file: gs://voxdatalake-report-configs/sql/labeling_open_work_orders_view.sql
+  - name: printing_open_work_orders_report
+    display_name: "Printing Open Work Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/printing_open_work_orders_view.sql

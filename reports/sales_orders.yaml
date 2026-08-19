@@ -118,3 +118,25 @@ bq_view:
   - name: sales_orders_open_report
     display_name: "Vox | Open Sales Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_open_view.sql
+  # ── Added 2026-08-14, NetSuite parity from reports-list/sales.md ──
+  - name: sales_orders_pending_approval_report
+    display_name: "Pending Approval Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_pending_approval_view.sql
+  - name: sales_orders_pending_accounting_approval_report
+    display_name: "Orders Pending Approval by Accounting"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_pending_accounting_approval_view.sql
+  - name: sales_orders_aging_report
+    display_name: "Report for orders past 14 days old"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_aging_view.sql
+  - name: sales_orders_over_10k_report
+    display_name: "Orders over $10k"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_over_10k_view.sql
+  - name: sales_orders_over_10k_bottles_report
+    display_name: "Orders over 10k bottles"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_over_10k_bottles_view.sql
+  - name: sales_customers_by_rep_report
+    display_name: "Customer List by Sales Rep"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_customers_by_rep_view.sql
+  - name: sales_revenue_by_rep_report
+    display_name: "Revenue per Sales Rep"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_revenue_by_rep_view.sql

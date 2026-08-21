@@ -40,6 +40,27 @@ don't need an entry.
   threshold on this report; `days_since_activity` stays exposed so the
   cutoff can change with zero recomputation if 90 is wrong for this
   business.
+- `sales_orders_rush_open_report` — "Vox | RUSH Open Sos" / "One for Rush
+  orders," unblocked by screenshots of the real NetSuite search. The
+  `Sales_v_Priority` lead (0 rows live) was a dead end because it was the
+  wrong lead: the actual criterion is `Memo (Main) contains RUSH`, a
+  free-text convention confirmed on a real order. Built as
+  `UPPER(Sales_v_PO.Note) LIKE '%RUSH%'` plus a status exclusion (Closed/
+  Cancelled/Pending Sales Approval) — see `sales_orders_rush_open_view.sql`
+  for the "Billed" status gap (no Plex equivalent) and the unconfirmed
+  Note-field-convention caveat.
+- `sales_order_allocation_report` — "Vox | Allocation Report," unblocked
+  by a screenshot of the real search after being "no match found." Joins
+  `Sales_v_PO -> Sales_v_PO_Line -> Sales_v_Release -> Sales_v_Release_Job
+  -> Part_v_Job` (new extraction: `Sales_v_Release_Job`; `Part_v_Job`/
+  `Part_v_Job_Status` read as shared tables already extracted by the
+  `work_orders` pipeline, same cross-pipeline pattern as `Part_v_Part`).
+  Of NetSuite's 4 sales-order statuses in the filter, only "Pending
+  Fulfillment" is confirmed live on this tenant — decided to use the same
+  "not Closed/Cancelled" open-status proxy already used for Open Quotes/
+  RMAs rather than build on the one narrow match. Job side uses the same
+  Completed/Cancelled/Hold-inverse pattern as the Labeling/Printing Open
+  WO reports.
 
 ### Changed
 - **Resolved the entire "needs data-scientist input" backlog** in
@@ -50,9 +71,9 @@ don't need an entry.
   "Approved" as closed, not open (a quote past approval is moving toward
   becoming an order, not still awaiting a decision) — every other item
   kept its existing best-guess default, now documented as a decision
-  instead of an open question. `Vox | RUSH Open Sos` stays genuinely
-  blocked — `Sales_v_Priority` returns 0 rows live, so there's no data to
-  decide from, a different problem than an ambiguous rule.
+  instead of an open question. `Vox | RUSH Open Sos` was the one exception
+  still blocked at the time — resolved later the same day once real search
+  criteria surfaced (see the Added entry above).
 - Test emails **decided to stay as-is** — all 3 recipients
   (`emilio.dominguez@`/`jennilyn.tockstein@`/`marketing@parasolgroupinc.com`)
   continue getting test-environment emails; the "worth deciding" item in

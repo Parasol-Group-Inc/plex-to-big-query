@@ -29,6 +29,8 @@ description: "Work orders by workcenter — Vox Nutrition production report (Ple
 
 extractions:
   # Job header — one row per production job (Job_No, part, qty, status, dates)
+  # Also read (not extracted) by the sales_orders pipeline's
+  # sales_order_allocation_report as of 2026-08-21 — do not remove.
   - plex_view: Part_v_Job
     bq_table: raw_Part_v_Job
     filter: ""
@@ -55,6 +57,8 @@ extractions:
   # ── Added 2026-08-11 for mfg_job_schedule_report (see bq_view list below) ──
 
   # Job status lookup — resolves Job_Status_Key to text + Completed/Cancelled flags
+  # Also read (not extracted) by the sales_orders pipeline's
+  # sales_order_allocation_report as of 2026-08-21 — do not remove.
   - plex_view: Part_v_Job_Status
     bq_table: raw_Part_v_Job_Status
     filter: ""

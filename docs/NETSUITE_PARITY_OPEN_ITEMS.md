@@ -33,13 +33,30 @@ where the decision required a SQL change).
 | Rolling / Monthly TAT Report | `quality_turnaround_time_report` | `Problem_Date` or `Entered_Date` as the clock start? | Kept `Problem_Date` → `Closed_Date`. |
 | Inventory Risk Analysis (Custom Formula / Item Stock Type) | `inventory_risk_analysis_report` | What aging threshold defines "risk"? | **Decided: 90+ days since last container activity (or no activity at all) = `is_at_risk`.** A general-purpose slow-moving-inventory convention, not derived from Vox policy — `days_since_activity` stays exposed so the cutoff can change with zero recomputation if 90 is wrong. SQL updated (`inventory_risk_analysis_view.sql`). |
 
-**Still genuinely blocked, not a criteria question:** Vox | RUSH Open Sos
-(aka "One for Rush orders") — `Sales_v_Priority` (the lookup
-`Sales_v_Release.Priority_Key` points to) returned **0 rows live**, so
-there's no data to pick a criteria *from*. This isn't an ambiguous rule
-like the ones above, it's an empty table — needs either the actual
-NetSuite report definition or confirmation the "Rush" concept exists on
-this tenant at all before anything can be built.
+**Resolved 2026-08-21:** Vox | RUSH Open Sos (aka "One for Rush orders") —
+the `Sales_v_Priority` lead above was a dead end, but it turned out to be
+the wrong lead entirely. Screenshots of the real search ("ATL | RUSH Open
+SOs") showed the actual criterion is `Memo (Main) contains RUSH`, a
+free-text convention (confirmed on a real order, SO0117746 — Memo starting
+"RUSH | New label review..."), not a status/priority field at all. Built as
+`sales_orders_rush_open_report`, filtering `UPPER(Sales_v_PO.Note) LIKE
+'%RUSH%'` plus a status exclusion (Closed/Cancelled/Pending Sales Approval).
+Two residual gaps, not guessed: NetSuite's "Billed" status exclusion has no
+Plex equivalent (assumed subsumed by Closed), and whether Plex's `Note`
+field actually carries the same "RUSH | ..." convention Vox uses in
+NetSuite is unconfirmed against real Plex data — flag for data-scientist
+review before trusting row counts.
+
+**Also resolved 2026-08-21:** Allocation reports — was "no match found"
+(bare name only) until a screenshot of the real search ("Vox | Allocation
+Report") gave actual criteria: jobs created from a sales order, where the
+job is Planned/Released and the order hasn't finished shipping/billing.
+Confirmed live join path: `Sales_v_PO -> Sales_v_PO_Line -> Sales_v_Release
+-> Sales_v_Release_Job -> Part_v_Job`. Of NetSuite's 4 order-status values
+in the filter, only "Pending Fulfillment" is confirmed live on this
+tenant — **decided: use the same "not Closed/Cancelled" open-status proxy**
+already used for Open Quotes/RMAs rather than build on the one narrow match.
+Built as `sales_order_allocation_report`.
 
 ## Part 2 — No Plex match found
 
@@ -53,5 +70,4 @@ scientist whether Vox tracks this concept somewhere else entirely.
 | Reorder Multiple Search | The only candidate name, `Material_v_Reorder_Point`, was tree-guessed only (never confirmed) — live query 2026-08-14 confirmed it doesn't exist ("Base table not found"). No other reorder-point view anywhere in the 2,828-view catalog. | Get the NetSuite report — it may define its own reorder logic (e.g. from `Item_Supplier`/lead-time fields) that doesn't map to a single Plex view. |
 | SO's with discounts | Discount columns exist only on the Quote side (`Sales_v_Quote_Part.Discount`, `Sales_v_Quote_Price_Cost.Discount_Rate`) — confirmed live there is no discount field anywhere on `Sales_v_PO`/`Sales_v_PO_Line`, and no `Quote_Key` link from an order back to its originating quote. | Ask the data scientist how Vox actually represents an order-level discount today — it may not be a Plex-native concept at all (e.g. handled via a price override at order entry with no audit trail). |
 | Inventory consumption | No view or stored procedure matching "consumption" anywhere in the schema or the 14,350-row stored-procedure catalog. | Get the NetSuite report definition — "consumption" likely means something specific (material usage vs. finished-good depletion) that needs a screenshot to disambiguate before searching further. |
-| Allocation reports | Never received more than a bare name. | Get a screenshot or a fuller description — too generic to search a 2,828-view schema against. |
 | Revenue for Vox | Same issue as mapping-doc #21/#54 (too generic to pin to one view). | Get a screenshot, or ask the data scientist what specific revenue breakdown this refers to (it may just be a saved search that scopes an otherwise-generic NetSuite "Revenue" report to the Vox subsidiary). |

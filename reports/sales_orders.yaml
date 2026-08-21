@@ -61,6 +61,14 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Release-to-Job link — added 2026-08-21 for sales_order_allocation_report.
+  # Pure link table (PCN, Release_Key, Job_Key): the one-hop-removed FK
+  # between a sales order release and the Job it's allocated to.
+  - plex_view: Sales_v_Release_Job
+    bq_table: raw_Sales_v_Release_Job
+    filter: ""
+    date_col: ""
+
   # Customer master — Customer_No → customer name and info
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
@@ -146,3 +154,18 @@ bq_view:
   - name: sales_revenue_by_rep_report
     display_name: "Revenue per Sales Rep"
     sql_file: gs://voxdatalake-report-configs/sql/sales_revenue_by_rep_view.sql
+  # Added 2026-08-21 — unblocked by screenshots of the real search
+  # ("ATL | RUSH Open SOs"): the filter is a Note/Memo text search, not a
+  # Priority/Rush status field. See the SQL file header and
+  # reports-list/sales.md + reports-list/production.md for the full story.
+  - name: sales_orders_rush_open_report
+    display_name: "RUSH Open Sales Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_rush_open_view.sql
+  # Added 2026-08-21 — unblocked by a screenshot of the real search
+  # ("Vox | Allocation Report"). Joins raw_Sales_v_Release_Job above with
+  # raw_Part_v_Job / raw_Part_v_Job_Status, which are SHARED tables owned
+  # and extracted by the work_orders pipeline (same cross-pipeline pattern
+  # as raw_Part_v_Part below). See the SQL file header for the full story.
+  - name: sales_order_allocation_report
+    display_name: "Vox | Allocation Report"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_order_allocation_view.sql

@@ -73,3 +73,28 @@ goal-vs-actual output logs with operator/attendance tracking that
 Production Yield has no analog for at all. A better (still unconfirmed)
 lead for the "Actual" output number is aggregating `Part_v_Job_Op`/
 `Part_v_Cell_Production.Quantity` by date + workcenter.
+
+**Update 2026-08-21 — that lead is now much stronger, not just
+unconfirmed.** A screenshot of Plex's own "Daily Shifts" UI report shows
+exactly this rollup already exists natively: grouped by
+Manager/Department/Workcenter/Part/date, with **Planned Production Hours,
+Parts Produced, Parts Scrapped, Scrap Rate, Earned/Actual Machine Hours,
+Efficiency, Utilization, OEE, Earned/Actual Labor Hours, Labor
+Efficiency** — i.e. exactly the goal-vs-actual-output-plus-attendance shape
+these 4 reports need, that Production Yield never had. Structural
+evidence this is buildable from confirmed-live views: `Part_v_Job_Op` +
+`Part_v_Cell_Production` (Quantity, Production_Date, Job_Op_Key — schema
+confirmed) + `Part_v_Workcenter` (`Workcenter_Group`/`Department_No`,
+already extracted but unused) + `Common_v_Department` (not yet extracted).
+`Workcenter_Group` also gives a cleaner per-report filter than the
+`wc.Name LIKE 'Labeling Line%'` text pattern already used elsewhere:
+confirmed live groups are Blending, Bottling, Encapsulating, Labeling,
+Pre-Weigh, Preparation, Printing, Rework, Scheduling — which maps cleanly
+to Blending/Labeling/Bottling Daily Reports, but **not** to Packaging (no
+"Packaging" workcenter group exists — it's a Department code `PACK` and a
+separate `Part_Group` value instead, still an open question which one the
+Packaging Daily Report actually means). See
+`catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values section for
+the full column/value detail. Not yet built for any of the 4 reports —
+this changes them from "weak/weakest fit, no real Plex analog" to
+"real Plex analog identified, ready to scope and build."

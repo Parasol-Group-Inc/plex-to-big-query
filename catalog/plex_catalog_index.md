@@ -135,6 +135,79 @@ Columns: `Plexus_Customer_No` · `Workcenter_Event_Key` · `Description` · `Cod
 
 All confirmed entries are **problem/downtime events**. Normal production log entries have `Workcenter_Event_Key = NULL`.
 
+### Confirmed live lookup values — Plex UI filter pick lists (2026-08-21)
+
+Sourced from screenshots of live Plex UI report filters (Job Status Report,
+Daily Shifts, Scheduled Job Requirements, Scrap by Parts) — these are the
+same ODBC-backed lookup tables the UI's pick lists query, so the values are
+real/live even though the reports themselves are UI-only (see
+`reports-list/production.md` for how these feed the Daily Reports backlog).
+
+**`Part_v_Workcenter.Workcenter_Group`** (plain string column, already
+extracted as `raw_Part_v_Workcenter`, never previously used by any report)
+— confirmed live values, with the Workcenter Code roster observed under
+each: **Blending** (Blending 2–5) · **Bottling** (Bottling 1–6, Bulk Room,
+Liquid Line, Powder Line) · **Encapsulating** (Encapsulation 1–10) ·
+**Labeling** (First 48, Labeling 1–6) · **Pre-Weigh** (Pre-Weigh 1–3) ·
+**Preparation** (Roll Compaction) · **Printing** (Printing) · **Rework**
+(Manufacture Rework) · **Scheduling** (no workcenter observed under it).
+This is a cleaner, tenant-native alternative to the `wc.Name LIKE
+'Labeling Line%'` / `'Printing%'` text-pattern matching used in
+`labeling_open_work_orders_view.sql` / `printing_open_work_orders_view.sql`
+— not urgent to change working reports, but the right tool going forward.
+
+**No "Packaging" workcenter group exists.** This narrows (doesn't yet
+resolve) the open `packaging_daily_report` mapping question — "Packaging"
+in Plex is a *Department* (`PACK`, see below) and a *Part Group* (see
+below), not a production workcenter line. It may span multiple workcenter
+groups, or refer to packaging materials/components rather than a
+production step.
+
+**`Part_v_Workcenter.Department_No`** (plain column, already extracted,
+never previously used) joins to **`Common_v_Department.Department_No`**
+(not yet extracted). Confirmed live department codes: `ACCT` (Accounting),
+`BLENDING` (Blending), `CUSTOMER`, `ENCAP` (Encapsulation), `GRAPH`
+(Graphic Design), `HOUSE` (Housekeeping), `HR`, `IT`, `LABEL` (Labeling),
+`MAINT` (Maintenance & Facilities), `MANUFACT` (Manufacturing), `PACK`
+(Packaging), `Parasol`, `PRINT` (Printing), `PURCHASING`, `QUALITY`,
+`SALES`, `SANITATION`, `SHIP` (Shipping), `SUPPLIER`, `WAREHOUSE`.
+
+**`Part_v_Part_Group.Part_Group`** (separate view/field from the
+already-used `Part_v_Part_Product_Group` — not yet extracted). Confirmed
+live values: Capsule, Component, Gummy, Inspection, Label, Liquid,
+Packaging, Powder, Raw Ingredient, Semi-Finished Goods, Softgel, Supplies,
+Tablet.
+
+**`Part_v_Operation.Operation_Code`** (not yet extracted) — confirmed live
+values include: Blending, Bottling, Encapsulating, Inspection, Label
+Printing, Labeling, Pre-Weigh 1/1 Non-Variable/2/2 Non-Variable/3/3
+Non-Variable/Gram, and several unit-specific Receive operations (ea, gs,
+kgs, mgs, oz — list was longer than the visible screenshot).
+
+**`Part_v_Cell_Production`** confirmed live (schema only) with
+`Job_Op_Key`, `Quantity`, `Production_Date` — this is the exact
+"aggregating `Part_v_Job_Op`/`Part_v_Cell_Production.Quantity` by date +
+workcenter" lead that `production.md`'s Production Yield verdict flagged
+as unconfirmed. The Plex UI's "Daily Shifts" report (Manager/Department/
+Workcenter/Part, grouped by date, with Planned Production Hours, Parts
+Produced, Parts Scrapped, Scrap Rate, Earned/Actual Machine + Labor Hours,
+Efficiency, Utilization, OEE) is strong evidence this exact rollup is
+buildable from `Part_v_Job_Op` + `Part_v_Cell_Production` +
+`Part_v_Workcenter` (Department_No/Workcenter_Group) + `Common_v_Department`
+— see `reports-list/production.md` for the implication on the 4 Daily
+Reports.
+
+**BOM/component-requirements views confirmed live** (`Part_v_BOM`,
+`Part_v_Flat_BOM`, `Part_v_Job_Bom`) — the Plex UI's "Scheduled Job
+Requirements" report (Part/Rev, Total Inventory, Avail Source, Job Count,
+Job Balance, Inv Balance, Total Required, grouped by Part Group) is
+structural evidence of a buildable component-explosion-vs-inventory
+rollup: scheduled Job quantities exploded through BOM, compared against
+`Part_v_Container` on-hand. See `reports-list/supply-chain.md` and
+`docs/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption" row — this
+may be the real lead that was missing there, and/or the manual process
+behind "Approaching MSL" (`reports-list/REPORTS_LIST_CATALOG.md`).
+
 ---
 
 ## Confirmed ODBC View Names for Sales Orders Pipeline

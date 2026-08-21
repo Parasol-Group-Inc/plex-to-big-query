@@ -30,3 +30,19 @@ existing manual number, or discover we're missing something Container-based
 on-hand-quantity doesn't capture (e.g. MSL = Minimum Stock Level, which
 implies a reorder-point/threshold concept `Part_v_Container` alone doesn't
 have).
+
+**New lead, 2026-08-21:** a screenshot of the Plex UI's own "Scheduled Job
+Requirements" report (Outlook-days filter, "Component" grain, columns Part/
+Rev/Total Inventory/Avail Source/Job Count/Job Balance/Inv Balance/Total
+Required) is structural evidence this exact concept — scheduled job
+component requirements exploded through BOM, compared against on-hand
+inventory — is buildable natively: `Part_v_BOM`/`Part_v_Flat_BOM`/
+`Part_v_Job_Bom` are confirmed live, joined against `Part_v_Job`
+(scheduled quantity) and `Part_v_Container` (on-hand). This may be the real
+Plex-native answer "Approaching MSL" is manually approximating, and/or the
+lead for `docs/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption"
+row. See `catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values
+section for the full detail. Not yet built — needs a decision on scope
+before writing SQL (MSL/reorder-point threshold logic hasn't been located
+anywhere in the schema, so this covers the "requirements vs. available"
+half, not a full MSL alert).

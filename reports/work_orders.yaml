@@ -126,6 +126,16 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-08-21 for the 4 Daily Reports (see bq_view list below) ──
+
+  # Per-date production count log, one row per job operation per date it
+  # produced output. The "Actual" number the 4 Daily Reports need — see
+  # reports-list/production.md's Production Yield verdict update.
+  - plex_view: Part_v_Cell_Production
+    bq_table: raw_Part_v_Cell_Production
+    filter: ""
+    date_col: Production_Date
+
 # NOTE: Part_v_Part is intentionally NOT extracted here.
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:00 PM Mountain).
 # work_orders_view.sql references it as a shared table in the same dataset.
@@ -146,6 +156,12 @@ extractions:
 #   labeling_open_work_orders_report — added 2026-08-11: Plex-native rebuild of
 #                                     NetSuite's "Labeling | Open WO: Results"
 #                                     saved search. See reports-list/production.md.
+#   encap/blending/labeling/packaging_daily_report — added 2026-08-21: the
+#                                     "Actual produced qty" half of the 4
+#                                     Daily Reports Google Sheets, built on
+#                                     Part_v_Cell_Production per the Daily
+#                                     Shifts UI-report lead. See
+#                                     reports-list/production.md.
 # The SQL files are loaded from GCS at runtime so they can be edited
 # independently without touching this YAML. {gcp_project} and {dataset} in
 # the SQL are replaced at runtime with the GCP_PROJECT and BQ_DATASET env vars.
@@ -162,3 +178,15 @@ bq_view:
   - name: printing_open_work_orders_report
     display_name: "Printing Open Work Orders"
     sql_file: gs://voxdatalake-report-configs/sql/printing_open_work_orders_view.sql
+  - name: encap_daily_report
+    display_name: "Encap Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/encap_daily_report_view.sql
+  - name: blending_daily_report
+    display_name: "Blending Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/blending_daily_report_view.sql
+  - name: labeling_daily_report
+    display_name: "Labeling Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/labeling_daily_report_view.sql
+  - name: packaging_daily_report
+    display_name: "Packaging Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/packaging_daily_report_view.sql

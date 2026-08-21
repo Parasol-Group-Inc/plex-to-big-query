@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Status:** ✅ Built 2026-08-21 (Actual half only), decided Bottling mapping — `packaging_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
 ## What it is
@@ -45,8 +45,23 @@ plus `Liquid Line`, `Powder Line`, `Bulk Room` (see
 `Bottling Line N` — needs real filled-in data to confirm which sheet
 "Line" corresponds to which Plex workcenter before aggregating anything.
 
+## Built 2026-08-21 — resolved the workcenter-group question
+
+This was the hardest of the 4 to place: a Plex UI screenshot of the
+Workcenter Group pick list confirmed **"Packaging" is not a Plex
+workcenter group at all** — the confirmed live groups are Blending,
+Bottling, Encapsulating, Labeling, Pre-Weigh, Preparation, Printing,
+Rework, Scheduling. "Packaging" only exists in Plex as a Department code
+(`PACK`) and a separate `Part_Group` value, neither of which is
+workcenter-shaped. Built on `Workcenter_Group = 'Bottling'` instead, since
+that roster (`Bottling Line 1`-`6`, `Bulk Room`, `Powder Line`,
+`Liquid Line`) matches this sheet's own line names almost exactly. Built
+as `packaging_daily_report`, aggregating `Part_v_Cell_Production.Quantity`
+by production date + workcenter (`reports/sql/packaging_daily_report_view.sql`).
+
 ## What's needed next
 
 Real (non-template) data — a filled-in week or month of this sheet — to
-confirm whether "Actual" numbers actually correlate with Job_Op/Cell
-Production quantities before building anything.
+confirm whether "Actual" numbers correlate with `Cell_Production`
+quantities, and whether the sheet's "Line" numbering lines up 1:1 with
+`Bottling Line N` or needs remapping.

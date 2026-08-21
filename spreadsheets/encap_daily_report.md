@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Encap Scheduling / Planning
 - **Departments:** Production, Planning
-- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Status:** ✅ Built 2026-08-21 (Actual half only) — `encap_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **worst fit of the 4 Daily Reports, see verdict below**
 
 ## What it is
@@ -45,6 +45,18 @@ this template only has stations for 1, 2, 4, 5, 7, 8, 9, 10 (skipping 3 and
 6) — worth confirming with real data whether those two are decommissioned,
 renamed, or just not yet added to the sheet, rather than assuming either.
 
+## Built 2026-08-21
+
+Unblocked by a screenshot of Plex's own "Daily Shifts" UI report, which
+confirmed this exact per-workcenter/per-date rollup exists natively. Built
+as `encap_daily_report`, aggregating `Part_v_Cell_Production.Quantity` by
+production date + workcenter, filtered to `Workcenter_Group =
+'Encapsulating'` (see `reports/sql/encap_daily_report_view.sql`). Only the
+"Actual" quantity is built — Planned/Start-Up-Stop/attendance columns have
+no Plex analog and are not guessed at.
+
 ## What's needed next
 
-Real (non-template) data to confirm the aggregation before building.
+Real (non-template) data to confirm `Part_v_Cell_Production` is actually
+populated for this tenant's encapsulation jobs, and whether Encap stations
+3 and 6 (skipped in the sheet's template) show real activity or true zeros.

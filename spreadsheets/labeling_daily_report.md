@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Status:** ✅ Built 2026-08-21 (Actual half only) — `labeling_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
 ## What it is
@@ -44,6 +44,18 @@ Packaging's mismatch. This same workcenter set is already used by
 that same query. Worth checking directly once real (non-template) data
 exists.
 
+## Built 2026-08-21
+
+Same unblock as the other 3 Daily Reports. Built as `labeling_daily_report`,
+aggregating `Part_v_Cell_Production.Quantity` by production date +
+workcenter, filtered to `Workcenter_Group = 'Labeling'`
+(`reports/sql/labeling_daily_report_view.sql`). The three shift-checkpoint
+timestamps and "# Of Orders Complete" are not built — no confirmed Plex
+analog, and "# Of Orders Complete" would need a genuinely different query
+(completed-job count) than the existing open-job count in
+`labeling_open_work_orders_report`.
+
 ## What's needed next
 
-Real (non-template) data to confirm any correlation before building.
+Real (non-template) data to confirm `Part_v_Cell_Production` correlates
+with this sheet's actual Line totals.

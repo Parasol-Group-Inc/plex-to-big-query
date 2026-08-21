@@ -9,10 +9,10 @@ most rows here already have (or now have) their own detail doc there.
 | Report | Source | Status | Notes |
 |---|---|---|---|
 | MFG Job Schedule | Google Sheet | ✅ Already built | See `spreadsheets/mfg_job_schedule.md` |
-| Encap Daily Report | Google Sheet | 🔍 Mapped | "Plex Report Equiv" claims Production Yield (ActionKey 7346) "works for part of it" — verdict: **worst fit of the 4 Daily Reports**, no weight concept at all. See `spreadsheets/encap_daily_report.md` |
-| Packaging Daily Report | Google Sheet | 🔍 Mapped | Same Production Yield claim — verdict: **weak fit**. See `spreadsheets/packaging_daily_report.md` |
-| Labeling Daily Report | Google Sheet | 🔍 Mapped | Same claim — verdict: **weak fit**. See `spreadsheets/labeling_daily_report.md` |
-| Blending Daily Report | Google Sheet | 🔍 Mapped | Same claim — verdict: **weakest-but-most-plausible fit** (genuine weighing workflow). See `spreadsheets/blending_daily_report.md` |
+| Encap Daily Report | Google Sheet | ✅ Built 2026-08-21 (Actual half only) | Built as `encap_daily_report` (`work_orders.yaml`) on `Part_v_Cell_Production`, filtered `Workcenter_Group = 'Encapsulating'`. Planned Hours/attendance/scrap not built — no Plex analog found, same as MFG Job Schedule's manual-only columns. See `spreadsheets/encap_daily_report.md`. |
+| Packaging Daily Report | Google Sheet | ✅ Built 2026-08-21 (Actual half only), decided Bottling mapping | Built as `packaging_daily_report`, filtered `Workcenter_Group = 'Bottling'` — "Packaging" isn't a Plex workcenter group at all (it's a Department code and a separate Part_Group), but the sheet's own lines match the Bottling roster almost exactly. See `spreadsheets/packaging_daily_report.md`. |
+| Labeling Daily Report | Google Sheet | ✅ Built 2026-08-21 (Actual half only) | Built as `labeling_daily_report`, filtered `Workcenter_Group = 'Labeling'` — direct match to the sheet's own Line 1-6 numbering. See `spreadsheets/labeling_daily_report.md`. |
+| Blending Daily Report | Google Sheet | ✅ Built 2026-08-21 (Actual half only) | Built as `blending_daily_report`, filtered `Workcenter_Group IN ('Blending', 'Pre-Weigh')` (the sheet's grid needs both). See `spreadsheets/blending_daily_report.md`. |
 | Bottling Job Schedule | Google Sheet | 🔍 Mapped | Sibling of MFG Job Schedule, bottling-specific. See `spreadsheets/bottling_job_schedule.md` |
 | Weekly Production Update | Google Sheet | ⏳ Pending | No content provided yet. Users: "Mark, Nick, Chris" |
 | Rolling TAT Report | NetSuite + GSheet | ✅ Deployed, best-criteria — needs data-scientist input | Same underlying concept as mapping-doc #70 "Turn Around Time Report - Rolling". Built as `quality_turnaround_time_report` (bq_view on `quality_nonconformance.yaml`) — per-record `Closed_Date - Problem_Date` in days, with no window hardcoded so "rolling" can be applied at the query layer. Confirm `Problem_Date` (vs. `Entered_Date`) is the right TAT start, and whether this covers the GSheet portion of the manual report at all — that layer wasn't investigated. |
@@ -90,11 +90,20 @@ already extracted but unused) + `Common_v_Department` (not yet extracted).
 `wc.Name LIKE 'Labeling Line%'` text pattern already used elsewhere:
 confirmed live groups are Blending, Bottling, Encapsulating, Labeling,
 Pre-Weigh, Preparation, Printing, Rework, Scheduling — which maps cleanly
-to Blending/Labeling/Bottling Daily Reports, but **not** to Packaging (no
-"Packaging" workcenter group exists — it's a Department code `PACK` and a
-separate `Part_Group` value instead, still an open question which one the
-Packaging Daily Report actually means). See
-`catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values section for
-the full column/value detail. Not yet built for any of the 4 reports —
-this changes them from "weak/weakest fit, no real Plex analog" to
-"real Plex analog identified, ready to scope and build."
+to Blending/Labeling/Bottling Daily Reports; Packaging has no matching
+workcenter group of its own (it's a Department code `PACK` and a separate
+`Part_Group` value instead) — **decided** to map it onto `Workcenter_Group
+= 'Bottling'` since the sheet's own line names match that roster almost
+exactly. See `catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values
+section for the full column/value detail.
+
+**Built 2026-08-21** — all 4 reports now have an `Actual`-quantity bq_view
+(`encap_daily_report`, `blending_daily_report`, `labeling_daily_report`,
+`packaging_daily_report`, all in `work_orders.yaml`), aggregating
+`Part_v_Cell_Production.Quantity` by production date + workcenter within
+each report's `Workcenter_Group` filter. Planned Hours, Start-Up/Stop
+times, and the employee Call Outs/OFF attendance roster are deliberately
+**not** built — no Plex analog identified, same treatment as MFG Job
+Schedule's manual-only columns. Unconfirmed against real data (flagged in
+every one of these reports' own docs) — verify `Part_v_Cell_Production` is
+actually populated for this tenant once real production data lands.

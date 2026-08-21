@@ -49,6 +49,22 @@ don't need an entry.
   Cancelled/Pending Sales Approval) — see `sales_orders_rush_open_view.sql`
   for the "Billed" status gap (no Plex equivalent) and the unconfirmed
   Note-field-convention caveat.
+- `encap_daily_report`, `blending_daily_report`, `labeling_daily_report`,
+  `packaging_daily_report` — the "Actual produced quantity" half of the 4
+  Daily Reports Google Sheets, unblocked by a screenshot of Plex's own
+  "Daily Shifts" UI report confirming this per-date/per-workcenter rollup
+  exists natively. Built on `Part_v_Cell_Production` (new extraction) ×
+  `Part_v_Job_Op`/`Part_v_Job`/`Part_v_Part`, filtered by each report's
+  `Part_v_Workcenter.Workcenter_Group` (also newly used — already extracted
+  but unused until now). Packaging has no matching workcenter group of its
+  own (it's a Department code and a Part_Group value instead) — decided to
+  map it onto `Workcenter_Group = 'Bottling'`, whose roster matches the
+  sheet's line names almost exactly. Deliberately NOT built: Planned
+  Production Hours, Start-Up/Stop times, shift checkpoints, and the
+  employee Call Outs/OFF attendance roster — no Plex analog identified,
+  same treatment as MFG Job Schedule's manual-only columns. Unconfirmed
+  against real (non-template) data, same caveat every one of these 4
+  reports' docs already flagged.
 - `sales_order_allocation_report` — "Vox | Allocation Report," unblocked
   by a screenshot of the real search after being "no match found." Joins
   `Sales_v_PO -> Sales_v_PO_Line -> Sales_v_Release -> Sales_v_Release_Job

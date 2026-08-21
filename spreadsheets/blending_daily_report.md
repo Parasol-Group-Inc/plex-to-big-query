@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report / Scheduling
 - **Departments:** Production, Planning
-- **Status:** 🔍 Mapped — template structure analyzed, not yet built
+- **Status:** ✅ Built 2026-08-21 (Actual half only) — `blending_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weakest-but-most-plausible fit of the 4 Daily Reports, see verdict below**
 
 ## What it is
@@ -44,6 +44,21 @@ all confirmed live `Workcenter_Type = 'Batch'` (see
 `reports-list/production.md`), matching this sheet's "Pre-Weigh 1/2/3" and
 "Blending 2/3/4/5" sections almost exactly.
 
+## Built 2026-08-21
+
+Same unblock as the other 3 Daily Reports (Plex's own "Daily Shifts" UI
+report confirms the rollup exists natively). Built as `blending_daily_report`,
+aggregating `Part_v_Cell_Production.Quantity` by production date +
+workcenter, filtered to `Workcenter_Group IN ('Blending', 'Pre-Weigh')`
+since the sheet's grid needs both station types
+(`reports/sql/blending_daily_report_view.sql`). Weigh-out vs. blending
+quantities aren't split — both workcenter groups' `Cell_Production` rows
+land in one `actual_qty` column; only the "Actual" quantity is built at
+all, not Planned/attendance.
+
 ## What's needed next
 
-Real (non-template) data to confirm any correlation before building.
+Real (non-template) data to confirm `Part_v_Cell_Production` correlates
+with this sheet's actual weigh-out/blending totals, and whether Weigh-Out
+and Blending goals need to be split into separate columns once real data
+shows they're tracked differently.

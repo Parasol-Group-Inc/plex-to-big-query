@@ -80,7 +80,8 @@ extractions:
     date_col: ""
 
 # NOTE: Part_v_Part is intentionally NOT extracted here.
-# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
+# raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story.
 # work_orders_view.sql references it as a shared table in the same dataset.
 
 bq_view:

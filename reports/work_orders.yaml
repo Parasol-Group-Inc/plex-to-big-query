@@ -123,10 +123,16 @@ extractions:
     date_col: ""
 
 # NOTE: Part_v_Part is intentionally NOT extracted here.
-# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 2 AM).
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:00 PM Mountain).
 # work_orders_view.sql references it as a shared table in the same dataset.
 # Do not add Part_v_Part here — two WRITE_TRUNCATEs on the same table
 # from different pipelines risk silently emptying it on a 0-row Plex response.
+#
+# raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story — also
+# owned/extracted by sales_orders, referenced as a shared table by
+# mfg_job_schedule_view.sql for the real Product_Type classification
+# (Vitamin/Mineral/Stock vs Custom Formula/etc.) that Part_Type alone
+# doesn't provide.
 
 # Three BigQuery reporting views over the same extractions above:
 #   work_orders_report              — original, unchanged (job/op/workcenter/hours)

@@ -187,13 +187,11 @@ retry-skip logic):
 
 ## Worth deciding (not changed — needs a call, not a guess)
 
-- **Test runs email the same 3 real people as prod**, including
-  `marketing@parasolgroupinc.com`. That's 8 "TEST" emails a day to an
-  inbox that presumably doesn't need to see test-environment noise. Options:
-  a dedicated test-only recipient (e.g. just Emilio), or suppress
-  `SENDGRID_ENABLED` on test entirely and rely on the Cloud Console/logs for
-  test verification. Either is a one-line `terraform.tfvars` change once
-  decided.
+- ~~Test runs email the same 3 real people as prod~~ **Decided 2026-08-21:
+  keep as-is.** Emilio confirmed no change needed — test emails continue
+  going to all 3 recipients (`emilio.dominguez@`/`jennilyn.tockstein@`/
+  `marketing@parasolgroupinc.com`). Revisit only if that inbox noise
+  actually becomes a problem in practice.
 - **Renaming `plex-etl`/`plex-etl-test`** to match the newer
   `plex-etl-{report}` pattern was considered and **rejected as not worth
   it** — Cloud Run Job names are immutable, so this would mean Terraform

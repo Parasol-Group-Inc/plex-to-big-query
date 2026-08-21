@@ -1,34 +1,45 @@
-# NetSuite Parity — Open Items (2026-08-14)
+# NetSuite Parity — Open Items (2026-08-14, decided 2026-08-21)
 
 Consolidated punch list from the 2026-08-14 reports-list-wide equivalent
-sweep (`docs/NETSUITE_REPORT_BUILD_PLAN.md` § "2026-08-14 batch"). Every
-report below is *not yet resolved* — either it needs a data-scientist
-decision, or it needs the actual NetSuite report definition. Reports that
-were built cleanly or with a defensible best-criteria guess are NOT listed
-here — see `reports-list/supply-chain.md`, `production.md`, and `sales.md`
-for those.
+sweep (`docs/NETSUITE_REPORT_BUILD_PLAN.md` § "2026-08-14 batch").
 
-## Part 1 — Needs a data-scientist decision
+**Update 2026-08-21:** Emilio made the call not to wait on a data-scientist
+review for Part 1 below — pick the best-criteria answer for each and adjust
+later if a report's numbers come out wrong once real data lands (starts
+2026-08-24). Every Part 1 item is now DECIDED on that basis; none of them
+were blocked by missing data, only by an unconfirmed business rule. Part 2
+is unchanged — those are genuinely missing a Plex data source, which
+"pick a criteria" can't fix; they still need the actual NetSuite report
+definition or a data-scientist steer on where the concept lives.
 
-These all have a real, schema-confirmed Plex path — the open question is a
-business-rule choice, not a missing table. Each was built with a best-guess
-default so nothing is blocked, but the guess should be confirmed (or
-corrected) before trusting the numbers.
+## Part 1 — Decided (best-criteria, adjust if real data disagrees)
 
-| Report | Built as | The question | Live-data finding |
+These all have a real, schema-confirmed Plex path. Each already had a
+best-guess default in place; the entries below are the ones where that
+default was upgraded to a documented decision on 2026-08-21 (code updated
+where the decision required a SQL change).
+
+| Report | Built as | The question | Decision |
 |---|---|---|---|
-| Approve Vendor Return Authorizations | `quality_supplier_returns_pending_report` | What does "pending approval" mean for a supplier return? | The `Approving`/`Approved` flag columns exist but are **0 on all 6 live statuses** (New/Hold/OK to Ship/Shipped/Complete/Cancelled). Built with a status-exclusion proxy (not yet Shipped/Complete/Cancelled) instead. |
-| Open Quotes | `sales_quotes_open_report` | What does "open" mean for a quote? | The `Open_Quote` flag exists but is **0 on all 8 live statuses**. Built with a status-exclusion proxy (not Won/Lost/Cancelled/No Quote) instead — is "Approved" open or closed here? |
-| Orders Pending Approval by Sales Rep | *not built* | Is this the same report as "Pending Approval Orders" (key 2585), or genuinely different? | No live-data conflict — this one was never distinguishable from its sibling report by name alone. Deliberately not built as a guessed duplicate. |
-| Orders Pending Approval by Accounting | `sales_orders_pending_accounting_approval_report` | Is "Pending Payment Review" (2638) really the "Accounting" stage? | Confirmed live as the only accounting-flavored status in the workflow, but it's a label-text inference, not NetSuite-confirmed. |
-| Report for orders past 14 days old | `sales_orders_aging_report` | Should the 14-day clock start from `PO_Date`, or from the last status change? | Built using `PO_Date`. `Sales_v_PO_Change` (status history) is already extracted and could support the alternative if needed. |
-| Orders over $10k | `sales_orders_over_10k_report` | What's the $10k basis? | No dollar column exists on the order/line records at all — confirmed live. Built from the same price-join `sales_orders_report` already uses (base-tier price × quantity, excludes tax/freight). `Sales_v_PO.Master_Price` exists as an alternative but is often unpopulated. |
-| Orders over 10k bottles | `sales_orders_over_10k_bottles_report` | Which `Quantity_Unit` value(s) mean "bottles" specifically? | Built by summing ALL units together per order — could overcount orders that mix bottles with other unit types. Unit values were never seen live (0 rows on test tenant). |
-| Open RMA's | `sales_returns_open_report` | Does "open" (not Closed/Cancelled) match the real NetSuite search? | Clean status-exclusion, no live-data conflict — just never screenshotted to confirm. |
-| Customer List by Sales Rep / Revenue per Sales Rep | `sales_customers_by_rep_report` / `sales_revenue_by_rep_report` | Is per-order rep assignment (`Sales_v_Order_Salesperson`) an acceptable proxy for "a customer's assigned rep"? | Plex has no standing customer→rep field. A different lead (`Common_v_Region_Customer_Type.Salesperson`) exists but was never confirmed live. |
-| Vox \| RUSH Open Sos (aka "One for Rush orders") | *not built* | Does a "Rush" priority label actually exist on this tenant? | `Sales_v_Priority` (the lookup `Sales_v_Release.Priority_Key` points to) returned **0 rows live** — can't confirm the concept exists at all without prod data or the actual NetSuite report. |
-| Rolling / Monthly TAT Report | `quality_turnaround_time_report` | Is `Problem_Date` (vs. `Entered_Date`) the right "clock start" for turnaround time? Does this even cover the GSheet layer of the original hybrid report? | Built using `Problem_Date` → `Closed_Date`. The GSheet portion of the original manual report was never investigated. |
-| Inventory Risk Analysis (Custom Formula / Item Stock Type) | `inventory_risk_analysis_report` | What aging threshold defines "risk" or "slow-moving"? | No packaged risk concept anywhere in Plex (confirmed at both the view and stored-procedure layer). Built exposing on-hand qty + days-since-last-container-activity with no cutoff baked in — the cutoff itself is the open question. |
+| Approve Vendor Return Authorizations | `quality_supplier_returns_pending_report` | What does "pending approval" mean for a supplier return? | Kept the existing status-exclusion proxy (not yet Shipped/Complete/Cancelled) — the `Approving`/`Approved` flags are confirmed dead (0 on all 6 statuses) so there's no better literal signal available. |
+| Open Quotes | `sales_quotes_open_report` | Is "Approved" open or closed? | **Decided: closed.** Approved now excluded alongside Won/Lost/Cancelled/No Quote — reasoning: Approved marks the decision point, the quote is moving toward becoming an order, not still awaiting action. SQL updated (`sales_quotes_open_view.sql`). |
+| Orders Pending Approval by Sales Rep | `sales_orders_pending_approval_by_rep_report` (new) | Is this the same report as "Pending Approval Orders" (key 2585)? | **Decided: yes, same data.** Built as a thin alias view over `sales_orders_pending_approval_report` rather than a duplicated pipeline, so the two can't silently drift apart. If it's ever confirmed to be a genuinely different scope, replace the alias with real logic. |
+| Orders Pending Approval by Accounting | `sales_orders_pending_accounting_approval_report` | Is "Pending Payment Review" (2638) really the "Accounting" stage? | Kept — it's the only accounting-flavored status in the confirmed workflow, no better candidate exists. |
+| Report for orders past 14 days old | `sales_orders_aging_report` | `PO_Date` or last status change? | Kept `PO_Date` — simpler and already live; revisit with `Sales_v_PO_Change` (already extracted) if the aging numbers look wrong once real orders age past 14 days. |
+| Orders over $10k | `sales_orders_over_10k_report` | What's the $10k basis? | Kept the price-join total (base-tier price × quantity, excludes tax/freight) — the only basis with real data behind it; `Master_Price` stays a fallback if it turns out to be more consistently populated than expected. |
+| Orders over 10k bottles | `sales_orders_over_10k_bottles_report` | Which `Quantity_Unit` value(s) mean "bottles"? | Kept summing all units — no live unit values exist yet to disambiguate. Revisit once real orders populate `Quantity_Unit` and it's clear whether non-bottle units are actually mixed into these orders in practice. |
+| Open RMA's | `sales_returns_open_report` | Does "open" match the real NetSuite search? | Kept — clean status-exclusion, no live-data conflict to resolve. |
+| Customer List by Sales Rep / Revenue per Sales Rep | `sales_customers_by_rep_report` / `sales_revenue_by_rep_report` | Is per-order rep assignment an acceptable proxy for "assigned rep"? | Kept the per-order proxy (`Sales_v_Order_Salesperson`) — Plex has no standing customer→rep field to use instead. |
+| Rolling / Monthly TAT Report | `quality_turnaround_time_report` | `Problem_Date` or `Entered_Date` as the clock start? | Kept `Problem_Date` → `Closed_Date`. |
+| Inventory Risk Analysis (Custom Formula / Item Stock Type) | `inventory_risk_analysis_report` | What aging threshold defines "risk"? | **Decided: 90+ days since last container activity (or no activity at all) = `is_at_risk`.** A general-purpose slow-moving-inventory convention, not derived from Vox policy — `days_since_activity` stays exposed so the cutoff can change with zero recomputation if 90 is wrong. SQL updated (`inventory_risk_analysis_view.sql`). |
+
+**Still genuinely blocked, not a criteria question:** Vox | RUSH Open Sos
+(aka "One for Rush orders") — `Sales_v_Priority` (the lookup
+`Sales_v_Release.Priority_Key` points to) returned **0 rows live**, so
+there's no data to pick a criteria *from*. This isn't an ambiguous rule
+like the ones above, it's an empty table — needs either the actual
+NetSuite report definition or confirmation the "Rush" concept exists on
+this tenant at all before anything can be built.
 
 ## Part 2 — No Plex match found
 

@@ -14,6 +14,68 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-08-21
+
+### Added
+- **`part_product_type` column** on `mfg_job_schedule_report`,
+  `part_on_hand_inventory_report`, and `inventory_risk_analysis_report` —
+  joins `Part_v_Part.Product_Type_Key` to `Part_v_Part_Product_Type`
+  (already extracted, never previously used by any report). This is a
+  real, already-populated (64/80 live parts) classification with 49
+  configured values — Vitamin, Mineral, Botanical Extract, Stock vs Custom
+  Formula Blend/Capsules, Blank/Custom/Labeled Bottle, Product/Fancy/
+  Outsourced Label, etc. — far more useful than `Part_v_Part.Part_Type`
+  (inline text, generically "Raw Materials" for nearly everything).
+  Directly resolves the Stock-vs-Custom question that `mfg_job_schedule_report`
+  had only speculative proxies for — confirmed live: two "White Bottle"
+  parts classify as "Blank Stock Bottle," the "Black Bottle" variant of the
+  same product classifies as "Custom Blank Bottle."
+- `sales_orders_pending_approval_by_rep_report` — "Orders Pending Approval
+  by Sales Rep," built as a thin alias view over
+  `sales_orders_pending_approval_report` (decided to be the same
+  underlying data under NetSuite's alternate label, not a genuinely
+  distinct search — see `docs/NETSUITE_PARITY_OPEN_ITEMS.md`).
+- `is_at_risk` boolean on `inventory_risk_analysis_report` — 90+ days
+  since last container activity (or no activity at all). First real aging
+  threshold on this report; `days_since_activity` stays exposed so the
+  cutoff can change with zero recomputation if 90 is wrong for this
+  business.
+
+### Changed
+- **Resolved the entire "needs data-scientist input" backlog** in
+  `docs/NETSUITE_PARITY_OPEN_ITEMS.md` Part 1 (11 reports) — Emilio's call
+  to pick best-criteria answers now rather than wait, adjustable later if
+  real data (starting 2026-08-24) shows a report is wrong. Only one real
+  code change beyond the two above: `sales_quotes_open_report` now treats
+  "Approved" as closed, not open (a quote past approval is moving toward
+  becoming an order, not still awaiting a decision) — every other item
+  kept its existing best-guess default, now documented as a decision
+  instead of an open question. `Vox | RUSH Open Sos` stays genuinely
+  blocked — `Sales_v_Priority` returns 0 rows live, so there's no data to
+  decide from, a different problem than an ambiguous rule.
+- Test emails **decided to stay as-is** — all 3 recipients
+  (`emilio.dominguez@`/`jennilyn.tockstein@`/`marketing@parasolgroupinc.com`)
+  continue getting test-environment emails; the "worth deciding" item in
+  `docs/EMAIL_SCHEDULE.md` is closed.
+- SendGrid domain authentication confirmed working — the "couldn't verify"
+  Gmail warning is no longer a live concern.
+
+### Fixed
+- 4 more stale "runs at 2/3 AM" schedule comments in `work_orders.yaml`/
+  `part_on_hand_inventory.yaml`/`quality_nonconformance.yaml` (prod + test)
+  that the 2026-08-19 doc sweep didn't catch, since they're code comments
+  inside yaml files, not doc files.
+
+### Flagged, not resolved
+- NetSuite's "Sample Order" custom body field — confirmed manual/
+  NetSuite-only (Field Help: "custom field created for your account," no
+  source formula; `Sales_v_PO_Type` has no "Sample" type configured; real
+  order pricing is inconsistent, ruling out a price-based proxy). Logged
+  in `reports-list/sales.md` with options if this becomes a priority
+  (Google Sheet bridge, a real Plex "Sample" order type going forward, or
+  a NetSuite-native SuiteAnalytics Connect data source if this pattern
+  recurs across other reports).
+
 ## 2026-08-19
 
 ### Added

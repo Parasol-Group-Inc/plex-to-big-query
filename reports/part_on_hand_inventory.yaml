@@ -32,6 +32,12 @@ extractions:
 
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
+#
+# raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story — also
+# owned/extracted by sales_orders, referenced by part_on_hand_inventory_view.sql
+# and inventory_risk_analysis_view.sql for the real Product_Type
+# classification (Vitamin/Mineral/Stock vs Custom Formula/etc.) that
+# Part_Type alone doesn't provide.
 
 # bq_view is a LIST — inventory_risk_analysis_report added 2026-08-14, best-
 # criteria NetSuite parity for both "Inventory Risk Analysis - Custom

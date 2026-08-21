@@ -10,11 +10,15 @@
 -- report — but confirmed live, it is 0 on every one of the 8 statuses above.
 -- This view instead uses a status-EXCLUSION proxy (same pattern as
 -- sales_orders_open_report): anything not yet Won, Lost, Cancelled, or
--- No Quote — i.e. New/Estimating/Quoted/Approved are treated as "open" (a
--- quote still in progress). Flag for data-scientist review: confirm this
--- reading before trusting row counts — "Approved" in particular could
--- arguably belong on either side of "open" depending on what happens next
--- in the Vox quoting workflow.
+-- No Quote is treated as "open."
+--
+-- DECIDED 2026-08-21 (best-criteria, not NetSuite-confirmed — adjust if
+-- reports come out wrong): Approved also excluded, i.e. only
+-- New/Estimating/Quoted count as "open." Reasoning: Approved marks the
+-- point where the customer decision is made and the quote is moving
+-- toward becoming an order — it's no longer awaiting action the way
+-- New/Estimating/Quoted are. Revisit if Vox's actual workflow treats
+-- Approved quotes as still needing follow-up.
 --
 -- Sales_v_Quote had 0 rows on the test tenant at confirmation time — this
 -- filter is schema-confirmed only, not verified against real quote records.
@@ -51,5 +55,6 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Quote_Status` sts
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
   ON q.Customer_No = cust.Customer_No
 
--- Status-exclusion proxy for "open" — see header note.
-WHERE q.Quote_Status_Key NOT IN (3827, 3828, 3830, 3831)
+-- Status-exclusion proxy for "open" — see header note. 3829 = Approved,
+-- excluded per the 2026-08-21 decision above.
+WHERE q.Quote_Status_Key NOT IN (3827, 3828, 3829, 3830, 3831)

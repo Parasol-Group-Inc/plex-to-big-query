@@ -25,6 +25,14 @@
 -- matches Container_Status_Lookup.Container_Status by text, not a numeric
 -- key. Casting it to INT64 would compile but silently match zero rows
 -- once real data appears.
+--
+-- part_product_type (added 2026-08-19): Part_v_Part.Product_Type_Key ->
+-- Part_v_Part_Product_Type.Product_Type -- a real, already-populated
+-- (64/80 parts live) classification (Vitamin, Mineral, Botanical Extract,
+-- Stock/Custom Formula Blend, Blank/Custom/Labeled Bottle, Product Label,
+-- etc.), unlike Part_v_Part.Part_Type which is inline text and generically
+-- "Raw Materials" for nearly every part. Shared table, already extracted
+-- by the sales_orders pipeline -- not re-extracted here.
 
 WITH
 
@@ -45,6 +53,7 @@ SELECT
 
   p.Part_No                   AS part_no,
   p.Name                      AS part_name,
+  pt.Product_Type              AS part_product_type,
   oh.on_hand_qty               AS on_hand_qty,
   oh.container_count           AS container_count
 
@@ -52,3 +61,6 @@ FROM on_hand oh
 
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON oh.part_key = p.Part_Key
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` pt
+  ON SAFE_CAST(p.Product_Type_Key AS FLOAT64) = SAFE_CAST(pt.Product_Type_Key AS FLOAT64)

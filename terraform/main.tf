@@ -2547,6 +2547,15 @@ resource "google_storage_bucket_object" "sales_orders_pending_approval_view_sql"
   content_type = "text/plain"
 }
 
+# Added 2026-08-21 — "Orders Pending Approval by Sales Rep", a thin alias
+# over sales_orders_pending_approval_view.sql (see that SQL file's header).
+resource "google_storage_bucket_object" "sales_orders_pending_approval_by_rep_view_sql" {
+  name         = "sql/sales_orders_pending_approval_by_rep_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_pending_approval_by_rep_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "sales_orders_pending_accounting_approval_view_sql" {
   name         = "sql/sales_orders_pending_accounting_approval_view.sql"
   bucket       = google_storage_bucket.report_configs.name

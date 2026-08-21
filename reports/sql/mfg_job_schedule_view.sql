@@ -60,6 +60,16 @@
 --     distribution row is plausibly fulfilling a specific customer order;
 --     exposed as a row count + first Release_Key, not collapsed into a
 --     boolean, since the concept is unconfirmed against real data.
+--   Part_v_Part_Product_Type — Part_v_Part.Product_Type_Key -> a real,
+--     already-populated (64/80 parts live, 2026-08-19) classification with
+--     49 configured values (Vitamin, Mineral, Botanical Extract, Stock
+--     Formula Blend, Custom Formula Blend, Stock Formula Capsules, Custom
+--     Formula Capsules, Blank/Custom/Labeled Bottle variants, Product/
+--     Fancy/Outsourced Label, etc.) — unlike Part_v_Part.Part_Type (inline
+--     text, generically "Raw Materials" for nearly everything), this
+--     DIRECTLY answers the Stock-vs-Custom question job_type/Part_v_Job_Type
+--     above were only speculative proxies for. Shared table, already
+--     extracted by the sales_orders pipeline — not re-extracted here.
 --
 -- GOAL-CHECK COLUMNS (added 2026-08-11, source: the spreadsheet's own
 -- "Success" tab config — Yield >=95%/92% stock/custom, Total Days <=84,
@@ -131,6 +141,7 @@ base AS (
     SAFE_CAST(jo.Op_No AS INT64)                    AS operation_no,
     p.Part_No                                       AS part_no,
     p.Name                                          AS part_name,
+    pt.Product_Type                                 AS part_product_type,
     SAFE_CAST(jo.Quantity AS FLOAT64)               AS qty,
     SAFE_CAST(j.Quantity AS FLOAT64)                AS planned_qty,
 
@@ -207,6 +218,13 @@ base AS (
   -- raw_Part_v_Part is shared with the sales_orders pipeline — not re-extracted here.
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
     ON SAFE_CAST(jo.Part_Key AS INT64) = p.Part_Key
+
+  -- raw_Part_v_Part_Product_Type is also shared with the sales_orders
+  -- pipeline. SAFE_CAST both sides to FLOAT64: Product_Type_Key is FLOAT64
+  -- on raw_Part_v_Part; casting the lookup side too is a no-op if it's
+  -- already the same type and guards against it differing.
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` pt
+    ON SAFE_CAST(p.Product_Type_Key AS FLOAT64) = SAFE_CAST(pt.Product_Type_Key AS FLOAT64)
 
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Status` js
     ON SAFE_CAST(j.Job_Status_Key AS INT64) = js.Job_Status_Key

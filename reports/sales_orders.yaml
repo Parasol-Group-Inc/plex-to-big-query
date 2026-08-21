@@ -122,6 +122,12 @@ bq_view:
   - name: sales_orders_pending_approval_report
     display_name: "Pending Approval Orders"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_pending_approval_view.sql
+  # Added 2026-08-21 — thin alias view, must stay listed after
+  # sales_orders_pending_approval_report above (SELECTs from it directly).
+  # See the SQL file header for why this is an alias, not a new pipeline.
+  - name: sales_orders_pending_approval_by_rep_report
+    display_name: "Orders Pending Approval by Sales Rep"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_pending_approval_by_rep_view.sql
   - name: sales_orders_pending_accounting_approval_report
     display_name: "Orders Pending Approval by Accounting"
     sql_file: gs://voxdatalake-report-configs/sql/sales_orders_pending_accounting_approval_view.sql

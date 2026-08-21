@@ -47,7 +47,7 @@ extractions:
     filter: ""
     date_col: ""
 
-# raw_Part_v_Part is owned by the sales_orders pipeline (runs at 3 AM for test).
+# raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
 # raw_Part_v_Job and raw_Part_v_Workcenter are owned by the work_orders
 # pipeline — reused by quality_deviation_view.sql, same shared-table rule.
 

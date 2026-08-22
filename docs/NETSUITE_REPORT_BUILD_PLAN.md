@@ -132,9 +132,19 @@ a PO.
 Scaffold: [`reports/purchasing_pending_requisitions.yaml`](../reports/purchasing_pending_requisitions.yaml),
 [`reports/test/purchasing_pending_requisitions.yaml`](../reports/test/purchasing_pending_requisitions.yaml),
 [`reports/sql/purchasing_pending_requisitions_view.sql`](../reports/sql/purchasing_pending_requisitions_view.sql).
-Not deployed — no Terraform resources, no GCS upload. Needs a real-data
-re-check before deploy, then steps 10-14 of the checklist below (Terraform,
-deploy, verify, update tracking docs).
+
+**Deployed 2026-08-22** — decided not to keep waiting on the real-data
+re-check (same call as the rest of the 2026-08-21 NetSuite-parity batch:
+ship on the confirmed business rule, flag the unverified part loudly
+rather than block on data that may not exist for a while). Added a
+dedicated Cloud Run job + scheduler pair (`plex-etl-purchasing-pending-requisitions`
+/ `-test`, 9:40 PM / 9:50 PM Mountain) via `terraform apply` — 9 resources
+added (2 jobs, 4 schedulers, 3 GCS config objects), 0 changed/destroyed.
+`plex-etl-purchasing-pending-requisitions-test` ran clean. **Still open:**
+the `Item_Key` vs `Part_Key` join and the row-count expectation are
+unverified — the test tenant has zero real Requisition rows. Re-check both
+once prod data exists or a test tenant with real requisitions is
+available.
 
 ---
 

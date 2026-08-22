@@ -3307,3 +3307,381 @@ resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_test_retry" {
     oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Purchasing Pending Requisitions — "Vox | Purchasing | Pending Order
+# Requisitions" (NetSuite parity, customsearch2935). Scaffolded 2026-08-13,
+# deployed 2026-08-22. Confirmed schema-only against vox.test.odbc.plex.com —
+# the test tenant has zero real Requisition rows, so the Item_Key vs Part_Key
+# join choice is unverified against real data (see reports/sql/
+# purchasing_pending_requisitions_view.sql header). Reuses raw_Common_v_Supplier
+# (purchasing_open_orders) and raw_Part_v_Part (sales_orders) — scheduled after
+# both so those tables are already populated.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Purchasing Pending Requisitions report — GCS config files ───────────────
+
+resource "google_storage_bucket_object" "purchasing_pending_requisitions_config_prod" {
+  name         = "reports/purchasing_pending_requisitions.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/purchasing_pending_requisitions.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "purchasing_pending_requisitions_config_test" {
+  name         = "test/purchasing_pending_requisitions.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/purchasing_pending_requisitions.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "purchasing_pending_requisitions_view_sql" {
+  name         = "sql/purchasing_pending_requisitions_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/purchasing_pending_requisitions_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Purchasing Pending Requisitions — prod (PlexProd, 9:40 PM Mountain) ──────
+
+resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
+  name     = "plex-etl-purchasing-pending-requisitions"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/purchasing_pending_requisitions.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions" {
+  name        = "plex-purchasing-pending-requisitions-sync"
+  description = "Triggers Plex to BigQuery purchasing pending requisitions ETL job"
+  schedule    = "40 21 * * *" # 9:40 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_retry" {
+  name        = "plex-purchasing-pending-requisitions-sync-retry"
+  description = "Retries the purchasing pending requisitions ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Purchasing Pending Requisitions — test (PlexTest, 9:50 PM Mountain) ──────
+
+resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
+  name     = "plex-etl-purchasing-pending-requisitions-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/purchasing_pending_requisitions.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
+  # (or a manual `gcloud run jobs update --image=...`) owns the deployed
+  # image tag for every plex-etl-* job. Terraform still declares an initial
+  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # on this field afterward — the standard split for "IaC owns resource
+  # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
+  # docs). This is what stops a routine `terraform apply` from silently
+  # reverting a job to a stale/different image.
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_test" {
+  name        = "plex-purchasing-pending-requisitions-sync-test"
+  description = "Triggers Plex to BigQuery purchasing pending requisitions ETL job (test)"
+  schedule    = "50 21 * * *" # 9:50 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_test_retry" {
+  name        = "plex-purchasing-pending-requisitions-sync-test-retry"
+  description = "Retries the purchasing pending requisitions ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

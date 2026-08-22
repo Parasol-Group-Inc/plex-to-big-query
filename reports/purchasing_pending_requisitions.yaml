@@ -3,11 +3,14 @@ category: Supply Chain
 description: "Vox | Purchasing | Pending Order Requisitions (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
-# 2026-08-13, but the test tenant currently has ZERO rows in Purchasing_v_
-# Requisition / Requisition_Type / Req_PO_Release. See reports/sql/
-# purchasing_pending_requisitions_view.sql for the full confirmation log and
-# the "Pending Order" business-rule decision.
+# Deployed 2026-08-22. Schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-13, but the test tenant had ZERO rows in Purchasing_v_Requisition /
+# Requisition_Type / Req_PO_Release at that time, so the Item_Key vs Part_Key
+# join choice in the SQL below is UNVERIFIED against real data. See
+# reports/sql/purchasing_pending_requisitions_view.sql for the full
+# confirmation log and the "Pending Order" business-rule decision. Re-check
+# row counts and that join once real requisition data exists (prod, or a test
+# tenant that has some).
 #
 # NetSuite source: Saved Transaction Search "Purchasing | Pending Order
 # Requisitions" (customsearch2935, owner Adrian Palmar) — criteria: Status =

@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** ✅ Built 2026-08-21 (Actual half only), decided Bottling mapping — `packaging_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), 0 rows, decided Bottling mapping — `packaging_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
 ## What it is
@@ -59,9 +59,16 @@ that roster (`Bottling Line 1`-`6`, `Bulk Room`, `Powder Line`,
 as `packaging_daily_report`, aggregating `Part_v_Cell_Production.Quantity`
 by production date + workcenter (`reports/sql/packaging_daily_report_view.sql`).
 
+## Test deploy result 2026-08-21
+
+View creates cleanly, but returns **0 rows** — `raw_Part_v_Cell_Production`
+is empty tenant-wide (see `encap_daily_report.md` for the full finding,
+same result applies here).
+
 ## What's needed next
 
-Real (non-template) data — a filled-in week or month of this sheet — to
+A direct answer from Vox/data-scientist on whether Cell Production
+tracking is used at all. Then a filled-in week or month of this sheet to
 confirm whether "Actual" numbers correlate with `Cell_Production`
 quantities, and whether the sheet's "Line" numbering lines up 1:1 with
 `Bottling Line N` or needs remapping.

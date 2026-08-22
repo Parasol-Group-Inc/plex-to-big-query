@@ -79,6 +79,12 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Added 2026-08-21 for the 4 Daily Reports — see reports/work_orders.yaml
+  - plex_view: Part_v_Cell_Production
+    bq_table: raw_Part_v_Cell_Production
+    filter: ""
+    date_col: Production_Date
+
 # NOTE: Part_v_Part is intentionally NOT extracted here.
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
 # raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story.
@@ -97,3 +103,15 @@ bq_view:
   - name: printing_open_work_orders_report
     display_name: "Printing Open Work Orders"
     sql_file: gs://voxdatalake-report-configs/sql/printing_open_work_orders_view.sql
+  - name: encap_daily_report
+    display_name: "Encap Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/encap_daily_report_view.sql
+  - name: blending_daily_report
+    display_name: "Blending Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/blending_daily_report_view.sql
+  - name: labeling_daily_report
+    display_name: "Labeling Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/labeling_daily_report_view.sql
+  - name: packaging_daily_report
+    display_name: "Packaging Daily Report"
+    sql_file: gs://voxdatalake-report-configs/sql/packaging_daily_report_view.sql

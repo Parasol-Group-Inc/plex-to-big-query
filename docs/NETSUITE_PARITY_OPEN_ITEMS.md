@@ -58,6 +58,16 @@ tenant — **decided: use the same "not Closed/Cancelled" open-status proxy**
 already used for Open Quotes/RMAs rather than build on the one narrow match.
 Built as `sales_order_allocation_report`.
 
+**Test deploy 2026-08-21 caught a real bug and a real data gap.** The view
+initially failed to create — `Sales_v_Release_Job`'s first-ever extraction
+returned 0 rows, so BigQuery typed all 3 columns STRING, which broke the
+join against the already-INT64 `Sales_v_Release`/`Part_v_Job`. Fixed with
+`SAFE_CAST` on both sides, redeployed, now creates cleanly. Still 0 rows,
+though — `raw_Sales_v_Release_Job` is genuinely empty on this tenant even
+with real data on both sides of it (`Sales_v_Release`: 8 rows,
+`Part_v_Job`: 16 rows). Needs a data-scientist/Vox answer: does this
+tenant populate job-to-release links in Plex at all?
+
 ## Part 2 — No Plex match found
 
 Nothing was built for these. Either pull the actual NetSuite report

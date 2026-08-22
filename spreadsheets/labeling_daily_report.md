@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** ✅ Built 2026-08-21 (Actual half only) — `labeling_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), 0 rows — `labeling_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
 ## What it is
@@ -55,7 +55,14 @@ analog, and "# Of Orders Complete" would need a genuinely different query
 (completed-job count) than the existing open-job count in
 `labeling_open_work_orders_report`.
 
+## Test deploy result 2026-08-21
+
+View creates cleanly, but returns **0 rows** — `raw_Part_v_Cell_Production`
+is empty tenant-wide (see `encap_daily_report.md` for the full finding,
+same result applies here).
+
 ## What's needed next
 
-Real (non-template) data to confirm `Part_v_Cell_Production` correlates
+A direct answer from Vox/data-scientist on whether Cell Production
+tracking is used at all. Then confirm `Part_v_Cell_Production` correlates
 with this sheet's actual Line totals.

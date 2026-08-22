@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Encap Scheduling / Planning
 - **Departments:** Production, Planning
-- **Status:** ✅ Built 2026-08-21 (Actual half only) — `encap_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), 0 rows — `encap_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **worst fit of the 4 Daily Reports, see verdict below**
 
 ## What it is
@@ -55,8 +55,17 @@ production date + workcenter, filtered to `Workcenter_Group =
 "Actual" quantity is built — Planned/Start-Up-Stop/attendance columns have
 no Plex analog and are not guessed at.
 
+## Test deploy result 2026-08-21
+
+View creates cleanly, but returns **0 rows**: `raw_Part_v_Cell_Production`
+came back empty tenant-wide (0 rows) despite 16 real live jobs and 38 real
+live workcenters existing on this test tenant. Stronger signal than
+"unconfirmed" — raises the real question of whether this tenant uses
+Plex's Cell Production tracking mode at all.
+
 ## What's needed next
 
-Real (non-template) data to confirm `Part_v_Cell_Production` is actually
-populated for this tenant's encapsulation jobs, and whether Encap stations
-3 and 6 (skipped in the sheet's template) show real activity or true zeros.
+A direct answer from Vox/data-scientist on whether Cell Production
+tracking is used here, and if not, what feeds the Daily Shifts UI report's
+numbers instead. Then confirm Encap stations 3 and 6 (skipped in the
+sheet's template) once real data exists.

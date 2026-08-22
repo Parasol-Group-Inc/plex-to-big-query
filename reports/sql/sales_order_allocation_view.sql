@@ -40,6 +40,15 @@
 -- work_orders_view.sql already uses for raw_Part_v_Part) — do not add
 -- either as an extraction in sales_orders.yaml.
 --
+-- FIXED 2026-08-21 (caught in test deploy, not guessed): `Sales_v_Release_Job`
+-- returned 0 rows on its first-ever extraction, so BigQuery autodetected all
+-- 3 columns as STRING (same "empty table types everything STRING" gotcha
+-- documented in catalog/plex_catalog_index.md for Job_Op.Workcenter_Key) —
+-- while `Sales_v_Release.Release_Key`/`Part_v_Job.Job_Key` are already
+-- INT64 from populated data. Both join conditions below need SAFE_CAST on
+-- both sides or the view fails to create at all with "No matching
+-- signature for operator =".
+--
 -- Not re-extracted beyond the new Sales_v_Release_Job link table — bq_view
 -- entry in reports/sales_orders.yaml.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
@@ -73,10 +82,10 @@ JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release` rel
   ON pol.PO_Line_Key = rel.PO_Line_Key
 
 JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release_Job` rj
-  ON rel.Release_Key = rj.Release_Key
+  ON SAFE_CAST(rel.Release_Key AS INT64) = SAFE_CAST(rj.Release_Key AS INT64)
 
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Job` j
-  ON rj.Job_Key = j.Job_Key
+  ON SAFE_CAST(rj.Job_Key AS INT64) = SAFE_CAST(j.Job_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Status` sts
   ON po.PO_Status_Key = sts.PO_Status_Key

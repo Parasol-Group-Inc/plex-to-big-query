@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report / Scheduling
 - **Departments:** Production, Planning
-- **Status:** ✅ Built 2026-08-21 (Actual half only) — `blending_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), 0 rows — `blending_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weakest-but-most-plausible fit of the 4 Daily Reports, see verdict below**
 
 ## What it is
@@ -56,9 +56,16 @@ quantities aren't split — both workcenter groups' `Cell_Production` rows
 land in one `actual_qty` column; only the "Actual" quantity is built at
 all, not Planned/attendance.
 
+## Test deploy result 2026-08-21
+
+View creates cleanly, but returns **0 rows** — `raw_Part_v_Cell_Production`
+is empty tenant-wide (see `encap_daily_report.md` for the full finding,
+same result applies here).
+
 ## What's needed next
 
-Real (non-template) data to confirm `Part_v_Cell_Production` correlates
+A direct answer from Vox/data-scientist on whether Cell Production
+tracking is used at all. Then confirm `Part_v_Cell_Production` correlates
 with this sheet's actual weigh-out/blending totals, and whether Weigh-Out
 and Blending goals need to be split into separate columns once real data
 shows they're tracked differently.

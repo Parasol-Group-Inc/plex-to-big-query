@@ -42,6 +42,12 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Added 2026-08-21 for sales_order_allocation_report — see reports/sales_orders.yaml
+  - plex_view: Sales_v_Release_Job
+    bq_table: raw_Sales_v_Release_Job
+    filter: ""
+    date_col: ""
+
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""
@@ -106,3 +112,9 @@ bq_view:
   - name: sales_revenue_by_rep_report
     display_name: "Revenue per Sales Rep"
     sql_file: gs://voxdatalake-report-configs/sql/sales_revenue_by_rep_view.sql
+  - name: sales_orders_rush_open_report
+    display_name: "RUSH Open Sales Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_orders_rush_open_view.sql
+  - name: sales_order_allocation_report
+    display_name: "Vox | Allocation Report"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_order_allocation_view.sql

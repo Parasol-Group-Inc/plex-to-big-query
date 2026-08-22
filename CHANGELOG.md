@@ -102,6 +102,34 @@ don't need an entry.
   `part_on_hand_inventory.yaml`/`quality_nonconformance.yaml` (prod + test)
   that the 2026-08-19 doc sweep didn't catch, since they're code comments
   inside yaml files, not doc files.
+- `sales_order_allocation_report` failed to create at all on first test
+  deploy — `Sales_v_Release_Job`'s first-ever extraction returned 0 rows,
+  so BigQuery typed all 3 columns STRING, breaking the join against the
+  already-INT64 `Sales_v_Release`/`Part_v_Job`. Fixed with `SAFE_CAST` on
+  both join conditions.
+- `reports/test/sales_orders.yaml` and `reports/test/work_orders.yaml` were
+  missing the `Sales_v_Release_Job` extraction and all 6 new bq_views added
+  earlier today (Rush, Allocation, 4 Daily Reports) — the prod configs got
+  updated but the test mirrors didn't, which would have made `PlexTest`
+  silently diverge from `PlexProd`. Caught before deploying test, not after.
+
+### Verified (test deploy, 2026-08-21)
+- All 6 new `bq_view`s (`sales_orders_rush_open_report`,
+  `sales_order_allocation_report`, `encap_daily_report`,
+  `blending_daily_report`, `labeling_daily_report`,
+  `packaging_daily_report`) deploy cleanly to `PlexTest` — no errors after
+  the `SAFE_CAST` fix above.
+- All 6 currently return **0 rows** against real test-tenant data — not a
+  code failure, a real data-signal finding: `raw_Sales_v_PO` has 9 real
+  orders, none match `RUSH` in `Note` (inconclusive on a sample this
+  small); `raw_Sales_v_Release_Job` is empty despite `Sales_v_Release` (8
+  rows) and `Part_v_Job` (16 rows) both having real data; and
+  `raw_Part_v_Cell_Production` is empty despite 16 real jobs and 38 real
+  workcenters existing — the last one raises a real open question (not
+  answered here) about whether this tenant uses Plex's Cell Production
+  tracking mode at all. See `reports-list/sales.md`,
+  `reports-list/production.md`, and `docs/NETSUITE_PARITY_OPEN_ITEMS.md`
+  for the full per-report detail.
 
 ### Flagged, not resolved
 - NetSuite's "Sample Order" custom body field — confirmed manual/

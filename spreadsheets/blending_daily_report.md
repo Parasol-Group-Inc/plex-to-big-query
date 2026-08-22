@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report / Scheduling
 - **Departments:** Production, Planning
-- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), 0 rows — `blending_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), promoted to prod GCS config 2026-08-22, 0 rows — `blending_daily_report` (`reports/work_orders.yaml`)
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weakest-but-most-plausible fit of the 4 Daily Reports, see verdict below**
 
 ## What it is

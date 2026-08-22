@@ -14,6 +14,12 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-08-22
+
+### Changed
+- **Promoted `sales_orders.yaml` and `work_orders.yaml` from test-only to production GCS config.** `terraform plan` (after moving the repo to a new local path) showed `reports/sales_orders.yaml` and `reports/work_orders.yaml` in `gs://voxdatalake-report-configs` were still on pre-2026-08-21 content — every report built that day (4 rebuilt Daily Reports, RUSH Open SOs, Allocation Report, Orders Pending Approval by Sales Rep alias, and the rest of the 2026-08-14/21 NetSuite-parity batch) had only ever been pushed to the `test/` path, not `reports/`. `terraform apply` synced both prod objects in place (plus a content-type metadata fix on the two test objects from an earlier manual `gcloud storage cp`). Verified with a manual run of both `plex-etl-test` and `plex-etl-work-orders-test` — both completed successfully against the new config. These reports go out for real on the next scheduled prod run (7:00 PM / 7:20 PM Mountain) instead of test-only.
+- Confirmed the repo move to `c:\F\Parasol\plex-to-big-query` didn't break anything: `docker compose build` succeeds, a live `docker compose up` pulled 73 real rows from `Part_v_Part` against `vox.test.odbc.plex.com` and wrote them locally, and no file in the repo references the old path.
+
 ## 2026-08-21
 
 ### Added

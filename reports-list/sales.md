@@ -11,6 +11,12 @@ went through each name individually looking for a real Plex equivalent
 to be buildable. See `docs/NETSUITE_REPORT_BUILD_PLAN.md` for the full
 confirmation log.
 
+> **2026-08-22:** `reports/sales_orders.yaml` — the report config backing
+> every "Built"/"Deployed" row below — was promoted from test-only to the
+> production GCS path (`terraform apply`; prod config had been stale since
+> 2026-08-21). All of these reports go out for real on the next scheduled
+> prod run, not just PlexTest.
+
 ## Built or scaffolded
 
 | Report | Status | Notes |

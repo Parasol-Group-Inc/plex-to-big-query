@@ -3,6 +3,12 @@
 Source file: `Reports List - Production.csv`. Columns: Report Name,
 Source, Function, Users, Link, Priority, Plex Report Equiv.
 
+> **2026-08-22:** `reports/work_orders.yaml` — the report config backing
+> every "Built"/"Deployed" row below — was promoted from test-only to the
+> production GCS path (`terraform apply`; prod config had been stale since
+> 2026-08-21). All of these reports go out for real on the next scheduled
+> prod run, not just PlexTest.
+
 This tab has the heaviest overlap with [`spreadsheets/`](../spreadsheets/) —
 most rows here already have (or now have) their own detail doc there.
 

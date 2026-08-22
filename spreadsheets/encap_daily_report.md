@@ -55,17 +55,28 @@ production date + workcenter, filtered to `Workcenter_Group =
 "Actual" quantity is built — Planned/Start-Up-Stop/attendance columns have
 no Plex analog and are not guessed at.
 
-## Test deploy result 2026-08-21
+## Corrected same day: rebuilt on `Part_v_Production`
 
-View creates cleanly, but returns **0 rows**: `raw_Part_v_Cell_Production`
-came back empty tenant-wide (0 rows) despite 16 real live jobs and 38 real
-live workcenters existing on this test tenant. Stronger signal than
-"unconfirmed" — raises the real question of whether this tenant uses
-Plex's Cell Production tracking mode at all.
+Initial deploy on `Part_v_Cell_Production` returned 0 rows. Live Plex
+screenshots (Job Manager, Job Detail, Job Routing, Job Production report)
+showed the real cause: all 16 real jobs on this tenant were freshly
+created that same morning with 0 actual hours logged — a benign "nothing
+has run yet," not a schema problem. That investigation also surfaced a
+real correction: Plex's own "Job Production" UI report (columns including
+**Employee** and **Shift**) matches `Part_v_Production` field-for-field,
+not `Part_v_Cell_Production` (which has no Employee/Shift/Rejected columns
+at all). Rebuilt on `Part_v_Production`, which also adds real
+`employee_count`/`employees` and `scrap_qty` (via the `Rejected` flag) —
+resolving 2 of this report's 3 "no Plex analog" gaps.
+
+## Test deploy result 2026-08-21 (post-correction)
+
+View creates cleanly, still **0 rows** — for the same benign reason:
+`raw_Part_v_Production` is also empty, because none of this tenant's real
+jobs have run yet.
 
 ## What's needed next
 
-A direct answer from Vox/data-scientist on whether Cell Production
-tracking is used here, and if not, what feeds the Daily Shifts UI report's
-numbers instead. Then confirm Encap stations 3 and 6 (skipped in the
-sheet's template) once real data exists.
+Recheck once this tenant's jobs actually move past `Scheduled` status.
+Then confirm Encap stations 3 and 6 (skipped in the sheet's template) show
+real activity or true zeros.

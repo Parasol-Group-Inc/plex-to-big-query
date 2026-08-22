@@ -131,6 +131,26 @@ don't need an entry.
   `reports-list/production.md`, and `docs/NETSUITE_PARITY_OPEN_ITEMS.md`
   for the full per-report detail.
 
+### Fixed (correction, same day)
+- The "Cell Production tracking mode" open question above turned out to be
+  the wrong question. Live Plex screenshots (Job Manager, Job Detail, Job
+  Routing, Job Production report) showed the real cause of the 0-row
+  result was benign: all 16 real jobs on this tenant were created that
+  same morning with 0 actual hours logged anywhere — nothing had run yet,
+  full stop. But the investigation also caught a real correction: Plex's
+  own "Job Production" UI report (confirmed columns Job No/Part No/Rev/Op
+  No/Tracking No/Last Operation Completed/Workcenter/**Employee**/Record
+  Date/**Shift**/Quantity) matches `Part_v_Production` field-for-field, not
+  `Part_v_Cell_Production` (no Employee/Shift/Rejected columns at all).
+  Rebuilt all 4 Daily Report views on `Part_v_Production` (new extraction,
+  `Part_v_Cell_Production` kept extracted but unused going forward) —
+  redeployed to `PlexTest`, all 4 create cleanly, still 0 rows for the
+  now-understood benign reason. This also resolves 2 of the 3 "no Plex
+  analog" gaps flagged at build time: `employee_count`/`employees`
+  (`Record_By` → `Personnel_v_Employee`, same INFERRED-join pattern already
+  used for `Job_Op.Started_By`/`Completed_By`) and `scrap_qty` (a genuine
+  `Rejected` flag) are now exposed on all 4 reports.
+
 ### Flagged, not resolved
 - NetSuite's "Sample Order" custom body field — confirmed manual/
   NetSuite-only (Field Help: "custom field created for your account," no

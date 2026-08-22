@@ -127,14 +127,26 @@ extractions:
     date_col: ""
 
   # ── Added 2026-08-21 for the 4 Daily Reports (see bq_view list below) ──
-
-  # Per-date production count log, one row per job operation per date it
-  # produced output. The "Actual" number the 4 Daily Reports need — see
-  # reports-list/production.md's Production Yield verdict update.
+  # Corrected same day: initially built on Part_v_Cell_Production, but a
+  # live screenshot of Plex's own "Job Production" report (columns Job No/
+  # Part No/Op No/Workcenter/Employee/Record Date/Shift/Quantity) matches
+  # Part_v_Production field-for-field (Record_By, Report_Shift, Record_Date,
+  # Workcenter_Key, Job_Op_Key, Quantity, Rejected) — Cell_Production has no
+  # Employee/Shift/Rejected columns at all. Switched the 4 Daily Reports to
+  # this table; kept below in case a genuinely cell-manufacturing-specific
+  # report needs it later.
   - plex_view: Part_v_Cell_Production
     bq_table: raw_Part_v_Cell_Production
     filter: ""
     date_col: Production_Date
+
+  # The real source for the 4 Daily Reports (see comment above) — also
+  # gives a genuine `Rejected` scrap flag and `Record_By`/`Report_Shift`,
+  # resolving 2 of the 3 gaps flagged as "no Plex analog" this morning.
+  - plex_view: Part_v_Production
+    bq_table: raw_Part_v_Production
+    filter: ""
+    date_col: Record_Date
 
 # NOTE: Part_v_Part is intentionally NOT extracted here.
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:00 PM Mountain).

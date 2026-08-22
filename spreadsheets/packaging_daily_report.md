@@ -59,16 +59,21 @@ that roster (`Bottling Line 1`-`6`, `Bulk Room`, `Powder Line`,
 as `packaging_daily_report`, aggregating `Part_v_Cell_Production.Quantity`
 by production date + workcenter (`reports/sql/packaging_daily_report_view.sql`).
 
-## Test deploy result 2026-08-21
+## Corrected same day: rebuilt on `Part_v_Production`
 
-View creates cleanly, but returns **0 rows** — `raw_Part_v_Cell_Production`
-is empty tenant-wide (see `encap_daily_report.md` for the full finding,
-same result applies here).
+Same correction as `encap_daily_report.md` — a live "Job Production" UI
+report screenshot showed `Part_v_Production` (with Employee/Shift/Rejected
+columns) is the right table, not `Part_v_Cell_Production`. Rebuilt, now
+also exposes `employee_count`/`employees` and `scrap_qty`.
+
+## Test deploy result 2026-08-21 (post-correction)
+
+View creates cleanly, still **0 rows** — benign: none of this tenant's
+real jobs have run yet (see `encap_daily_report.md` for the full finding).
 
 ## What's needed next
 
-A direct answer from Vox/data-scientist on whether Cell Production
-tracking is used at all. Then a filled-in week or month of this sheet to
-confirm whether "Actual" numbers correlate with `Cell_Production`
-quantities, and whether the sheet's "Line" numbering lines up 1:1 with
-`Bottling Line N` or needs remapping.
+Recheck once this tenant's jobs actually move past `Scheduled`. Then a
+filled-in week or month of this sheet to confirm whether "Actual" numbers
+correlate with `Part_v_Production` quantities, and whether the sheet's
+"Line" numbering lines up 1:1 with `Bottling Line N` or needs remapping.

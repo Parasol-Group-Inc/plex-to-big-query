@@ -3309,6 +3309,65 @@ resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_test_retry" {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Catch-up batch (2026-08-22): 6 bq_view SQL files pushed to GCS manually
+# during the 2026-08-21 NetSuite-parity build (per that day's commit
+# messages) but never given a matching google_storage_bucket_object resource
+# here — the same 404-on-first-load gap the 2026-08-19 catch-up batch above
+# fixed for a different 12 files. All 6 ride on an existing job's periodic
+# run; no new Cloud Run job/scheduler needed.
+resource "google_storage_bucket_object" "encap_daily_report_view_sql" {
+  name         = "sql/encap_daily_report_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/encap_daily_report_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "blending_daily_report_view_sql" {
+  name         = "sql/blending_daily_report_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/blending_daily_report_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "labeling_daily_report_view_sql" {
+  name         = "sql/labeling_daily_report_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/labeling_daily_report_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "packaging_daily_report_view_sql" {
+  name         = "sql/packaging_daily_report_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/packaging_daily_report_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_orders_rush_open_view_sql" {
+  name         = "sql/sales_orders_rush_open_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_orders_rush_open_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_order_allocation_view_sql" {
+  name         = "sql/sales_order_allocation_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_order_allocation_view.sql"
+  content_type = "text/plain"
+}
+
+# bottling_job_schedule_report — new 9th bq_view on the existing
+# plex-etl-work-orders(-test) job (see reports/work_orders.yaml). No new
+# Cloud Run job/scheduler needed. See spreadsheets/bottling_job_schedule.md.
+resource "google_storage_bucket_object" "bottling_job_schedule_view_sql" {
+  name         = "sql/bottling_job_schedule_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/bottling_job_schedule_view.sql"
+  content_type = "text/plain"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Purchasing Pending Requisitions — "Vox | Purchasing | Pending Order
 # Requisitions" (NetSuite parity, customsearch2935). Scaffolded 2026-08-13,
 # deployed 2026-08-22. Confirmed schema-only against vox.test.odbc.plex.com —

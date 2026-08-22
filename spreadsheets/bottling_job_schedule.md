@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Scheduling bottling jobs
 - **Departments:** Production, Planning, Sales
-- **Status:** 🔍 Mapped — column structure analyzed from 5 real tabs, not yet built
+- **Status:** ✅ Built 2026-08-22 — `bottling_job_schedule_report` (9th `bq_view` on `reports/work_orders.yaml`), deployed to prod+test via `terraform apply`, verified with a clean test run
 - **Related:** [MFG Job Schedule](mfg_job_schedule.md) — the bottling-specific sibling of the same production-tracking pattern; also appears as "Quality | Bottling Production Search" in `reports-list/quality.md`
 
 ## What it is
@@ -72,3 +72,40 @@ live — `Bottling Line 1` through `Bottling Line 6` (see
 `reports-list/production.md`) — so once real `Job_Op` activity exists, the
 Run Time/# Completed reconstruction can be scoped to those specific
 workcenters rather than all of Job_Op.
+
+## Built 2026-08-22
+
+Built as `bottling_job_schedule_report`, a 9th `bq_view` on the existing
+`reports/work_orders.yaml`/`reports/test/work_orders.yaml` pipeline — no new
+extractions or Cloud Run job needed, same extractions `mfg_job_schedule_report`
+already uses. Grain: one row per job operation, filtered to
+`Workcenter_Group = 'Bottling'` (same confirmed roster as
+`packaging_daily_report`: Bottling Line 1-6, Bulk Room, Powder Line, Liquid
+Line).
+
+**Built:** `job_no`, `part_no`/`part_name`, `workcenter`, `planned_qty`
+(Bottle/Pill Count), `lot_no`, `started_by_name`/`completed_by_name` (Input
+Name candidates, both exposed — ambiguous which one the sheet means),
+`job_status` + completed/cancelled flags.
+
+**Built the Run Time / # Completed reconstruction lead too** (flagged in
+the doc above as "most promising, worth testing"), exploratory and NOT
+confirmed against real data: `op_qty` (Job_Op.Quantity, candidate "#
+Completed"), `op_start_ts`/`op_completion_ts` (full timestamp — every other
+view in this repo truncates to DATE since none of them needed time-of-day),
+`run_time_minutes` (the difference, candidate "Run Time"). `op_start_date`/
+`op_completion_date` (plain DATE) are also exposed to match the sheet's
+Start Date/Finished date columns directly.
+
+**Not built** (see the gaps table above — unconfirmed leads, not guessed):
+Rep, Bottle/Lid Size and Color, Fill Weight. **Not attempted:** splitting
+into the sheet's 4 sub-tabs (Liquids/Powders/Gummies/Capsules_Softgels) —
+no confirmed Plex-side split (Part_Group/Product_Type) exists per tab, so
+this view returns the whole Bottling roster undivided.
+
+**Test deploy:** `terraform apply` (7 GCS objects added — including
+backfilling terraform tracking for 6 already-live SQL files from the
+2026-08-21 batch that had the same gap — 2 changed, 0 destroyed).
+`plex-etl-work-orders-test` ran clean against the new config. Real-data
+validation of the Run Time/# Completed lead still pending — same "no real
+job has run yet on this tenant" situation as the 4 Daily Reports.

@@ -121,3 +121,6 @@ bq_view:
   - name: packaging_daily_report
     display_name: "Packaging Daily Report"
     sql_file: gs://voxdatalake-report-configs/sql/packaging_daily_report_view.sql
+  - name: bottling_job_schedule_report
+    display_name: "Bottling Job Schedule"
+    sql_file: gs://voxdatalake-report-configs/sql/bottling_job_schedule_view.sql

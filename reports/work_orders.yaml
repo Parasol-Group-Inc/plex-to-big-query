@@ -174,6 +174,10 @@ extractions:
 #                                     Part_v_Cell_Production per the Daily
 #                                     Shifts UI-report lead. See
 #                                     reports-list/production.md.
+#   bottling_job_schedule_report     — added 2026-08-22: Bottling Job
+#                                     Schedule Google Sheet, one row per job
+#                                     operation on a Bottling workcenter. See
+#                                     spreadsheets/bottling_job_schedule.md.
 # The SQL files are loaded from GCS at runtime so they can be edited
 # independently without touching this YAML. {gcp_project} and {dataset} in
 # the SQL are replaced at runtime with the GCP_PROJECT and BQ_DATASET env vars.
@@ -202,3 +206,6 @@ bq_view:
   - name: packaging_daily_report
     display_name: "Packaging Daily Report"
     sql_file: gs://voxdatalake-report-configs/sql/packaging_daily_report_view.sql
+  - name: bottling_job_schedule_report
+    display_name: "Bottling Job Schedule"
+    sql_file: gs://voxdatalake-report-configs/sql/bottling_job_schedule_view.sql

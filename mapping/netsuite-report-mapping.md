@@ -4,6 +4,11 @@ Working doc mapping the NetSuite saved-search/report list against the Plex
 (vox.test.on.plex.com) module → category taxonomy in
 [available-reports.md](available-reports.md) / [enabled-reports.md](enabled-reports.md).
 
+See [netsuite-saved-searches.md](netsuite-saved-searches.md) for the full
+raw NetSuite saved-search export (1,609 searches, all types) this curated
+~80-report list was drawn from — useful when a name here doesn't match
+anything obvious and you want to check what else exists on the account.
+
 **Method:** name and keyword matching only — no NetSuite report definitions
 were inspected, so this is a *conceptual* first pass, not a verified
 functional equivalence. Confirmed by direct search: none of these NetSuite

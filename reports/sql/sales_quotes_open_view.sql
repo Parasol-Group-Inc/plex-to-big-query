@@ -49,12 +49,22 @@ SELECT
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_Quote` q
 
+-- SAFE_CAST both sides on every join below and the WHERE filter:
+-- raw_Sales_v_Quote had 0 rows on the 2026-08-23 first real run, so
+-- BigQuery autodetected it all-STRING, while raw_Sales_v_Quote_Status and
+-- raw_Common_v_Customer both have real data and are properly typed
+-- (INT64). A one-sided comparison broke view creation outright ("No
+-- matching signature for operator = for argument types: STRING, INT64"),
+-- confirmed by the first scheduled run's "table not found" result (the
+-- view never actually got created). SAFE_CAST is a no-op once
+-- raw_Sales_v_Quote gets real INT64 data too.
+
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Quote_Status` sts
-  ON q.Quote_Status_Key = sts.Quote_Status_Key
+  ON SAFE_CAST(q.Quote_Status_Key AS INT64) = SAFE_CAST(sts.Quote_Status_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
-  ON q.Customer_No = cust.Customer_No
+  ON SAFE_CAST(q.Customer_No AS INT64) = SAFE_CAST(cust.Customer_No AS INT64)
 
 -- Status-exclusion proxy for "open" — see header note. 3829 = Approved,
 -- excluded per the 2026-08-21 decision above.
-WHERE q.Quote_Status_Key NOT IN (3827, 3828, 3829, 3830, 3831)
+WHERE SAFE_CAST(q.Quote_Status_Key AS INT64) NOT IN (3827, 3828, 3829, 3830, 3831)

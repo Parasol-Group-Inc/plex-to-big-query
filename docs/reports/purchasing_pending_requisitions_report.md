@@ -19,6 +19,7 @@ Plex doesn't have a requisition status literally called "Pending Order," so this
 
 ## Flags and open questions
 
+- **Sent a real "PARTIAL PRODUCTION" email on its first scheduled run (2026-08-23).** The BigQuery view failed to create — `raw_Purchasing_v_Requisition` had 0 rows on both prod and test, so BigQuery auto-typed it all-`STRING`, while `raw_Purchasing_v_Requisition_Status` has real data and is properly typed (`INT64`); joining the two without a cast fails outright. Fixed same day with `SAFE_CAST` on both sides of every join. Re-verified this time by directly querying the BigQuery view (a Cloud Run job can exit successfully even when the view itself failed to build — that gap is how this got missed the first time).
 - **Not yet checked against a real requisition.** The test environment has zero real requisitions on it, so while the report's logic and the business rule are both confirmed correct in principle, nobody has been able to look at one real row and check it's showing the right thing. Worth a spot-check once real requisitions exist, either in production or on a test environment that has some.
 
 ## More detail

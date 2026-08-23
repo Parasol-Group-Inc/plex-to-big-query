@@ -68,26 +68,36 @@ SELECT
 
 FROM `{gcp_project}.{dataset}.raw_Purchasing_v_Requisition` req
 
+-- SAFE_CAST both sides on every join below: raw_Purchasing_v_Requisition,
+-- raw_Purchasing_v_Requisition_Type, and raw_Purchasing_v_Req_PO_Release are
+-- all still 0 rows on both PlexProd and PlexTest (confirmed by the
+-- 2026-08-23 production/test runs), so BigQuery autodetected them as
+-- all-STRING — while raw_Purchasing_v_Requisition_Status has real rows and
+-- is properly typed (INT64). A one-sided join broke view creation outright
+-- ("No matching signature for operator = for argument types: STRING,
+-- INT64") on the first real scheduled run. SAFE_CAST on both sides is a
+-- no-op once these tables get real INT64 data too.
+
 -- Requisition type lookup
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Requisition_Type` typ
-  ON req.Requisition_Type_Key = typ.Requisition_Type_Key
+  ON SAFE_CAST(req.Requisition_Type_Key AS INT64) = SAFE_CAST(typ.Requisition_Type_Key AS INT64)
 
 -- Status lookup — filtered to "Approved, not yet released" below
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Requisition_Status` sts
-  ON req.Requisition_Status_Key = sts.Requisition_Status_Key
+  ON SAFE_CAST(req.Requisition_Status_Key AS INT64) = SAFE_CAST(sts.Requisition_Status_Key AS INT64)
 
 -- Supplier name — shared table, extracted by the purchasing_open_orders pipeline
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Supplier` sup
-  ON req.Supplier_No = sup.Supplier_No
+  ON SAFE_CAST(req.Supplier_No AS INT64) = SAFE_CAST(sup.Supplier_No AS INT64)
 
 -- Part number/name — shared table, extracted by the sales_orders pipeline
 -- Confirmed for the PO side that Part_Key is the live column; unconfirmed here (see header note).
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
-  ON SAFE_CAST(req.Part_Key AS INT64) = p.Part_Key
+  ON SAFE_CAST(req.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
 -- Has this requisition already become a PO? A matching release row means yes.
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Req_PO_Release` rel
-  ON req.Requisition_Key = rel.Requisition_Key
+  ON SAFE_CAST(req.Requisition_Key AS INT64) = SAFE_CAST(rel.Requisition_Key AS INT64)
 
 -- "Pending Order" = approved and buyable, but not yet turned into a PO release.
 WHERE COALESCE(SAFE_CAST(sts.Approved AS INT64), 0) = 1

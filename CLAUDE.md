@@ -48,6 +48,34 @@ test host and writes a CSV to `./output/`, no BigQuery write, no email.
 Safe, read-only, and the fastest way to confirm Docker/ODBC/credentials
 all still work.
 
+## Verifying a report deploy actually worked
+
+**`gcloud run jobs execute ... --wait` exiting 0 does NOT mean the report's
+BigQuery view got created.** The container can finish successfully (raw
+table extractions all succeeded) while the view-creation step fails and
+the job still reports "PARTIAL" status/exit 0 — this bit two brand-new
+reports on their first real run (2026-08-23): `purchasing_pending_requisitions_report`
+sent a real "PARTIAL PRODUCTION" email, `quality_supplier_returns_pending_report`
+a "PARTIAL TEST" one, both from the same root cause (see below). After any
+`gcloud run jobs execute`, confirm the view itself, don't trust the exit
+code alone:
+
+```bash
+bq query --use_legacy_sql=false --project_id=voxdatalake \
+  "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.<report_name>\`"
+```
+
+**Root cause of both failures — a recurring pattern in this repo:** a raw
+table with 0 rows gets BigQuery-autodetected as all-`STRING`; a sibling
+table with real rows gets proper types (`INT64`, etc.). A JOIN between
+them without `SAFE_CAST` on *both* sides fails view creation outright
+("No matching signature for operator ="). This has now hit
+`sales_order_allocation_view.sql`, `purchasing_pending_requisitions_view.sql`,
+and `quality_supplier_returns_pending_view.sql` — when writing a new
+report SQL, `SAFE_CAST(x AS INT64)` on both sides of every join is
+cheap insurance, not just for empty tables today but for tables that are
+empty in test/dev but real in prod (or vice versa).
+
 ## Known friction
 
 - **GitHub push access**: as of 2026-08-22, `git push origin main` fails

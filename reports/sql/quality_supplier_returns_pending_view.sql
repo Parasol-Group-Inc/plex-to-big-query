@@ -47,14 +47,23 @@ SELECT
 
 FROM `{gcp_project}.{dataset}.raw_Quality_v_Supplier_Return` r
 
+-- SAFE_CAST both sides on every join below: raw_Quality_v_Supplier_Return had
+-- 0 rows on the 2026-08-23 test run (confirmed live), so BigQuery
+-- autodetected it as all-STRING, while raw_Quality_v_Supplier_Return_Status
+-- and _Type both have real rows and are properly typed (INT64). A one-sided
+-- join broke view creation outright ("No matching signature for operator =
+-- for argument types: STRING, INT64"). SAFE_CAST on both sides (and on the
+-- WHERE filter below) is a no-op once raw_Quality_v_Supplier_Return gets
+-- real INT64 data too.
+
 LEFT JOIN `{gcp_project}.{dataset}.raw_Quality_v_Supplier_Return_Status` sts
-  ON r.Return_Status_Key = sts.Return_Status_Key
+  ON SAFE_CAST(r.Return_Status_Key AS INT64) = SAFE_CAST(sts.Return_Status_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Quality_v_Supplier_Return_Type` typ
-  ON r.Return_Type_Key = typ.Return_Type_Key
+  ON SAFE_CAST(r.Return_Type_Key AS INT64) = SAFE_CAST(typ.Return_Type_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Supplier` sup
-  ON r.Supplier_No = sup.Supplier_No
+  ON SAFE_CAST(r.Supplier_No AS INT64) = SAFE_CAST(sup.Supplier_No AS INT64)
 
 -- Status-exclusion proxy for "pending approval" — see header note.
-WHERE r.Return_Status_Key NOT IN (2207, 2208, 2209)
+WHERE SAFE_CAST(r.Return_Status_Key AS INT64) NOT IN (2207, 2208, 2209)

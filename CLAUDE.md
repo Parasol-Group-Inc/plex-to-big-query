@@ -68,3 +68,11 @@ Every commit that changes behavior, infrastructure, or a deployed report
 gets a matching `CHANGELOG.md` entry, added in the same commit, plus a
 status-line update in whichever `reports-list/`/`spreadsheets/` doc tracks
 that report. Doc-only typo fixes don't need one.
+
+**Report docs (added 2026-08-23):** every deployed `bq_view` report also
+gets a business-facing doc in `docs/reports/` (see
+`docs/reports/REPORT_CATALOG.md` for the template and full list) — written
+for the team/ClickUp, not engineers, since the code already has comments
+and the full technical history lives in `reports-list/`/`spreadsheets/`.
+Any change to a report's YAML/SQL needs a matching update to its
+`docs/reports/*.md` doc, in the same commit.

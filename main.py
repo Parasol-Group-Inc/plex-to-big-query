@@ -1,7 +1,8 @@
 import os
 import re
+import decimal
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Optional
 
 import pyodbc
@@ -338,6 +339,30 @@ def get_odbc_connection(user: str, password: str, company_code: str, access_toke
     return conn
 
 
+# Maps a pyodbc cursor.description type_code (a Python type object -- e.g.
+# `int`, `str`, `datetime.datetime` -- see extract_schema_catalog.py's
+# describe_type(), which already relies on this exact shape from the same
+# driver) to a BigQuery SchemaField type. Falls back to STRING for anything
+# unrecognized, so this can never be less permissive than the previous
+# blanket-STRING behavior.
+_ODBC_TYPE_TO_BQ = {
+    int:             "INT64",
+    float:           "FLOAT64",
+    bool:            "BOOL",
+    str:             "STRING",
+    bytes:           "BYTES",
+    bytearray:       "BYTES",
+    decimal.Decimal: "FLOAT64",  # matches the SAFE_CAST(... AS FLOAT64) convention already used throughout reports/sql/* for money/price columns
+    datetime:        "TIMESTAMP",
+    date:            "DATE",
+    time:            "TIME",
+}
+
+
+def _bq_type_for_odbc(type_code) -> str:
+    return _ODBC_TYPE_TO_BQ.get(type_code, "STRING")
+
+
 # ── Plex query ────────────────────────────────────────────────────────────────
 def query_plex(
     conn: pyodbc.Connection,
@@ -355,8 +380,17 @@ def query_plex(
     cursor = conn.cursor()
     cursor.execute(sql)
     columns = [col[0] for col in cursor.description]
+    # Plex's real per-column type, straight from the ODBC driver -- used only
+    # to type an EMPTY raw table's placeholder schema correctly (see
+    # write_to_bigquery) instead of forcing every column to STRING, which is
+    # what caused the recurring "No matching signature for operator = for
+    # argument types: STRING, INT64" view-creation failures once a sibling
+    # table populated with real INT64 data. Populated tables are unaffected --
+    # autodetect=True still infers types from actual row values as before.
+    odbc_schema = {col[0]: _bq_type_for_odbc(col[1]) for col in cursor.description}
     rows = cursor.fetchall()
     df = pd.DataFrame.from_records(rows, columns=columns)
+    df.attrs["odbc_schema"] = odbc_schema
     cursor.close()
     log.info(f"Fetched {len(df)} rows from Plex [{view}].")
     return df
@@ -389,9 +423,13 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
                 f"(previous data preserved). Verify Plex returned data."
             )
         except gcp_exceptions.NotFound:
-            schema = [bigquery.SchemaField(col, "STRING") for col in df.columns]
+            odbc_schema = df.attrs.get("odbc_schema", {})
+            schema = [
+                bigquery.SchemaField(col, odbc_schema.get(col, "STRING"))
+                for col in df.columns
+            ]
             bq.create_table(bigquery.Table(table_ref, schema=schema))
-            log.info(f"0 rows for {table_name} — created empty table with {len(schema)} columns.")
+            log.info(f"0 rows for {table_name} — created empty table with {len(schema)} column(s), typed from Plex's real ODBC schema.")
         return 0
 
     job_config = bigquery.LoadJobConfig(
@@ -635,6 +673,7 @@ def main():
         # block the others from applying.
         if OUTPUT_MODE == "bigquery":
             views_applied = 0
+            pending_views = []  # (view_name, view_sql) — config validated, SQL loaded, ready to attempt
             for view_cfg in bq_view_configs(config):
                 problem = validate_bq_view(view_cfg)
                 if problem:
@@ -657,12 +696,32 @@ def main():
                 elif view_sql:
                     view_sql = view_sql.replace("{gcp_project}", GCP_PROJECT).replace("{dataset}", BQ_DATASET)
 
+                pending_views.append((view_name, view_sql))
+
+            # First pass, in config order. A thin alias view that SELECTs
+            # from a sibling view listed later in the same config (e.g.
+            # sales_orders_pending_approval_by_rep_view.sql) would otherwise
+            # fail purely on list ordering — collected here and retried once
+            # below, after every other view in this run has had a chance to
+            # be created, instead of depending on a YAML comment to keep the
+            # list in the right order forever.
+            failed_views = []
+            for view_name, view_sql in pending_views:
                 try:
                     create_or_replace_bq_view(bq, BQ_DATASET, view_name, view_sql)
                     events.append(f"Applied BigQuery view {BQ_DATASET}.{view_name}")
                     views_applied += 1
                 except Exception as exc:
-                    log.exception(f"Failed to create/update BigQuery view {view_name}: {exc}")
+                    log.warning(f"View {view_name} failed on first attempt, will retry once after the rest of this run's views: {exc}")
+                    failed_views.append((view_name, view_sql))
+
+            for view_name, view_sql in failed_views:
+                try:
+                    create_or_replace_bq_view(bq, BQ_DATASET, view_name, view_sql)
+                    events.append(f"Applied BigQuery view {BQ_DATASET}.{view_name} (succeeded on retry after other views were created)")
+                    views_applied += 1
+                except Exception as exc:
+                    log.exception(f"Failed to create/update BigQuery view {view_name} (also failed on retry): {exc}")
                     events.append(f"ERROR: BigQuery view update failed for {view_name}: {exc}")
                     partial_errors.append(f"view {view_name}: {exc}")
 

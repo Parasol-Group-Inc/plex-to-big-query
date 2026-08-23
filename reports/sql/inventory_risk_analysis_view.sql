@@ -62,28 +62,36 @@ container_activity AS (
   WHERE SAFE_CAST(c.Active AS INT64) = -1
     AND SAFE_CAST(cs.OK_Status AS INT64) = -1
   GROUP BY part_key
+),
+
+-- BigQuery can't reference a SELECT-list alias from another expression in
+-- the same SELECT list, so days_since_activity is computed once here and
+-- reused below for both days_since_activity and is_at_risk instead of
+-- evaluating the same DATE_DIFF twice per row.
+enriched AS (
+  SELECT
+
+    p.Part_No                                             AS part_no,
+    p.Name                                                AS part_name,
+    p.Part_Type                                           AS part_type,
+    pt.Product_Type                                       AS part_product_type,
+
+    ca.on_hand_qty,
+    ca.container_count,
+    ca.last_activity_date,
+    DATE_DIFF(CURRENT_DATE(), ca.last_activity_date, DAY) AS days_since_activity
+
+  FROM container_activity ca
+
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
+    ON ca.part_key = p.Part_Key
+
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` pt
+    ON SAFE_CAST(p.Product_Type_Key AS FLOAT64) = SAFE_CAST(pt.Product_Type_Key AS FLOAT64)
 )
 
 SELECT
-
-  p.Part_No                                             AS part_no,
-  p.Name                                                AS part_name,
-  p.Part_Type                                           AS part_type,
-  pt.Product_Type                                       AS part_product_type,
-
-  ca.on_hand_qty,
-  ca.container_count,
-  ca.last_activity_date,
-  DATE_DIFF(CURRENT_DATE(), ca.last_activity_date, DAY) AS days_since_activity,
-
+  *,
   -- 90-day threshold decision — see header note.
-  (ca.last_activity_date IS NULL
-    OR DATE_DIFF(CURRENT_DATE(), ca.last_activity_date, DAY) >= 90)  AS is_at_risk
-
-FROM container_activity ca
-
-JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
-  ON ca.part_key = p.Part_Key
-
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` pt
-  ON SAFE_CAST(p.Product_Type_Key AS FLOAT64) = SAFE_CAST(pt.Product_Type_Key AS FLOAT64)
+  (last_activity_date IS NULL OR days_since_activity >= 90) AS is_at_risk
+FROM enriched

@@ -127,22 +127,25 @@ extractions:
     date_col: ""
 
   # ── Added 2026-08-21 for the 4 Daily Reports (see bq_view list below) ──
-  # Corrected same day: initially built on Part_v_Cell_Production, but a
-  # live screenshot of Plex's own "Job Production" report (columns Job No/
-  # Part No/Op No/Workcenter/Employee/Record Date/Shift/Quantity) matches
+  # Initially built on Part_v_Cell_Production, corrected same day: a live
+  # screenshot of Plex's own "Job Production" report (columns Job No/Part
+  # No/Op No/Workcenter/Employee/Record Date/Shift/Quantity) matches
   # Part_v_Production field-for-field (Record_By, Report_Shift, Record_Date,
   # Workcenter_Key, Job_Op_Key, Quantity, Rejected) — Cell_Production has no
-  # Employee/Shift/Rejected columns at all. Switched the 4 Daily Reports to
-  # this table; kept below in case a genuinely cell-manufacturing-specific
-  # report needs it later.
-  - plex_view: Part_v_Cell_Production
-    bq_table: raw_Part_v_Cell_Production
-    filter: ""
-    date_col: Production_Date
-
-  # The real source for the 4 Daily Reports (see comment above) — also
-  # gives a genuine `Rejected` scrap flag and `Record_By`/`Report_Shift`,
-  # resolving 2 of the 3 gaps flagged as "no Plex analog" this morning.
+  # Employee/Shift/Rejected columns at all. This is the real source for the
+  # 4 Daily Reports — gives a genuine `Rejected` scrap flag and
+  # `Record_By`/`Report_Shift`, resolving 2 of the 3 gaps flagged as "no
+  # Plex analog" that morning.
+  #
+  # Removed 2026-08-23: this pipeline briefly also extracted
+  # Part_v_Cell_Production (raw_Part_v_Cell_Production) alongside this, kept
+  # around "in case a cell-manufacturing-specific report needs it later" —
+  # but nothing in this pipeline's bq_views ever read it, and
+  # raw_Part_v_Cell_Production is already owned and WRITE_TRUNCATE'd by the
+  # separate inventory_activity pipeline (reports/inventory_activity.yaml),
+  # on its own independent schedule. Two pipelines truncating the same table
+  # is exactly the risk called out below for Part_v_Part — removed rather
+  # than left as a live footgun for a report that doesn't exist yet.
   - plex_view: Part_v_Production
     bq_table: raw_Part_v_Production
     filter: ""

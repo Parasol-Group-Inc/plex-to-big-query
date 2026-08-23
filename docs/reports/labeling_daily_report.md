@@ -19,6 +19,7 @@ Pulls from the same production-log data already extracted for Work Orders, then 
 
 ## Flags and open questions
 
+- **Fixed 2026-08-23 — scrap was silently always zero.** The scrap check compared Plex's `Rejected` flag to `1`, but Plex represents boolean true as `-1`, not `1` (an already-confirmed convention elsewhere in this pipeline) — so no row could ever match, and rejected quantity vanished from both the actual and scrap totals instead of being counted as scrap. Fixed by comparing to `-1`. Caught by code review before any real production data existed to be affected by it.
 - **Currently 0 rows — expected, not broken.** No real production has been logged against this tenant's Labeling lines yet, so there's nothing to roll up. This should start populating once real jobs move past the scheduling stage.
 - **Not built: the sheet's three shift-checkpoint times (6:30 AM / 8:45 AM / 12:15 PM) and "# Of Orders Complete."** No confirmed Plex data answers either one. The shift value this report does show is a shift *label* (e.g. "1st," "2nd"), not a checkpoint time, so it doesn't fill that gap. "# Of Orders Complete" is conceptually close to the open-job count already built for `labeling_open_work_orders_report`, but that counts *open* jobs — a genuinely different question from *completed* jobs, so it isn't approximated here.
 - **Not built: Planned output and Start-Up Time.** These looked like manual scheduling inputs with no matching data in Plex, the same category of gap found on MFG Job Schedule's manual-only columns.

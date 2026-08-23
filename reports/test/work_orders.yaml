@@ -79,13 +79,12 @@ extractions:
     filter: ""
     date_col: ""
 
-  # Added 2026-08-21 for the 4 Daily Reports — see reports/work_orders.yaml
-  - plex_view: Part_v_Cell_Production
-    bq_table: raw_Part_v_Cell_Production
-    filter: ""
-    date_col: Production_Date
-
-  # Corrected same day — see reports/work_orders.yaml for the full story.
+  # Added 2026-08-21 for the 4 Daily Reports, corrected same day — see
+  # reports/work_orders.yaml for the full story. Removed 2026-08-23: this
+  # pipeline briefly also extracted Part_v_Cell_Production alongside this,
+  # but nothing here reads it and it's already owned by the separate
+  # inventory_activity pipeline — same two-pipelines-truncate-one-table risk
+  # already called out for Part_v_Part above.
   - plex_view: Part_v_Production
     bq_table: raw_Part_v_Production
     filter: ""

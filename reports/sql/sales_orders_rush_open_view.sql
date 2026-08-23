@@ -56,7 +56,8 @@ base_price AS (
     SAFE_CAST(Price AS FLOAT64)                AS Price
   FROM (
     SELECT
-      *,
+      Customer_Part_Key,
+      Price,
       ROW_NUMBER() OVER (
         PARTITION BY Customer_Part_Key
         ORDER BY SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC

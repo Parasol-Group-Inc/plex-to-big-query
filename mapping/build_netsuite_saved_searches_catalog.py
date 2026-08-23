@@ -52,6 +52,16 @@ def slugify(text):
     return "".join(c if c.isalnum() else "-" for c in text.lower()).strip("-")
 
 
+def escape_md_cell(value):
+    """Escape a value for safe interpolation into a markdown table cell.
+
+    Applied uniformly to every interpolated field so a stray `|` or `*` in
+    freeform NetSuite data (title, owner, ID, run-by, ...) can't silently
+    break the generated table's column alignment.
+    """
+    return str(value).replace("|", "\\|").replace("*", "\\*")
+
+
 def write_md(records):
     by_type = defaultdict(list)
     for rec in records:
@@ -99,12 +109,14 @@ def write_md(records):
         lines.append("| Title | ID | Owner | Bundle | Scheduled | Last Run By | Last Run On |")
         lines.append("|---|---|---|---|---|---|---|")
         for r in sorted(recs, key=lambda x: x["Title"].lower()):
-            title = r["Title"].replace("|", "\\|").replace("*", "\\*")
-            bundle = r["FromBundle"] or "--"
-            last_run_by = r["LastRunBy"].replace("|", "\\|") or "--"
-            last_run_on = r["LastRunOn"] or "--"
+            title = escape_md_cell(r["Title"])
+            rec_id = escape_md_cell(r["ID"])
+            owner = escape_md_cell(r["Owner"])
+            bundle = escape_md_cell(r["FromBundle"]) if r["FromBundle"] else "--"
+            last_run_by = escape_md_cell(r["LastRunBy"]) if r["LastRunBy"] else "--"
+            last_run_on = escape_md_cell(r["LastRunOn"]) if r["LastRunOn"] else "--"
             lines.append(
-                f"| {title} | {r['ID']} | {r['Owner']} | {bundle} | "
+                f"| {title} | {rec_id} | {owner} | {bundle} | "
                 f"{r['Scheduled']} | {last_run_by} | {last_run_on} |"
             )
         lines.append("")

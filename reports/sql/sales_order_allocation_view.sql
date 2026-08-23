@@ -49,6 +49,13 @@
 -- both sides or the view fails to create at all with "No matching
 -- signature for operator =".
 --
+-- Extended 2026-08-23: SAFE_CAST both sides on every remaining join and the
+-- WHERE filter too, not just the two that actually broke — the tables on
+-- the other side of those (Sales_v_PO_Status, Common_v_Customer, Part_v_Part,
+-- Part_v_Job_Status) are populated today, but any one of them empty on a
+-- future run (same failure mode this view already hit once) would otherwise
+-- break view creation the same way. All are no-ops today.
+--
 -- Not re-extracted beyond the new Sales_v_Release_Job link table — bq_view
 -- entry in reports/sales_orders.yaml.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
@@ -88,20 +95,20 @@ JOIN `{gcp_project}.{dataset}.raw_Part_v_Job` j
   ON SAFE_CAST(rj.Job_Key AS INT64) = SAFE_CAST(j.Job_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Status` sts
-  ON po.PO_Status_Key = sts.PO_Status_Key
+  ON SAFE_CAST(po.PO_Status_Key AS INT64) = SAFE_CAST(sts.PO_Status_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
-  ON po.Customer_No = cust.Customer_No
+  ON SAFE_CAST(po.Customer_No AS INT64) = SAFE_CAST(cust.Customer_No AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
-  ON pol.Part_Key = p.Part_Key
+  ON SAFE_CAST(pol.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Status` js
-  ON SAFE_CAST(j.Job_Status_Key AS INT64) = js.Job_Status_Key
+  ON SAFE_CAST(j.Job_Status_Key AS INT64) = SAFE_CAST(js.Job_Status_Key AS INT64)
 
 -- SO side: "open" = not Closed (2074) / Cancelled (2076) — open-status
 -- proxy decided 2026-08-21, see header note.
-WHERE po.PO_Status_Key NOT IN (2074, 2076)
+WHERE SAFE_CAST(po.PO_Status_Key AS INT64) NOT IN (2074, 2076)
   -- Job side: "open" = inverse of Completed/Cancelled/Hold, same pattern
   -- as labeling_open_work_orders_report/printing_open_work_orders_report.
   AND COALESCE(SAFE_CAST(js.Completed_Status AS INT64), 0) = 0

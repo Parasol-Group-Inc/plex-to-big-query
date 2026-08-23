@@ -11,7 +11,6 @@
 substitutions:
   _GCP_REGION:    "us-central1"
   _AR_REPO:       "plex-pipeline"
-  _CR_JOB:        "plex-etl"
   _CR_JOB_TEST:   "plex-etl-test"    # smoke test runs HERE, never on prod
   _IMAGE_NAME:    "etl"
   _ENV:           "prod"             # prod | test
@@ -22,7 +21,14 @@ substitutions:
   # terraform/main.tf — each of those has a `lifecycle { ignore_changes }`
   # on its image field specifically so this step is the thing that moves
   # it, not a stray `terraform apply`.
-  _ALL_JOBS: "plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test plex-etl-part-obsolescence plex-etl-part-obsolescence-test plex-etl-inventory-activity plex-etl-inventory-activity-test plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test"
+  # Corrected 2026-08-23 -- this list had silently fallen behind by 8 jobs
+  # (purchasing_pending_requisitions, sales_quotes, sales_returns,
+  # quality_supplier_returns, prod+test each) added across the preceding
+  # week of deploys. Any job missing from this list never gets a new image
+  # from this pipeline -- it silently stays pinned to whatever SHA was set
+  # at its `terraform apply` time. Verified 2026-08-23 against every
+  # google_cloud_run_v2_job resource name in terraform/main.tf (24 total).
+  _ALL_JOBS: "plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test plex-etl-part-obsolescence plex-etl-part-obsolescence-test plex-etl-inventory-activity plex-etl-inventory-activity-test plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test plex-etl-purchasing-pending-requisitions plex-etl-purchasing-pending-requisitions-test plex-etl-sales-quotes plex-etl-sales-quotes-test plex-etl-sales-returns plex-etl-sales-returns-test plex-etl-quality-supplier-returns plex-etl-quality-supplier-returns-test"
 
 # Full image URL derived from substitutions
 # e.g. us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:abc123
@@ -95,8 +101,8 @@ steps:
         set -e
         IMAGE="${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
         for job in ${_ALL_JOBS}; do
-          echo "=== Updating $job -> $IMAGE ==="
-          gcloud run jobs update "$job" --image="$IMAGE" --region="${_GCP_REGION}"
+          echo "=== Updating $$job -> $$IMAGE ==="
+          gcloud run jobs update "$$job" --image="$$IMAGE" --region="${_GCP_REGION}"
         done
     waitFor:
       - "push-sha"

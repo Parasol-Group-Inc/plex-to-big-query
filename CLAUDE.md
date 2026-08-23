@@ -65,16 +65,63 @@ bq query --use_legacy_sql=false --project_id=voxdatalake \
   "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.<report_name>\`"
 ```
 
-**Root cause of both failures — a recurring pattern in this repo:** a raw
-table with 0 rows gets BigQuery-autodetected as all-`STRING`; a sibling
-table with real rows gets proper types (`INT64`, etc.). A JOIN between
-them without `SAFE_CAST` on *both* sides fails view creation outright
-("No matching signature for operator ="). This has now hit
-`sales_order_allocation_view.sql`, `purchasing_pending_requisitions_view.sql`,
-and `quality_supplier_returns_pending_view.sql` — when writing a new
-report SQL, `SAFE_CAST(x AS INT64)` on both sides of every join is
-cheap insurance, not just for empty tables today but for tables that are
-empty in test/dev but real in prod (or vice versa).
+**Root cause — fixed at the source 2026-08-23, not just patched per-file.**
+A raw table with 0 rows used to get BigQuery-autodetected as all-`STRING`
+(hardcoded in `write_to_bigquery`); a sibling table with real rows gets
+proper types (`INT64`, etc.). A JOIN between them without `SAFE_CAST` on
+*both* sides failed view creation outright ("No matching signature for
+operator ="). This hit `sales_order_allocation_view.sql`,
+`purchasing_pending_requisitions_view.sql`,
+`quality_supplier_returns_pending_view.sql`, `sales_quotes_open_view.sql`,
+and `sales_returns_open_view.sql` before it was fixed properly: `query_plex()`
+now reads each column's real ODBC type from `cursor.description` (the same
+approach `extract_schema_catalog.py` already used successfully) and
+`write_to_bigquery()` uses it to type an empty table correctly from the
+start, instead of forcing STRING. Populated tables are untouched —
+`autodetect=True` still infers types from real row values exactly as
+before, so this doesn't change behavior for anything that already works.
+**Still keep `SAFE_CAST(x AS INT64)` on both sides of every join in new
+report SQL anyway** — cheap insurance for the case where BigQuery's own
+type inference on a *populated* column doesn't match your assumption (e.g.
+a nullable int column landing as `FLOAT64` via pandas, which already
+happened once for `Product_Type_Key` in this repo).
+
+## bq_view creation order and the retry-once safety net
+
+A `bq_view` entry can be a thin alias over a sibling view in the same
+config (`SELECT * FROM other_view`, e.g.
+`sales_orders_pending_approval_by_rep_view.sql`). That only works if the
+sibling is created first — `main()`'s view loop (`main.py`) now retries
+any view that fails on its first pass exactly once, after every other
+view in that run has had a chance to be created, so a YAML-list reorder
+that breaks this ordering self-heals within the same run instead of
+silently leaving a stale/missing view. Don't rely on this as a substitute
+for reasonable ordering, though — it only helps within one run.
+
+## Manual Cloud Build deploys (`deploy/cloudbuild.yaml`)
+
+`gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake .`
+needs `SHORT_SHA` supplied explicitly — it's only auto-populated when
+Cloud Build is triggered from a connected git source, not a plain local
+submit:
+
+```bash
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
+```
+
+**Two real bugs in this file, found and fixed 2026-08-23 the first time it
+was actually exercised end-to-end:** every custom substitution declared in
+the `substitutions:` block must be referenced somewhere in the template or
+the whole build is rejected at submit time (a vestigial unused `_CR_JOB`
+broke this); and Cloud Build's substitution parser scans for *any*
+`$WORD`/`${WORD}` pattern in every string field, including inside embedded
+bash scripts — a script's own bash variables (`$job`, `$IMAGE` in the
+`deploy-all` step) must be escaped as `$$job`/`$$IMAGE` or Cloud Build
+tries to resolve them as (nonexistent) substitutions and fails. Also keep
+`_ALL_JOBS` in sync with every `google_cloud_run_v2_job` resource name in
+`terraform/main.tf` — a job missing from that list silently never gets a
+new image from this pipeline again.
 
 ## Known friction
 

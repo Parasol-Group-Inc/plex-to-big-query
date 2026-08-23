@@ -4462,3 +4462,366 @@ resource "google_cloud_scheduler_job" "etl_sales_returns_test_retry" {
     }
   }
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Approve Vendor Return Authorizations — "Quality | Approve Vendor Return
+# Authorizations" (NetSuite parity). SQL/business rule built and
+# schema-confirmed 2026-08-14, correctly marked "scaffolded, needs
+# data-scientist input" in reports-list/supply-chain.md (unlike Open
+# Quotes/Open RMA's, this one was never falsely claimed as deployed) but
+# found 2026-08-23 to have zero Terraform/GCS footprint. Deploying now —
+# the underlying data question (Approving/Approved flags are dead on every
+# status) doesn't block shipping the status-exclusion proxy already used
+# elsewhere in this pipeline.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Approve Vendor Return Authorizations — GCS config files ─────────────────
+
+resource "google_storage_bucket_object" "quality_supplier_returns_config_prod" {
+  name         = "reports/quality_supplier_returns.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/quality_supplier_returns.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "quality_supplier_returns_config_test" {
+  name         = "test/quality_supplier_returns.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/quality_supplier_returns.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "quality_supplier_returns_pending_view_sql" {
+  name         = "sql/quality_supplier_returns_pending_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_supplier_returns_pending_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Approve Vendor Return Authorizations — prod (PlexProd, 10:40 PM Mountain) ─
+
+resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
+  name     = "plex-etl-quality-supplier-returns"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/quality_supplier_returns.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_quality_supplier_returns" {
+  name        = "plex-quality-supplier-returns-sync"
+  description = "Triggers Plex to BigQuery Approve Vendor Return Authorizations ETL job"
+  schedule    = "40 22 * * *" # 10:40 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_retry" {
+  name        = "plex-quality-supplier-returns-sync-retry"
+  description = "Retries the Approve Vendor Return Authorizations ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Approve Vendor Return Authorizations — test (PlexTest, 10:50 PM Mountain) ─
+
+resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
+  name     = "plex-etl-quality-supplier-returns-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/quality_supplier_returns.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_test" {
+  name        = "plex-quality-supplier-returns-sync-test"
+  description = "Triggers Plex to BigQuery Approve Vendor Return Authorizations ETL job (test)"
+  schedule    = "50 22 * * *" # 10:50 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_test_retry" {
+  name        = "plex-quality-supplier-returns-sync-test-retry"
+  description = "Retries the Approve Vendor Return Authorizations ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

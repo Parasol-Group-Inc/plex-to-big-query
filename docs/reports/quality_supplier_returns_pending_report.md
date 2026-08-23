@@ -1,6 +1,6 @@
 # Approve Vendor Return Authorizations
 
-> **Status:** ✅ SQL built and schema-confirmed live 2026-08-14, business rule decided 2026-08-21 · **Category:** Supply Chain · **Runs:** not yet on a schedule — its own Cloud Run job/scheduler hasn't been wired up (see Flags below)
+> **Status:** ✅ Built, deployed, and verified 2026-08-23 · **Category:** Supply Chain · **Runs:** own Cloud Run job, 10:40 PM / 10:50 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -19,10 +19,9 @@ Pulls every supplier return from Plex, attaches its status name, return type, an
 
 ## Flags and open questions
 
-- **Not actually running yet.** The SQL and config are written and schema-confirmed, but this report has no Cloud Run job or scheduler set up in the infrastructure config yet. Some internal notes elsewhere in this repo already list it as "Built"; that reflects the business logic being finalized, not the pipeline actually being live on a recurring schedule.
 - **"Pending approval" is a workaround, not a direct match.** Plex's return status table has literal Approving and Approved yes/no flags that looked like the obvious answer, but when checked against the live system both flags turned out to be "No" on every single one of the 6 statuses Vox uses — they can't identify an awaiting-approval return at all. This report instead defines "pending" as "not yet Shipped, Complete, or Cancelled," the same approach used elsewhere in this pipeline for other "open"/"pending" reports.
 - **Whether that's even the right definition is still an open question for a data scientist.** It's possible "approval" for a vendor return happens as a permission or workflow step that lives outside Plex's status field entirely — for example, a NetSuite-side approval click with no corresponding Plex status change. If so, this proxy wouldn't reflect real approval state at all, and someone who knows the actual approval workflow needs to confirm or correct it.
-- **Untested against real returns.** There were zero supplier return records on the test system at the time this was built, so the logic above is confirmed against Plex's schema and status list, but not yet checked against an actual live return.
+- **Untested against real returns.** There were zero supplier return records on the test system at the time this was built, so the logic above is confirmed against Plex's schema and status list, but not yet checked against an actual live return. A real test run (2026-08-23) completed cleanly, but the test tenant still has no return records to verify row-level correctness against.
 
 ## More detail
 

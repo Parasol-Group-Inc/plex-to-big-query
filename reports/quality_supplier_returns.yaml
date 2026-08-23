@@ -3,7 +3,7 @@ category: Supply Chain
 description: "Vox | Approve Vendor Return Authorizations (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# Deployed 2026-08-23. Schema confirmed live against vox.test.odbc.plex.com on
 # 2026-08-14. NetSuite source: "Approve Vendor Return Authorizations"
 # (reports-list/supply-chain.md).
 #

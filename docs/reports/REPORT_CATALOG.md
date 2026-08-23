@@ -69,7 +69,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Inventory Activity | Supply Chain | ✅ Built | [inventory_activity_report.md](inventory_activity_report.md) |
 | Part On-Hand Inventory | Supply Chain | ✅ Built | [part_on_hand_inventory_report.md](part_on_hand_inventory_report.md) |
 | Inventory Risk Analysis | Supply Chain | ✅ Built | [inventory_risk_analysis_report.md](inventory_risk_analysis_report.md) |
-| Quality Supplier Returns Pending | Supply Chain | ✅ Built | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
+| Quality Supplier Returns Pending | Supply Chain | ✅ Built and deployed 2026-08-23 | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 | Inventory Snapshot | Inventory | ✅ Built | [inventory_snapshot_report.md](inventory_snapshot_report.md) |
 | Inventory Valuation Summary | Inventory | ✅ Built | [inventory_valuation_summary_report.md](inventory_valuation_summary_report.md) |
 | Quality Nonconformance | Quality | ✅ Built | [quality_nonconformance_report.md](quality_nonconformance_report.md) |

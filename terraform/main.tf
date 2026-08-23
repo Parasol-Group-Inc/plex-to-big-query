@@ -3744,3 +3744,721 @@ resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_test_
     }
   }
 }
+# ═══════════════════════════════════════════════════════════════════════════
+# Open Quotes — "Vox | Open Quotes" (NetSuite parity). SQL/business rule
+# built and schema-confirmed 2026-08-14/21, but discovered 2026-08-23 (while
+# writing docs/reports/) to have NEVER been wired up to any Cloud Run job,
+# scheduler, or GCS config — reports-list/sales.md incorrectly called it
+# "Deployed." Deploying for real now. Sales_v_Quote had 0 real rows on the
+# test tenant at confirmation time — logic is schema-confirmed, not yet
+# checked against a real quote.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Open Quotes report — GCS config files ────────────────────────────────────
+
+resource "google_storage_bucket_object" "sales_quotes_config_prod" {
+  name         = "reports/sales_quotes.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sales_quotes.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_quotes_config_test" {
+  name         = "test/sales_quotes.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/sales_quotes.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_quotes_open_view_sql" {
+  name         = "sql/sales_quotes_open_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_quotes_open_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Open Quotes — prod (PlexProd, 10:00 PM Mountain) ─────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_sales_quotes" {
+  name     = "plex-etl-sales-quotes"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/sales_quotes.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_quotes" {
+  name        = "plex-sales-quotes-sync"
+  description = "Triggers Plex to BigQuery Open Quotes ETL job"
+  schedule    = "0 22 * * *" # 10:00 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_quotes_retry" {
+  name        = "plex-sales-quotes-sync-retry"
+  description = "Retries the Open Quotes ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Open Quotes — test (PlexTest, 10:10 PM Mountain) ─────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
+  name     = "plex-etl-sales-quotes-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/sales_quotes.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_quotes_test" {
+  name        = "plex-sales-quotes-sync-test"
+  description = "Triggers Plex to BigQuery Open Quotes ETL job (test)"
+  schedule    = "10 22 * * *" # 10:10 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_quotes_test_retry" {
+  name        = "plex-sales-quotes-sync-test-retry"
+  description = "Retries the Open Quotes ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Open RMA's — "Vox | Open RMA's" (NetSuite parity). Same story as Open
+# Quotes above: SQL/business rule built and schema-confirmed 2026-08-14/21,
+# but discovered 2026-08-23 to have never been wired up. Sales_v_Return had
+# 0 real rows on the test tenant at confirmation time.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Open RMA's report — GCS config files ─────────────────────────────────────
+
+resource "google_storage_bucket_object" "sales_returns_config_prod" {
+  name         = "reports/sales_returns.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sales_returns.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_returns_config_test" {
+  name         = "test/sales_returns.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/sales_returns.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_returns_open_view_sql" {
+  name         = "sql/sales_returns_open_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_returns_open_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Open RMA's — prod (PlexProd, 10:20 PM Mountain) ──────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_sales_returns" {
+  name     = "plex-etl-sales-returns"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/sales_returns.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_returns" {
+  name        = "plex-sales-returns-sync"
+  description = "Triggers Plex to BigQuery Open RMA's ETL job"
+  schedule    = "20 22 * * *" # 10:20 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_returns_retry" {
+  name        = "plex-sales-returns-sync-retry"
+  description = "Retries the Open RMA's ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Open RMA's — test (PlexTest, 10:30 PM Mountain) ──────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
+  name     = "plex-etl-sales-returns-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/sales_returns.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_returns_test" {
+  name        = "plex-sales-returns-sync-test"
+  description = "Triggers Plex to BigQuery Open RMA's ETL job (test)"
+  schedule    = "30 22 * * *" # 10:30 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_sales_returns_test_retry" {
+  name        = "plex-sales-returns-sync-test-retry"
+  description = "Retries the Open RMA's ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

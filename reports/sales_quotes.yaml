@@ -3,8 +3,10 @@ category: Sales
 description: "Vox | Open Quotes (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
-# 2026-08-14. NetSuite source: "Open Quotes" (reports-list/sales.md).
+# Deployed 2026-08-23. Schema confirmed live against vox.test.odbc.plex.com on
+# 2026-08-14. NetSuite source: "Open Quotes" (reports-list/sales.md). No real
+# quote records existed on the test tenant at confirmation time — logic is
+# schema-confirmed, not yet checked against a real quote.
 #
 # ⚠ BUSINESS-RULE GAP, FLAGGED FOR DATA-SCIENTIST REVIEW: Sales_v_Quote_Status
 # has a literal Open_Quote boolean column — looked like an exact match — but

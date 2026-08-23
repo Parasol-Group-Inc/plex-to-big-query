@@ -3,7 +3,7 @@ category: Sales
 description: "Vox | Open RMA's (NetSuite parity) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NOT YET DEPLOYED — schema confirmed live against vox.test.odbc.plex.com on
+# Deployed 2026-08-23. Schema confirmed live against vox.test.odbc.plex.com on
 # 2026-08-14. NetSuite source: "Open RMA's" (reports-list/sales.md).
 #
 # CONFIRMED LIVE Sales_v_Return_Status workflow: New (2122), Received (2124),

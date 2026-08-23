@@ -51,8 +51,8 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Revenue per Sales Rep | Sales | ✅ Built | [sales_revenue_by_rep_report.md](sales_revenue_by_rep_report.md) |
 | RUSH Open Sales Orders | Sales | ✅ Built | [sales_orders_rush_open_report.md](sales_orders_rush_open_report.md) |
 | Sales Order Allocation | Sales | ✅ Built | [sales_order_allocation_report.md](sales_order_allocation_report.md) |
-| Open Quotes | Sales | 🛠 Built, not deployed | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
-| Open RMAs | Sales | 🛠 Built, not deployed | [sales_returns_open_report.md](sales_returns_open_report.md) |
+| Open Quotes | Sales | ✅ Built and deployed 2026-08-23 | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
+| Open RMAs | Sales | ✅ Built and deployed 2026-08-23 | [sales_returns_open_report.md](sales_returns_open_report.md) |
 | Work Orders | Production | ✅ Built | [work_orders_report.md](work_orders_report.md) |
 | MFG Job Schedule | Production | ✅ Built | [mfg_job_schedule_report.md](mfg_job_schedule_report.md) |
 | Labeling \| Open WO: Results | Production | ✅ Built | [labeling_open_work_orders_report.md](labeling_open_work_orders_report.md) |

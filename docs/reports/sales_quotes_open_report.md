@@ -1,6 +1,6 @@
 # Open Quotes
 
-> **Status:** ✅ SQL built and schema-confirmed live 2026-08-14, business rule decided 2026-08-21 · **Category:** Sales · **Runs:** not yet on a schedule — its own Cloud Run job/scheduler hasn't been wired up (see Flags below)
+> **Status:** ✅ Built, deployed, and verified 2026-08-23 · **Category:** Sales · **Runs:** own Cloud Run job, 10:00 PM / 10:10 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -19,10 +19,9 @@ Pulls every quote from Plex, attaches its status name and the customer's name, a
 
 ## Flags and open questions
 
-- **Not actually running yet.** The SQL and config are written and schema-confirmed, but this report has no Cloud Run job or scheduler set up in the infrastructure config yet — unlike its sibling Sales reports, which run nightly. Some internal notes elsewhere in this repo already list it as "Deployed"; that reflects the business logic being finalized, not the pipeline actually being live. It needs its own scheduled job before it will produce fresh data on a recurring basis.
 - **"Open" is a workaround, not a direct match.** Plex's quote status table has a literal Open_Quote yes/no flag that looked like the obvious answer, but when checked against the live system it turned out to be "No" on every single status Vox uses — it can't tell open from closed at all. This report instead defines "open" as "not yet Won, Lost, Cancelled, or No Quote," the same approach used elsewhere in this pipeline for other "open" reports.
 - **Whether Approved quotes count as open is a judgment call, not a confirmed NetSuite match.** The decision (made 2026-08-21) is that an Approved quote is closed — the customer has already decided and it's on its way to becoming an order, not still awaiting action. If Vox's team actually still tracks Approved quotes as open and needing follow-up, this should be revisited.
-- **Untested against real quotes.** There were zero quote records on the test system at the time this was built, so the logic above is confirmed against Plex's schema and status list, but not yet checked against an actual live quote.
+- **Untested against real quotes.** There were zero quote records on the test system at the time this was built, so the logic above is confirmed against Plex's schema and status list, but not yet checked against an actual live quote. A real test run (2026-08-23) completed cleanly, but the test tenant still has no quote records to verify row-level correctness against.
 
 ## More detail
 

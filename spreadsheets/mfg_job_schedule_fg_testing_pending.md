@@ -37,6 +37,7 @@ report.
 | All Raws Sampled & Shipped, Raws Released, FG Testing Released | `Quality_v_Checksheet`/`_Status` |
 | Available Inventory | `Part_v_Container` (`part_on_hand_inventory_report`) — **see caveat below**, the raw on-hand number is buildable but this tab pairs it with a derived metric that isn't |
 | POs Received | `purchasing_open_orders_report` — **see caveat below**, the exact semantics of this column are ambiguous in the export |
+| Blender (batch size) | **Resolved 2026-08-23** — `Part_v_Approved_Workcenter.Batch_Size`, joined through `Part_v_Part_Operation`/`Part_v_Operation` for the unit (`kgs`/`kg`, confirmed live on all 6 real Blending parts). See the resolution below for the full query and reasoning. |
 
 **New finding — "Custom or Stock" is confirmed manual, not a Plex gap:**
 This tab has an explicit `Custom or Stock` column with hand-typed values
@@ -69,7 +70,6 @@ plausible Plex-side source for both at once, unconfirmed against data.
 | Column | Gap |
 |---|---|
 | MG Per Cap, Cap Specs | Same BOM/unit-conversion gap already flagged on the Open tab — not built speculatively. |
-| Blender (batch size, e.g. `2000L`/`1500L`) | Checked `Part_v_Job_Material` live (only `PCN`/`Job_Key`/`Part_Material_Key`/`Cuts` — not a batch-size field) — no confirmed source found yet. Likely a vessel/equipment attribute or a Job-level attribute, not yet located. |
 | Days Left, Days on hand when completed | These look like a **derived days-of-supply metric** (`Available Inventory` ÷ an implied usage/demand rate), not a raw field — some rows have large negative values (e.g. `Available Inventory = -8,585,908`, `Days Left = -102.4`), consistent with a backorder condition in a live formula, not a static ERP column. The raw on-hand quantity is buildable (`part_on_hand_inventory_report`); the usage/demand-rate component that turns it into "days" has no confirmed Plex source — flagged, not built. |
 | NC-to-job correlation | Same standing gap: `Quality_v_Problem` has no `Job_Key`/`Job_Op_Key`. |
 | POs Received — exact semantics | The CSV export has **2 unlabeled columns** immediately before this one (holding a boolean-looking `FALSE` and a blank in the sample data) — the real sheet likely has hidden/helper columns that didn't carry a header name into the export. Recommend confirming the actual column headers directly in the Sheet UI before building, rather than trusting CSV column position. |
@@ -129,12 +129,63 @@ and populated on actual Blending routings (`Blend 2`/`3`/`4`/`5`):
 `Part_v_Part.Unit` is a real column, populated (not NULL) but blank on
 every row except one — and that one says **`eaches`** (a count), not
 liters. This is the opposite of the sheet's `2000L` example, not a
-confirmation of it. **Verdict: right shape, wrong/unconfirmed unit** — not
-resolved yet. Next concrete step: open the Job Routing screen in the Plex
-UI for `BLEND | Neuro Plus Brain and Focus` (`23111-01VOXNU-1`), Blend 2
-operation (`Batch_Size = 1000`, blank `Unit`) and see what unit label the
-UI itself shows for that real number — a live UI check should resolve
-what the raw column can't.
+confirmation of it. **Verdict at this point: right shape, wrong/unconfirmed
+unit** — see resolution below, `Part_v_Part.Unit` was the wrong unit
+column to check (it's the finished part's own stocking unit, not the
+operation's production unit).
+
+## RESOLVED 2026-08-23 — Blender batch size is in kilograms, not liters
+
+`Part_v_Part.Unit` was the wrong place to look — it's the finished part's
+stocking unit, not the unit an *operation* produces in. The right chain is
+`Part_v_Approved_Workcenter.Part_Operation_Key` → `Part_v_Part_Operation.Part_Operation_Key`
+→ `Part_v_Part_Operation.Operation_Key` → `Part_v_Operation.Operation_Key`,
+which carries the operation-type's own unit columns
+(`Unit`/`Production_Unit`/`Denominator_Unit`/`Cost_Unit`).
+
+Live-confirmed (SQL Development Environment, `vox.test.odbc.plex.com`):
+**every single Blending row** (`Operation_Code = 'Blending'`, all of
+Blend 2/3/4/5, all 6 real parts) returns `Operation_Unit = 'kgs'`,
+`Denominator_Unit = 'kg'` — no exceptions, no blanks. `Batch_Criteria`
+(on `Part_v_Part_Operation`) came back blank on all rows — exists as a
+real column, just not populated on this tenant.
+
+```sql
+SELECT TOP 20
+  paw.Batch_Size,
+  po.Unit AS Operation_Unit,
+  po.Production_Unit,
+  po.Denominator_Unit,
+  po.Operation_Code,
+  ppo.Batch_Criteria,
+  wc.Name AS Workcenter_Name,
+  p.Part_No,
+  p.Name AS Part_Name
+FROM Part_v_Approved_Workcenter AS paw
+JOIN Part_v_Workcenter AS wc
+  ON paw.Workcenter_Key = wc.Workcenter_Key
+JOIN Part_v_Part AS p
+  ON paw.Part_Key = p.Part_Key
+JOIN Part_v_Part_Operation AS ppo
+  ON paw.Part_Operation_Key = ppo.Part_Operation_Key
+JOIN Part_v_Operation AS po
+  ON ppo.Operation_Key = po.Operation_Key
+WHERE wc.Workcenter_Group = 'Blending'
+  AND paw.Batch_Size > 0
+ORDER BY paw.Batch_Size DESC
+```
+
+**Verdict: `Part_v_Approved_Workcenter.Batch_Size` IS the "Blender" column
+— measured in kilograms, not liters.** The sheet's `2000L` example was
+either an approximation/rounding by whoever wrote the doc, a different
+part not yet seen in this tenant's 51 populated rows, or a genuine
+unit mismatch worth a quick confirmation with whoever fills in the sheet
+— but the Plex-side mapping itself is settled: real numbers (500-1000 kg
+range, live-confirmed on 6 real parts), real unit, no ambiguity left in
+the schema. This is the **approved/planned** batch size (a routing spec),
+not a per-job actual — `Part_v_Job_Op_Batch` (still 0 rows) remains the
+place to check once a real job actually produces a batch, if a per-job
+actual is ever needed instead of the routing spec.
 
 ## What's needed next
 
@@ -143,5 +194,4 @@ what the raw column can't.
 2. Test the `Job_Type_Key`/`Job_Distribution.Release_Key` leads once real
    job data exists on either tenant — would resolve Stock/Custom AND
    Customer at once, for both this tab and YTD Gate Stats.
-3. Confirm the two new "Blender" candidates above against a real Blending
-   job/routing, either via live data or a Plex UI screenshot.
+3. ✅ **Resolved 2026-08-23** — Blender/batch size mapping (see above).

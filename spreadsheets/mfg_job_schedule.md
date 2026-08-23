@@ -92,14 +92,16 @@ not just for lack of data.
 7. How should the 95%/92%/84-day goal thresholds be stored if this ever
    gets built, given they're editable in the sheet and explicitly
    non-retroactive? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
-8. 🔬 **Partially resolved 2026-08-23, still open**: `Part_v_Approved_Workcenter.Batch_Size`
-   is confirmed live and real on Blending routings (Blend 2-5, real values
-   500-1000) for real Vox parts — right shape, but `Part_v_Part.Unit` is
-   blank on every row except one, which says `eaches`, not liters —
-   contradicts the sheet's `2000L` example rather than confirming it.
-   Needs a live Job Routing UI check to settle the actual unit.
-   `Part_v_Job_Op_Batch` (per-job actual, incl. a `Resource_ID` that may BE
-   the blender ID) still 0 rows, unchecked. — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
+8. ✅ **Resolved 2026-08-23**: "Blender" = `Part_v_Approved_Workcenter.Batch_Size`,
+   measured in **kilograms** (`Part_v_Operation.Unit`/`Denominator_Unit` =
+   `kgs`/`kg`, confirmed live via
+   `Part_v_Approved_Workcenter → Part_v_Part_Operation → Part_v_Operation`,
+   no exceptions across all 6 real Blending parts). Contradicts the
+   sheet's `2000L` example (kg, not liters) — worth a quick confirmation
+   with whoever maintains the sheet, but the Plex-side mapping itself is
+   settled. This is the approved/planned batch size (a routing spec); a
+   per-job actual would be `Part_v_Job_Op_Batch` (still 0 rows, unneeded
+   unless the routing spec turns out to be insufficient). — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
 9. Should any future build sanity-bound the 8 stage-to-stage interval
    columns (Entered→POs Received, etc.)? Real data shows year-typo rows
    producing million-day intervals — the source sheet doesn't guard

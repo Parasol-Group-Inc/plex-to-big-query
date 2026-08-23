@@ -111,6 +111,31 @@ count? If it matches one of the live `Part_v_Approved_Workcenter` values
 above, that confirms the table; if not, `Part_v_Job_Op_Batch.Resource_ID`
 is the next thing to check once a real job actually produces a batch.
 
+## Update 2026-08-23 (cont.) — live-confirmed, but unit is ambiguous, not settled
+
+Ran the query above against `vox.test.odbc.plex.com` (SQL Development
+Environment). `Part_v_Approved_Workcenter.Batch_Size` is confirmed real
+and populated on actual Blending routings (`Blend 2`/`3`/`4`/`5`):
+
+| Batch_Size | Unit | Workcenter | Part |
+|---|---|---|---|
+| 1000 | *(blank)* | Blend 2/3/5 | `BLEND \| Neuro Plus Brain and Focus` (`23111-01VOXNU-1`) |
+| 750 | *(blank)* | Blend 4 | same part |
+| 690 | *(blank)* | Blend 2/3/5 | `Powder \| L-Arginine Plus` |
+| 645 | *(blank)* | Blend 2/3/5 | `Powder \| Beetroot` |
+| 570 | *(blank)* | Blend 2/3/5 | `Powder \| BCAA Honeydew/Watermelon` |
+| 500 | **eaches** | Blend 4 | `BLEND \| Myo D-Chiro Inositol Plus` |
+
+`Part_v_Part.Unit` is a real column, populated (not NULL) but blank on
+every row except one — and that one says **`eaches`** (a count), not
+liters. This is the opposite of the sheet's `2000L` example, not a
+confirmation of it. **Verdict: right shape, wrong/unconfirmed unit** — not
+resolved yet. Next concrete step: open the Job Routing screen in the Plex
+UI for `BLEND | Neuro Plus Brain and Focus` (`23111-01VOXNU-1`), Blend 2
+operation (`Batch_Size = 1000`, blank `Unit`) and see what unit label the
+UI itself shows for that real number — a live UI check should resolve
+what the raw column can't.
+
 ## What's needed next
 
 1. Confirm the real column headers for the 2 unlabeled columns before

@@ -51,8 +51,8 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Revenue per Sales Rep | Sales | ✅ Built | [sales_revenue_by_rep_report.md](sales_revenue_by_rep_report.md) |
 | RUSH Open Sales Orders | Sales | ✅ Built | [sales_orders_rush_open_report.md](sales_orders_rush_open_report.md) |
 | Sales Order Allocation | Sales | ✅ Built | [sales_order_allocation_report.md](sales_order_allocation_report.md) |
-| Open Quotes | Sales | ✅ Built | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
-| Open RMAs | Sales | ✅ Built | [sales_returns_open_report.md](sales_returns_open_report.md) |
+| Open Quotes | Sales | 🛠 Built, not deployed | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
+| Open RMAs | Sales | 🛠 Built, not deployed | [sales_returns_open_report.md](sales_returns_open_report.md) |
 | Work Orders | Production | ✅ Built | [work_orders_report.md](work_orders_report.md) |
 | MFG Job Schedule | Production | ✅ Built | [mfg_job_schedule_report.md](mfg_job_schedule_report.md) |
 | Labeling \| Open WO: Results | Production | ✅ Built | [labeling_open_work_orders_report.md](labeling_open_work_orders_report.md) |
@@ -66,14 +66,14 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Purchase Orders to Approve | Supply Chain | ✅ Built | [purchasing_po_pending_approval_report.md](purchasing_po_pending_approval_report.md) |
 | Purchasing Pending Requisitions | Supply Chain | ✅ Built | [purchasing_pending_requisitions_report.md](purchasing_pending_requisitions_report.md) |
 | Part Obsolescence | Supply Chain | ✅ Built | [part_obsolescence_report.md](part_obsolescence_report.md) |
-| Inventory Activity | Inventory | ✅ Built | [inventory_activity_report.md](inventory_activity_report.md) |
+| Inventory Activity | Supply Chain | ✅ Built | [inventory_activity_report.md](inventory_activity_report.md) |
+| Part On-Hand Inventory | Supply Chain | ✅ Built | [part_on_hand_inventory_report.md](part_on_hand_inventory_report.md) |
+| Inventory Risk Analysis | Supply Chain | ✅ Built | [inventory_risk_analysis_report.md](inventory_risk_analysis_report.md) |
+| Quality Supplier Returns Pending | Supply Chain | ✅ Built | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 | Inventory Snapshot | Inventory | ✅ Built | [inventory_snapshot_report.md](inventory_snapshot_report.md) |
 | Inventory Valuation Summary | Inventory | ✅ Built | [inventory_valuation_summary_report.md](inventory_valuation_summary_report.md) |
-| Part On-Hand Inventory | Inventory | ✅ Built | [part_on_hand_inventory_report.md](part_on_hand_inventory_report.md) |
-| Inventory Risk Analysis | Inventory | ✅ Built | [inventory_risk_analysis_report.md](inventory_risk_analysis_report.md) |
 | Quality Nonconformance | Quality | ✅ Built | [quality_nonconformance_report.md](quality_nonconformance_report.md) |
 | Quality Turnaround Time | Quality | ✅ Built | [quality_turnaround_time_report.md](quality_turnaround_time_report.md) |
 | Quality Deviation | Quality | ✅ Built | [quality_deviation_report.md](quality_deviation_report.md) |
-| Quality Supplier Returns Pending | Quality | ✅ Built | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 
-36 reports total. Two written so far as a format check (`bottling_job_schedule_report.md`, `purchasing_pending_requisitions_report.md`) — the rest follow once the format's confirmed.
+36 reports documented, generated 2026-08-22/23. 34 of them (all but `bottling_job_schedule_report.md` and `purchasing_pending_requisitions_report.md`) were generated in parallel by a multi-agent workflow, each agent independently reading its report's YAML/SQL and searching `reports-list/`/`spreadsheets/`/NetSuite build-plan docs for context — that process caught two real deployment gaps (see Open Quotes/Open RMA's above) that the existing docs had missed.

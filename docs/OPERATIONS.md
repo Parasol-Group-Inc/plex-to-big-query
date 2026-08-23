@@ -102,7 +102,7 @@ Before writing any code, verify the views exist and contain the columns you need
 3. Run `SELECT TOP 5 * FROM {view}` to confirm columns and data types
 4. Check [`catalog/plex_catalog_index.md`](../catalog/plex_catalog_index.md) for a cross-database index of known views
 
-> **No aliases in FROM clause.** Plex SQL Developer rejects trailing table aliases (`FROM Part_v_Job j`). Use the full view name every time.
+> **Corrected 2026-08-23 — this claim was backwards.** Multi-table queries in Plex SQL Developer actually *require* table aliases (`FROM Part_v_Approved_Workcenter AS paw JOIN Part_v_Workcenter AS wc ON ...`) — a join written with fully-qualified view names and no aliases fails to run at all. Confirmed live by Emilio in the SQL Development Environment. If this note is still around, treat it as reversed: use aliases, not full view names, for anything with more than one table.
 
 > **No "Prod" database.** Work orders, jobs, and manufacturing data live in the **Part** database, not a "Prod" database. Check the catalog before assuming where a view lives.
 

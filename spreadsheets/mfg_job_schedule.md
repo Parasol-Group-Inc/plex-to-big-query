@@ -92,8 +92,11 @@ not just for lack of data.
 7. How should the 95%/92%/84-day goal thresholds be stored if this ever
    gets built, given they're editable in the sheet and explicitly
    non-retroactive? — [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md)
-8. Locate a real Plex source for "Blender" (batch size, e.g. `2000L`) —
-   checked `Part_v_Job_Material`, wrong table. — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
+8. 🔬 **New leads found 2026-08-23, needs Emilio to check in Plex**:
+   `Part_v_Job_Op_Batch` (actual per-job batch, incl. a `Resource_ID` that
+   may BE the blender ID — 0 rows live, no job has batched yet) and
+   `Part_v_Approved_Workcenter.Batch_Size` (routing spec, confirmed live
+   with real data, 348.75–1000.0 range, unit unconfirmed). — [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md)
 9. Should any future build sanity-bound the 8 stage-to-stage interval
    columns (Entered→POs Received, etc.)? Real data shows year-typo rows
    producing million-day intervals — the source sheet doesn't guard
@@ -113,11 +116,19 @@ not just for lack of data.
     out (`Part_v_Part_Planning_Parameters` has the wrong columns; 4
     speculative Material-module view names don't exist) — likely outside
     Plex entirely (NetSuite demand planning, or a sheet-side historical
-    average). — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
+    average). 🔬 **2026-08-23**: `Part_v_RP` (a 42-column MRP/requirements-
+    planning record — "RP" reads as Requirements Planning, not literally
+    Reorder Point) is a new, previously-unchecked candidate — 0 rows live,
+    possibly a transient working table. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
 14. Is "Current QTY Available" = "Quantity On Hand" minus something
     allocated/committed? `Part_v_Inventory_Allocation` exists but has no
     `Quantity`/`Part_Key` column to net against — checked, not a direct
-    join. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
+    join. 🔬 **2026-08-23**: `Part_v_Kitting_Allocation_w` is a new
+    candidate with both a real `Quantity` and `Component_Part_Key` — the
+    right shape, but 0 rows live (likely transient). **Ask Emilio to
+    check Plex's Kitting/MRP screen directly** — one real comparison
+    against a part on this sheet would confirm or kill both this and Q13
+    at once. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
 
 ## What it is
 

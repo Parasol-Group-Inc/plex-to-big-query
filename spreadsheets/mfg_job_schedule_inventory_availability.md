@@ -80,6 +80,43 @@ Hand** itself is buildable now (`Part_v_Container`, same source as
 `part_on_hand_inventory_report`) — **Current QTY Available's netting
 logic is not**, flagged as a gap rather than assumed solved.
 
+## Update 2026-08-23 — two new candidates found, both empty live (inconclusive, not ruled out)
+
+Re-swept the full 14,350-row schema catalog for "allocat"/"committed"/
+"reserved"/"available"/"reorder" beyond the views already checked above.
+Two real, previously-unchecked tables turned up — neither could be
+confirmed against real data because both returned **0 rows live** against
+`vox.test.odbc.plex.com`:
+
+- **`Part_v_Kitting_Allocation_w`** — `Kitting_Allocation_w_Key`,
+  `Master_Unit_Key`, `Component_Part_Key`, `Component_Part_Operation_Key`,
+  `Quantity`, `Production_Order`, `Serial_No`. Unlike
+  `Part_v_Inventory_Allocation` (checked above, no `Quantity`/`Part_Key`),
+  this one has both a real `Quantity` and a `Component_Part_Key` — exactly
+  the shape needed to net against `Quantity On Hand` per part. The `_w`
+  suffix (seen elsewhere in Plex as a "working"/scratch-table convention)
+  suggests this may only be populated transiently during an active
+  MRP/kitting run rather than held as persistent history, which would
+  explain the 0 rows without ruling it out as the real source.
+- **`Part_v_RP`** — a 42-column MRP/requirements-planning record
+  (`Component_Key`, `Material_Key`, `Component_Balance`,
+  `Material_Balance`, `Order_Date`, `Generated_Date`,
+  `Estimated_Available_Date`, `Can_Trigger_RP`, ...). "RP" here reads as
+  **Requirements Planning**, not literally "Reorder Point" — but
+  `Component_Balance`/`Material_Balance` are plausible candidates for
+  either `Current QTY Available` or the netting logic behind it. Also 0
+  rows live, same transient-table caveat as above.
+
+**Not resolvable by more schema searching** — both tables exist and have
+the right shape, but confirming what they actually mean requires either
+real data or someone who's used Plex's MRP/Kitting screens directly.
+**Ask Emilio to check, next time he's in Plex:** does the UI show a
+"Kitting" or "Material Requirements Planning" screen with an allocated/
+committed quantity per part? If so, what does it show for a part that
+also appears on this sheet — does it match `Quantity On Hand −
+Current QTY Available`? That single comparison would confirm or kill
+both leads at once.
+
 ## Buildable from Plex (same confirmed sources)
 
 | Column | Plex source |

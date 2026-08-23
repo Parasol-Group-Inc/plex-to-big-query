@@ -82,6 +82,35 @@ situation as every other tab), Date entered, Days in WIP, BR Ready for
 MFG, Sign Off, and Notes (a rich, timestamped free-text commentary log —
 e.g. multi-paragraph raw-material sourcing updates per job).
 
+## Update 2026-08-23 — two new "Blender" candidates found
+
+Re-swept the full schema catalog for "Blender"/"Batch_Size" beyond
+`Part_v_Job_Material` (already ruled out). Two real, previously-unchecked
+tables:
+
+- **`Part_v_Job_Op_Batch`** — `Job_Op_Key` (direct FK to the already-
+  extracted `Part_v_Job_Op`), `Batch_No`, `Batch_Size` (float), and
+  `Resource_ID` (string). This is the stronger candidate: a per-job-
+  operation *actual* batch record, and `Resource_ID` could plausibly BE
+  the literal blender identifier, not just its size. Confirmed live to
+  exist and be queryable — **0 rows** on the test tenant (no job has
+  produced a batch yet, consistent with everything else on this tenant).
+- **`Part_v_Approved_Workcenter`** — a part+operation+workcenter routing
+  spec with a `Batch_Size` float column. **Confirmed LIVE with real data**
+  (2,335 rows, 51 with non-zero `Batch_Size`: 348.75–1000.0 range). This
+  is the *planned/approved* batch size for a routing, not a per-job
+  actual — and the unit (count vs. liters) is unconfirmed; the sheet's
+  own example (`2000L`) wasn't seen in this tenant's populated range, but
+  that may just mean no Blending-workcenter row happens to be populated
+  yet, not that the column is wrong.
+
+**Ask Emilio to check, next time he's in Plex:** open the Job Routing (or
+Approved Workcenter) screen for a part that runs on a Blending workcenter
+— does it show a "Batch Size" field, and is it labeled in liters or a
+count? If it matches one of the live `Part_v_Approved_Workcenter` values
+above, that confirms the table; if not, `Part_v_Job_Op_Batch.Resource_ID`
+is the next thing to check once a real job actually produces a batch.
+
 ## What's needed next
 
 1. Confirm the real column headers for the 2 unlabeled columns before
@@ -89,5 +118,5 @@ e.g. multi-paragraph raw-material sourcing updates per job).
 2. Test the `Job_Type_Key`/`Job_Distribution.Release_Key` leads once real
    job data exists on either tenant — would resolve Stock/Custom AND
    Customer at once, for both this tab and YTD Gate Stats.
-3. Locate a real source for "Blender" (batch size) — not found in
-   `Part_v_Job_Material`; try equipment/vessel attributes next.
+3. Confirm the two new "Blender" candidates above against a real Blending
+   job/routing, either via live data or a Plex UI screenshot.

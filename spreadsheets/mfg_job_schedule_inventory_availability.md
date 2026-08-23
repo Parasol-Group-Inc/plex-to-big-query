@@ -110,12 +110,43 @@ confirmed against real data because both returned **0 rows live** against
 **Not resolvable by more schema searching** — both tables exist and have
 the right shape, but confirming what they actually mean requires either
 real data or someone who's used Plex's MRP/Kitting screens directly.
-**Ask Emilio to check, next time he's in Plex:** does the UI show a
-"Kitting" or "Material Requirements Planning" screen with an allocated/
-committed quantity per part? If so, what does it show for a part that
-also appears on this sheet — does it match `Quantity On Hand −
-Current QTY Available`? That single comparison would confirm or kill
-both leads at once.
+
+## Update 2026-08-23 (cont.) — all 5 allocation-family candidates confirmed empty, live
+
+Live row-count check (SQL Development Environment, Emilio) against all
+five allocation/kitting candidate tables identified across both research
+passes:
+
+| Table | Row_Count |
+|---|---|
+| `Part_v_Kitting_Allocation_w` | 0 |
+| `Part_v_Kitting_Production_w` | 0 |
+| `Part_v_Kitting_Production_Log` | 0 |
+| `Part_v_RP` | 0 |
+| `Part_v_Inventory_Allocation` | 0 |
+
+**Discrepancy worth noting:** the "New lead, checked and mostly ruled out"
+section above says `Part_v_Inventory_Allocation` "is a real view with
+rows" — that was true at the time of an earlier check, but it's 0 rows as
+of this 2026-08-23 count. Either the tenant's data was reset/cleared
+between checks, or the earlier check ran against a different environment
+(prod vs. test) — not chased down, just flagged so a future re-check
+isn't confused by the contradiction.
+
+**Verdict: this is not a missing-join problem like Q8 turned out to be —
+kitting/allocation as a Plex feature appears simply unused on this
+tenant.** All five tables have plausible shapes; none have a single row.
+No further schema searching or query refinement will produce an answer
+here. This needs one of:
+1. Real data to accumulate on this tenant (same "nothing has run yet"
+   situation as everything else on `vox.test.odbc.plex.com`), or
+2. Direct confirmation from someone who's used Plex's Kitting/MRP screens
+   — does Vox use this feature at all, on any part, ever? If the answer
+   is "no, we don't use Kitting in Plex," these five tables are a dead
+   end regardless of future data, and `Current QTY Available`'s netting
+   logic (and `Avg Daily`/`Reorder Point`, per Q13) most likely lives
+   entirely outside Plex — worth treating both as one combined
+   data-architect question rather than two separate open items.
 
 ## Buildable from Plex (same confirmed sources)
 
@@ -137,15 +168,21 @@ is from its reorder point — a business process guide, not a data column.
 
 Meaningfully de-risked a gap that's been open since the very first MFG
 Job Schedule pass: the "days of supply" formula is now known exactly, and
-the one remaining unknown (`Avg Daily`'s source) has been actively
-checked against the most plausible Plex candidates and ruled out, not
-left unexamined. Worth raising with the data architect directly — this
-may simply live outside Plex (NetSuite demand planning, or a
-sheet-side historical average).
+both remaining unknowns (`Avg Daily`'s source, and `Current QTY
+Available`'s allocation/committed netting logic) have been actively
+checked against every plausible Plex candidate found across two research
+passes — 7 tables total, all either don't exist, don't have the right
+columns, or (the 5 kitting/allocation candidates) exist with the right
+shape but are completely empty live. **Closed out on the Plex-research
+side as of 2026-08-23** — not resolvable by more schema searching or
+querying; genuinely needs a person.
 
 ## What's needed next
 
-Ask Emilio/the data architect directly where `Avg Daily` and `Reorder
-Point` actually come from — the obvious Plex candidates are checked and
-ruled out, so this needs a person who knows the process, not another
-schema guess.
+Ask Emilio/the data architect directly, as one combined question (both
+gaps point the same direction): where do `Avg Daily`, `Reorder Point`,
+and `Current QTY Available`'s netting logic actually come from — and does
+Vox use Plex's Kitting/MRP screens at all? If not, all three most likely
+live entirely outside Plex (NetSuite demand planning, or a sheet-side
+calculation), and no amount of waiting for more test-tenant data will
+change that.

@@ -116,24 +116,25 @@ not just for lack of data.
 12. What does "BR Ready for MFG" actually represent? Real values are
     small integers (1-3) and occasionally a comma-pair like `2,5` — no
     clear pattern against any other mapped column. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
-13. Where do "Avg Daily" (usage rate) and "Reorder Point" actually come
-    from? Checked the obvious Plex candidates live and ruled all of them
-    out (`Part_v_Part_Planning_Parameters` has the wrong columns; 4
-    speculative Material-module view names don't exist) — likely outside
-    Plex entirely (NetSuite demand planning, or a sheet-side historical
-    average). 🔬 **2026-08-23**: `Part_v_RP` (a 42-column MRP/requirements-
-    planning record — "RP" reads as Requirements Planning, not literally
-    Reorder Point) is a new, previously-unchecked candidate — 0 rows live,
-    possibly a transient working table. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
-14. Is "Current QTY Available" = "Quantity On Hand" minus something
-    allocated/committed? `Part_v_Inventory_Allocation` exists but has no
-    `Quantity`/`Part_Key` column to net against — checked, not a direct
-    join. 🔬 **2026-08-23**: `Part_v_Kitting_Allocation_w` is a new
-    candidate with both a real `Quantity` and `Component_Part_Key` — the
-    right shape, but 0 rows live (likely transient). **Ask Emilio to
-    check Plex's Kitting/MRP screen directly** — one real comparison
-    against a part on this sheet would confirm or kill both this and Q13
-    at once. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
+13. 🚫 **Closed out on the Plex-research side, 2026-08-23** — where do
+    "Avg Daily" (usage rate) and "Reorder Point" actually come from?
+    Checked every plausible Plex candidate across two research passes
+    (`Part_v_Part_Planning_Parameters`, 4 speculative Material-module
+    names, `Part_v_RP`, a full schema sweep for "reorder"/"usage_rate"/
+    "consumption"/"demand_rate") — none exist, don't have the right
+    columns, or (`Part_v_RP`) are empty live. **Now genuinely a person
+    question, not a data question** — most likely lives outside Plex
+    entirely (NetSuite demand planning, or a sheet-side calculation). — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
+14. 🚫 **Closed out on the Plex-research side, 2026-08-23** — is "Current
+    QTY Available" = "Quantity On Hand" minus something allocated/
+    committed? Checked all 5 plausible candidate tables
+    (`Part_v_Inventory_Allocation`, `Part_v_Kitting_Allocation_w`,
+    `Part_v_Kitting_Production_w`, `Part_v_Kitting_Production_Log`,
+    `Part_v_RP`) — right shapes, but **all 5 confirmed 0 rows live**, not
+    a missing-join problem like Q8 turned out to be. Kitting/MRP as a
+    Plex feature appears simply unused on this tenant. **Ask as one
+    combined question with Q13**: does Vox use Plex's Kitting/MRP screens
+    at all? If not, both are outside Plex's scope entirely. — [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md)
 
 ## What it is
 

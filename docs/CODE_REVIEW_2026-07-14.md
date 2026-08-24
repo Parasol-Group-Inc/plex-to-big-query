@@ -59,8 +59,6 @@ job re-run: dates read as real DATEs (`2025-06-17`, not
 
 ## Open items
 
-- DataDirect ODBC license still on 15-day trial — resolve before prod cutover.
-- SendGrid domain authentication: Gmail flags report emails with a
-  "couldn't verify" warning. Fix in SendGrid → Settings → Sender
-  Authentication → Authenticate Your Domain (adds CNAME records to
-  parasolgroupinc.com DNS).
+- ~~DataDirect ODBC license still on 15-day trial — resolve before prod cutover.~~ Licensed 2026-08-24.
+- ~~SendGrid domain authentication: Gmail flags report emails with a
+  "couldn't verify" warning.~~ Resolved 2026-08-21 (CNAME records added).

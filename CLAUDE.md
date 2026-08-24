@@ -125,11 +125,11 @@ new image from this pipeline again.
 
 ## Known friction
 
-- **GitHub push access**: as of 2026-08-22, `git push origin main` fails
-  with `403 Permission ... denied to emiliodom` even though `gh auth
-  status` shows a valid token with `repo` scope — this is an org/repo
-  permission on the `emiliodom` account, not a local git/token problem.
-  Don't waste time retrying; ask Emilio to sort out repo access first.
+- **GitHub push access**: resolved 2026-08-24 — repo access was fixed on
+  the GitHub side and 22 queued commits pushed cleanly. (As of 2026-08-22,
+  `git push origin main` had been failing with `403 Permission ... denied
+  to emiliodom` even though `gh auth status` showed a valid token with
+  `repo` scope — an org/repo permission issue, not local git/token.)
 - **gcloud reauth**: `gcloud storage`/`gcloud run` calls can fail with
   "Reauthentication failed. cannot prompt during non-interactive
   execution" even though `gcloud auth list` shows an active account — an

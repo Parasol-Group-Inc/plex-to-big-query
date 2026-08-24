@@ -215,8 +215,8 @@ Full command-level fixes: repo → `docs/TROUBLESHOOTING.md` and `CHEATSHEET.md`
 
 | Item | Status |
 |---|---|
-| DataDirect ODBC driver license | ⚠ On 15-day trial — must be licensed before relying on prod long-term |
-| SendGrid domain authentication | ⚠ Pending — report emails show a Gmail warning banner until DNS records are added |
+| DataDirect ODBC driver license | ✅ Licensed 2026-08-24 — no longer on trial |
+| SendGrid domain authentication | ✅ Resolved 2026-08-21 — CNAME records added, Gmail warning gone |
 | Prod work orders data | Plex prod host returns no `Job`/`Job_Op` rows yet — pipeline is ready, waiting on Plex data |
 
 ---

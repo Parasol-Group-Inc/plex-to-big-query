@@ -14,6 +14,12 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-08-24
+
+### Fixed
+- **DataDirect ODBC driver license applied for real** — no longer running on the 15-day trial flagged since 2026-07-14. Closed out in `docs/CLICKUP_TEAM_GUIDE.md` §9 and `docs/CODE_REVIEW_2026-07-14.md`'s open items (both had gone stale after the SendGrid item was already resolved 2026-08-21).
+- **22 local commits pushed to `origin/main`**, resolving the `git push` permission issue noted in `CLAUDE.md` "Known friction" — repo access was fixed on the GitHub side. Local and remote `main` are now in sync.
+
 ## 2026-08-23
 
 ### Added

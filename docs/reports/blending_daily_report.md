@@ -1,6 +1,6 @@
 # Blending Daily Report
 
-> **Status:** ✅ Deployed to test 2026-08-21, promoted to the production config 2026-08-22 · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ⚠️ Fixed and verified on Test 2026-08-25; **production view still doesn't exist** — broke in prod 2026-08-24 (see Flags below), fix is deployed but prod hasn't re-run since. Will self-heal on the next scheduled prod run (7:20 PM Mountain) or a manual `gcloud run jobs execute plex-etl-work-orders` · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -20,6 +20,7 @@ Takes Plex's raw production log, keeps only the entries logged against a Blendin
 ## Flags and open questions
 
 - **Fixed 2026-08-24 — real "PARTIAL PRODUCTION" view-creation failure.** Same root cause and fix as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-24 entry — see there for the full detail. Fixed by adding `SAFE_CAST(... AS INT64)` to the `Job`->`Part` join.
+- **Verified 2026-08-25 — Test fixed, Prod still broken.** Same result as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-25 entry: `PlexTest.blending_daily_report` exists and is queryable (0 rows, benign); `PlexProd.blending_daily_report` still doesn't exist — needs the prod job's next run.
 - **Fixed 2026-08-23 — scrap was silently always zero.** The scrap check compared Plex's `Rejected` flag to `1`, but Plex represents boolean true as `-1`, not `1` (an already-confirmed convention elsewhere in this pipeline) — so no row could ever match, and rejected quantity vanished from both the actual and scrap totals instead of being counted as scrap. Fixed by comparing to `-1`. Caught by code review before any real production data existed to be affected by it.
 - **Weigh-out and blending quantities aren't split apart.** The sheet's template treats "Daily Weigh-Out Goal/Total" and "Daily Blending Goal/Total" as separate numbers, but this report combines both station types' output into one `actual_qty` column per row (distinguishable only by which station the row belongs to). Splitting them further would need to know whether the sheet actually wants them tracked differently — not yet confirmed.
 - **Planned quantities, Start-Up Time, and Call Outs/attendance are not built.** Only the "Actual" side of the sheet (what was actually produced/scrapped, by whom) is covered — no Plex analog has been confirmed yet for the sheet's Planned/projected targets or its attendance tracking.

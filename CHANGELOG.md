@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-08-25
+
+### Verified
+- **Confirmed the 2026-08-24 SAFE_CAST fix on `plex-etl-work-orders-test`**, per this repo's own rule of never trusting a clean exit code — queried all 4 views directly. `PlexTest.encap_daily_report`/`blending_daily_report`/`labeling_daily_report`/`packaging_daily_report` all exist and are queryable (`COUNT(*) = 0`, expected/benign — `raw_Part_v_Production` is still empty). **`PlexProd` is a different story: all 4 views still don't exist at all** (`Not found: Table ... was not found`) — only the test job has been re-run since the fix landed; the prod job (`plex-etl-work-orders`) hasn't run again yet, so prod is still in the broken state the 2026-08-24 "PARTIAL PRODUCTION" email left it in until its next run (scheduled 7:20 PM Mountain, or trigger manually with `gcloud run jobs execute plex-etl-work-orders --region=us-central1 --project=voxdatalake --wait`).
+
 ## 2026-08-24
 
 ### Fixed

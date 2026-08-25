@@ -65,10 +65,10 @@ JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
   ON SAFE_CAST(prod.Workcenter_Key AS INT64) = wc.Workcenter_Key
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job` j
-  ON jo.Job_Key = j.Job_Key
+  ON SAFE_CAST(jo.Job_Key AS INT64) = SAFE_CAST(j.Job_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
-  ON j.Part_Key = part.Part_Key
+  ON SAFE_CAST(j.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
 
 -- INFERRED join, not NetSuite/Plex-confirmed — see encap_daily_report_view.sql.
 LEFT JOIN `{gcp_project}.{dataset}.raw_Personnel_v_Employee` emp

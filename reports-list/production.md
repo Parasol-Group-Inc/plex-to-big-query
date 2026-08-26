@@ -136,3 +136,32 @@ cleanly, still 0 rows**, for the same benign reason: `raw_Part_v_Production`
 also came back 0 rows, because none of the 16 real jobs have run yet. This
 is now well-understood, not an open question — recheck once this tenant's
 jobs actually move past `Scheduled`.
+
+**2026-08-24/25 incident, resolved 2026-08-26.** A missing `SAFE_CAST` on
+the `Job_Op -> Job -> Part` joins (present in test but missed in the
+original build) broke view creation in `PlexProd` for all 4 reports —
+caught by a real "PARTIAL PRODUCTION" email. Fixed and pushed 2026-08-24
+(`5897a2c`), verified fixed on `PlexTest` 2026-08-25, but `PlexProd` still
+had no views at all since the prod job hadn't re-run. Manually ran
+`plex-etl-work-orders` in prod 2026-08-26 and confirmed all 4 views now
+exist and are queryable in `PlexProd` — incident closed. Still 0 rows
+everywhere: `raw_Part_v_Job`/`raw_Part_v_Job_Op`/`raw_Part_v_Production`
+are all confirmed still empty on the real Plex prod host as of this check.
+
+**2026-08-26 — MFG Job Schedule's "Inventory Availability" sub-tab
+partially built.** The 3 columns with a confirmed Plex source
+(Description, Quantity On Hand, On Order) are now deployed as
+`mfg_job_schedule_inventory_availability_report`, a 3rd `bq_view` on the
+existing `part_on_hand_inventory.yaml` pipeline — no new extraction,
+reuses the already-deployed on-hand and open-PO reports. The tab's
+remaining columns (Reorder Point, Avg Daily, Current QTY Available, % Left,
+Days on/to Reorder Point) stay unbuilt — their inputs have no confirmed
+Plex source after two full research passes; see
+`spreadsheets/mfg_job_schedule_inventory_availability.md`. The other 6
+MFG Job Schedule sub-tabs (YTD Gate Stats, FG Testing Pending, YTD List,
+Done YTD, Done 2025, 2025 List) remain 🔍 Mapped, not built — their
+headline metrics (Yield, Deviation/NC correlation, the "Successful"
+composite) are all structurally blocked on either a missing Plex FK, a
+business-rule definition only Emilio can give, or real (non-empty)
+`Part_v_Job`/`Part_v_Job_Op` data to test against, none of which more
+coding can resolve.

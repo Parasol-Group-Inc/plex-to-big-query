@@ -1,6 +1,6 @@
 # Packaging Daily Report
 
-> **Status:** ⚠️ Fixed and verified on Test 2026-08-25; **production view still doesn't exist** — broke in prod 2026-08-24 (see Flags below), fix is deployed but prod hasn't re-run since. Will self-heal on the next scheduled prod run (7:20 PM Mountain) or a manual `gcloud run jobs execute plex-etl-work-orders` · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Fixed and verified in both Test and Prod 2026-08-26 — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.packaging_daily_report` exists and is queryable again (0 rows, benign — see Flags below) · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -21,6 +21,7 @@ Pulls from the same production-log data already extracted for Work Orders, then 
 
 - **Fixed 2026-08-24 — real "PARTIAL PRODUCTION" view-creation failure.** Same root cause and fix as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-24 entry — see there for the full detail. Fixed by adding `SAFE_CAST(... AS INT64)` to the `Job`->`Part` join.
 - **Verified 2026-08-25 — Test fixed, Prod still broken.** Same result as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-25 entry: `PlexTest.packaging_daily_report` exists and is queryable (0 rows, benign); `PlexProd.packaging_daily_report` still doesn't exist — needs the prod job's next run.
+- **Resolved 2026-08-26** — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.packaging_daily_report` exists and is queryable (0 rows, still benign — see [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-26 entry for the full detail).
 - **Fixed 2026-08-23 — scrap was silently always zero.** The scrap check compared Plex's `Rejected` flag to `1`, but Plex represents boolean true as `-1`, not `1` (an already-confirmed convention elsewhere in this pipeline) — so no row could ever match, and rejected quantity vanished from both the actual and scrap totals instead of being counted as scrap. Fixed by comparing to `-1`. Caught by code review before any real production data existed to be affected by it.
 - **The "Packaging" line mapping is a decision, not a confirmed 1:1 match.** Plex has no workcenter category called "Packaging" — it only exists there as a department code and a separate part-classification field, neither of which lines up with an actual production line. This report uses Plex's "Bottling" line group instead, because those line names (Bottling Line 1-6, Bulk Room, Powder Line, Liquid Line) closely resemble the sheet's own lines. Which sheet "Line" corresponds to which Plex line hasn't been verified against real filled-in data yet.
 - **Currently 0 rows — expected, not broken.** No real production has been logged against this tenant yet, so there's nothing to roll up. This should start populating once real jobs move past the scheduling stage.

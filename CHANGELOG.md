@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-08-26
+
+### Fixed
+- **`PlexProd` Daily Reports incident closed.** The 2026-08-24 SAFE_CAST fix (`5897a2c`) had only been verified on `PlexTest` as of 2026-08-25 — `PlexProd` still had no views at all for `encap`/`blending`/`labeling`/`packaging_daily_report` because the prod job hadn't run again. Manually executed `plex-etl-work-orders` in prod and, per this repo's own rule of never trusting a clean exit code, queried all 4 views directly: all exist and are queryable (`COUNT(*) = 0`, still benign — `raw_Part_v_Job`/`raw_Part_v_Job_Op`/`raw_Part_v_Production` confirmed still 0 rows on the real Plex prod host, no real production data has landed yet).
+
+### Added
+- **`mfg_job_schedule_inventory_availability_report`** — partial build of the MFG Job Schedule spreadsheet's "Inventory Availability" sub-tab (previously 🔍 Mapped, unbuilt). Covers the 3 columns with a confirmed Plex source (Description, Quantity On Hand, On Order) as a 3rd `bq_view` on the existing `part_on_hand_inventory.yaml` pipeline — no new extraction, just a query joining the already-deployed `part_on_hand_inventory_report` and `purchasing_open_orders_report` views by part number. The tab's other columns (Reorder Point, Avg Daily usage rate, Current QTY Available's allocation-netting logic, % Left, Days on/to Reorder Point) stay deliberately unbuilt — both remaining inputs were checked live against every plausible Plex candidate across two research passes and are either the wrong shape or confirmed empty on this tenant, a data-architect question, not a coding one. Deployed to both `PlexProd`/`PlexTest` via `terraform apply`, verified live. See `docs/reports/mfg_job_schedule_inventory_availability_report.md` and `spreadsheets/mfg_job_schedule_inventory_availability.md`.
+
 ## 2026-08-25
 
 ### Verified

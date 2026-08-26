@@ -69,6 +69,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Inventory Activity | Supply Chain | ✅ Built | [inventory_activity_report.md](inventory_activity_report.md) |
 | Part On-Hand Inventory | Supply Chain | ✅ Built | [part_on_hand_inventory_report.md](part_on_hand_inventory_report.md) |
 | Inventory Risk Analysis | Supply Chain | ✅ Built | [inventory_risk_analysis_report.md](inventory_risk_analysis_report.md) |
+| MFG Job Schedule - Inventory Availability (partial) | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_inventory_availability_report.md](mfg_job_schedule_inventory_availability_report.md) |
 | Quality Supplier Returns Pending | Supply Chain | ✅ Built and deployed 2026-08-23 | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 | Inventory Snapshot | Inventory | ✅ Built | [inventory_snapshot_report.md](inventory_snapshot_report.md) |
 | Inventory Valuation Summary | Inventory | ✅ Built | [inventory_valuation_summary_report.md](inventory_valuation_summary_report.md) |
@@ -76,4 +77,4 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Quality Turnaround Time | Quality | ✅ Built | [quality_turnaround_time_report.md](quality_turnaround_time_report.md) |
 | Quality Deviation | Quality | ✅ Built | [quality_deviation_report.md](quality_deviation_report.md) |
 
-36 reports documented, generated 2026-08-22/23. 34 of them (all but `bottling_job_schedule_report.md` and `purchasing_pending_requisitions_report.md`) were generated in parallel by a multi-agent workflow, each agent independently reading its report's YAML/SQL and searching `reports-list/`/`spreadsheets/`/NetSuite build-plan docs for context — that process caught two real deployment gaps (see Open Quotes/Open RMA's above) that the existing docs had missed.
+37 reports documented. 36 generated 2026-08-22/23 (34 of those in parallel by a multi-agent workflow, each agent independently reading its report's YAML/SQL and searching `reports-list/`/`spreadsheets/`/NetSuite build-plan docs for context — that process caught two real deployment gaps, see Open Quotes/Open RMA's above); `mfg_job_schedule_inventory_availability_report.md` added 2026-08-26.

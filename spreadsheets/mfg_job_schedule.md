@@ -24,7 +24,7 @@ own gaps, and even feed a different downstream report than the main tab.
 | Done 2025 | 🔍 Mapped | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
 | 2025 List | 🔍 Mapped | [mfg_job_schedule_2025_list.md](mfg_job_schedule_2025_list.md) |
 | Success | ✅ Fully resolved | [mfg_job_schedule_success.md](mfg_job_schedule_success.md) |
-| Inventory Availability | 🔍 Mapped | [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md) |
+| Inventory Availability | 🚧 Partially built 2026-08-26 (3 of ~13 columns) | [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md) |
 
 **All 10 tabs now reviewed.** See the Open Questions list below for what's
 still genuinely open across the whole spreadsheet — everything else has

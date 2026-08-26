@@ -25,3 +25,6 @@ bq_view:
   - name: inventory_risk_analysis_report
     display_name: "Inventory Risk Analysis"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_risk_analysis_view.sql
+  - name: mfg_job_schedule_inventory_availability_report
+    display_name: "MFG Job Schedule - Inventory Availability (partial)"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_inventory_availability_view.sql

@@ -2,12 +2,16 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (~90 SKU rows). A completely
-  different grain from every other tab (one row per SKU, not per job) —
-  this is the reorder-point/inventory dashboard that the "Available
-  Inventory"/"Days Left" columns on the Open/FG Testing Pending/Done
-  tabs were always pointing back to. Confirms several exact formulas;
-  checked live for the 2 remaining gaps and ruled out the obvious leads.
+- **Status:** 🚧 Partially built 2026-08-26 — the 3 columns with a
+  confirmed Plex source (Description, Quantity On Hand, On Order) are
+  deployed as `mfg_job_schedule_inventory_availability_report`. Real data
+  analyzed (~90 SKU rows). A completely different grain from every other
+  tab (one row per SKU, not per job) — this is the reorder-point/inventory
+  dashboard that the "Available Inventory"/"Days Left" columns on the
+  Open/FG Testing Pending/Done tabs were always pointing back to. Confirms
+  several exact formulas; checked live for the 2 remaining gaps and ruled
+  out the obvious leads — see "Built 2026-08-26" below for what's still
+  not built and why.
 
 ## What it is
 
@@ -186,3 +190,22 @@ Vox use Plex's Kitting/MRP screens at all? If not, all three most likely
 live entirely outside Plex (NetSuite demand planning, or a sheet-side
 calculation), and no amount of waiting for more test-tenant data will
 change that.
+
+## Built 2026-08-26 — the 3 unblocked columns, not the whole tab
+
+Rather than wait on the open questions above, built the 3 columns that
+were always independently buildable: Description, Quantity On Hand, On
+Order. Added as a 3rd `bq_view` (`mfg_job_schedule_inventory_availability_report`)
+on the existing `part_on_hand_inventory.yaml` pipeline — no new
+extraction, just a query joining the already-deployed
+`part_on_hand_inventory_report` and `purchasing_open_orders_report`
+views by part number. Deployed to both `PlexProd` and `PlexTest` via
+`terraform apply`, verified live (view exists and is queryable, 0 rows —
+same benign reason as everything else on this tenant). See
+`reports/sql/mfg_job_schedule_inventory_availability_view.sql` and
+`docs/reports/mfg_job_schedule_inventory_availability_report.md`.
+
+Reorder Point, Avg Daily, Current QTY Available, % Left, Days on Hand,
+Days to Reorder Point, and Reorder Point Days on Hand remain **not
+built** — still genuinely blocked on the two open questions above, not
+something this pass changed.

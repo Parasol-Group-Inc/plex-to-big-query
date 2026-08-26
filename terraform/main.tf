@@ -2976,6 +2976,13 @@ resource "google_storage_bucket_object" "part_on_hand_inventory_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "mfg_job_schedule_inventory_availability_view_sql" {
+  name         = "sql/mfg_job_schedule_inventory_availability_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/mfg_job_schedule_inventory_availability_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Part On-Hand Inventory — prod (PlexProd, 4 PM UTC) ────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {

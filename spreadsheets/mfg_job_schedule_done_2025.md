@@ -2,11 +2,14 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (~150 rows). Same 49-column
-  schema as `mfg_job_schedule_done_ytd.md` (confirmed identical, including
-  the â¡ï¸ mangled-arrow interval headers) — this is the prior-period
-  archive. Pinned down the exact TAT boundary that was still open, and
-  surfaced 3 new findings worth flagging to the data scientist.
+- **Status:** ✅ Built 2026-08-26, unified with Done YTD/YTD List/2025 List
+  into one continuous view (see "Built 2026-08-26" below — the archiving
+  boundary this doc flags as unclear is a non-issue for that build, since
+  it doesn't split by year at all). Real data analyzed (~150 rows). Same
+  49-column schema as `mfg_job_schedule_done_ytd.md` (confirmed identical,
+  including the â¡ï¸ mangled-arrow interval headers) — this is the
+  prior-period archive. Pinned down the exact TAT boundary that was still
+  open, and surfaced 3 new findings worth flagging to the data scientist.
 
 ## What it is
 
@@ -103,3 +106,16 @@ Same as the other calculated tabs — real `Part_v_Job`/`Part_v_Job_Op`
 data to test Yield. Additionally: ask Emilio/the data architect about the
 Done YTD/Done 2025 archiving boundary, the "BR Ready for MFG" values, and
 whether rework rows should be included in stats consistently.
+
+## Built 2026-08-26
+
+Rework handling **resolved 2026-08-26 (Emilio's call)**: include all
+rework rows in stats, never drop them — expose a computed `is_rework`
+flag (`Job_Type = 'Rework'` OR negative `total_days`) instead, matching
+the "left in with a negative Total Days" behavior this doc found more than
+the "deliberately blanked date" behavior. Built into
+`mfg_job_schedule_success_metrics_report` — see
+`spreadsheets/mfg_job_schedule_ytd_list.md`'s "Built 2026-08-26" section.
+The archiving-boundary question above is moot for this build (one
+continuous view, no year split). "BR Ready for MFG" remains unbuilt — its
+meaning is still genuinely unknown, not guessed at.

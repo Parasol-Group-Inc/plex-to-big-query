@@ -2,7 +2,9 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (108 real rows + a long tail of
+- **Status:** ✅ Built 2026-08-26, unified with Done YTD/Done 2025/2025 List
+  into one continuous `mfg_job_schedule_success_metrics_report` (see "Built
+  2026-08-26" below). Real data analyzed (108 real rows + a long tail of
   blank placeholder rows). **This tab is the row-level source data behind
   "YTD Gate Stats"** — mapping it reverse-engineered the "Successful"
   formula that Gate Stats' own headers didn't specify.
@@ -104,3 +106,33 @@ yes/no rather than treating it as unknowable.
 3. Once resolved, `Success Rating`/`Month` become computed columns over
    the same `mfg_job_schedule_report` + `quality_nonconformance_report`
    data — still no new extraction needed.
+
+## Built 2026-08-26
+
+Deployed as `mfg_job_schedule_success_metrics_report` — ONE continuous
+view (no separate current-year/archive split, see
+`spreadsheets/mfg_job_schedule_done_2025.md`'s archiving-boundary note)
+covering this tab plus Done YTD/Done 2025/2025 List at once, since all 4
+are the same underlying per-job calculated-metrics concept. Implements
+`Success Rating = (Yield + Deviation + TAT gates passed) / 3` exactly as
+reverse-engineered here, using the date pair confirmed in
+`mfg_job_schedule_done_ytd.md` (`FG Testing Released − Date Entered`).
+
+**Deviation** now comes from a real join (`Quality_v_Deviation_Job`, same
+source as `quality_deviation_report`), not left as a gap — still carries
+that report's own "unconfirmed whether every Problem/NC gets a linked
+Deviation" caveat.
+
+**Yield's "Caps Made" is a generalization**, not a literal match: sums
+`Part_v_Production` across ALL of a job's operations (not just
+Encapsulation), so Blending-only jobs get a Yield instead of a hard NULL
+— Emilio's Q2 (does the formula hold for Blending-only jobs) is still
+open, unvalidated either way, since no job with real completed production
+existed to check against at build time.
+
+**Verified live against `PlexTest`**: 25 real rows (this tenant's jobs, all
+added 2026-08-26). Job 4 already shows a real partial yield
+(429/2000 = 21.5%) from actual logged production — the first real,
+non-zero Yield calculation this spreadsheet's build effort has seen. No
+job has an FG Testing Released date yet, so `total_days`/`month`/the TAT
+gate are still NULL across the board — expected, not broken.

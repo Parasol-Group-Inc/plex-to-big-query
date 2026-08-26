@@ -2,10 +2,11 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (~190 rows). Same 7-column
-  shape as `mfg_job_schedule_ytd_list.md` (Date, Product, Yield, Product
-  Type, Days to Mfg, Deviation/NCs?, Success Rating, Month) — this is the
-  prior-year archive counterpart, same relationship as Done
+- **Status:** ✅ Built 2026-08-26, unified with YTD List/Done YTD/Done 2025
+  (see "Built 2026-08-26" below). Real data analyzed (~190 rows). Same
+  7-column shape as `mfg_job_schedule_ytd_list.md` (Date, Product, Yield,
+  Product Type, Days to Mfg, Deviation/NCs?, Success Rating, Month) — this
+  is the prior-year archive counterpart, same relationship as Done
   2025-is-to-Done YTD. Mostly confirmatory, but resolved one real
   ambiguity: what "Date" actually is.
 
@@ -67,3 +68,11 @@ source.
 Same as `mfg_job_schedule_ytd_list.md` and `mfg_job_schedule_done_2025.md`
 — real `Part_v_Job`/`Part_v_Job_Op` data to test Yield, and Emilio's
 confirmation of the remaining open items in `mfg_job_schedule.md`.
+
+## Built 2026-08-26
+
+See `spreadsheets/mfg_job_schedule_ytd_list.md`'s "Built 2026-08-26"
+section — `mfg_job_schedule_success_metrics_report` is one continuous
+view covering this tab, YTD List, Done YTD, and Done 2025 together
+(confirms this tab's own "Date = FG Testing Released" finding, used
+directly as the view's `fg_testing_released_date` column).

@@ -2,9 +2,12 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — column structure analyzed, **not buildable yet**:
-  blocked on 2 pre-existing gaps + 1 new gap + 1 business-rule definition
-  that can't be inferred from the sheet alone
+- **Status:** ✅ Built 2026-08-26 as `mfg_job_schedule_gate_stats_report`,
+  a monthly rollup on top of `mfg_job_schedule_success_metrics_report`.
+  The "Successful" business-rule gap this doc originally flagged as
+  undecidable was resolved by Emilio the same day (100% only, all 3
+  gates) — see the "Built 2026-08-26" section below for what shipped and
+  what's still a best-available proxy rather than a confirmed match.
 
 ## What it is
 
@@ -74,3 +77,32 @@ blocks two downstream reports, not one.
    over `mfg_job_schedule_report` + `quality_nonconformance_report` output
    — no new extraction needed, same reuse pattern as the rest of this
    spreadsheet.
+
+## Built 2026-08-26
+
+Deployed as `mfg_job_schedule_gate_stats_report`, a `GROUP BY month`
+rollup over `mfg_job_schedule_success_metrics_report` (see
+`spreadsheets/mfg_job_schedule_ytd_list.md`'s "Built 2026-08-26" section
+for the row-level view this aggregates). Both tables from this doc's own
+findings are covered: Table 1 (Total/Successful/Not Successful/%
+Successful, split Stock/Custom) and Table 2 (avg Yield, jobs with
+Deviation, avg TAT, jobs within TAT goal, split Stock/Custom).
+
+**"Successful" resolved 2026-08-26 (Emilio's call):** = Success Rating
+100% (all 3 gates), not a lower partial-credit bar — built as the
+`is_successful` column on the underlying row-level view.
+
+**Verified live against `PlexTest`** — 0 rows as of this build, but for
+the correct reason: `month` is NULL on every real job so far (none have
+an FG Testing Released date yet, the tenant's 25 real jobs were all added
+2026-08-26), and this view explicitly filters `WHERE month IS NOT NULL`
+to match the sheet's own behavior of only showing a row once a job has a
+real completion month. Not broken — will populate once real checksheets
+get approved.
+
+**Still not independently confirmed:** the Stock/Custom classification
+proxy (`Job_Distribution` row = Custom) and the Yield formula for
+Blending-only jobs (Q2) — both inherited from
+`mfg_job_schedule_success_metrics_report`, neither resolved by this build.
+Not buildable to test until real production/distribution data exists to
+check them against.

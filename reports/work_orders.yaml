@@ -162,6 +162,12 @@ extractions:
 # mfg_job_schedule_view.sql for the real Product_Type classification
 # (Vitamin/Mineral/Stock vs Custom Formula/etc.) that Part_Type alone
 # doesn't provide.
+#
+# raw_Quality_v_Deviation_Job (added 2026-08-26, referenced by
+# mfg_job_schedule_success_metrics_view.sql for the Deviation gate) is the
+# same shared-table story again — owned/extracted by the
+# quality_nonconformance pipeline (reports/quality_nonconformance.yaml),
+# not re-extracted here.
 
 # Three BigQuery reporting views over the same extractions above:
 #   work_orders_report              — original, unchanged (job/op/workcenter/hours)
@@ -181,6 +187,18 @@ extractions:
 #                                     Schedule Google Sheet, one row per job
 #                                     operation on a Bottling workcenter. See
 #                                     spreadsheets/bottling_job_schedule.md.
+#   mfg_job_schedule_success_metrics_report — added 2026-08-26: one row per
+#                                     job, collapsing the "Done YTD"/"Done
+#                                     2025"/"YTD List"/"2025 List" sub-tabs
+#                                     into a single continuous view (Yield,
+#                                     Total Days, Deviation, Success Rating).
+#                                     mfg_job_schedule_fg_testing_pending_report
+#                                     and mfg_job_schedule_gate_stats_report
+#                                     both build on top of it — MUST be
+#                                     listed before them below so the
+#                                     retry-once pass in main() doesn't need
+#                                     to kick in on every normal run. See
+#                                     reports/sql/mfg_job_schedule_success_metrics_view.sql.
 # The SQL files are loaded from GCS at runtime so they can be edited
 # independently without touching this YAML. {gcp_project} and {dataset} in
 # the SQL are replaced at runtime with the GCP_PROJECT and BQ_DATASET env vars.
@@ -212,3 +230,12 @@ bq_view:
   - name: bottling_job_schedule_report
     display_name: "Bottling Job Schedule"
     sql_file: gs://voxdatalake-report-configs/sql/bottling_job_schedule_view.sql
+  - name: mfg_job_schedule_success_metrics_report
+    display_name: "MFG Job Schedule - Success Metrics (Done/YTD List, unified)"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_success_metrics_view.sql
+  - name: mfg_job_schedule_fg_testing_pending_report
+    display_name: "MFG Job Schedule - FG Testing Pending"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_fg_testing_pending_view.sql
+  - name: mfg_job_schedule_gate_stats_report
+    display_name: "MFG Job Schedule - YTD Gate Stats"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_gate_stats_view.sql

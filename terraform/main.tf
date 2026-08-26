@@ -3374,6 +3374,27 @@ resource "google_storage_bucket_object" "bottling_job_schedule_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "mfg_job_schedule_success_metrics_view_sql" {
+  name         = "sql/mfg_job_schedule_success_metrics_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/mfg_job_schedule_success_metrics_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "mfg_job_schedule_fg_testing_pending_view_sql" {
+  name         = "sql/mfg_job_schedule_fg_testing_pending_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/mfg_job_schedule_fg_testing_pending_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "mfg_job_schedule_gate_stats_view_sql" {
+  name         = "sql/mfg_job_schedule_gate_stats_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/mfg_job_schedule_gate_stats_view.sql"
+  content_type = "text/plain"
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Purchasing Pending Requisitions — "Vox | Purchasing | Pending Order
 # Requisitions" (NetSuite parity, customsearch2935). Scaffolded 2026-08-13,

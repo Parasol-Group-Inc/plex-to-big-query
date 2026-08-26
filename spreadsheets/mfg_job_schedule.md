@@ -16,13 +16,13 @@ own gaps, and even feed a different downstream report than the main tab.
 | Tab | Status | Detail Doc |
 |---|---|---|
 | Open | ✅ Built | this doc |
-| YTD Gate Stats | 🔍 Mapped | [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md) |
-| FG Testing Pending | 🔍 Mapped | [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md) |
-| YTD List | 🔍 Mapped | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
+| YTD Gate Stats | ✅ Built 2026-08-26 (best-criteria — see caveats) | [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md) |
+| FG Testing Pending | ✅ Built 2026-08-26 | [mfg_job_schedule_fg_testing_pending.md](mfg_job_schedule_fg_testing_pending.md) |
+| YTD List | ✅ Built 2026-08-26 (unified with Done YTD/2025 List/Done 2025 — see caveats) | [mfg_job_schedule_ytd_list.md](mfg_job_schedule_ytd_list.md) |
 | READ ME | 📄 Reviewed — not data, but confirmed/corrected several findings | [mfg_job_schedule_read_me.md](mfg_job_schedule_read_me.md) |
-| Done YTD | 🔍 Mapped | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
-| Done 2025 | 🔍 Mapped | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
-| 2025 List | 🔍 Mapped | [mfg_job_schedule_2025_list.md](mfg_job_schedule_2025_list.md) |
+| Done YTD | ✅ Built 2026-08-26 (unified — see caveats) | [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md) |
+| Done 2025 | ✅ Built 2026-08-26 (unified — see caveats) | [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md) |
+| 2025 List | ✅ Built 2026-08-26 (unified — see caveats) | [mfg_job_schedule_2025_list.md](mfg_job_schedule_2025_list.md) |
 | Success | ✅ Fully resolved | [mfg_job_schedule_success.md](mfg_job_schedule_success.md) |
 | Inventory Availability | 🚧 Partially built 2026-08-26 (3 of ~13 columns) | [mfg_job_schedule_inventory_availability.md](mfg_job_schedule_inventory_availability.md) |
 
@@ -55,6 +55,27 @@ needs validating against real data (load begins 2026-08-24) before this
 becomes the automated Deviation=NO/YES answer the Success Rating formula
 needs.
 
+**Built 2026-08-26 — the Done YTD / Done 2025 / YTD List / 2025 List /
+FG Testing Pending / YTD Gate Stats sub-tabs, unified.** Those 4
+calculated-metrics sub-tabs are the same underlying concept split across
+2 grains (full detail vs. a 7-column extract) and 2 time windows (current
+year vs. prior-year archive) — a spreadsheet needs that split to stay
+readable, a BigQuery view doesn't. Built as ONE continuous
+`mfg_job_schedule_success_metrics_report` (one row per job, no date-range
+split), with `mfg_job_schedule_fg_testing_pending_report` as a thin filter
+alias over it and `mfg_job_schedule_gate_stats_report` as a monthly
+rollup on top. Uses the now-confirmed formulas (Total Days = FG Testing
+Released − Date Entered, TAT goal ≤84 days, Yield = Caps Made ÷ Capsule
+Count, Success Rating = gates-passed/3) plus 2 business-rule calls from
+Emilio (Q4, Q11 above). Verified live against `PlexTest`, which now has
+25 real jobs (up from 0 as of a week ago) — see
+`reports/sql/mfg_job_schedule_success_metrics_view.sql`'s header for
+every input that's still a best-available proxy rather than a fully
+confirmed match (FG Testing Released date, the Yield generalization to
+non-encapsulation jobs, Stock-vs-Custom). Not yet re-verified in `PlexProd`
+— rides the same `work_orders.yaml` pipeline as the 4 Daily Reports, will
+create there on the next scheduled prod run.
+
 ## ❓ Open Questions for the Data Architect/Scientist
 
 Running list across all tabs of this spreadsheet — kept in one place so
@@ -79,8 +100,9 @@ not just for lack of data.
    `FG Testing Released − Date Entered`, confirmed by exact match against
    real data; the 2 negative values are legitimate rework/partial-batch
    rows, not bad data. — [mfg_job_schedule_done_ytd.md](mfg_job_schedule_done_ytd.md)
-4. Confirm the job-level "Successful" threshold in Gate Stats' Table 1 —
-   perfect 3/3 Success Rating, or a lower bar? — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
+4. ✅ **Resolved 2026-08-26 (Emilio's call)**: "Successful" = Success Rating
+   = 100% (all 3 gates pass) — not a lower partial-credit bar. Built into
+   `mfg_job_schedule_gate_stats_report`'s `is_successful` column. — [mfg_job_schedule_ytd_gate_stats.md](mfg_job_schedule_ytd_gate_stats.md)
 5. ✅ **Resolved 2026-08-11**: TAT goal is exactly `Total Days ≤ 84` for
    both stock and custom — confirmed by real-data inference (2 rows
    landing exactly on 85, both failing) **and** by the literal source
@@ -109,10 +131,11 @@ not just for lack of data.
 10. What's the actual archiving boundary between "Done YTD" and
     "Done 2025"? Not determinable from the data — some late-2025
     completions appear in Done 2025 while Done YTD starts 9/17/2025. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
-11. Should rework rows be included in monthly stats consistently? Real
-    data shows both practices today: some rework rows get a deliberately
-    deleted date ("not in stats, this is a rework"), others are left in
-    with a negative Total Days. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
+11. ✅ **Resolved 2026-08-26 (Emilio's call)**: include all rework rows in
+    stats, never silently drop them — expose a computed `is_rework` flag
+    (`Job_Type = 'Rework'` OR negative `total_days`) instead, so any
+    consumer can filter it out themselves. Built into
+    `mfg_job_schedule_success_metrics_report`. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
 12. What does "BR Ready for MFG" actually represent? Real values are
     small integers (1-3) and occasionally a comma-pair like `2,5` — no
     clear pattern against any other mapped column. — [mfg_job_schedule_done_2025.md](mfg_job_schedule_done_2025.md)
@@ -186,6 +209,11 @@ running human commentary log).
   (2/3 PM UTC)
 - `part_on_hand_inventory_report` — `plex-etl-part-on-hand-inventory(-test)`
   (4/5 PM UTC)
+- `mfg_job_schedule_success_metrics_report` / `_fg_testing_pending_report` /
+  `_gate_stats_report` — added 2026-08-26, 3 more `bq_view`s on the same
+  `plex-etl-work-orders(-test)` job
+- `mfg_job_schedule_inventory_availability_report` — added 2026-08-26, a
+  3rd `bq_view` on `plex-etl-part-on-hand-inventory(-test)`
 
 See [docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md](../docs/MFG_JOB_SCHEDULE_BUILD_PLAN.md)
 for the full technical narrative (SQL design decisions, bugs hit and fixed,

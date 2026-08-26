@@ -159,9 +159,32 @@ Days on/to Reorder Point) stay unbuilt — their inputs have no confirmed
 Plex source after two full research passes; see
 `spreadsheets/mfg_job_schedule_inventory_availability.md`. The other 6
 MFG Job Schedule sub-tabs (YTD Gate Stats, FG Testing Pending, YTD List,
-Done YTD, Done 2025, 2025 List) remain 🔍 Mapped, not built — their
+Done YTD, Done 2025, 2025 List) remained 🔍 Mapped, not built — their
 headline metrics (Yield, Deviation/NC correlation, the "Successful"
-composite) are all structurally blocked on either a missing Plex FK, a
-business-rule definition only Emilio can give, or real (non-empty)
-`Part_v_Job`/`Part_v_Job_Op` data to test against, none of which more
-coding can resolve.
+composite) were structurally blocked on either a missing Plex FK, a
+business-rule definition only Emilio could give, or real (non-empty)
+`Part_v_Job`/`Part_v_Job_Op` data to test against.
+
+**2026-08-26 (cont.) — all 6 remaining sub-tabs built, same day.** Two
+business-rule calls from Emilio (Successful = 100%/all 3 gates, not
+partial credit; rework rows included with an `is_rework` flag, never
+dropped) unblocked the business-rule side. The data side turned out to
+have moved too: `PlexTest` went from 0 real jobs to 25 sometime this week
+— real, non-trivial data to validate against for the first time. Built
+`mfg_job_schedule_success_metrics_report` (one continuous view covering
+Done YTD/Done 2025/YTD List/2025 List at once — a spreadsheet needs that
+4-way split to stay readable, a BigQuery view doesn't), plus
+`mfg_job_schedule_fg_testing_pending_report` (thin filter over it) and
+`mfg_job_schedule_gate_stats_report` (monthly rollup on top). All 3
+deployed via `terraform apply` and verified live against `PlexTest` — job
+4 already shows a real, non-zero Yield calculation (429/2000 = 21.5%)
+from actual logged production, the first real Yield number this
+spreadsheet effort has seen. Still open, unconfirmed by this build:
+whether the Yield formula holds for Blending-only jobs (Q2), the
+Stock-vs-Custom proxy, and whether "latest approved checksheet" is really
+"FG Testing Released" specifically vs. some other QC stage — see
+`spreadsheets/mfg_job_schedule_ytd_list.md`'s "Built 2026-08-26" section
+for the full caveat list. Not yet re-verified in `PlexProd` — rides the
+same `work_orders.yaml` pipeline, will create there on the next scheduled
+run rather than a manual trigger (no urgency, unlike the Daily Reports
+incident above).

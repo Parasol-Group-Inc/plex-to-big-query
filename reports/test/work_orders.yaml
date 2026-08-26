@@ -123,3 +123,12 @@ bq_view:
   - name: bottling_job_schedule_report
     display_name: "Bottling Job Schedule"
     sql_file: gs://voxdatalake-report-configs/sql/bottling_job_schedule_view.sql
+  - name: mfg_job_schedule_success_metrics_report
+    display_name: "MFG Job Schedule - Success Metrics (Done/YTD List, unified)"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_success_metrics_view.sql
+  - name: mfg_job_schedule_fg_testing_pending_report
+    display_name: "MFG Job Schedule - FG Testing Pending"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_fg_testing_pending_view.sql
+  - name: mfg_job_schedule_gate_stats_report
+    display_name: "MFG Job Schedule - YTD Gate Stats"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_gate_stats_view.sql

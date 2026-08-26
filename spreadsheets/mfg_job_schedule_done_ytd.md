@@ -2,11 +2,13 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (~110 real rows). **This is
-  the actual master table** where Yield/Total Days/Deviation/Success Grade
-  get calculated — YTD List is a slimmed extract of it. Confirmed 2 of the
-  4 open questions from `mfg_job_schedule_read_me.md` with exact,
-  reproducible formula matches; no guessing needed this round.
+- **Status:** ✅ Built 2026-08-26, unified with YTD List/Done 2025/2025 List
+  (see "Built 2026-08-26" below — this doc's confirmed formulas are what
+  the unified build implements). Real data analyzed (~110 real rows).
+  **This is the actual master table** where Yield/Total Days/Deviation/
+  Success Grade get calculated — YTD List is a slimmed extract of it.
+  Confirmed 2 of the 4 open questions from `mfg_job_schedule_read_me.md`
+  with exact, reproducible formula matches; no guessing needed this round.
 
 ## What it is
 
@@ -114,3 +116,15 @@ explained, not just a hypothesis.
 Same as `mfg_job_schedule_ytd_list.md` — real `Part_v_Job`/`Part_v_Job_Op`
 data to test Yield, and Emilio's confirmation of the job-level
 "Successful" threshold and the exact TAT boundary (84 vs 85).
+
+## Built 2026-08-26
+
+See `spreadsheets/mfg_job_schedule_ytd_list.md`'s "Built 2026-08-26"
+section — `mfg_job_schedule_success_metrics_report` implements this tab's
+formulas (Total Days, Yield %, the sanity-bound-worthy interval columns
+aren't built as separate columns here since this view doesn't reproduce
+the 8 `AO`-`AV` interval columns specifically, only the ones already
+exposed elsewhere) as one continuous view, not split into a "Done YTD"
+vs. "Done 2025" archive — collapsing the archiving-boundary open question
+(this doc's own "what's needed next" below) into a non-issue for the
+BigQuery build.

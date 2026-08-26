@@ -2,8 +2,11 @@
 
 - **Parent spreadsheet:** [MFG Job Schedule](mfg_job_schedule.md) (see its
   "Tabs in this spreadsheet" tracker)
-- **Status:** 🔍 Mapped — real data analyzed (11 rows), same job-level grain
-  as the "Open" tab, mostly buildable
+- **Status:** ✅ Built 2026-08-26 as `mfg_job_schedule_fg_testing_pending_report`
+  — a thin filter (`WHERE fg_testing_released_date IS NULL`) over
+  `mfg_job_schedule_success_metrics_report`. Real data analyzed (11 rows
+  at mapping time), same job-level grain as the "Open" tab, mostly
+  buildable — see "Built 2026-08-26" at the bottom for what shipped.
 
 ## What it is
 
@@ -195,3 +198,14 @@ actual is ever needed instead of the routing spec.
    job data exists on either tenant — would resolve Stock/Custom AND
    Customer at once, for both this tab and YTD Gate Stats.
 3. ✅ **Resolved 2026-08-23** — Blender/batch size mapping (see above).
+
+## Built 2026-08-26
+
+Deployed as `mfg_job_schedule_fg_testing_pending_report` — verified live
+against `PlexTest`: 25 rows, matching the tenant's full 25-job count
+exactly (none have an FG Testing Released date yet, so all currently show
+as pending — correct for a tenant where every real job was just added
+2026-08-26). Only the columns already confirmed buildable on the Open tab
+are included (job/part identity, dates, Yield/Deviation/TAT gates); the
+Blender batch-size, MG Per Cap, and Days Left/POs Received gaps flagged
+above are unchanged by this build — none of them were re-attempted here.

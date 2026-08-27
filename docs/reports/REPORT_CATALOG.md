@@ -73,6 +73,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | MFG Job Schedule - Success Metrics (Done/YTD List, unified) | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_success_metrics_report.md](mfg_job_schedule_success_metrics_report.md) |
 | MFG Job Schedule - FG Testing Pending | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_fg_testing_pending_report.md](mfg_job_schedule_fg_testing_pending_report.md) |
 | MFG Job Schedule - YTD Gate Stats | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_gate_stats_report.md](mfg_job_schedule_gate_stats_report.md) |
+| Weekly Production Update | Production | ✅ Built and deployed 2026-08-26 (partial) | [weekly_production_update_report.md](weekly_production_update_report.md) |
 | Quality Supplier Returns Pending | Supply Chain | ✅ Built and deployed 2026-08-23 | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 | Inventory Snapshot | Inventory | ✅ Built | [inventory_snapshot_report.md](inventory_snapshot_report.md) |
 | Inventory Valuation Summary | Inventory | ✅ Built | [inventory_valuation_summary_report.md](inventory_valuation_summary_report.md) |
@@ -80,4 +81,4 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Quality Turnaround Time | Quality | ✅ Built | [quality_turnaround_time_report.md](quality_turnaround_time_report.md) |
 | Quality Deviation | Quality | ✅ Built | [quality_deviation_report.md](quality_deviation_report.md) |
 
-40 reports documented. 36 generated 2026-08-22/23 (34 of those in parallel by a multi-agent workflow, each agent independently reading its report's YAML/SQL and searching `reports-list/`/`spreadsheets/`/NetSuite build-plan docs for context — that process caught two real deployment gaps, see Open Quotes/Open RMA's above); `mfg_job_schedule_inventory_availability_report.md`, `mfg_job_schedule_success_metrics_report.md`, `mfg_job_schedule_fg_testing_pending_report.md`, and `mfg_job_schedule_gate_stats_report.md` added 2026-08-26.
+41 reports documented. 36 generated 2026-08-22/23 (34 of those in parallel by a multi-agent workflow, each agent independently reading its report's YAML/SQL and searching `reports-list/`/`spreadsheets/`/NetSuite build-plan docs for context — that process caught two real deployment gaps, see Open Quotes/Open RMA's above); `mfg_job_schedule_inventory_availability_report.md`, `mfg_job_schedule_success_metrics_report.md`, `mfg_job_schedule_fg_testing_pending_report.md`, `mfg_job_schedule_gate_stats_report.md`, and `weekly_production_update_report.md` added 2026-08-26.

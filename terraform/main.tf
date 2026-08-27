@@ -3395,6 +3395,13 @@ resource "google_storage_bucket_object" "mfg_job_schedule_gate_stats_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "weekly_production_update_view_sql" {
+  name         = "sql/weekly_production_update_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/weekly_production_update_view.sql"
+  content_type = "text/plain"
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Purchasing Pending Requisitions — "Vox | Purchasing | Pending Order
 # Requisitions" (NetSuite parity, customsearch2935). Scaffolded 2026-08-13,

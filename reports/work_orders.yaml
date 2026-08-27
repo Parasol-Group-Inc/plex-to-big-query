@@ -239,3 +239,6 @@ bq_view:
   - name: mfg_job_schedule_gate_stats_report
     display_name: "MFG Job Schedule - YTD Gate Stats"
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_gate_stats_view.sql
+  - name: weekly_production_update_report
+    display_name: "Weekly Production Update"
+    sql_file: gs://voxdatalake-report-configs/sql/weekly_production_update_view.sql

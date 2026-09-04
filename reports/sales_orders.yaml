@@ -69,6 +69,61 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-09-01, EXPLORATORY: schema-confirmed only (tree-scanned in
+  # catalog/full_schema_catalog.csv), never queried live before. Per the
+  # 2026-09-01 Emilio/Jennilyn meeting (meetings-reference/Sep-1/), real
+  # "Revenue"/"Total in Shipping"/"WIP" must come from Plex's SHIPPING
+  # module, not the Sales module sales_revenue_summary_report/
+  # sales_order_value_by_status_report were originally built on — those two
+  # views are being rebuilt on top of this once real data confirms the
+  # schema below matches expectations. See
+  # score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md.
+  - plex_view: Sales_v_Shipper
+    bq_table: raw_Sales_v_Shipper
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Shipper_Line
+    bq_table: raw_Sales_v_Shipper_Line
+    filter: ""
+    date_col: ""
+
+  # Shipper_Status_Key → status text + a literal `Shipped` boolean, the key
+  # to distinguishing "actually shipped" from "ready/pending in shipping."
+  - plex_view: Sales_v_Shipper_Status
+    bq_table: raw_Sales_v_Shipper_Status
+    filter: ""
+    date_col: ""
+
+  # One row per physical carton/package on a shipment — candidate source
+  # for "number of cartons shipped."
+  - plex_view: Sales_v_Shipper_Container
+    bq_table: raw_Sales_v_Shipper_Container
+    filter: ""
+    date_col: ""
+
+  # Shipper_Line → AR invoice link + invoice date — candidate source for
+  # "sorted by invoice date."
+  - plex_view: Sales_v_Shipper_AR_Invoice
+    bq_table: raw_Sales_v_Shipper_AR_Invoice
+    filter: ""
+    date_col: ""
+
+  # Bridges a Shipper_Line back to the Release_Key already used above —
+  # the join path back to the Sales order chain (customer, part group,
+  # blanket order type).
+  - plex_view: Sales_v_Shipper_Line_Release
+    bq_table: raw_Sales_v_Shipper_Line_Release
+    filter: ""
+    date_col: ""
+
+  # Quantity_Allocated per release — needed for the Out-of-Stock rule from
+  # the same meeting (quantity available = on-hand − allocated).
+  - plex_view: Sales_v_Release_Allocation
+    bq_table: raw_Sales_v_Release_Allocation
+    filter: ""
+    date_col: ""
+
   # Customer master — Customer_No → customer name and info
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
@@ -169,3 +224,65 @@ bq_view:
   - name: sales_order_allocation_report
     display_name: "Vox | Allocation Report"
     sql_file: gs://voxdatalake-report-configs/sql/sales_order_allocation_view.sql
+  # ── 2026-09-01 Emilio/Jennilyn meeting corrections (meetings-reference/Sep-1/) ──
+  # The two views originally added 2026-09-01 (below, under this same date)
+  # were built on the Sales module. Jennilyn was explicit that real
+  # Revenue/WIP/"Total in Shipping" must come from Plex's SHIPPING module
+  # instead (Sales_v_Shipper family, added to extractions[] above same day,
+  # live-confirmed with real data). Both views were REPLACED IN PLACE
+  # (same names) rather than left as dead code alongside new ones — see
+  # score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md.
+  #
+  # shipping_revenue_report MUST be listed before sales_revenue_summary_report
+  # below (thin rollup, SELECTs from it directly).
+  - name: shipping_revenue_report
+    display_name: "Vox Scorecard | Shipping Revenue (detail)"
+    sql_file: gs://voxdatalake-report-configs/sql/shipping_revenue_report.sql
+  - name: sales_revenue_summary_report
+    display_name: "Vox Scorecard | Revenue Summary (MTD/YTD)"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_revenue_summary_view.sql
+  - name: sales_order_value_by_status_report
+    display_name: "Vox Scorecard | WIP Order Value"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_order_value_by_status_view.sql
+  - name: shipping_pending_revenue_report
+    display_name: "Vox Scorecard | Total in Shipping (Pending Revenue)"
+    sql_file: gs://voxdatalake-report-configs/sql/shipping_pending_revenue_view.sql
+  - name: shipping_daily_report
+    display_name: "Vox Scorecard | Shipping Daily (Packages/Orders/Revenue)"
+    sql_file: gs://voxdatalake-report-configs/sql/shipping_daily_report_view.sql
+  - name: inventory_out_of_stock_report
+    display_name: "Vox Scorecard | Out of Stock (33-parts)"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_out_of_stock_view.sql
+
+  # ── Added 2026-09-04 — buildable-now items from the Sep 1 requirements
+  # meeting that nothing was blocking. All four reuse raw tables this
+  # pipeline was ALREADY extracting; zero new ETL, zero new Plex calls.
+  #
+  # sales_mtd_by_status_change_report MUST be listed before
+  # sales_mtd_summary_report (thin rollup, SELECTs from it directly), and
+  # sales_revenue_summary_report (above) before sales_revenue_run_rate_report
+  # for the same reason.
+  - name: sales_mtd_by_status_change_report
+    display_name: "Vox Scorecard | Sales MTD (by status change, detail)"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_mtd_by_status_change_view.sql
+  - name: sales_mtd_summary_report
+    display_name: "Vox Scorecard | Sales MTD/YTD by Rep"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_mtd_summary_view.sql
+  - name: sales_revenue_run_rate_report
+    display_name: "Vox Scorecard | Revenue Run Rate & % Into Month"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_revenue_run_rate_view.sql
+  - name: pipeline_plex_value_report
+    display_name: "Vox Scorecard | Pipeline Value (Plex half only)"
+    sql_file: gs://voxdatalake-report-configs/sql/pipeline_plex_value_view.sql
+
+  # ── Added 2026-09-04 — goal vs actual. These are the FIRST views in this
+  # pipeline that read a maintained table (`scorecard_goals`) rather than
+  # Plex data. That table is fed from a Google Sheet by an Apps Script and is
+  # NOT created by this ETL — if it's missing, these two views fail to create.
+  # Both must stay after sales_revenue_summary_report / sales_mtd_summary_report.
+  - name: revenue_vs_goal_report
+    display_name: "Vox Scorecard | Revenue vs Goal"
+    sql_file: gs://voxdatalake-report-configs/sql/revenue_vs_goal_view.sql
+  - name: sales_vs_goal_report
+    display_name: "Vox Scorecard | Sales vs Goal by Rep"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_vs_goal_view.sql

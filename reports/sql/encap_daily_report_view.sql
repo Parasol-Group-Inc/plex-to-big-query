@@ -42,8 +42,21 @@
 -- jobs were freshly created that morning with 0 actual production logged
 -- against any of them (Status=Scheduled, 0 hours) — so this table was
 -- empty for a benign reason (nothing had run yet), not proof the table/
--- join is wrong. Needs re-checking once real production has actually
--- happened on this tenant.
+-- join is wrong.
+--
+-- FIXED 2026-09-01 — a real bug, not benign: once real Part_v_Production
+-- rows finally landed on this tenant, this view still returned 0. Root
+-- cause: raw_Part_v_Job_Op's Job_Op_Key values only cover current/open
+-- operations on this tenant — a production log entry against an operation
+-- that's since closed/archived has a Job_Op_Key Part_v_Job_Op no longer
+-- carries, so the (INNER) `jo` join silently dropped every such row. The
+-- `wc` join never needed `jo` at all (it already keys off
+-- `prod.Workcenter_Key` directly, confirmed above) — only `job_count`/
+-- `parts_run` depend on reaching Job/Part through `jo`. Changed to
+-- LEFT JOIN so a production row is never dropped just because its
+-- operation has aged out of Job_Op; job_count/parts_run simply go
+-- NULL-safe (COUNT DISTINCT / STRING_AGG already ignore NULLs) for those
+-- rows instead of losing the row's actual/scrap quantity entirely.
 --
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
@@ -86,7 +99,7 @@ SELECT
 
 FROM prod
 
-JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
   ON SAFE_CAST(prod.Job_Op_Key AS INT64) = SAFE_CAST(jo.Job_Op_Key AS INT64)
 
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc

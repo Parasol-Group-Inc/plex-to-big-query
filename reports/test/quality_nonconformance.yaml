@@ -61,3 +61,7 @@ bq_view:
   - name: quality_deviation_report
     display_name: "Quality Deviations"
     sql_file: gs://voxdatalake-report-configs/sql/quality_deviation_view.sql
+  # Added 2026-09-01 — see reports/quality_nonconformance.yaml for the full story.
+  - name: quality_cost_by_category_report
+    display_name: "Vox Scorecard | NC Cost by Category"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_cost_by_category_view.sql

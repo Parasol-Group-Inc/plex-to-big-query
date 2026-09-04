@@ -73,3 +73,9 @@ bq_view:
   - name: inventory_valuation_summary_report
     display_name: "Vox | Inventory Valuation Summary"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_summary_view.sql
+  # Added 2026-09-01 — Vox Nutrition Scorecard migration
+  # (score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md). Thin alias
+  # over inventory_valuation_summary_report above — must stay listed after it.
+  - name: inventory_valuation_total_report
+    display_name: "Vox Scorecard | Inventory Value Total"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_total_view.sql

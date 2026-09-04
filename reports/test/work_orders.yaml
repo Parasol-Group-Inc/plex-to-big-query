@@ -135,3 +135,27 @@ bq_view:
   - name: weekly_production_update_report
     display_name: "Weekly Production Update"
     sql_file: gs://voxdatalake-report-configs/sql/weekly_production_update_view.sql
+  # Added 2026-09-01 — see reports/work_orders.yaml for the full story.
+  - name: quality_fpy_by_area_month_report
+    display_name: "Vox Scorecard | FPY by Area & Month"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_fpy_by_area_month_view.sql
+  - name: mfg_job_open_caps_report
+    display_name: "Vox Scorecard | Open Caps (Encapsulation)"
+    sql_file: gs://voxdatalake-report-configs/sql/mfg_job_open_caps_view.sql
+  - name: bottling_job_open_report
+    display_name: "Vox Scorecard | Open Bottles (Bottling)"
+    sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_view.sql
+  # Added 2026-09-04 — "production by work center group by month", asked for
+  # directly in the Sep 1 requirements meeting. Complements (does not
+  # replace) the 4 per-day, per-workcenter Daily Reports: this is the grain
+  # the scorecard's Actual-vs-Goal tiles need, and it covers every work
+  # center group at once so a new line appears without a new view.
+  - name: production_monthly_by_workcenter_group_report
+    display_name: "Vox Scorecard | Production by Work Center Group & Month"
+    sql_file: gs://voxdatalake-report-configs/sql/production_monthly_by_workcenter_group_view.sql
+  # Added 2026-09-04 — goal vs actual per work centre group. Reads the
+  # maintained `scorecard_goals` table (Google Sheet -> Apps Script -> BigQuery),
+  # not Plex. Must stay after production_monthly_by_workcenter_group_report.
+  - name: production_vs_goal_report
+    display_name: "Vox Scorecard | Production vs Goal"
+    sql_file: gs://voxdatalake-report-configs/sql/production_vs_goal_view.sql

@@ -28,3 +28,7 @@ bq_view:
   - name: mfg_job_schedule_inventory_availability_report
     display_name: "MFG Job Schedule - Inventory Availability (partial)"
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_inventory_availability_view.sql
+  # Added 2026-09-01 — see reports/part_on_hand_inventory.yaml for the full story.
+  - name: inventory_top_quantity_report
+    display_name: "Vox Scorecard | Top Quantity Ranking"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_top_quantity_view.sql

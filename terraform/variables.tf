@@ -80,14 +80,14 @@ variable "secret_company_code" {
 
 variable "cloud_run_job" {
   type        = string
-  description = "Cloud Run job name"
-  default     = "plex-etl"
+  description = "Cloud Run job name for the SALES ORDERS pipeline (renamed 2026-09-04 from the legacy generic \"plex-etl\")"
+  default     = "plex-etl-sales-orders"
 }
 
 variable "scheduler_job" {
   type        = string
-  description = "Cloud Scheduler job name"
-  default     = "plex-daily-sync"
+  description = "Cloud Scheduler job name for the SALES ORDERS pipeline (renamed 2026-09-04 from the legacy generic \"plex-daily-sync\")"
+  default     = "plex-sales-orders-sync"
 }
 
 variable "scheduler_cron" {
@@ -205,14 +205,14 @@ variable "bq_dataset_test" {
 
 variable "cloud_run_job_test" {
   type        = string
-  description = "Cloud Run job name for the test pipeline"
-  default     = "plex-etl-test"
+  description = "Cloud Run job name for the SALES ORDERS test pipeline (renamed 2026-09-04 from \"plex-etl-test\")"
+  default     = "plex-etl-sales-orders-test"
 }
 
 variable "scheduler_job_test" {
   type        = string
-  description = "Cloud Scheduler job name for the test pipeline"
-  default     = "plex-daily-sync-test"
+  description = "Cloud Scheduler job name for the SALES ORDERS test pipeline (renamed 2026-09-04 from \"plex-daily-sync-test\")"
+  default     = "plex-sales-orders-sync-test"
 }
 
 variable "scheduler_cron_test" {

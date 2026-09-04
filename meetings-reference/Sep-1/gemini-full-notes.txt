@@ -1,0 +1,64 @@
+Sep 1, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+Summary
+Scorecard data review and revenue reporting definition via shipping metrics and inventory risk analysis
+
+Revenue Reporting Metrics
+Shipping revenue selected as primary metric. Data sourced from shipping module.
+
+Operational Health Tracking
+Pending shipping revenue tracked by summing ready units. Inventory risk analysis logic defined.
+
+Sales And Production Goals
+Sales month to date and pipeline opportunities defined. Production goals organized by work center group.
+
+
+Decisions
+Aligned
+Shipping orders selected for revenue data The revenue metric will be derived from shipped orders within the shipping database rather than sales orders.
+Revenue data grouped by part group Shipping revenue will be categorized by part group to enable percentage of revenue reporting by group.
+Custom table chosen for goal management Goal tracking will be managed using a custom input table in Looker Studio.
+Shipping module selected for pending revenue Revenue for open or pending orders will be sourced from the shipping module, specifically summing the value of ready units.
+Out-of-stock logic defined for parts Out-of-stock logic is defined to only include parts starting with '33' that possess a minimum stock level.
+WIP revenue defined as pending fulfillment Work in progress (WIP) revenue includes all order lines pending fulfillment, regardless of specific production status.
+Sales MTD based on status change Sales month-to-date calculations are based on the date the status changed to pending fulfillment.
+Sales goals parsed by representative Sales goal tracking will be parsed and associated by sales representative.
+YTD sales includes static historical data Year-to-date sales data will be comprised of Plex data supplemented with a static historical number at go-live.
+Pipeline calculated from Monday and Plex Total pipeline opportunities will be calculated by summing Monday.com data with quotes and pending sales approval orders from Plex.
+
+
+Next steps
+[Jennilyn Tockstein] Create Goal Table: Build a table in the system to allow for manual entry and editing of metric goals.
+[Jennilyn Tockstein] Configure Big Query Table: Add a new table to Big Query to track operational health and safe days.
+[The group] Update YTD Data: Add dummy values for the year to date data and update them with prior numbers at go live.
+
+
+Details
+Scorecard Data Status: Emilio Dominguez reviewed the scorecard's current state, noting that some items are ready, while others are partial, lack a Plex path, or require decisions due to how Plex handles data. Currently, the revenue data relies on live data extracted from the Looker database rather than a built Plex report, and Emilio Dominguez noted that they are contrasting available data against existing Plex structures (00:00:00).
+
+Revenue Reporting Definition: Jennilyn Tockstein and Emilio Dominguez discussed the revenue metric, clarifying that "master price" is not the correct primary field. They concluded that "shipping revenue"—representing the dollar value of units shipped—is the correct metric to utilize, rather than sales revenue (00:03:22). They decided to pull this data from the shipping module in Plex (00:11:10).
+
+Shipping Revenue by Part Group: Jennilyn Tockstein confirmed that shipping revenue should be grouped by part group and sorted by invoice date. This grouping will allow them to calculate the percentage of revenue by part group for better reporting (00:11:10).
+Revenue Goals and Percentage Metrics: For the revenue goals, Jennilyn Tockstein plans to create a table in BigQuery to allow for manual entry. This table will enable them to track the "percentage to goal" metric, which is a calculated field using month-to-date revenue against the established goal (00:12:55).
+Operational Health - Pending Shipping Revenue: Emilio Dominguez and Jennilyn Tockstein addressed operational health tracking, specifically regarding the revenue of items that are completed and in the shipping module but have not yet left the facility (00:15:17). Jennilyn Tockstein specified that they should sum the value of units ready to ship (open or pending) rather than the total order amount (00:17:22).
+
+Shipping Reporting Details: Jennilyn Tockstein advised using the shipping report to track the number of packages shipped, the count of orders shipped, and shipping revenue from the previous day. They also discussed tracking pending orders labeled as "blanket," which can be identified via the order type field in the Plex system (00:19:26).
+
+Inventory Risk Analysis Logic: Emilio Dominguez and Jennilyn Tockstein defined the "out of stock" logic for the inventory risk analysis report. The report will track parts that begin with "33" and have a minimum inventory quantity assigned (00:21:21). A part is considered "out of stock" if the inventory on hand is insufficient to meet demand; however, Jennilyn Tockstein noted that custom parts are excluded from this negative balance constraint (00:24:24).
+
+Work in Progress Metric: The "work in progress" (WIP) metric was defined by Jennilyn Tockstein as any order line that is in a "pending fulfillment" status (00:26:17). It includes the dollar value of orders that are released or paid for but have not yet shipped, regardless of whether the job is currently in production or already completed (00:28:56).
+
+Sales Month-to-Date Reporting: Jennilyn Tockstein clarified that "sales month-to-date" counts any order line that entered "pending fulfillment" status for the first time during the current month (00:33:40). The metric will also track the associated sales representative (00:36:14).
+Sales Year-to-Date Strategy: Regarding sales year-to-date, Emilio Dominguez and Jennilyn Tockstein acknowledged the scarcity of historical data in the new system (00:36:14). They agreed to input a static or dummy number into Plex at go-live to serve as a starting point, which will then accumulate new data moving forward (00:38:27).
+
+Pipeline Opportunities Forecast: The pipeline opportunities forecast will combine data from Monday.com with data from Plex. Specifically, it will sum Monday.com figures with Plex sales orders currently marked as "quote" or "pending sales approval" (00:38:27).
+Production Actual versus Goal: Production data, specifically actual versus goal, will be organized by work center group and month. Jennilyn Tockstein indicated they will set up a goal table to manage this metric (00:38:27).
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.

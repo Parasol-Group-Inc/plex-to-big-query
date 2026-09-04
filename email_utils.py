@@ -187,14 +187,11 @@ def send_report(report: Dict[str, object]) -> bool:
     # A pipeline can produce more than one named report in a single run (e.g.
     # the work_orders pipeline also produces MFG Job Schedule and Labeling |
     # Open WO: Results) — those are peer reports sharing a pipeline, not a
-    # "general" report with side extras, so the subject lists each by its
-    # real Reports List name rather than just the internal pipeline name.
+    # "general" report with side extras. Each one is listed by its real
+    # Reports List name in the body's "REPORTS PRODUCED" section (built from
+    # reports_detail further down); the subject no longer enumerates them.
     report_category = str(report.get("report_category", ""))
     reports_detail   = report.get("reports_detail") or []
-    display_names    = [
-        str(r.get("display_name", "")) for r in reports_detail
-        if isinstance(r, dict) and r.get("display_name")
-    ]
 
     # PRODUCTION vs TEST is deliberately kept OUT of the subject — every
     # report in a category gets exactly one subject shape regardless of
@@ -206,9 +203,35 @@ def send_report(report: Dict[str, object]) -> bool:
     # report_name's "_test" suffix irrelevant to the subject.
     environment = "TEST" if "test" in bq_dataset.lower() else ("PRODUCTION" if bq_dataset else "")
 
-    # Subject includes report name so each pipeline gets its own Gmail thread.
-    # e.g. "[Plex ETL] Production: Work Orders, MFG Job Schedule — 2026-08-13"
-    # REPORT_SUBJECT env var overrides entirely when set to a non-default value.
+    # Subject is category + pipeline: "[Plex ETL] - Sales: Orders — 2026-09-04".
+    #
+    # CHANGED 2026-09-04. It used to list every display_name the run produced,
+    # which was fine when a pipeline made 2-3 reports and became unusable once
+    # the Vox scorecard work pushed sales_orders to 22 views — the real subject
+    # line ran to roughly 90 words and wrapped over four lines in Gmail,
+    # burying the one word that actually identifies the email. The full report
+    # list still ships in the body under "REPORTS PRODUCED", which is where a
+    # reader can actually scan it.
+    #
+    # The pipeline name is included because category alone is NOT unique:
+    # "Supply Chain" is shared by six pipelines (inventory_activity,
+    # part_obsolescence, part_on_hand_inventory, purchasing_open_orders,
+    # purchasing_pending_requisitions, quality_supplier_returns) and "Sales" by
+    # three (sales_orders, sales_quotes, sales_returns). Category-only subjects
+    # made those six arrive looking identical, with the body's report list the
+    # only way to tell which pipeline had actually run — and Gmail threaded
+    # them together on top of that. Category+pipeline is unique across all 24
+    # jobs and still fits on one line.
+    #
+    # A leading category word is stripped off the pipeline name so the common
+    # cases don't stutter: "Quality: Quality Nonconformance" reads as
+    # "Quality: Nonconformance", "Sales: Sales Orders" as "Sales: Orders".
+    # Only an exact leading word match is removed, so "Supply Chain:
+    # Purchasing Open Orders" is left alone.
+    #
+    # run_date is kept: without it every day's run for a pipeline collapses
+    # into a single ever-growing Gmail thread, which makes finding a specific
+    # day's email materially harder. Drop it here if that's actually wanted.
     #
     # Deliberately NO status (SUCCESS/PARTIAL/FAILED) in the subject: a
     # pipeline can produce several peer reports in one run, and only one of
@@ -218,21 +241,37 @@ def send_report(report: Dict[str, object]) -> bool:
     # in the body (see status badge) where it can sit next to the actual
     # events/errors that explain it — same reasoning that already moved
     # PRODUCTION/TEST out of the subject above.
+    #
+    # REPORT_SUBJECT env var still overrides entirely when set to a
+    # non-default value.
     report_name_raw = str(report.get("report_name", ""))
-    # Strip a trailing "_test" so even a report with no category/display_name
-    # set (falling back to the bare report_name) doesn't leak the environment
-    # into the subject the way every real pipeline above no longer does.
+    # Strip a trailing "_test" so even a report with no category set (falling
+    # back to the bare report_name) doesn't leak the environment into the
+    # subject the way every real pipeline above no longer does.
     report_name_for_subject = re.sub(r"_test$", "", report_name_raw, flags=re.IGNORECASE)
     report_name_display = report_name_for_subject.replace("_", " ").title() if report_name_for_subject else ""
-    if display_names:
-        joined = ", ".join(display_names)
-        subject_label = f"{report_category}: {joined}" if report_category else joined
+
+    # Drop a leading category word from the pipeline name ("Quality Supplier
+    # Returns" under category "Quality" -> "Supplier Returns"). Exact leading
+    # word only, and never down to nothing — a pipeline named exactly after its
+    # category keeps its full name rather than becoming "Quality: ".
+    pipeline_label = report_name_display
+    if report_category and pipeline_label:
+        prefix = f"{report_category} "
+        if pipeline_label.lower().startswith(prefix.lower()):
+            trimmed = pipeline_label[len(prefix):].strip()
+            if trimmed:
+                pipeline_label = trimmed
+
+    if report_category and pipeline_label:
+        subject_label = f"{report_category}: {pipeline_label}"
     else:
-        subject_label = report_name_display
+        # No category set on the config — fall back to the pipeline name alone.
+        subject_label = report_category or pipeline_label
     default_subject = (
-        f"[Plex ETL] {subject_label} — {run_date}"
+        f"[Plex ETL] - {subject_label} — {run_date}"
         if subject_label
-        else f"[Plex ETL] {company_name} — {run_date}"
+        else f"[Plex ETL] - {company_name} — {run_date}"
     )
     subject_override = os.environ.get("REPORT_SUBJECT", "")
     subject = (

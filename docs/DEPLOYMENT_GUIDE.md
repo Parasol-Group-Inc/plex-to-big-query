@@ -1,7 +1,7 @@
 # GCP Deployment Guide — Phase 2
 
 > **Scope check:** this walks through bootstrapping the pipeline **from
-> zero** — the original single-view job (`plex-etl` / `Part_v_Part`), one
+> zero** — the original single-view job (`plex-etl-sales-orders` / `Part_v_Part`), one
 > Cloud Run job, one schedule. It's the right doc for a first-time setup
 > (a new GCP project, disaster recovery) or for understanding how the
 > pieces fit together. If you're adding a **new report to an
@@ -27,12 +27,12 @@ All multi-line commands in this guide use **backslash `\`** for line continuatio
 
 ```bash
 # Git Bash / bash — use backslash
-gcloud run jobs execute plex-etl \
+gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake
 
 # PowerShell — use backtick
-gcloud run jobs execute plex-etl `
+gcloud run jobs execute plex-etl-sales-orders `
   --region=us-central1 `
   --project=voxdatalake
 ```
@@ -262,7 +262,7 @@ terraform apply -var-file=terraform.tfvars
 ## Step 3 — Test the Cloud Run job manually
 
 ```bash
-gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl-sales-orders --region=us-central1 --project=voxdatalake --wait
 ```
 
 The `--wait` flag keeps the terminal open until the job finishes (or fails). Takes about 30–60 seconds.
@@ -270,7 +270,7 @@ The `--wait` flag keeps the terminal open until the job finishes (or fails). Tak
 Check the logs:
 ```bash
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders" \
   --project=voxdatalake \
   --limit=50 \
   --format="table(timestamp,textPayload)"
@@ -288,7 +288,7 @@ gcloud logging read \
 [INFO] === ETL job complete — NNN rows written ===
 ```
 
-**GCP Console path for logs:** Console → **Cloud Run** → **Jobs** tab → `plex-etl` → click the execution → **Logs** tab.
+**GCP Console path for logs:** Console → **Cloud Run** → **Jobs** tab → `plex-etl-sales-orders` → click the execution → **Logs** tab.
 
 ---
 
@@ -316,10 +316,10 @@ gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
 
 Trigger it immediately to confirm end-to-end scheduling works:
 ```bash
-gcloud scheduler jobs run plex-daily-sync --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs run plex-sales-orders-sync --location=us-central1 --project=voxdatalake
 ```
 
-**GCP Console path:** Console → **Cloud Scheduler** → `plex-daily-sync` → **Run now** button.
+**GCP Console path:** Console → **Cloud Scheduler** → `plex-sales-orders-sync` → **Run now** button.
 
 ---
 
@@ -378,7 +378,7 @@ The `ServerDataSource` name in the ODBC connection string doesn't match what the
 
 To switch Cloud Run to the test host temporarily for validation:
 ```bash
-gcloud run jobs update plex-etl \
+gcloud run jobs update plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.test.odbc.plex.com
@@ -386,7 +386,7 @@ gcloud run jobs update plex-etl \
 
 To update the ServerDataSource once you have the correct name from Plex support:
 ```bash
-gcloud run jobs update plex-etl \
+gcloud run jobs update plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --update-env-vars=PLEX_SERVER_DATASOURCE=<name-from-plex-support>
@@ -431,22 +431,22 @@ terraform apply -var-file=terraform.tfvars
 
 **Pause the pipeline:**
 ```bash
-gcloud scheduler jobs pause plex-daily-sync --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs pause plex-sales-orders-sync --location=us-central1 --project=voxdatalake
 ```
 
 **Resume the pipeline:**
 ```bash
-gcloud scheduler jobs resume plex-daily-sync --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-sales-orders-sync --location=us-central1 --project=voxdatalake
 ```
 
 **View recent job history:**
 ```bash
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=voxdatalake
+gcloud run jobs executions list --job=plex-etl-sales-orders --region=us-central1 --project=voxdatalake
 ```
 
 **Switch to production Plex host** (once confirmed with Plex support):
 ```bash
-gcloud run jobs update plex-etl \
+gcloud run jobs update plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com,PLEX_SERVER_DATASOURCE=<production-service-name>
@@ -456,7 +456,7 @@ Then update `terraform.tfvars` to match so the next `terraform apply` doesn't re
 **Tear down all infrastructure** (move to a different GCP project):
 See [docs/TEARDOWN.md](docs/TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the *original* single-view pipeline (`plex-etl` / `Part_v_Part`) from zero — it's not the process for adding to an already-running deployment. The project has since grown to 8 report families (16 Cloud Run jobs, prod+test) driven by YAML configs in GCS rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the *original* single-view pipeline (`plex-etl-sales-orders` / `Part_v_Part`) from zero — it's not the process for adding to an already-running deployment. The project has since grown to 8 report families (16 Cloud Run jobs, prod+test) driven by YAML configs in GCS rather than hardcoded views, with no code changes needed for a new extraction. For that process:
 - **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
 - **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
 - **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

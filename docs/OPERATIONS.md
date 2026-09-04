@@ -52,7 +52,7 @@ gcloud storage cp reports/sales_orders.yaml gs://voxdatalake-report-configs/repo
 3. Trigger a run:
 
 ```bash
-gcloud run jobs execute plex-etl-test \
+gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 ```
 
@@ -81,7 +81,7 @@ gcloud storage cp reports/sql/sales_orders_view.sql \
 # The next pipeline run will CREATE OR REPLACE the view in BigQuery.
 # You can also edit the view directly in the BigQuery Console —
 # your changes persist until the next pipeline run.
-gcloud run jobs execute plex-etl-test \
+gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 ```
 
@@ -263,10 +263,10 @@ gcloud builds submit \
 cd terraform && terraform apply -var-file=terraform.tfvars
 ```
 
-> **Cloud Build safety:** the build's smoke test runs **`plex-etl-test`
+> **Cloud Build safety:** the build's smoke test runs **`plex-etl-sales-orders-test`
 > only** (writes to `PlexTest`). Production is never executed automatically —
 > after the test run looks good, trigger prod yourself:
-> `gcloud run jobs execute plex-etl --region=us-central1`
+> `gcloud run jobs execute plex-etl-sales-orders --region=us-central1`
 
 ### Step 6 — Test and validate
 
@@ -287,7 +287,7 @@ Check the email — subject will be `[Plex ETL] {category}: {display_name} — D
 
 | Setting | Production | Test |
 |---|---|---|
-| Sales Orders job | `plex-etl` (7:00 PM Mountain) | `plex-etl-test` (7:10 PM Mountain) |
+| Sales Orders job | `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-sales-orders-test` (7:10 PM Mountain) |
 | Work Orders job | `plex-etl-work-orders` (7:20 PM Mountain) | `plex-etl-work-orders-test` (7:30 PM Mountain) |
 | Failure retry (all 16 jobs) | 9:45 PM Mountain daily — see [Failure Retry](#failure-retry-9-45-pm-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
@@ -301,8 +301,8 @@ Check the email — subject will be `[Plex ETL] {category}: {display_name} — D
 
 ```bash
 # Sales Orders
-gcloud run jobs execute plex-etl-test --region=us-central1 --project=voxdatalake --wait
-gcloud run jobs execute plex-etl --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl-sales-orders-test --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl-sales-orders --region=us-central1 --project=voxdatalake --wait
 
 # Work Orders
 gcloud run jobs execute plex-etl-work-orders-test --region=us-central1 --project=voxdatalake --wait
@@ -339,8 +339,8 @@ adjustment needed):
 
 | Retry scheduler | Retries |
 |---|---|
-| `plex-daily-sync-retry` | `plex-etl` (sales, prod) |
-| `plex-daily-sync-test-retry` | `plex-etl-test` (sales, test) |
+| `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (sales, prod) |
+| `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (sales, test) |
 | `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
 | `plex-work-orders-sync-test-retry` | `plex-etl-work-orders-test` (test) |
 
@@ -366,7 +366,7 @@ FROM `voxdatalake.PlexProd.job_run_log`   -- or PlexTest for the test jobs
 ORDER BY logged_at DESC
 LIMIT 20
 ```
-`job_name` is the Cloud Run job name (`plex-etl`, `plex-etl-test`, etc. —
+`job_name` is the Cloud Run job name (`plex-etl-sales-orders`, `plex-etl-sales-orders-test`, etc. —
 from the `CLOUD_RUN_JOB` env var Cloud Run sets automatically). `run_mode`
 is `scheduled` or `retry`; `status` is `success`/`partial`/`failed`, or
 `skipped` for a retry that no-op'd.
@@ -374,8 +374,8 @@ is `scheduled` or `retry`; `status` is `success`/`partial`/`failed`, or
 **Pausing a retry temporarily** (e.g. during planned maintenance), without
 touching Terraform:
 ```bash
-gcloud scheduler jobs pause plex-daily-sync-retry --location=us-central1 --project=voxdatalake
-gcloud scheduler jobs resume plex-daily-sync-retry --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs pause plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
 ```
 
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /
@@ -460,7 +460,7 @@ After every run the pipeline can email an HTML summary with status, row counts p
 
 **1. Get a SendGrid API key**
 - Log in at [app.sendgrid.com](https://app.sendgrid.com) → Settings → API Keys → Create
-- Name it `plex-etl`, restrict to **Mail Send** only
+- Name it `plex-etl-sales-orders`, restrict to **Mail Send** only
 
 **2. Verify your sender email**
 - Settings → Sender Authentication → Single Sender Verification
@@ -488,7 +488,7 @@ Then `terraform apply -var-file=terraform.tfvars`.
 **5. Test**
 
 ```bash
-gcloud run jobs execute plex-etl-test \
+gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 # Check inbox within 1 minute
 ```

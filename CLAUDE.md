@@ -123,6 +123,55 @@ tries to resolve them as (nonexistent) substitutions and fails. Also keep
 `terraform/main.tf` — a job missing from that list silently never gets a
 new image from this pipeline again.
 
+## `scorecard_goals` — the one table nothing here creates
+
+`voxdatalake.{PlexProd,PlexTest}.scorecard_goals` holds the negotiated targets
+behind every "% to Goal" tile on the Vox scorecard. It is **not managed by
+Terraform and not written by the ETL** — a Google Sheet is the source of truth
+and `deploy/goals_sheet_to_bigquery.gs` (an Apps Script) replaces the table on
+each push.
+
+Three views read it — `revenue_vs_goal_report`, `sales_vs_goal_report`,
+`production_vs_goal_report` — and **all three fail to create if the table is
+missing**, which looks exactly like a broken view rather than a missing
+dependency. Rebuild DDL and the full column list are in
+`docs/reports/scorecard_goals.md`.
+
+The join that bites: `scope` is an **exact string match**, and Plex disagrees
+with the scorecard's own labels — the work centre group is `Encapsulating`, the
+tile says "Encapsulation". A mismatch yields a NULL goal, not an error, so it
+reads as 0% forever. All three views expose `goal_without_sales` /
+`goal_without_production` flags precisely so an unmatched row surfaces.
+
+## Job naming
+
+`plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers
+(plus a `-retry` variant each). Sales Orders was renamed off the legacy generic
+`plex-etl` / `plex-etl-test` / `plex-daily-sync` on 2026-09-04 — it was the only
+pipeline when the repo was built and kept the generic name afterwards, so
+`gcloud run jobs execute plex-etl-sales-orders-test` (the obvious guess) failed
+with NOT_FOUND.
+
+**Cloud Run job and scheduler names are immutable — Terraform destroys and
+recreates to rename.** That's safe (neither holds state), but a recreated job
+is a brand-new job, so it comes up on whatever `image_url` in
+`terraform.tfvars` says. Because every job's `lifecycle.ignore_changes` on
+`image` lets the live jobs drift ahead of that value, **check `image_url`
+against a live job before any rename** — it was several deploys stale in
+2026-09-04 and would have silently rolled the pipeline back.
+
+## Email subjects
+
+`[Plex ETL] - {Category}: {Pipeline} — {date}`, built in `email_utils.py` from
+each config's `category` plus its pipeline name. Changed 2026-09-04 — the
+subject used to enumerate every `display_name` a run produced and hit **810
+characters** once `sales_orders` reached 22 views. The full report list lives in
+the body under "REPORTS PRODUCED".
+
+Prod and test deliberately share a subject (the `_test` suffix is stripped) so
+the two environments thread together; PRODUCTION/TEST shows as a body badge.
+**This is a code change, so it ships via Cloud Build, not `terraform apply`.**
+
 ## Known friction
 
 - **GitHub push access**: resolved 2026-08-24 — repo access was fixed on

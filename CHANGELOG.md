@@ -14,6 +14,288 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-04
+
+### Added — goals now have a home, and every "% to Goal" tile is buildable
+The biggest open item on the scorecard is closed. Goals live in a Google Sheet
+(where people can actually edit them) and reach BigQuery via an Apps Script.
+
+- **`scorecard_goals` table created by hand in `PlexTest` and `PlexProd`.**
+  **Not managed by Terraform, not created by the ETL** — the pipeline only
+  reads it. Long format, one row per `(metric, period_month, scope)`, because
+  the three grains genuinely differ: revenue is company-wide, sales goals are
+  per rep, production goals are per work centre group. A wide table couldn't
+  hold all three without NULL-padding or three tables to keep in sync, and
+  long format makes a new metric a new row rather than a schema migration plus
+  an Apps Script edit. Full column list and rebuild DDL in
+  `docs/reports/scorecard_goals.md`.
+- **`deploy/goals_sheet_to_bigquery.gs`** — the Apps Script. `WRITE_TRUNCATE`
+  so the sheet is the single source of truth (an append-only load would
+  accumulate duplicate goals for a month and quietly double every tile);
+  **refuses to push an empty sheet**, which would otherwise blank every goal
+  tile; declares its schema rather than autodetecting, since autodetect on a
+  month of round numbers lands `goal_value` as INTEGER and breaks the next
+  push containing a decimal; skips and logs bad rows instead of failing the
+  whole load.
+- **Three new `bq_view`s**, each kept inside a single pipeline so neither
+  depends on a view the other creates:
+  - `revenue_vs_goal_report` (`sales_orders.yaml`) — LEFT JOIN on purpose, so
+    a month with revenue but no goal yet still shows rather than the tile
+    vanishing because somebody hasn't filled in next month.
+  - `sales_vs_goal_report` (`sales_orders.yaml`) — FULL OUTER JOIN, so a rep
+    with a target and no sales yet shows at 0%. That's the case someone is
+    actually checking at the start of a month; an inner join hides it.
+  - `production_vs_goal_report` (`work_orders.yaml`) — same reasoning.
+- **All three verified against real seeded data**, not just dry-run:
+  Bottling **3,000 of 5,000 (60%)**, Pre-Weigh **429 of 1,000 (43%)**,
+  September revenue $65 against a $200,000 placeholder. 4 placeholder rows
+  seeded in `PlexTest` only, every one noted `PLACEHOLDER — replace from the
+  sheet`; the first real push replaces them. `PlexProd` left empty.
+
+### Found — the scope join is an exact string match, and Plex disagrees with the tile names
+- **Plex's work centre group is `Encapsulating`; the scorecard tile says
+  "Encapsulation".** A mismatch produces a NULL goal, not an error, so it
+  would read as 0% forever with nothing indicating why. All three views
+  therefore expose `goal_without_sales` / `goal_without_production` flags to
+  surface an unmatched goal row rather than letting it sit invisible. Same
+  trap applies to rep names, including the literal `(no rep assigned)` bucket
+  that unassigned orders collapse into.
+
+### Changed — email subjects cut from 810 characters to ~45
+- **`[Plex ETL] - {Category}: {Pipeline} — {date}`**, e.g.
+  `[Plex ETL] - Sales: Orders — 2026-09-04`.
+  The subject used to enumerate every `display_name` the run produced. That was
+  fine at 2-3 reports per pipeline and became unusable once the scorecard work
+  pushed `sales_orders` to 22 views: the real subject line hit **810
+  characters**, wrapped over four lines in Gmail, and buried the one word that
+  identifies the email. Longest subject is now **71 characters**, most are
+  under 60. The full report list still ships in the body under "REPORTS
+  PRODUCED", where it can actually be scanned. Removed the now-unused
+  `display_names` local in `email_utils.py`.
+- **Category alone was not enough, so the pipeline name is included.** An
+  intermediate version used category only and was rejected on inspection:
+  "Supply Chain" is shared by six pipelines (`inventory_activity`,
+  `part_obsolescence`, `part_on_hand_inventory`, `purchasing_open_orders`,
+  `purchasing_pending_requisitions`, `quality_supplier_returns`) and "Sales" by
+  three, so six jobs would have arrived looking identical with the body's
+  report list the only way to tell which had run. **Verified all 12 pipelines
+  now produce distinct subjects.**
+- **A leading category word is stripped from the pipeline name** so the common
+  cases don't stutter: `Quality: Nonconformance` rather than "Quality: Quality
+  Nonconformance", `Sales: Orders` rather than "Sales: Sales Orders". Exact
+  leading-word match only, and never trimmed to nothing — a pipeline named
+  exactly after its category keeps its full name instead of becoming
+  "Quality: ".
+- **Prod and test still share a subject, unchanged and deliberate.** The
+  `_test` suffix is stripped so the two environments thread together rather
+  than forking into separate-looking emails; PRODUCTION/TEST shows as a badge
+  in the body. That's why 24 jobs produce 12 distinct subjects, not 24.
+- **`run_date` deliberately kept.** Without it, every day's run for a pipeline
+  collapses into one ever-growing Gmail thread, making a specific day's email
+  materially harder to find. One line to remove if that's actually wanted.
+- **⚠ Ships via Cloud Build, not `terraform apply`** — this is a code change to
+  `email_utils.py`, baked into the container image. A Terraform apply will not
+  pick it up.
+
+### Changed — renamed the Sales Orders job off its legacy generic name
+- **`plex-etl` → `plex-etl-sales-orders`** and **`plex-etl-test` →
+  `plex-etl-sales-orders-test`**; schedulers **`plex-daily-sync` →
+  `plex-sales-orders-sync`** (`-test`/`-retry` variants follow automatically,
+  since they derive from `var.scheduler_job`).
+  Sales Orders was the *only* pipeline when it was built, so it took the
+  generic name and kept it after the repo went multi-report. Every other
+  pipeline is `plex-etl-<pipeline>` / `plex-<pipeline>-sync`, so
+  `gcloud run jobs execute plex-etl-sales-orders-test` — the obvious guess —
+  failed with `NOT_FOUND`. Same for `plex-daily-sync`, which sounds global but
+  only ever triggered sales orders. This rename was already logged as a TODO
+  in `docs/EMAIL_SCHEDULE.md`.
+  Touched: `terraform/terraform.tfvars`, `terraform/variables.tf`,
+  `deploy/cloudbuild.yaml` (**both** `_CR_JOB_TEST` and `_ALL_JOBS` — a job
+  missing from that list silently never gets a new image again),
+  `deploy/setup.sh`, `reports/test/sales_orders.yaml`, and 11 operational
+  docs. `CHANGELOG.md` and the dated `CODE_REVIEW_*` docs were deliberately
+  left alone — they're a historical record of names that were real at the time.
+  Plan is exactly **6 to add, 1 to change, 6 to destroy**: the 2 Cloud Run
+  jobs + 4 schedulers, all replacements. Both resource types have immutable
+  names, and neither holds state.
+
+### Fixed — `image_url` had silently gone stale, and the rename would have shipped it
+- **`image_url` bumped `:2f235d2` → `:8ba5717`.** Every job's
+  `lifecycle.ignore_changes` on `image` lets the live jobs drift ahead of this
+  value by design, so it had fallen several deploys behind — all live jobs
+  were verified running `:8ba5717` while tfvars still said `:2f235d2`.
+  Normally that's harmless. **It is not harmless during a rename**: Terraform
+  destroys and recreates the renamed jobs, and a recreated job is a brand-new
+  job, so it comes up on whatever `image_url` says. Applying the rename
+  without this bump would have quietly rolled the Sales Orders pipeline back
+  to an older image, with nothing in the plan output indicating it. Caught by
+  diffing `gcloud run jobs describe` against tfvars before applying.
+
+### Added — buildable-now scorecard items from the Sep 1 requirements meeting
+Everything the Emilio/Jennilyn meeting (`meetings-reference/Sep-1/`) asked for
+that nothing was actually blocking. **Five new `bq_view`s, zero new
+extractions, zero new Plex ODBC calls** — every one reuses raw tables this
+pipeline was already pulling. Not yet deployed (`gcloud` reauth is expired,
+see Known friction in `CLAUDE.md`).
+
+- **`sales_mtd_by_status_change_report`** + **`sales_mtd_summary_report`**
+  (`reports/sales_orders.yaml`) — "Sales MTD" as Jennilyn actually defined it:
+  every order line whose order first entered **Pending Fulfillment** in a
+  given month, dated by the status change, with the sales rep retained.
+  *"Anything that moved into pending fulfillment status during that month is
+  our sales month to date... it's the date of that status change, not the date
+  of the order."*
+  **This turned out to need no investigation at all.** `Sales_v_PO_Change` was
+  already being extracted, and `sales_orders_report` has been computing
+  exactly this ("Date Approved" = `MIN(Change_Date)` where
+  `PO_Status_Key = 2073`) in production since long before the scorecard
+  effort started. Status key 2073 = "Pending Fulfillment" is confirmed live on
+  this tenant, not inferred — the full workflow is documented in
+  `catalog/plex_catalog_index.md`.
+  Deliberately a **different number from Revenue**, which is shipped units out
+  of the Shipping module. Jennilyn was explicit these are not interchangeable.
+- **`sales_revenue_run_rate_report`** — MTD revenue against days elapsed, plus
+  the straight-line projection to month end. Serves the "94% into month"
+  sub-metric and the MTD Run Rate tile. Pure calendar arithmetic over
+  `sales_revenue_summary_report`; no new data. Uses calendar days, matching
+  the existing scorecard's own `pct_into_month` field — flagged in case Vox
+  means business days.
+- **`pipeline_plex_value_report`** — the Plex half of Total Pipeline: orders in
+  a Quote status or Pending Sales Approval, with dollar value.
+  **Reading Jennilyn's words literally avoided a whole extraction.** She said
+  *"the sales **orders** that have the status quote"* — an order status
+  (`Sales_v_PO_Status.Is_Quote`), not `Sales_v_Quote`, which is a separate
+  object with its own workflow. Building on the Quote module instead would
+  have meant extracting Plex's automotive quote-pricing tables
+  (`Sales_v_Quote_Price`, with `Escalation_Year`/`IRR`/`NPV`/`EBITDA` and
+  `Sales_v_Quote_Part.Die_Cavity_Count`) that a supplement manufacturer almost
+  certainly never populates. Confirmed by reading the schema catalog before
+  writing any SQL.
+- **`production_monthly_by_workcenter_group_report`**
+  (`reports/work_orders.yaml`) — *"production by work center group by month,"*
+  every group at once. Complements rather than replaces the 4 Daily Reports,
+  which are per-day/per-workcenter and each hardcode one group. Also
+  structurally immune to the `Part_v_Job_Op` join bug fixed on 2026-09-01:
+  it needs neither Job nor Part, so it never makes that join.
+
+### Changed — WIP ambiguity resolved into data instead of a debate
+- **`sales_order_value_by_status_report`** gained `status_key`,
+  `is_pending_fulfillment` and `also_counts_in_pipeline` columns. Jennilyn
+  defined WIP two different ways in the same conversation — the broad *"not a
+  quote, not cancelled, not shipped"* and the strict *"anything that is
+  pending fulfillment"* — and they do not produce the same number, because the
+  broad reading also sweeps in Pending Sales Approval and Deposit Review.
+  Rather than pick one and hope, the view keeps the broad reading and exposes
+  a flag so the strict figure is one filter away. `also_counts_in_pipeline`
+  marks the rows that **double-count against Total Pipeline**, which counts
+  the same Pending Sales Approval orders — surfaced in both reports rather
+  than silently netted, since which tile owns those dollars is a business
+  call.
+
+### Added — `docs/CHEATSHEET.md` reference section
+- New **"Reference — Status Codes, Conventions & Business Rules"** section,
+  written because the same facts had been re-derived from scratch in three
+  separate sessions. Covers: the **`-1` vs `1` boolean split** (the single
+  most expensive gotcha here — `Part_v_*` uses `-1 = true`, `Sales_v_*`
+  status lookups use `1 = true`, and guessing wrong yields a permanently
+  empty view that never errors), the full Sales Order and Quote status key
+  tables, the four **distinct** Vox scorecard metric definitions (Revenue vs
+  Sales MTD vs WIP vs Total in Shipping — not interchangeable), the
+  out-of-stock rule, the mandatory date-conversion pattern, the
+  `SAFE_CAST`-both-sides rule, and the list of things Plex genuinely cannot
+  produce.
+
+### Notes
+- All 5 new views **dry-run clean against `PlexTest`** (`bq query --dry_run`).
+  `sales_mtd_summary_report` correctly fails dry-run only because its source
+  view doesn't exist yet — it resolves once deployed in list order.
+- Real data confirmed present for the new Sales MTD path before building:
+  `raw_Sales_v_PO_Change` has 39 rows, 3 of them at `PO_Status_Key = 2073`
+  across **2 distinct orders** — so this returns real rows, not zero.
+- `terraform validate` passes; `terraform fmt` clean. `terraform plan` shows
+  **18 to add, 2 to change, 9 to destroy** — every one of those 9 is a GCS
+  object *replacement* (destroy + recreate with new content), not a real
+  deletion. The plan also picks up the 2026-09-01 shipping views, which were
+  pushed manually and never tracked in Terraform state, so applying syncs
+  **prod** as well and fixes the Daily Reports still broken there.
+- **Applied.** All 5 new SQL files confirmed in
+  `gs://voxdatalake-report-configs/sql/`, and the 2026-09-01 shipping views
+  are now properly tracked in Terraform state rather than existing only as
+  manual `gcloud storage cp` pushes.
+- **`plex-etl-work-orders-test` ran; `production_monthly_by_workcenter_group_report`
+  confirmed created** by querying `INFORMATION_SCHEMA.VIEWS` directly.
+- **All 4 new `sales_orders` views deployed and verified.** The rename was
+  applied, `plex-etl-sales-orders-test` executed successfully, and every view
+  was queried directly rather than trusting the exit code:
+  - `sales_mtd_by_status_change_report` — 10 lines, **7 real orders**, 35,201
+    units, September 2026. The status-change mechanism works as designed.
+  - `sales_mtd_summary_report` — 1 rep, September 2026.
+  - `sales_revenue_run_rate_report` — September at **$65**, straight-line
+    projection **$488**.
+  - `pipeline_plex_value_report` — **$900,975 across 15 orders, 32 lines**,
+    every one in Quote status (nothing sits in Pending Sales Approval on this
+    tenant right now).
+  - `sales_order_value_by_status_report` — `is_pending_fulfillment` and
+    `also_counts_in_pipeline` are live. **All 10 WIP rows are Pending
+    Fulfillment and 0 overlap with Pipeline**, so the broad and narrow WIP
+    readings currently return identical rows — the ambiguity is real but
+    costs nothing today.
+
+### Found — the missing prices are specific to Pending Fulfillment orders
+- **WIP and Sales MTD both read $0** despite 7 real orders and 35,201 units,
+  because not one of those order lines has a matching row in
+  `Part_v_Customer_Part_Price`. This is **not** a broken join or a wrong tier
+  rule: quote-stage orders price correctly through the same code path
+  (`pipeline_plex_value_report` returns $900,975, with only 2 of 32 lines
+  missing a price). Whatever is absent is specific to the parts on these
+  particular orders. Two scorecard tiles read $0 until a price source is
+  agreed — raised with the data scientist rather than papered over with a
+  guessed fallback.
+
+### Note — `PlexTest` figures churn; don't quote them as business numbers
+- **The 2026-09-01 test figures are gone.** The tenant's practice data was
+  rebuilt between then and 2026-09-04: shipping revenue $25,500 → **$65**,
+  ready-to-ship $115,800 → **$413**, open caps 4,643,140 → **2,226,500**, and
+  `bottling_job_open_report` 0 rows → **4 open jobs**. Nothing regressed; the
+  views are unchanged. Treat any earlier session's test numbers as stale.
+- **`PlexProd` is still effectively empty** — checked 2026-09-04, every
+  production view returns 0 rows except `sales_order_value_by_status_report`
+  and `sales_orders_pending_approval_report` (2 orders each, no prices). Prod
+  fills at go-live; the 4 new views land there on its next scheduled run.
+
+## 2026-09-01
+
+### Changed — corrected per the Emilio/Jennilyn scorecard-requirements meeting
+- **Discovered this morning's Revenue/WIP/"Total in Shipping" builds were on the wrong Plex module entirely**, by reviewing `meetings-reference/Sep-1/` (Otter + Gemini transcripts of the actual requirements meeting with Jennilyn Tockstein, the data scientist). Jennilyn was explicit and repeated: "the shipping revenue should just be the units that went out the door... I think we want to pull it from the shipping [module]... the sales one I think will be less reliable since it will not count in when we like close things short or ship partials." Everything built earlier today against `Sales_v_PO`/`Sales_v_Release` order value was the wrong source for these three tiles specifically (Sales MTD-by-status-change logic and the 4 Daily Report fixes were unaffected — those matched the meeting exactly).
+- **Found the real Plex module — tree-confirmed via `catalog/full_schema_catalog.csv`, then live-confirmed the same session**: `Sales_v_Shipper`/`_Line`/`_Status`/`_Container`/`_AR_Invoice`/`_Line_Release`, none ever extracted by this pipeline before. Independently corroborated by `mapping/enabled-reports.md`: "Customer Shipping History Summary" and "Shipper History Summary by Part Group" are literally enabled Plex UI reports on this tenant, under Sales and CRM — Plex ships a canned report for almost exactly what Jennilyn described. Added all 6 views plus `Sales_v_Release_Allocation` (for the Out-of-Stock rule) as new extractions on `reports/sales_orders.yaml`, deployed, and verified with real data: 2 real shipments, one actually Shipped (17,000 units × $1.50 = $25,500, reconciling exactly against 17 real `Sales_v_Shipper_Container` rows), one still Open with 20,000 ready units. Real bug caught by checking live data instead of assuming: `Sales_v_Shipper_Status.Shipped` and `Sales_v_PO_Status.Is_Quote`/`Cancelled_Status` all use `1` = true, **not** the `-1` = true convention already confirmed elsewhere in this pipeline (`Part_v_Container.Active`, etc.) — booleans aren't universal across Plex views; would have been a silent bug if reused from memory.
+- **`sales_revenue_summary_report` and `sales_order_value_by_status_report` rewritten in place** (same view names, per Emilio's call — no dead views left from the wrong turn):
+  - `sales_revenue_summary_report` now rolls up the new `shipping_revenue_report` (shipped-unit revenue, `Sales_v_Shipper_Line.Quantity × Price`) by month and part group, instead of Sales-module order value. Verified: September 2026, $25,500 shipping revenue, 17,000 units.
+  - `sales_order_value_by_status_report`'s WIP definition dropped `Job_Status` entirely, per Jennilyn: "we don't need the production status... if the order line isn't a quote, isn't cancelled, and isn't shipped, it's WIP." Now keys off `Sales_v_PO_Status.Is_Quote`/`Cancelled_Status` plus absence of a `Shipped` `Sales_v_Shipper_Line_Release` link. Verified: 32 real WIP lines across 15 orders, $875,475 total (a far richer real picture than the Job_Status version ever produced).
+- **4 new views**, all live-verified with real data:
+  - `shipping_revenue_report` — shipped-unit revenue detail, sorted by invoice date, part-group breakdown.
+  - `shipping_pending_revenue_report` — "Total in Shipping": ready-but-unshipped unit value. Decided 2026-09-01: falls back to the customer price list when `Shipper_Line.Price` is 0 (Plex doesn't finalize price until actual shipment, confirmed on the one real pending shipment) — verified $115,800 ready value on 20,000 ready units, vs. $0 without the fallback. Also carries the "blanket order" flag Jennilyn asked for (`Sales_v_PO_Type.Blanket`, already confirmed live).
+  - `shipping_daily_report` — packages/cartons shipped, orders shipped, revenue shipped, per day. Verified: 17 packages, 1 order, $25,500 for 2026-09-01.
+  - `inventory_out_of_stock_report` — Vox's exact Out-of-Stock rule (Part_No LIKE `33%`, `Minimum_Inventory_Quantity > 0` — decided a literal 0 doesn't count as "assigned" — `quantity_available < 0`, excluding parts whose `Part_v_Part_Product_Type` indicates Custom). Reuses `part_on_hand_inventory_view.sql`'s already-confirmed on-hand pattern. 0 rows today — `Sales_v_Release_Allocation` (needed for the allocated-quantity half) is genuinely empty on this tenant, not a bug.
+
+### Added
+- **9 new `bq_view`s built for the Vox Nutrition Scorecard migration** — `sales_revenue_summary_report`, `sales_order_value_by_status_report` (both `reports/sales_orders.yaml`); `quality_cost_by_category_report` (`reports/quality_nonconformance.yaml`); `quality_fpy_by_area_month_report`, `mfg_job_open_caps_report`, `bottling_job_open_report` (all `reports/work_orders.yaml`); `inventory_valuation_total_report` (`reports/inventory_snapshot.yaml`); `inventory_avg_daily_usage_report` (`reports/inventory_activity.yaml`, converted its `bq_view` from a single mapping to a list to support this — safe against the currently-deployed `main.py`, which already normalizes both forms); `inventory_top_quantity_report` (`reports/part_on_hand_inventory.yaml`). All 6 touched `reports/*.yaml` updated in both prod and `test/` copies, plus 9 new `google_storage_bucket_object` Terraform resources (`terraform fmt -check` clean). **Zero new Plex extractions** — every view reuses already-extracted, already-confirmed-live raw tables or an already-deployed sibling report view (the "thin alias" pattern this repo already uses, e.g. `sales_orders_pending_approval_by_rep_report`). Business-rule calls made 2026-09-01 with Emilio, all matching this repo's existing conventions rather than inventing new ones: MFG_Job/Bottling_Job "open" = inverse of Completed/Cancelled/Hold status flags (same as `labeling_open_work_orders_report`); YTD FPY ships now with DPMO on a documented `Opportunities_Per_Unit = 1` placeholder, Sigma deliberately left uncomputed (a hand-rolled DPMO→Sigma approximation risked being subtly wrong in cGMP-adjacent reporting); Quality_Rework/MatDestr's `$` fields get a category+month rollup (`quality_cost_by_category_report`) rather than a guessed `Problem_Category` string match, since — a real correction to the 2026-09-01 migration-map doc's first pass — `Quality_v_Problem.Cost` already exists and is already exposed by `quality_nonconformance_report`, so this was never actually a "no Plex path" item. **Deployed and verified same day**: `terraform apply` (9 added, 12 changed, 0 destroyed) pushed all 6 configs + 9 SQL files to GCS, then all 6 affected test Cloud Run jobs were manually triggered and every new view queried directly against `PlexTest` — this repo's own house rule, since a clean job exit code has caused false confidence before (see 2026-08-23/24). 8 of 9 views created cleanly on the first pass; `sales_revenue_summary_report` failed with a real bug (below), fixed and re-verified same session.
+
+### Fixed
+- **`sales_revenue_summary_report` naming collision.** A subquery selected `DATE_TRUNC(date_approved, MONTH) AS date_approved FROM date_approved` — the bare column reference resolved to the enclosing CTE's own name (`date_approved`) instead of its column of the same name, so BigQuery tried to pass a whole `STRUCT<PO_Key, date_approved>` into `DATE_TRUNC` and rejected the view outright. Fixed by aliasing the inner `FROM date_approved` as `da_inner` and qualifying the reference. Caught by dry-running the view via the BigQuery REST API before redeploying — `bq` itself was unusable in this environment (`python3.12: command not found` from its wrapper script), so verification for this whole session went through direct `bigquery.googleapis.com/bigquery/v2/.../queries` calls instead.
+- **`quality_fpy_by_area_month_report` returned 0 rows against real data, same day it was written.** Copied the Daily Reports' `Part_v_Production → Part_v_Job_Op → Part_v_Workcenter` join pattern to reach `Workcenter_Group`, but this view already keyed its `Workcenter_Group` join off `Part_v_Production.Workcenter_Key` directly — the `Job_Op` join was dead weight, and being an `INNER JOIN` it silently dropped every production row once real data landed, because this tenant's real `Job_Op_Key` values in `Part_v_Production` have since aged out of the current `Part_v_Job_Op` extract (Job_Op only reflects current/open operations; the production log is permanent). Fixed by removing the unused join entirely.
+- **The same root cause was live in 4 already-deployed reports** (`encap_daily_report`, `blending_daily_report`, `labeling_daily_report`, `packaging_daily_report`) — previously invisible because `Part_v_Production` had zero rows on this tenant since they were built 2026-08-21, so "0 rows, benign" was the correct read at the time. It stopped being benign the moment real production data appeared. These 4 don't have the FPY view's luxury of dropping the join entirely (they still need `Job_Op → Job → Part` for `job_count`/`parts_run`), so each was changed from `JOIN raw_Part_v_Job_Op` to `LEFT JOIN` instead — a production row is never dropped just because its operation has since closed/archived; `job_count`/`parts_run` just go `NULL`-safe for those specific rows. Redeployed and reverified against `PlexTest`: `packaging_daily_report`/`blending_daily_report` now show real rows (Bottling Line 1 and Preweigh 1, both 2026-08-31/09-01, matching `quality_fpy_by_area_month_report`'s own real 100%-FPY read for the same production); `encap_daily_report`/`labeling_daily_report` correctly still show 0 — no real production has been logged against those workcenters yet, a genuine business fact now, not a join bug.
+
+### Verified (real data, not just clean deploys)
+- `sales_revenue_summary_report`: September 2026, 9 orders, $695,355 computed revenue.
+- `sales_order_value_by_status_report`: 26 real (PO, Job) rows, $695,355 total order value — 0 currently flagged WIP/Ready-to-Ship, because every linked job is still "Scheduled" on this tenant, not Production or Completed.
+- `mfg_job_open_caps_report`: 2 real open Encapsulation jobs (Job 83, Job 84), 4,643,140 combined caps pending.
+- `quality_fpy_by_area_month_report` (post-fix): Bottling and Pre-Weigh both show real 100% FPY for August 2026 (3,000/3,000 and 429.185/429.185 good/total respectively), 0 rejected, DPMO 0 under the provisional Opportunities_Per_Unit=1 placeholder.
+- Everything else (`quality_cost_by_category_report`, `inventory_valuation_total_report`, `inventory_avg_daily_usage_report`, `inventory_top_quantity_report`, `bottling_job_open_report`) creates cleanly but returns 0 rows — confirmed to be genuinely empty upstream extracts (`Quality_v_Problem`, `Part_v_Snapshot`, `Part_v_Cell_Production`/`_Depletion`, `Part_v_Container` all still 0 rows on this tenant), not a query bug.
+
+### Added
+- **`score-card-reference/vox_migration_board.html`** (published as a Claude Artifact, shared with Jennilyn) — an interactive tile-by-tile map of the live Looker Studio scorecard against its Plex-native replacement, built from the migration-map doc plus every real number verified above. Click-through detail drawer per tile (old source, new Plex view, verified data, rationale, SQL location), an Andon-style tally strip, and a dedicated section for the 4 genuinely non-Plex items (Goals, CRM pipeline stages, Safety, Cycle Count) with a Sheet/Form-to-BigQuery suggestion for each. Gets redeployed to the same link as more views ship or more real data lands.
+- **`score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md`** — readiness map cross-referencing the Vox Nutrition MTD Scorecard audit docs (dropped into the new `score-card-reference/` folder: a Looker Studio data-source catalog, a chart-by-chart mapping workbook, an interactive navigator, and a field guide) against this repo's actual build state, answering the data scientist's concrete question: what's ready now, and what could feed the scorecard with more work. Scope note: Plex is replacing the Monday.com sync that currently backs 6 of the scorecard's BigQuery sources (`vw_sales`, `vw_pipeline` ×2, `vw_sales_mtd_vs_goal`, `vw_shipping_daily_snapshot`, `shipping_revenue_daily` — confirmed fed by the unrelated `monday-daily-sync-VoxScorecardsLive` scheduler in `docs/EMAIL_SCHEDULE.md`, zero Terraform resources in this repo), so those are in scope as migration targets, not waved off. Biggest finding on re-read of the actual SQL: `sales_orders_report`/`sales_orders_open_report`/`sales_orders_pending_approval_report`/`sales_revenue_by_rep_report` (all deployed on `reports/sales_orders.yaml`) already expose a computed per-order dollar value (`price_total` = price × quantity; `order_total` = `Sales_v_PO.Master_Price`, sparsely populated) — revenue/pipeline-value tiles are largely 🎯 buildable from already-extracted tables, not a NetSuite-only concept as the first pass concluded. Also upgraded the Inventory "Avg. Daily" gap from "no confirmed source" to 🎯 buildable-but-unverified: the already-deployed `inventory_activity_report` (`Part_v_Cell_Production`/`Part_v_Cell_Depletion`) computes monthly depletion per part, a direct lead for a daily-average figure, previously overlooked because earlier notes were about a narrower reorder-point/MSL search. Genuine remaining ❌ no-Plex-path items, unaffected by the Monday retirement: negotiated Goal figures (planning input, not a transaction), CRM Opportunity/Forecast pipeline stages (pre-quote, no Plex object), OSHA Safety tracking, and Rework/Material-Destruction `$` cost fields (no cost column found on any Quality table in any catalog to date).
+
 ## 2026-08-26
 
 ### Fixed

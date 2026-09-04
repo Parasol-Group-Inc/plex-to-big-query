@@ -4860,3 +4860,178 @@ resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_test_retry" 
     }
   }
 }
+
+# ── Vox Nutrition Scorecard migration — new bq_view SQL, added 2026-09-01 ────
+# No new Cloud Run jobs/schedulers: every view below is a new `bq_view`
+# entry on an EXISTING pipeline's reports/*.yaml (sales_orders, work_orders,
+# quality_nonconformance, inventory_activity, inventory_snapshot,
+# part_on_hand_inventory — see those files' google_storage_bucket_object
+# resources above for the prod/test config objects themselves, unchanged in
+# shape by this addition). These SQL file objects just need to exist in GCS
+# for the next scheduled run of each pipeline to pick them up. See
+# score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md for the full
+# per-view rationale and score-card tile mapping.
+
+resource "google_storage_bucket_object" "sales_revenue_summary_view_sql" {
+  name         = "sql/sales_revenue_summary_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_revenue_summary_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_order_value_by_status_view_sql" {
+  name         = "sql/sales_order_value_by_status_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_order_value_by_status_view.sql"
+  content_type = "text/plain"
+}
+
+# ── 2026-09-01 Emilio/Jennilyn meeting corrections (meetings-reference/Sep-1/) ──
+# Shipping module views — see reports/sales_orders.yaml for the full story.
+
+resource "google_storage_bucket_object" "shipping_revenue_report_sql" {
+  name         = "sql/shipping_revenue_report.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/shipping_revenue_report.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "shipping_pending_revenue_view_sql" {
+  name         = "sql/shipping_pending_revenue_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/shipping_pending_revenue_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "shipping_daily_report_view_sql" {
+  name         = "sql/shipping_daily_report_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/shipping_daily_report_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_out_of_stock_view_sql" {
+  name         = "sql/inventory_out_of_stock_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_out_of_stock_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "quality_cost_by_category_view_sql" {
+  name         = "sql/quality_cost_by_category_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_cost_by_category_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "quality_fpy_by_area_month_view_sql" {
+  name         = "sql/quality_fpy_by_area_month_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_fpy_by_area_month_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "mfg_job_open_caps_view_sql" {
+  name         = "sql/mfg_job_open_caps_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/mfg_job_open_caps_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "bottling_job_open_view_sql" {
+  name         = "sql/bottling_job_open_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/bottling_job_open_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_valuation_total_view_sql" {
+  name         = "sql/inventory_valuation_total_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_valuation_total_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_avg_daily_usage_view_sql" {
+  name         = "sql/inventory_avg_daily_usage_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_avg_daily_usage_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_top_quantity_view_sql" {
+  name         = "sql/inventory_top_quantity_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_top_quantity_view.sql"
+  content_type = "text/plain"
+}
+
+# ── 2026-09-04 buildable-now scorecard items ───────────────────────────────
+# Everything the Sep 1 requirements meeting asked for that nothing was
+# blocking. All five views reuse raw tables already being extracted — no new
+# extractions[] entries, no new Plex ODBC calls. See
+# score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md.
+
+resource "google_storage_bucket_object" "sales_mtd_by_status_change_view_sql" {
+  name         = "sql/sales_mtd_by_status_change_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_mtd_by_status_change_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_mtd_summary_view_sql" {
+  name         = "sql/sales_mtd_summary_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_mtd_summary_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_revenue_run_rate_view_sql" {
+  name         = "sql/sales_revenue_run_rate_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_revenue_run_rate_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "pipeline_plex_value_view_sql" {
+  name         = "sql/pipeline_plex_value_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/pipeline_plex_value_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "production_monthly_by_workcenter_group_view_sql" {
+  name         = "sql/production_monthly_by_workcenter_group_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/production_monthly_by_workcenter_group_view.sql"
+  content_type = "text/plain"
+}
+
+# ── 2026-09-04 goal-vs-actual views ───────────────────────────────────────
+# These three read `scorecard_goals`, a maintained BigQuery table fed from a
+# Google Sheet by an Apps Script (deploy/goals_sheet_to_bigquery.gs). That
+# table is NOT managed by Terraform and NOT created by the ETL — it was
+# created by hand in both datasets 2026-09-04. If it is ever dropped, these
+# three views stop being creatable; the DDL to rebuild it is in
+# docs/reports/scorecard_goals.md.
+
+resource "google_storage_bucket_object" "revenue_vs_goal_view_sql" {
+  name         = "sql/revenue_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/revenue_vs_goal_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "sales_vs_goal_view_sql" {
+  name         = "sql/sales_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_vs_goal_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "production_vs_goal_view_sql" {
+  name         = "sql/production_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/production_vs_goal_view.sql"
+  content_type = "text/plain"
+}

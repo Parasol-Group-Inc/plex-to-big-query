@@ -11,7 +11,8 @@
 substitutions:
   _GCP_REGION:    "us-central1"
   _AR_REPO:       "plex-pipeline"
-  _CR_JOB_TEST:   "plex-etl-test"    # smoke test runs HERE, never on prod
+  _CR_JOB_TEST:   "plex-etl-sales-orders-test" # smoke test runs HERE, never on prod
+                                               # renamed 2026-09-04 from "plex-etl-test"
   _IMAGE_NAME:    "etl"
   _ENV:           "prod"             # prod | test
   # Every plex-etl-* job shares this one image (main.py/email_utils.py are
@@ -28,7 +29,11 @@ substitutions:
   # from this pipeline -- it silently stays pinned to whatever SHA was set
   # at its `terraform apply` time. Verified 2026-08-23 against every
   # google_cloud_run_v2_job resource name in terraform/main.tf (24 total).
-  _ALL_JOBS: "plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test plex-etl-part-obsolescence plex-etl-part-obsolescence-test plex-etl-inventory-activity plex-etl-inventory-activity-test plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test plex-etl-purchasing-pending-requisitions plex-etl-purchasing-pending-requisitions-test plex-etl-sales-quotes plex-etl-sales-quotes-test plex-etl-sales-returns plex-etl-sales-returns-test plex-etl-quality-supplier-returns plex-etl-quality-supplier-returns-test"
+  # Updated 2026-09-04: "plex-etl"/"plex-etl-test" renamed to
+  # "plex-etl-sales-orders"/"plex-etl-sales-orders-test". The old names are
+  # deliberately NOT left in this list — Terraform destroys those jobs on
+  # rename, and a nonexistent job in this list fails the deploy-all step.
+  _ALL_JOBS: "plex-etl-sales-orders plex-etl-sales-orders-test plex-etl-work-orders plex-etl-work-orders-test plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test plex-etl-part-obsolescence plex-etl-part-obsolescence-test plex-etl-inventory-activity plex-etl-inventory-activity-test plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test plex-etl-purchasing-pending-requisitions plex-etl-purchasing-pending-requisitions-test plex-etl-sales-quotes plex-etl-sales-quotes-test plex-etl-sales-returns plex-etl-sales-returns-test plex-etl-quality-supplier-returns plex-etl-quality-supplier-returns-test"
 
 # Full image URL derived from substitutions
 # e.g. us-central1-docker.pkg.dev/vox-nutrition-prod/plex-pipeline/etl:abc123

@@ -1,0 +1,255 @@
+Sep 1, 2026
+Emilio / Jennilyn - Transcript
+00:00:00
+
+Emilio Dominguez: Okay. So last uh meeting was about what is currently there to be used for the scorecard. Right. So I I was having this analysis uh done with um things pretty much uh in good standing. Some of them are partial. Some of them need a decision because of how Plex handles data. Some of them don't have a Plex path at all. Right. um one still bullyable and one unconfirmed schema um on the so these are the the legends on this uh for the for this artifact. So this is also coming from live data. The the things that we have in some of the of the of the cards some things are partial or a decision or they are not um they're not built because there is no way right now and some have unconfirmed schema or they have uh possibility to be built. So for this like the revenue for now uh so this is live data this is and it's alo a contrast on what um where the data is coming from versus what it uh what Plex has so this came from the looker DV
+
+
+00:01:46
+
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: and now like uh there is this the report is not built at all right but is is the data that is available to be to be used on that looker lucer studio report. So this has this um the plex uh it it is called the plex native path all the all the sum um what is going going on right now on data and also um there's some missing information from this uh revenue master price and master price it says is partially populated. Um that's about it. So that's that has data and can be that part of the of the scorecard. Then on the things that could be built but we don't really have that sort of written variable data. This 90% into month metric like the percent that is currently ongoing. Uh since this is just math, right? So this can
+Jennilyn Tockstein: Yeah, I'm wondering.
+Emilio Dominguez: be.
+Jennilyn Tockstein: So, it wants a master price.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I'm like caught up on that.
+Emilio Dominguez: This one the at this
+
+
+00:03:22
+
+Jennilyn Tockstein: The the revenue one. Yeah,
+Emilio Dominguez: one.
+Jennilyn Tockstein: it says master price.
+Emilio Dominguez: Oh yes,
+Jennilyn Tockstein: Re master price.
+Emilio Dominguez: it master price is exposed as a cross check column but shouldn't be primary. Uh see sales orders over 10k reports on header note on Y. So if we go to the query here, we can track that down.
+Jennilyn Tockstein: cuz I think what we'd want to use for revenue is the sales price and the revenue As a box counts, it means it's shipped.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So it's basically the dollar value of shipped. Try to remember Yeah, it should just be like a generic revenue report. I would think we wouldn't have anything coming from Flex Test because Well, maybe I don't know how much they're practicing shipping right
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: now.
+Emilio Dominguez: This is the sales revenue summary report. This one
+Jennilyn Tockstein: You're going to want to order account revenue. Yeah, I think that that's not what we're going to want to use for revenue.
+
+
+00:05:43
+
+Emilio Dominguez: Yeah. And the SQL code is this one. Let me just hide this. So it has the Data proof base price and the customer base price, the order totals and the master price as it calls it. It comes from the row sales on the purchase order. That's that's the master price here. Data proves and that's that. set. So this is that um but yeah I understand about um just a more simple way to to have it
+Jennilyn Tockstein: So,
+Emilio Dominguez: We have sales orders report here.
+Jennilyn Tockstein: I think we're going to want this the shipping revenue, not the sales revenue.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um
+Emilio Dominguez: Excuse me. Okay. So for the revenue that will be the shipped orders.
+Jennilyn Tockstein: See? God. Okay.
+Emilio Dominguez: Yeah. So we handle the the status here. So it will be the that ship status and just taking out this master price that is it's not even filled like that's not something that is being used right now.
+
+
+00:11:10
+
+Jennilyn Tockstein: Yeah, I think so. When you look in Plex, it's got like two databases to pull from for revenue. One's in sales and one's in shipping. And I think we want to pull it from the shipping
+Emilio Dominguez: Okay, let me go there.
+Jennilyn Tockstein: because the sales one I think will be less reliable since it will not count in when we like close things short or ship partials or ETA. I tried but the shipping revenue should just be the units that went out the door. The summed value of the units that went out the door. So I think it's from here. And we would want them sorted by invoice date.
+Emilio Dominguez: That's shipping. Shipping revenue by part, right? Shipping revenue by part
+Jennilyn Tockstein: I mean,
+Emilio Dominguez: group.
+Jennilyn Tockstein: I couldn't find a way to not group it by part. We can just section like select all of them. It actually would be pretty nice to have these by part group so that I can tell them
+Emilio Dominguez: Okay.
+
+
+00:12:55
+
+Jennilyn Tockstein: their percent of revenue by by part group. That actually would be pretty
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: nice.
+Emilio Dominguez: Okay, that's revenue. Let's keep on. Then as for the the goals, that's going to be um just maybe a spreadsheet or something um a value that you will enter the on Lucer Studio or something like
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: you have right now.
+Jennilyn Tockstein: I'll make a table and
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: yeah, to calculate just something for them to put their goals in and and edit their goals. Should add that to my to-do list.
+Emilio Dominguez: that will also help this um the percentage to the goal. Right?
+Jennilyn Tockstein: What's that
+Emilio Dominguez: So that's going to be used uh used uh used for this like the what percentage percent for the for
+Jennilyn Tockstein: percentage to go? Yeah.
+Emilio Dominguez: the goals of metric and this is a calculated field that is max on the amount monthto- date uh revenue and the goal right so this is like that table that is going to be quite custom And then the revenue, this is uh still the the shipping revenue for that we were talking about for this month onto the the revenue number, right?
+
+
+00:15:17
+
+Jennilyn Tockstein: Yeah, it's the same month to date
+Emilio Dominguez: Okay. Okay. Nice. Uh then operational health.
+Jennilyn Tockstein: new.
+Emilio Dominguez: So that's quite uh difficult for the safe days. So that will be maybe also a table,
+Jennilyn Tockstein: Yeah, same thing.
+Emilio Dominguez: right?
+Jennilyn Tockstein: I need to add a table to Big Query.
+Emilio Dominguez: Then as for this, this is what maybe you were speaking about the the shipping, but well this is totally shipping. So this is similar to the value from the
+Jennilyn Tockstein: No, because this is revenue that is it's the revenue value
+Emilio Dominguez: mount.
+Jennilyn Tockstein: of items that are done. They're in shipping, but they haven't left the building yet.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So, when we go to the shipping module, I can pull this up.
+Emilio Dominguez: Revenue summary. carry my ship
+Jennilyn Tockstein: So this is going to be yeah customer shipping.
+Emilio Dominguez: too.
+Jennilyn Tockstein: It's going to be what's in customer shipping that's not shipped yet.
+Emilio Dominguez: Hey
+Jennilyn Tockstein: Like I can show you.
+
+
+00:17:22
+
+Jennilyn Tockstein: I mean you're looking at the table. It's on here. Whatever is in here, whatever's in here that hasn't isn't morphed the ship yet.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: The value of all that's completed. So, they might have they might have like 10,000 units ordered,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: but 5,000 units are ready. And we'd only want the value of the 5,000 units that are ready to ship, not the 10,000 total. I think that the revenue in shipping is going to be the best place to pull this. Yeah. Anything that's open or pending is what we'd
+Emilio Dominguez: Oh my
+Jennilyn Tockstein: want to sum,
+Emilio Dominguez: goodness.
+Jennilyn Tockstein: but we'd want it to definitely just be the units that are ready, not the order total. I I thought we had some in the shipping. I think it's in there.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: I think we'll be able to pin it down to maybe a little better by tomorrow because tomorrow we're doing a workshop on
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: shipping and then I think
+
+
+00:19:26
+
+Emilio Dominguez: You're okay.
+Jennilyn Tockstein: general shipping might have the Yeah.
+Emilio Dominguez: Nice.
+Jennilyn Tockstein: or shipper history for like the total of what shipped yesterday. Um, they like to have I think you have it on your artifact. Maybe not. They liked to have the um they used to show the number of cartons that they shipped every day. Um, oh yeah. So we we do show that on here. So on the that shipping report, you should be able to pull the number of packages shipped and then a count of the orders that shipped. These two will probably be pretty important for them. And then yeah, this is the revenue shipped yesterday. This is the month-to- date revenue.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: It's the exact same thing as the other one. And this is that orders that are open or pending. ing and shipping. And then these are the orders that are pending that are labeled blanket.
+Emilio Dominguez: Are you labeling that also? Plex uh that blanket.
+
+
+00:21:21
+
+Jennilyn Tockstein: We are Let me see if I can find where we marked them. It's in the pipe right here.
+Emilio Dominguez: Oh,
+Jennilyn Tockstein: So you can change it blanket.
+Emilio Dominguez: the type of Okay.
+Jennilyn Tockstein: What's the order type?
+Emilio Dominguez: What is that? Okay. So that's that um out of a stock. This is uh inventory risk analysis report has an is at risk flag 90 plus days since last container activity plus already is reordering
+Jennilyn Tockstein: right now. Yeah. So, it's Yeah, it's the ones that have a stock level and a usage that's below it. So when we set up our parts, we can assign um a minimum stock level. And if it has
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: that if I can. So it's the minimum inventory quantity. If the inventory amount, like the inventory on hand is negative or we have none inventory and we have demand and there's an inventory quantity. And the last part is it has to start with a 33. So the parts um if it's like a 53 and we're below, we don't count those.
+
+
+00:24:24
+
+Jennilyn Tockstein: We're just counting the 33 parts.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: because we'll have one, twos, and fives that have minimum stock levels. But for their our out of stock report, we just consider the 33 parts. They start with a 33 and they have to have the um minimum inventory quantity. I actually don't know where I can see this parts inventory amount.
+Emilio Dominguez: like if it's reaching that right if it's reaching the minimum inventory quantity so that's at risk uh and parts that have
+Jennilyn Tockstein: Yes.
+Emilio Dominguez: the three tree and you said the other thing about if it's um if it has demand but does that mean that if it's uh there is a purchase order like pending or something related to the
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: part
+Jennilyn Tockstein: if there sales orders and stuff that use the part so that the quantity available is below zero, then it's out of stock.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I don't know how to see the demand here. Usually there's like the quantity on hand and then there's like the quantity available, the amount that hasn't been sold yet.
+
+
+00:26:17
+
+Jennilyn Tockstein: like or it'll at least show you the quantity on hand and the quantity needed or quantity allocated or something, right? And your quantity minus that is your quantity available, but I don't see that in here. I'm sure it's on the at risk report or something,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: but um I did want to say for us to be out of stock, it has to start with 33 uh for the part number and it has to have a minimum stock level. So sometimes we make custom parts. Those are okay to be negative because that's just showing us that we're in the process of making this part. It's not actually something we stock.
+Emilio Dominguez: Okay. So that's out of stock logic. Then we have the work in progress. So this has sales orders value by the status report. So the flag is work in progress. Start to have the is
+Jennilyn Tockstein: Um, I'm gonna hop on this call real quick with me just a second.
+
+
+00:28:56
+
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: I'll be right back.
+Emilio Dominguez: Don't worry. Don't worry.
+Jennilyn Tockstein: Okay. Sorry about
+Emilio Dominguez: No worse.
+Jennilyn Tockstein: that.
+Emilio Dominguez: So um as for the work in progress um so are you having that also um tracked down with the status of the job like if it's production or completed.
+Jennilyn Tockstein: It's it's Yeah, it's basically anything that
+Emilio Dominguez: So,
+Jennilyn Tockstein: is pending fulfillment really. any any order lines that are pending fulfillment. It means that they're in our minds. they're they're uh paid for or released, but they haven't yet shipped. It's all of the dollar value of everything that is in that status. So, it doesn't matter where in the process it is. It doesn't matter if it's in shipping or not, as long as it that order was released or started um but hasn't left the building yet, that's what our whip revenue is.
+Emilio Dominguez: Amen.
+Jennilyn Tockstein: So, it's okay if the job isn't actually in production yet or if it's already done.
+Emilio Dominguez: Hey
+Jennilyn Tockstein: Um, we don't need the production status.
+
+
+00:33:40
+
+Jennilyn Tockstein: We just need to know if the order line, if it's not a quote, if it's not cancelled or whatever. And if that order line isn't shipped, then it's whip.
+Emilio Dominguez: Okay. Okay. So that's for work in progress fails. So this comes from the same one here, but So sales is um pretty much. Everything that has been completed um has been shipped
+Jennilyn Tockstein: Um,
+Emilio Dominguez: and
+Jennilyn Tockstein: no. So, sales month today is anything that became uh anything that had the status change into uh pending fulfillment that month to date. So on the sales order statuses, they changed them from quote to pending sales approval to deposit review. Anyways, anything that moved into pending fulfillment status during that month is our sales month today. So it doesn't matter if it went from pending ending fulfillment to a different status after. As long as it went from pending, as long as it entered pending fulfillment for the first time that month, it is counted as sales month to date.
+
+
+00:36:14
+
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: And it's the date of that status change, not the date of the order or anything else.
+Emilio Dominguez: Okay. So that's for sales. Uh the goal will be similar on having this as a table right
+Jennilyn Tockstein: Yeah. So, same same thing. Well,
+Emilio Dominguez: percentage.
+Jennilyn Tockstein: we'll take that number we just talked about and compare it to their goal and we'll actually parse that out by rep, too. So when we get our sales month to date, we want to make sure we retain the sales rep associated with it. So that
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: and so that we have that as well.
+Emilio Dominguez: Okay. Then we have the sales and year to date. And this is going to be quite quite different for now because of data being so so new, right?
+Jennilyn Tockstein: What's that?
+Emilio Dominguez: for this one is going to be different um the different time frame uh because it's year to date but there's not much data
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: involved and I don't know that if you are going to put all data uh from the year into plex
+
+
+00:38:27
+
+Jennilyn Tockstein: Um, we'll just pull over whatever we get in Plex and then add a static
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: number to it on the date of transfer and then let it
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: just keep adding from there. Yeah. So, we could add in a dummy number right now and then at go live just update
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: it to the prior number.
+Emilio Dominguez: Okay. So for pipeline opportunities forecast Um that's been part of Monday, right? Monday data. But uh for this uh pipeline on the on the
+Jennilyn Tockstein: Yeah. Yeah.
+Emilio Dominguez: scorecard.
+Jennilyn Tockstein: It's it's a blend of the Monday data and a little bit of the Plex data. So from Plex,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: we would need the ones that are quotes. Uh the sales orders that have the status quote and the sales orders that have the status pending sales approval.
+Emilio Dominguez: Okay. And this total pipeline will be the the sum
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: right.
+Jennilyn Tockstein: So, it'll be a sum of the Monday data plus the quotes and pending sales approval sales orders.
+Emilio Dominguez: Um, as for production, the encapsulation, the actual versus the the goal. Oh.
+Jennilyn Tockstein: Yeah. So, we'll have to set up the goal table and then these are the Yeah. production by work center group by month and I've actually got a conflicting meeting right now.
+Emilio Dominguez: Mhm. Mhm.
+Jennilyn Tockstein: So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: I might have to hop off,
+Emilio Dominguez: No worry.
+Jennilyn Tockstein: but we can we can finish going through this.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: Is it Thursday t Wednesday?
+Emilio Dominguez: Sure. Yeah, I have already uh Yeah,
+Jennilyn Tockstein: Friday.
+Emilio Dominguez: I haven't I haven't noticed, but I have this uh this batch for now, so I can surely keep going with this.
+Jennilyn Tockstein: That's great.
+Emilio Dominguez: And yeah, let's uh continue. Let's continue then.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: Thank you and for the help.
+Jennilyn Tockstein: sounds good. Thank you.
+Emilio Dominguez: Have a good one.
+Jennilyn Tockstein: Right.
+
+
+Transcription ended after 00:42:15
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

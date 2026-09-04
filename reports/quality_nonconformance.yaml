@@ -108,3 +108,9 @@ bq_view:
   - name: quality_deviation_report
     display_name: "Quality Deviations"
     sql_file: gs://voxdatalake-report-configs/sql/quality_deviation_view.sql
+  # Added 2026-09-01 — Vox Nutrition Scorecard migration
+  # (score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md). Thin alias
+  # over quality_nonconformance_report above — must stay listed after it.
+  - name: quality_cost_by_category_report
+    display_name: "Vox Scorecard | NC Cost by Category"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_cost_by_category_view.sql

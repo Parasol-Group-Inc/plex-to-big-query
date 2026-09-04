@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vox Scorecard — Data Lineage Navigator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F2540;
+    --navy-2:#173A63;
+    --brand:#1C4E80;
+    --paper:#EFF2F6;
+    --card:#FFFFFF;
+    --ink:#101A26;
+    --muted:#5B6B7C;
+    --hair:#DCE3EA;
+    --confirmed:#1E8E5A;
+    --confirmed-bg:#E4F5EC;
+    --flagged:#B8790C;
+    --flagged-bg:#FCF0DA;
+    --thread:#8FA6BC;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --disp: 'Space Grotesk', 'Inter', sans-serif;
+    --body: 'Inter', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    font-family:var(--body);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 90px;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+    margin-bottom:22px;
+  }
+  .brandmark{display:flex;align-items:center;gap:14px;}
+  .brandmark .glyph{
+    width:38px;height:38px;border-radius:8px;
+    background:linear-gradient(155deg,var(--navy-2),var(--navy));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-family:var(--mono);font-size:12px;font-weight:600;
+    box-shadow:0 2px 6px rgba(15,37,64,.25);
+    flex-shrink:0;
+  }
+  h1{
+    font-family:var(--disp);font-size:19px;font-weight:700;
+    margin:0;color:var(--navy);letter-spacing:.2px;
+  }
+  .sub{font-size:12.5px;color:var(--muted);margin-top:2px;font-family:var(--mono);}
+  .trace-status{
+    display:flex;align-items:center;gap:10px;
+    background:var(--card);border:1px solid var(--hair);
+    padding:9px 16px;border-radius:999px;
+    font-family:var(--mono);font-size:12px;color:var(--navy);
+    box-shadow:0 1px 2px rgba(16,26,38,.04);
+  }
+  .trace-status .dot{
+    width:8px;height:8px;border-radius:50%;background:var(--confirmed);
+    box-shadow:0 0 0 3px var(--confirmed-bg);
+  }
+  .trace-status b{color:var(--navy);font-weight:600;}
+
+  .instructions{
+    font-size:12.5px;color:var(--muted);margin:2px 0 22px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .instructions .pip{
+    width:16px;height:16px;border-radius:4px;border:1.5px dashed var(--thread);
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  /* ---------- Dashboard replica ---------- */
+  .board{
+    background:var(--card);
+    border:1px solid var(--hair);
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 1px 3px rgba(16,26,38,.06), 0 12px 28px -18px rgba(16,26,38,.18);
+  }
+  .board-title{
+    font-family:var(--disp);font-weight:700;font-size:24px;
+    color:var(--brand);text-align:center;letter-spacing:.3px;
+    margin:2px 0 20px;
+  }
+  .row{display:grid;gap:16px;margin-bottom:16px;}
+  .row3{grid-template-columns:repeat(3,1fr);}
+  .row2{grid-template-columns:1.1fr 1.4fr;}
+
+  .card{
+    border:1px solid var(--hair);border-radius:12px;
+    padding:16px 18px 18px;background:#FCFDFE;
+    position:relative;
+  }
+  .card h2{
+    font-family:var(--disp);font-size:14px;font-weight:700;
+    color:var(--brand);text-align:center;margin:0 0 12px;
+    text-transform:uppercase;letter-spacing:.6px;
+  }
+
+  /* metric buttons */
+  button.m{
+    all:unset;cursor:pointer;
+    border-radius:6px;
+    padding:1px 4px;
+    position:relative;
+    transition:background .15s ease;
+  }
+  button.m:hover{background:rgba(28,78,128,.08);}
+  button.m:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+  button.m.traced::after{
+    content:'';position:absolute;top:-3px;right:-5px;
+    width:6px;height:6px;border-radius:50%;background:var(--confirmed);
+    box-shadow:0 0 0 2px #fff;
+  }
+  button.m.active{background:rgba(28,78,128,.14);}
+
+  .metric-big{font-size:30px;font-weight:700;color:var(--ink);text-align:center;display:block;}
+  .metric-sub{font-size:11px;color:var(--muted);text-align:center;display:block;margin-top:1px;}
+  .metric-row{display:flex;justify-content:space-around;margin-top:12px;text-align:center;}
+  .metric-row .item{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .metric-row .val{font-size:17px;font-weight:700;}
+  .metric-row .lbl{font-size:10px;color:var(--muted);}
+  .accent-blue{color:#2C6FB0;}
+  .accent-red{color:#C4433A;}
+  .accent-green{color:#2A9159;}
+
+  /* Operational Health row */
+  .ophealth-row{display:flex;justify-content:space-around;text-align:center;}
+  .ophealth-row .item .val{font-size:24px;font-weight:700;}
+  .ophealth-row .item .lbl{font-size:11px;color:var(--muted);}
+
+  /* Production sub-blocks */
+  .prod-stage{margin-bottom:14px;}
+  .prod-stage:last-child{margin-bottom:0;}
+  .prod-stage .stage-name{
+    text-align:center;font-family:var(--disp);font-weight:600;font-size:12.5px;
+    color:var(--brand);margin-bottom:6px;letter-spacing:.4px;text-transform:uppercase;
+  }
+  .barwrap{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;}
+  .bar{height:14px;border-radius:3px;background:#DCEAF5;position:relative;overflow:visible;}
+  .bar .fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#1B5C93,#2C81C4);}
+  .bar .tag{position:absolute;right:4px;top:-15px;font-size:9.5px;color:var(--muted);font-family:var(--mono);}
+  .stage-stats{display:flex;justify-content:space-around;font-size:11px;}
+  .stage-stats .item{display:flex;flex-direction:column;align-items:center;gap:1px;}
+  .stage-stats .lbl{color:var(--muted);font-size:9.5px;}
+  .stage-stats .val{font-weight:700;font-size:13px;}
+
+  /* Pipeline funnel */
+  .funnel-list{list-style:none;margin:6px 0 10px;padding:0;font-size:12px;}
+  .funnel-list li{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px dashed var(--hair);}
+  .funnel-total{text-align:center;font-size:13px;color:var(--muted);margin-top:6px;}
+  .funnel-total b{color:var(--ink);font-size:16px;}
+
+  /* Quality metrics */
+  .qm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;}
+  .qm-grid .lbl{font-size:10.5px;color:var(--muted);margin-bottom:2px;}
+  .qm-grid .val{font-size:19px;font-weight:700;}
+  .qm-grid .fpy{margin-top:10px;}
+  .qm-grid .fpy .val{color:#C4433A;font-size:20px;}
+
+  /* Operations */
+  .ops-flex{display:flex;gap:16px;}
+  .ops-chart{flex:1.4;}
+  .ops-side{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:14px;text-align:center;}
+  .ops-side .val{font-size:19px;font-weight:700;}
+  .ops-side .lbl{font-size:10.5px;color:var(--muted);}
+  .tat-chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px;}
+  .tat-bar{flex:1;background:#2C81C4;border-radius:3px 3px 0 0;position:relative;display:flex;align-items:flex-start;justify-content:center;color:#fff;font-size:11px;font-weight:700;padding-top:3px;}
+  .tat-cap{font-size:9px;color:var(--muted);text-align:center;margin-top:4px;}
+
+  footer.note{
+    font-size:11px;color:var(--muted);text-align:center;margin-top:16px;
+    font-family:var(--mono);
+  }
+
+  /* ---------- Drawer ---------- */
+  .scrim{
+    position:fixed;inset:0;background:rgba(15,37,64,.28);
+    opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;
+  }
+  .scrim.show{opacity:1;pointer-events:auto;}
+  .drawer{
+    position:fixed;top:0;right:0;height:100%;width:420px;max-width:92vw;
+    background:var(--card);z-index:50;
+    box-shadow:-16px 0 40px -12px rgba(15,37,64,.35);
+    transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+    display:flex;flex-direction:column;
+  }
+  .drawer.show{transform:translateX(0);}
+  .drawer-head{
+    padding:20px 22px 14px;border-bottom:1px solid var(--hair);
+    display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  }
+  .drawer-head .eyebrow{
+    font-family:var(--mono);font-size:11px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;
+  }
+  .drawer-head h3{font-family:var(--disp);font-size:17px;margin:0;color:var(--navy);line-height:1.3;}
+  .drawer-close{
+    all:unset;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;
+    padding:4px 8px;border-radius:6px;
+  }
+  .drawer-close:hover{background:var(--paper);}
+  .drawer-body{padding:18px 22px 30px;overflow-y:auto;flex:1;}
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:11.5px;font-weight:600;
+    padding:5px 11px;border-radius:999px;margin-bottom:16px;
+  }
+  .badge.clean{background:var(--confirmed-bg);color:var(--confirmed);}
+  .badge.flag{background:var(--flagged-bg);color:var(--flagged);}
+  .badge-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+  .origin-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:11px;font-weight:600;
+    padding:5px 11px;border-radius:999px;
+    border:1px solid var(--hair);background:#fff;color:var(--navy-2);
+  }
+  .origin-badge.sheets{background:#EAF6EE;color:#1E7A45;border-color:#CDECD6;}
+  .origin-badge.bigquery{background:#EAF1FB;color:#2255A4;border-color:#CFE0F5;}
+  .origin-badge.blend{background:#F3ECFB;color:#6A3FB0;border-color:#E4D6F7;}
+  .origin-badge.formula{background:#FEF3E7;color:#B0620C;border-color:#F8DFC0;}
+  .meta-row{display:flex;gap:18px;margin-bottom:16px;font-family:var(--mono);font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
+  .meta-row span b{color:var(--navy-2);font-weight:600;}
+  .v.structure{
+    font-family:var(--mono);font-size:12px;background:#F6F0FB;
+    padding:11px 13px;border-radius:8px;border:1px solid #E4D6F7;
+    color:#4B2E80;white-space:pre-wrap;line-height:1.6;word-break:break-word;
+  }
+  .block{margin-bottom:18px;}
+  .block .k{
+    font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.6px;color:var(--muted);margin-bottom:5px;
+  }
+  .block .v{font-size:13.5px;line-height:1.55;}
+  .block .v.mono{
+    font-family:var(--mono);font-size:12.3px;background:var(--paper);
+    padding:11px 13px;border-radius:8px;border:1px solid var(--hair);
+    color:var(--navy-2);word-break:break-word;
+  }
+  .block .v.flagtext{
+    background:var(--flagged-bg);border:1px solid #F0DBAE;color:#5C3F0A;
+    padding:11px 13px;border-radius:8px;font-size:13px;line-height:1.55;
+  }
+  .block .v.next{
+    background:#EAF1F8;border:1px solid #CFE0EF;color:var(--navy-2);
+    padding:11px 13px;border-radius:8px;font-size:13px;line-height:1.5;
+  }
+  .thread-line{
+    display:flex;align-items:center;gap:8px;margin:0 0 14px;
+    font-family:var(--mono);font-size:11px;color:var(--thread);
+  }
+  .thread-line .seg{flex:1;border-top:1px dashed var(--thread);}
+
+  /* Search */
+  .searchbar{
+    display:flex;gap:10px;margin:16px 0 0;
+  }
+  .searchbar input{
+    flex:1;font-family:var(--body);font-size:13px;
+    padding:10px 14px;border-radius:10px;border:1px solid var(--hair);
+    background:var(--card);color:var(--ink);
+  }
+  .searchbar input:focus{outline:2px solid var(--brand);outline-offset:1px;}
+  .results{margin-top:10px;display:none;flex-direction:column;gap:6px;}
+  .results.show{display:flex;}
+  .result-item{
+    text-align:left;border:1px solid var(--hair);border-radius:8px;
+    padding:9px 12px;background:var(--card);cursor:pointer;font-size:12.5px;
+  }
+  .result-item:hover{border-color:var(--brand);}
+  .result-item .rsec{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;}
+
+  @media (max-width:820px){
+    .row3{grid-template-columns:1fr;}
+    .row2{grid-template-columns:1fr;}
+    .qm-grid{grid-template-columns:repeat(3,1fr);}
+    .ops-flex{flex-direction:column;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .drawer,.scrim,button.m{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brandmark">
+      <div class="glyph">VS</div>
+      <div>
+        <h1>Vox Scorecard — Data Lineage Navigator</h1>
+        <div class="sub">click any figure to trace its source · audit session 2</div>
+      </div>
+    </div>
+    <div class="trace-status"><span class="dot"></span> <b>32 / 32</b>&nbsp;tiles traced</div>
+  </div>
+
+  <div class="instructions"><span class="pip"></span> Every number below is wired to its Looker Studio Setup panel. Click one to open its lineage.</div>
+
+  <div class="board">
+    <div class="board-title">VOX NUTRITION MTD SCORECARD</div>
+
+    <!-- Row 1 -->
+    <div class="row row3">
+      <div class="card">
+        <h2>Revenue</h2>
+        <button class="m traced" data-id="rev-mtd"><span class="metric-big">$4,109,322</span><span class="metric-sub">Revenue MTD</span></button>
+        <div class="metric-row">
+          <button class="m traced item" data-id="rev-into-month"><span class="val accent-blue">94%</span><span class="lbl">into month</span></button>
+          <button class="m traced item" data-id="rev-goal"><span class="val">$4.7M</span><span class="lbl">Goal</span></button>
+          <button class="m traced item" data-id="rev-to-goal"><span class="val">88%</span><span class="lbl">to Goal</span></button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Operational Health</h2>
+        <button class="m traced" data-id="shipping" style="display:block;"><span class="metric-big">$1,044,808</span><span class="metric-sub">Total in Shipping</span></button>
+        <div class="ophealth-row" style="margin-top:12px;">
+          <button class="m traced item" data-id="safe-days"><span class="val">8</span><span class="lbl">Safe Days</span></button>
+          <button class="m traced item" data-id="oos"><span class="val accent-red">6</span><span class="lbl">OOS</span></button>
+          <button class="m traced item" data-id="wip"><span class="val">$4.92M</span><span class="lbl">WIP</span></button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Sales</h2>
+        <button class="m traced" data-id="sales-mtd"><span class="metric-big">$4,880,519</span><span class="metric-sub">Sales MTD</span></button>
+        <div class="metric-row">
+          <button class="m traced item" data-id="sales-to-goal"><span class="val">103%</span><span class="lbl">to Goal</span></button>
+          <button class="m traced item" data-id="sales-goal"><span class="val">$4.8M</span><span class="lbl">Goal</span></button>
+          <button class="m traced item" data-id="sales-ytd"><span class="val">$28.7M</span><span class="lbl">YTD</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="row row2">
+      <div class="card">
+        <h2>Pipeline</h2>
+        <button class="m traced" data-id="pipeline-funnel" style="display:block;width:100%;">
+          <ul class="funnel-list">
+            <li><span>Opportunities (35%)</span><span>$33.69M</span></li>
+            <li><span>Forecast (70%)</span><span>$12.31M</span></li>
+            <li><span>NS Quotes (80%)</span><span>$63.04K</span></li>
+            <li><span>NS Pending SOs (95%)</span><span>$821.62K</span></li>
+          </ul>
+        </button>
+        <button class="m traced funnel-total" data-id="pipeline-total" style="display:block;width:100%;">TOTAL PIPELINE <b>$46,888,545</b></button>
+      </div>
+      <div class="card">
+        <h2>Production</h2>
+
+        <div class="prod-stage">
+          <div class="stage-name">Encapsulation</div>
+          <button class="m traced" data-id="encap-bar" style="display:block;width:100%;">
+            <div class="barwrap">
+              <div class="bar"><div class="fill" style="width:100%;"></div><span class="tag">106.65M</span></div>
+              <div class="bar"><div class="fill" style="width:94%;background:#C9D8E4;"></div><span class="tag" style="color:#8698a8;">100.00M</span></div>
+            </div>
+          </button>
+          <div class="stage-stats">
+            <button class="m traced item" data-id="encap-yday"><span class="lbl">Y-DAY</span><span class="val accent-blue">6.5M</span></button>
+            <button class="m traced item" data-id="encap-goal"><span class="lbl">% TO GOAL</span><span class="val accent-blue">107%</span></button>
+          </div>
+        </div>
+
+        <div class="prod-stage">
+          <div class="stage-name">Bottling</div>
+          <button class="m traced" data-id="bottling-bar" style="display:block;width:100%;">
+            <div class="barwrap">
+              <div class="bar"><div class="fill" style="width:100%;"></div><span class="tag">1.67M</span></div>
+              <div class="bar"><div class="fill" style="width:90%;background:#C9D8E4;"></div><span class="tag" style="color:#8698a8;">1.50M</span></div>
+            </div>
+          </button>
+          <div class="stage-stats">
+            <button class="m traced item" data-id="bottling-yday"><span class="lbl">Y-DAY</span><span class="val accent-blue">86.6K</span></button>
+            <button class="m traced item" data-id="bottling-goal"><span class="lbl">% TO GOAL</span><span class="val accent-blue">111%</span></button>
+          </div>
+        </div>
+
+        <div class="prod-stage">
+          <div class="stage-name">Labeling</div>
+          <button class="m traced" data-id="labeling-bar" style="display:block;width:100%;">
+            <div class="barwrap">
+              <div class="bar"><div class="fill" style="width:100%;"></div><span class="tag">892.17K</span></div>
+              <div class="bar"><div class="fill" style="width:78%;background:#C9D8E4;"></div><span class="tag" style="color:#8698a8;">700.00K</span></div>
+            </div>
+          </button>
+          <div class="stage-stats">
+            <button class="m traced item" data-id="labeling-yday"><span class="lbl">Y-DAY</span><span class="val accent-blue">43.8K</span></button>
+            <button class="m traced item" data-id="labeling-goal"><span class="lbl">% TO GOAL</span><span class="val accent-blue">127%</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3 -->
+    <div class="row row2">
+      <div class="card">
+        <h2>Quality Metrics</h2>
+        <div class="qm-grid">
+          <button class="m traced" data-id="reworks"><div class="lbl">REWORKS</div><div class="val">18</div></button>
+          <button class="m traced" data-id="deviations"><div class="lbl">DEVIATIONS</div><div class="val">19</div></button>
+          <button class="m traced" data-id="destruction"><div class="lbl">DESTRUCTION $</div><div class="val" style="font-size:14px;">No data</div></button>
+          <button class="m traced fpy" data-id="fpy-encap"><div class="lbl">FPY - ENCAP</div><div class="val">91.06%</div></button>
+          <button class="m traced fpy" data-id="fpy-bottling"><div class="lbl">FPY - BOTTLING</div><div class="val">99.88%</div></button>
+          <button class="m traced fpy" data-id="fpy-labeling"><div class="lbl">FPY - LABELING</div><div class="val">99.38%</div></button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Operations</h2>
+        <div class="ops-flex">
+          <div class="ops-chart">
+            <button class="m traced" data-id="tat" style="display:block;width:100%;">
+              <div style="font-size:11px;color:var(--brand);text-align:center;margin-bottom:2px;font-weight:600;">30 DAY ROLLING TAT (UPDATED WEEKLY)</div>
+              <div class="tat-chart">
+                <div class="tat-bar" style="height:100%;">10.7</div>
+                <div class="tat-bar" style="height:80%;">8.6</div>
+                <div class="tat-bar" style="height:43%;background:#5B93BE;">4.6</div>
+                <div class="tat-bar" style="height:40%;background:#5B93BE;">4.3</div>
+                <div class="tat-bar" style="height:37%;background:#5B93BE;">4</div>
+              </div>
+              <div class="tat-cap">Labeled Custom / Stock Bottle · Blank Custom / Stock Bottle · Bulk Case</div>
+            </button>
+          </div>
+          <div class="ops-side">
+            <button class="m traced" data-id="open-caps"><div class="val">219.7M</div><div class="lbl">OPEN CAPS</div></button>
+            <button class="m traced" data-id="open-bottles"><div class="val">1.2M</div><div class="lbl">OPEN BOTTLES</div></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="note">Data Last Updated: 7/31/2026 10:39:22 AM</footer>
+  </div>
+
+  <div class="searchbar">
+    <input type="text" id="search" placeholder="Search the audit — e.g. &quot;formula&quot;, &quot;FPY&quot;, &quot;BigQuery&quot;, &quot;flagged&quot;…">
+  </div>
+  <div class="results" id="results"></div>
+
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-label="Data lineage detail">
+  <div class="drawer-head">
+    <div>
+      <div class="eyebrow" id="d-section">Section</div>
+      <h3 id="d-tile">Tile name</h3>
+    </div>
+    <button class="drawer-close" id="d-close" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="badge-row">
+      <span class="origin-badge" id="d-origin">Origin</span>
+      <span class="badge" id="d-badge">Status</span>
+    </div>
+
+    <div class="meta-row" id="d-meta"></div>
+
+    <div class="block">
+      <div class="k">Source / Field / Config (chart-level)</div>
+      <div class="v mono" id="d-source"></div>
+    </div>
+
+    <div class="block" id="d-structure-wrap">
+      <div class="k">Exact data structure</div>
+      <div class="v structure" id="d-structure"></div>
+    </div>
+
+    <div class="block" id="d-structnote-wrap">
+      <div class="k">Structure note</div>
+      <div class="v" id="d-structnote"></div>
+    </div>
+
+    <div class="thread-line"><span>audit note</span><span class="seg"></span></div>
+
+    <div class="block">
+      <div class="k">Basis &amp; Flags</div>
+      <div class="v" id="d-basis"></div>
+    </div>
+
+    <div class="block" id="d-next-wrap">
+      <div class="k">Next step</div>
+      <div class="v next" id="d-next"></div>
+    </div>
+  </div>
+</aside>
+
+<script type="application/json" id="tile-data">
+[
+  {
+    "section": "Revenue",
+    "tile": "MTD Revenue number ($4,109,322)",
+    "source": "Vox_Looker_DB - Rev_MTD (ds16); Metric = REVENUE (Sum). No filter, no date range dimension.",
+    "confidence": "High",
+    "basis": "Confirmed via chart Setup panel.",
+    "next_step": "\u2014",
+    "id": "rev-mtd",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds16",
+    "freshness": "15 min",
+    "structure": "Fields: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count\nAggregation notes: % Revenue Target defaults to Sum",
+    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting."
+  },
+  {
+    "section": "Revenue",
+    "tile": "94% into month sub-metric",
+    "source": "vw_sales_mtd_vs_goal; Metric = pct_into_month, aggregation overridden to MIN. Date range dimension = month.",
+    "confidence": "High",
+    "basis": "Confirmed. Resolves earlier P3 concern \u2014 this chart does NOT rely on the flagged Sum default.",
+    "next_step": "\u2014",
+    "id": "rev-into-month",
+    "origin_type": "BigQuery (SQL-defined view)",
+    "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
+    "freshness": "Live (view computes on query; no fixed cache interval observed)",
+    "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+  },
+  {
+    "section": "Revenue",
+    "tile": "$4.7M Goal sub-metric",
+    "source": "Vox_Looker_DB - Rev_MTD (ds16); Metric = Goal (Sum). Date range dimension = Date.",
+    "confidence": "High",
+    "basis": "Confirmed. Genuine target figure, Sum is appropriate.",
+    "next_step": "\u2014",
+    "id": "rev-goal",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds16",
+    "freshness": "15 min",
+    "structure": "Fields: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count\nAggregation notes: % Revenue Target defaults to Sum",
+    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting."
+  },
+  {
+    "section": "Revenue",
+    "tile": "88% to Goal sub-metric",
+    "source": "Vox_Looker_DB - Rev_MTD (ds16); Metric = '% to rev goal' (calculated field). Formula CONFIRMED: MAX(MTD Revenue) / MAX(Goal). Data type Percent, aggregation Auto. Comparison type: Period.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "Confirmed. Formula uses MAX/MAX \u2014 a safe, deliberate ratio construction (not the flagged Sum-on-percentage pattern). FLAG: raw source also contains a separate pre-built field '% Revenue Target' that isn't used here \u2014 confirm with the report owner whether it's redundant with this calculated field or serves a different purpose.",
+    "next_step": "\u2014",
+    "id": "rev-to-goal",
+    "origin_type": "Calculated Field (built on top of a Sheets source)",
+    "connector": "Calculated field on Vox_Looker_DB - Rev_MTD (Sheets / ds16)",
+    "freshness": "15 min",
+    "structure": "Formula: MAX(MTD Revenue) / MAX(Goal)\nBuilt on source: Vox_Looker_DB - Rev_MTD\nFull field list: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count",
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+  },
+  {
+    "section": "Operational Health",
+    "tile": "Safe Days (8)",
+    "source": "Vox_Looker_DB - Safety; Dimension = '7/23/2026' (the misnamed field decoded earlier to actually hold the value 8). Sort by this field, Descending.",
+    "confidence": "High",
+    "basis": "Confirmed. Chart correctly surfaces the right number despite the source's swapped field names.",
+    "next_step": "\u2014",
+    "id": "safe-days",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds22",
+    "freshness": "15 min",
+    "structure": "Fields: '7/23/2026' (Sum) = actually holds the Safe Days value (8); 'Last OSHA' (Text) = actually holds the label 'Safe Days'; Record Count\nAggregation notes: Field names and values are swapped",
+    "structure_note": "Source sheet has no header row \u2014 it's a 2-row label/value table (Last OSHA: 7/23/2026 / Safe Days: 8). Looker Studio read row 1 as headers, so field names and values are backwards. Underlying numbers are correct; only the labels are broken. Needs a real Metric/Value header structure."
+  },
+  {
+    "section": "Operational Health",
+    "tile": "Total in Shipping ($1,044,808)",
+    "source": "shipping_revenue_daily (BigQuery); Metric = total_unshipped_revenue (Sum). Date range dimension = snapshot_date.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean, appropriate Sum aggregation on a genuine dollar total.",
+    "next_step": "\u2014",
+    "id": "shipping",
+    "origin_type": "BigQuery View",
+    "connector": "BigQuery / ds161",
+    "freshness": "12 hours",
+    "structure": "Fields: snapshot_date, total_unshipped_revenue (Sum), Record Count\nAggregation notes: Clean",
+    "structure_note": "Genuine dollar total; likely feeds 'Total in Shipping' / WIP tiles."
+  },
+  {
+    "section": "Operational Health",
+    "tile": "OOS (6)",
+    "source": "Vox_Looker_DB - Inventory; Metric = Item Name, aggregation Count Distinct (CTD). NO FILTER applied on this chart.",
+    "confidence": "High (flagged)",
+    "basis": "Confirmed source, but this is a likely REAL BUG: the chart counts all distinct item names in the sheet with no filter for actual out-of-stock/reorder status. The raw sheet has an 'At Reorder Point?' Yes/No column that isn't used. 'OOS: 6' may just mean '6 items exist' rather than '6 items are out of stock'.",
+    "next_step": "Confirm with the report owner whether a status filter should be added, or whether the sheet is scoped to already-OOS items only by design.",
+    "id": "oos",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds36",
+    "freshness": "15 min",
+    "structure": "Fields: Avg. Daily, Current Qty, Item Name, On Order, Record Count\nAggregation notes: Avg. Daily defaults to Sum",
+    "structure_note": "Raw sheet has ~23 columns incl. a full reorder-point analysis table; Looker Studio only pulls a smaller secondary set (Item Name/Current Qty/Avg. Daily/On Order). The detailed table isn't used at all \u2014 confirm intentional."
+  },
+  {
+    "section": "Operational Health",
+    "tile": "WIP ($4.92M)",
+    "source": "Vox_Looker_DB - Flow; Metric = Amount (Sum). Filter = wip (Phase Equal to WIP).",
+    "confidence": "High",
+    "basis": "Confirmed. Correctly filtered, clean.",
+    "next_step": "\u2014",
+    "id": "wip",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds32",
+    "freshness": "15 min",
+    "structure": "Fields: Amount (Sum), Order (Sum), Phase, Record Count\nAggregation notes: Order is a sort key, not a quantity \u2014 confirmed via data preview",
+    "structure_note": "5 phases: Quotes, Pending SOs, WIP, Ready to Ship, Inventory Val. Order = 1-5 display sequence, not summable data \u2014 resolved, not an issue."
+  },
+  {
+    "section": "Sales",
+    "tile": "Sales MTD ($4,880,519)",
+    "source": "vw_sales_mtd_vs_goal; Metric = actual_total (Sum). Date range dimension = month. Default date range: Custom, 'This month to date (exclude today)'. Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean, sensible date range choice.",
+    "next_step": "\u2014",
+    "id": "sales-mtd",
+    "origin_type": "BigQuery (SQL-defined view)",
+    "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
+    "freshness": "Live (view computes on query; no fixed cache interval observed)",
+    "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+  },
+  {
+    "section": "Sales",
+    "tile": "103% to Goal",
+    "source": "vw_sales_mtd_vs_goal; Metric = goal_progress (Sum) \u2014 using the SOURCE'S DEFAULT aggregation, unmodified. Date range dimension = month, same custom range.",
+    "confidence": "High (flagged)",
+    "basis": "Confirmed active instance of the flagged aggregation issue: goal_progress is a percentage field defaulting to Sum, and this chart does not override it. Whether this is a real problem depends on the row grain of vw_sales_mtd_vs_goal (one row per month = harmless; multiple rows per month = misleading blended %).",
+    "next_step": "Verify the row grain of vw_sales_mtd_vs_goal directly in BigQuery.",
+    "id": "sales-to-goal",
+    "origin_type": "BigQuery (SQL-defined view)",
+    "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
+    "freshness": "Live (view computes on query; no fixed cache interval observed)",
+    "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+  },
+  {
+    "section": "Sales",
+    "tile": "$4.8M Goal",
+    "source": "vw_sales_mtd_vs_goal; Metric = goal (Sum). Date range dimension = month, same custom range.",
+    "confidence": "High",
+    "basis": "Confirmed. Genuine target figure, Sum is appropriate.",
+    "next_step": "\u2014",
+    "id": "sales-goal",
+    "origin_type": "BigQuery (SQL-defined view)",
+    "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
+    "freshness": "Live (view computes on query; no fixed cache interval observed)",
+    "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+  },
+  {
+    "section": "Sales",
+    "tile": "$28.7M YTD",
+    "source": "vw_sales; Metric = amount (Sum). Date range dimension = date_approved. Default date range: Custom, 'This year to date (exclude today)'.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean, genuine YTD total.",
+    "next_step": "\u2014",
+    "id": "sales-ytd",
+    "origin_type": "BigQuery View",
+    "connector": "BigQuery / ds163",
+    "freshness": "4 hours",
+    "structure": "Fields: amount (Sum), date_approved, name, sales_rep, sales_rep_2, Record Count\nAggregation notes: Clean",
+    "structure_note": "Two separate rep columns (sales_rep, sales_rep_2) \u2014 confirm what distinguishes them (e.g. split deals)."
+  },
+  {
+    "section": "Pipeline",
+    "tile": "Funnel chart (Opportunities/Forecast/NS Quotes/NS Pending SOs)",
+    "source": "vw_pipeline; Dimension = stage. Metric = pipeline_total, aggregation MAX. Sort = probability, Ascending.",
+    "confidence": "High",
+    "basis": "Confirmed \u2014 corrects earlier guess that raw Opportunities/Forecast/SalesPipeline tabs fed this chart; it's actually vw_pipeline directly. Resolves the earlier 'probability defaults to Sum' concern: probability is only used to sort, never displayed or aggregated.",
+    "next_step": "\u2014",
+    "id": "pipeline-funnel",
+    "origin_type": "BigQuery View",
+    "connector": "BigQuery / ds168",
+    "freshness": "4 hours",
+    "structure": "Fields: pipeline_total (Sum), probability (Sum), stage, Record Count\nAggregation notes: probability defaults to Sum",
+    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it."
+  },
+  {
+    "section": "Pipeline",
+    "tile": "Total Pipeline ($46,888,545)",
+    "source": "vw_pipeline; Metric = pipeline_total (Sum).",
+    "confidence": "High (flagged)",
+    "basis": "Confirmed, but note: the funnel chart uses MAX on pipeline_total while this number uses SUM on the same field. Worth confirming this difference is intentional (e.g. funnel bars show largest single deal per stage, while the total is a true sum) rather than an inconsistency.",
+    "next_step": "Confirm with report owner whether the MAX vs SUM difference is intentional.",
+    "id": "pipeline-total",
+    "origin_type": "BigQuery View",
+    "connector": "BigQuery / ds168",
+    "freshness": "4 hours",
+    "structure": "Fields: pipeline_total (Sum), probability (Sum), stage, Record Count\nAggregation notes: probability defaults to Sum",
+    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it."
+  },
+  {
+    "section": "Production",
+    "tile": "Encapsulation bar chart (106.65M vs 100.00M)",
+    "source": "encap goals + totals blend; Dimension = total (likely a calculated label field). Metric = Encap Total (Sum) + Encapsulation (Sum). Filter = Encap Date filter. Sort = Encap Total, Ascending. Display: Top N, 100 bars.",
+    "confidence": "High",
+    "basis": "Confirmed. Fully consistent with the blend mapping done earlier.",
+    "next_step": "\u2014",
+    "id": "encap-bar",
+    "origin_type": "Looker Studio Blend (joins 2 Google Sheets sources)",
+    "connector": "Blend \u2014 encap goals + totals",
+    "freshness": "Inherits from Sheets sources (~15 min)",
+    "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Encap Date, Encap Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Encapsulation)\nJoin key: Encap Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
+    "structure_note": "Working. No calculated field in the blend itself \u2014 the % to Goal math must live at chart level."
+  },
+  {
+    "section": "Production",
+    "tile": "Encapsulation Y-DAY (6.5M)",
+    "source": "Vox_Looker_DB - Production_Daily (raw source, not the blend); Metric = Encap Yesterday (Sum). Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean.",
+    "next_step": "\u2014",
+    "id": "encap-yday",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds15",
+    "freshness": "15 min",
+    "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+  },
+  {
+    "section": "Production",
+    "tile": "Encapsulation % TO GOAL (107%)",
+    "source": "encap goals + totals blend; Metric = 'encap %' (calculated field, Source field ID qt_stxthsll2d). Formula CONFIRMED: SUM(Encap Total) / SUM(Encapsulation). Data type Percent, aggregation Auto. Filter = Encap Date filter. Comparison type: Period.",
+    "confidence": "High (confirmed)",
+    "basis": "Confirmed. Clean SUM/SUM ratio construction \u2014 numerator and denominator summed before dividing, which is a safe pattern (distinct from summing an already-computed percentage).",
+    "next_step": "\u2014",
+    "id": "encap-goal",
+    "origin_type": "Calculated Field (built on top of a blend)",
+    "connector": "Calculated field on blend \u2014 encap goals + totals (field ID qt_stxthsll2d)",
+    "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
+    "structure": "Formula: SUM(Encap Total) / SUM(Encapsulation)\nBuilt on blend: encap goals + totals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Encap Date, Encap Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Encapsulation)\n  Join key: Encap Date = GOALS",
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+  },
+  {
+    "section": "Production",
+    "tile": "Bottling bar chart (1.67M vs 1.50M)",
+    "source": "bottling daily+ goals blend; Dimension = total. Metric = Bottling Total (Sum) + Bottling (Sum). Display: Top N, 100 bars.",
+    "confidence": "High",
+    "basis": "Confirmed. Identical structure to Encapsulation's bar chart.",
+    "next_step": "\u2014",
+    "id": "bottling-bar",
+    "origin_type": "Looker Studio Blend (joins 2 Google Sheets sources)",
+    "connector": "Blend \u2014 bottling daily+ goals",
+    "freshness": "Inherits from Sheets sources (~15 min)",
+    "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Bottling Date, Bottling Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Bottling)\nJoin key: Bottling Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
+    "structure_note": "Working. Identical structure to the Encap blend."
+  },
+  {
+    "section": "Production",
+    "tile": "Bottling Y-DAY (86.6K)",
+    "source": "Vox_Looker_DB - Production_Daily (raw source); Metric = Bottling Yesterday (Sum). Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean.",
+    "next_step": "\u2014",
+    "id": "bottling-yday",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds15",
+    "freshness": "15 min",
+    "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+  },
+  {
+    "section": "Production",
+    "tile": "Bottling % TO GOAL (111%)",
+    "source": "bottling daily+ goals blend; Metric = 'bottling %' (calculated field, Source field ID qt_ae8tyyll2d). Formula CONFIRMED: SUM(Bottling Total) / SUM(Bottling). Data type Percent, aggregation Auto. Filter = bottling mtd. Comparison type: Period.",
+    "confidence": "High (confirmed)",
+    "basis": "Confirmed. Identical safe SUM/SUM pattern to 'encap %'.",
+    "next_step": "\u2014",
+    "id": "bottling-goal",
+    "origin_type": "Calculated Field (built on top of a blend)",
+    "connector": "Calculated field on blend \u2014 bottling daily+ goals (field ID qt_ae8tyyll2d)",
+    "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
+    "structure": "Formula: SUM(Bottling Total) / SUM(Bottling)\nBuilt on blend: bottling daily+ goals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Bottling Date, Bottling Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Bottling)\n  Join key: Bottling Date = GOALS",
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+  },
+  {
+    "section": "Production",
+    "tile": "Labeling bar chart (892.17K vs 700.00K)",
+    "source": "labeling daily + goals blend; Dimension = total. Metric = Labeling Total (Sum) + Labeling (Sum). Filter = Labeling Date filter. Sort = Labeling Total, Ascending. Display: Top N, 100 bars.",
+    "confidence": "High",
+    "basis": "Confirmed. Identical structure to Encapsulation/Bottling bar charts.",
+    "next_step": "\u2014",
+    "id": "labeling-bar",
+    "origin_type": "Looker Studio Blend (joins 2 Google Sheets sources)",
+    "connector": "Blend \u2014 labeling daily + goals",
+    "freshness": "Inherits from Sheets sources (~15 min)",
+    "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Labeling Date, Labeling Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Labeling)\nJoin key: Labeling Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
+    "structure_note": "Working. Identical structure to the Encap/Bottling blends."
+  },
+  {
+    "section": "Production",
+    "tile": "Labeling Y-DAY (43.8K)",
+    "source": "Vox_Looker_DB - Production_Daily (raw source); Metric = Labeling Yesterday (Sum). Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean.",
+    "next_step": "\u2014",
+    "id": "labeling-yday",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds15",
+    "freshness": "15 min",
+    "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+  },
+  {
+    "section": "Production",
+    "tile": "Labeling % TO GOAL (127%)",
+    "source": "labeling daily + goals blend; Metric = 'New Field' (calculated field, Source field ID qt_b68tyyll2d, never renamed). Formula CONFIRMED: SUM(Labeling Total) / SUM(Labeling). Data type Percent, aggregation Auto. Filter = Labeling Date filter. Comparison type: Period.",
+    "confidence": "High (confirmed, naming gap)",
+    "basis": "Confirmed. Same safe SUM/SUM pattern as its siblings, functionally correct. Naming gap stands: still called 'New Field' instead of 'labeling %'.",
+    "next_step": "Rename the field to 'labeling %' for consistency (cosmetic, no functional risk).",
+    "id": "labeling-goal",
+    "origin_type": "Calculated Field (built on top of a blend)",
+    "connector": "Calculated field on blend \u2014 labeling daily + goals (field ID qt_b68tyyll2d)",
+    "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
+    "structure": "Formula: SUM(Labeling Total) / SUM(Labeling)\nBuilt on blend: labeling daily + goals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Labeling Date, Labeling Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Labeling)\n  Join key: Labeling Date = GOALS",
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "Reworks (18)",
+    "source": "Vox_Looker_DB - Quality_Rework; Metric = Record Count (Auto). Date range dimension = Date. Default date range: Custom, 'This month to date (exclude today)'. Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean, simple record count.",
+    "next_step": "\u2014",
+    "id": "reworks",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds17",
+    "freshness": "15 min",
+    "structure": "Fields: RW and Incoming Report Number(s), Date, Status, Total Cost (COG + Labor) (Sum), Record Count\nAggregation notes: Clean",
+    "structure_note": "Genuine additive dollar total; feeds the Reworks tile."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "Deviations (19)",
+    "source": "Vox_Looker_DB - Quality_Deviation; Metric = Record Count (Auto). Date range dimension = Date Deviation was Initiated. Same custom date range. Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed. Clean, simple record count.",
+    "next_step": "\u2014",
+    "id": "deviations",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds18",
+    "freshness": "15 min",
+    "structure": "Fields: Date Deviation was Initiated, Deviation No., Status, Record Count\nAggregation notes: Clean",
+    "structure_note": "Simple log/register; feeds the Deviations tile via Record Count."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "Destruction $ (No data)",
+    "source": "Vox_Looker_DB - Quality_MatDestr; Metric = Value (Sum). Date range dimension = Report Date. Same custom date range. Comparison type: Period.",
+    "confidence": "High",
+    "basis": "Confirmed: chart is correctly configured. 'No data' is EXPECTED BEHAVIOR \u2014 it means no destruction reports have a Report Date in the current month, not a broken chart.",
+    "next_step": "\u2014",
+    "id": "destruction",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds19",
+    "freshness": "15 min",
+    "structure": "Fields: Material Destruction Report Number(s), Report Date, Status, Value (Sum), Record Count\nAggregation notes: Clean",
+    "structure_note": "Genuine additive dollar total. Original dashboard tile showed 'No data' for Destruction $ \u2014 check whether this source has rows for the current period."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "FPY - Encap (91.06%)",
+    "source": "Quality_Looker_DB - YTD FPYs; Metric = FPY (Sum) \u2014 using the SOURCE'S DEFAULT aggregation, unmodified. Filter = encap only. Date range dimension = Month. Same custom date range. Comparison type: None.",
+    "confidence": "High (confirmed, low risk)",
+    "basis": "Row grain CONFIRMED via direct data export: Quality_Looker_DB - YTD FPYs has exactly one row per Area+Month (36 rows total, zero duplicate Area+Month combinations). Since this chart filters to a single Area and single Month, SUM(FPY) sums over exactly one row \u2014 mathematically identical to displaying that row's value directly. The Sum aggregation is technically still the 'wrong' type for a percentage field, but harmless given this data shape. Value cross-checked against raw July 2026 row: matches exactly (91.06%).",
+    "next_step": "\u2014",
+    "id": "fpy-encap",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds160",
+    "freshness": "15 min",
+    "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "FPY - Bottling (99.88%)",
+    "source": "Quality_Looker_DB - YTD FPYs; Metric = FPY (Sum). Filter = bottling only. Date range dimension = Month. Default date range: Custom, 'This month to date (exclude today)'.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "CONFIRMED via chart Setup panel screenshots. FLAG: dashboard displays 99.88%, but the raw July 2026 Bottling/Packaging row (pulled via direct BigQuery/data export) shows FPY = 0.9971808 = 99.72% \u2014 a ~0.16pt discrepancy not seen in FPY-Encap or FPY-Labeling, both of which matched their raw rows exactly. Row grain is confirmed clean (1 row per Area+Month), so this isn't a Sum-aggregation artifact \u2014 likely a data-freshness timing gap between the live dashboard and the export snapshot, or the 'bottling only' filter picking up more than the single expected row.",
+    "next_step": "Re-pull the Bottling/Packaging July row at the same moment as a fresh dashboard screenshot to isolate timing vs. filter scope as the cause.",
+    "id": "fpy-bottling",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds160",
+    "freshness": "15 min",
+    "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+  },
+  {
+    "section": "Quality Metrics",
+    "tile": "FPY - Labeling (99.38%)",
+    "source": "Quality_Looker_DB - YTD FPYs; Metric = FPY (Sum). Filter = labeling only. Date range dimension = Month. Default date range: Custom, 'This month to date (exclude today)'. Comparison type: Period.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "CONFIRMED via chart Setup panel screenshots. Value matches raw July 2026 Labeling row exactly (99.38%). FLAG: Comparison type is Period here, but None on FPY-Encap and FPY-Bottling \u2014 an inconsistency across three otherwise-identical sibling tiles.",
+    "next_step": "\u2014",
+    "id": "fpy-labeling",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds160",
+    "freshness": "15 min",
+    "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+  },
+  {
+    "section": "Operations",
+    "tile": "30 Day Rolling TAT chart",
+    "source": "Weekly Rolling TAT Analysis - Analysis; Dimension (X-axis) = Item Stock Type. Metrics (Y-axis) = Performance Standard (Sum) + Average Work Days (Sum). No filter. No date range dimension. Sort = Average Work Days, Descending. Display: Top N, 500 points. Cross-filtering and change-sorting enabled.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "CONFIRMED via chart Setup panel screenshots. FLAG: chart title reads '30 DAY ROLLING TAT (UPDATED WEEKLY)' but no date range dimension is configured on this chart at all \u2014 any time-windowing must happen upstream in the source view, not in Looker Studio. Also: a 'Bonus Standard' field exists in the source alongside 'Performance Standard' but is unused on this chart.",
+    "next_step": "Confirm with the report owner whether 'Weekly Rolling TAT Analysis' pre-filters to a 30-day window upstream, and whether 'Bonus Standard' should be the displayed benchmark instead of/alongside 'Performance Standard'.",
+    "id": "tat",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds165",
+    "freshness": "15 min",
+    "structure": "Fields: Average Work Days (Sum), Bonus Standard (Sum), Item Stock Type, Performance Standard (Sum), Record Count\nAggregation notes: Average Work Days defaults to Sum",
+    "structure_note": "A field literally named 'Average' is being summed \u2014 clearest example of the aggregation issue in the whole report. Should be Average."
+  },
+  {
+    "section": "Operations",
+    "tile": "Open Caps (219.7M)",
+    "source": "Vox_Looker_DB - MFG_Job; Metric = Caps Pending (Sum). No filter. No date range dimension. Comparison type: Period.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "CONFIRMED via chart Setup panel screenshot. FLAG: no filter or date scoping \u2014 Sum(Caps Pending) totals every row in the sheet, all-time. The field name implies pre-filtered pending status, but this can't be verified from Looker Studio alone with no status field exposed. Comparison type = Period with no date dimension configured is likely a non-functional/vestigial setting (same pattern seen on Open Bottles and the TAT chart).",
+    "next_step": "Confirm with the report owner whether MFG_Job is pre-scoped to open/pending jobs only at the source level.",
+    "id": "open-caps",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds174",
+    "freshness": "15 min",
+    "structure": "Fields: Cap Specs, Caps Pending, Customer, Date Entered, Days in WIP, Description, Qty Ordered, SKU, Yield, Record Count\nAggregation notes: Yield, Days in WIP default to Sum",
+    "structure_note": "Yield is typically a % per job; Days in WIP summed across jobs is not meaningful. Consider Average."
+  },
+  {
+    "section": "Operations",
+    "tile": "Open Bottles (1.2M)",
+    "source": "Vox_Looker_DB - Bottling_Job; Metric = QTY (Sum). No filter. No date range dimension. Comparison type: Period.",
+    "confidence": "High (confirmed, flagged)",
+    "basis": "CONFIRMED via chart Setup panel screenshot. Same pattern as Open Caps: no filter/date scoping, Comparison type = Period with nothing to compare against. Field list (Bottle, Company, DATE, Pill Count, Product, QTY, WO#) has no obvious status field to confirm open-vs-completed job scoping.",
+    "next_step": "Confirm with the report owner whether Bottling_Job is pre-scoped to open jobs only at the source level.",
+    "id": "open-bottles",
+    "origin_type": "Google Sheets",
+    "connector": "Sheets / ds173",
+    "freshness": "15 min",
+    "structure": "Fields: Bottle, Company, DATE, Pill Count (Sum), Product, QTY (Sum), WO#, Record Count\nAggregation notes: Clean",
+    "structure_note": "Genuine additive quantities; no issues."
+  }
+]
+</script>
+<script>
+  const DATA = JSON.parse(document.getElementById('tile-data').textContent);
+  const byId = {};
+  DATA.forEach(d => byId[d.id] = d);
+
+  const drawer = document.getElementById('drawer');
+  const scrim = document.getElementById('scrim');
+
+  function isFlagged(conf){
+    return /flag|naming gap/i.test(conf);
+  }
+
+  function originClass(originType){
+    if(!originType) return '';
+    if(/sheets/i.test(originType)) return 'sheets';
+    if(/bigquery/i.test(originType)) return 'bigquery';
+    if(/blend/i.test(originType)) return 'blend';
+    if(/calculated field/i.test(originType)) return 'formula';
+    return '';
+  }
+
+  function originIcon(cls){
+    return { sheets:'▦', bigquery:'◱', blend:'⋈', formula:'ƒ' }[cls] || '●';
+  }
+
+  function openTile(id){
+    const d = byId[id];
+    if(!d) return;
+    document.querySelectorAll('button.m').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll(`button.m[data-id="${id}"]`).forEach(b=>b.classList.add('active'));
+
+    document.getElementById('d-section').textContent = d.section;
+    document.getElementById('d-tile').textContent = d.tile;
+    document.getElementById('d-source').textContent = d.source;
+    document.getElementById('d-basis').textContent = d.basis;
+
+    const badge = document.getElementById('d-badge');
+    const flagged = isFlagged(d.confidence);
+    badge.textContent = d.confidence;
+    badge.className = 'badge ' + (flagged ? 'flag' : 'clean');
+
+    const oCls = originClass(d.origin_type);
+    const origin = document.getElementById('d-origin');
+    origin.textContent = originIcon(oCls) + '  ' + (d.origin_type || 'Unknown origin');
+    origin.className = 'origin-badge ' + oCls;
+
+    const meta = document.getElementById('d-meta');
+    const metaParts = [];
+    if(d.connector) metaParts.push(`<span><b>Connector:</b> ${d.connector}</span>`);
+    if(d.freshness) metaParts.push(`<span><b>Freshness:</b> ${d.freshness}</span>`);
+    meta.innerHTML = metaParts.join('');
+
+    const structWrap = document.getElementById('d-structure-wrap');
+    if(d.structure){
+      structWrap.style.display = '';
+      document.getElementById('d-structure').textContent = d.structure;
+    } else {
+      structWrap.style.display = 'none';
+    }
+
+    const structNoteWrap = document.getElementById('d-structnote-wrap');
+    if(d.structure_note){
+      structNoteWrap.style.display = '';
+      document.getElementById('d-structnote').textContent = d.structure_note;
+    } else {
+      structNoteWrap.style.display = 'none';
+    }
+
+    const nextWrap = document.getElementById('d-next-wrap');
+    if(!d.next_step || d.next_step === '—'){
+      nextWrap.style.display = 'none';
+    } else {
+      nextWrap.style.display = '';
+      document.getElementById('d-next').textContent = d.next_step;
+    }
+
+    drawer.querySelector('.drawer-body').scrollTop = 0;
+    drawer.classList.add('show');
+    scrim.classList.add('show');
+  }
+
+  function closeDrawer(){
+    drawer.classList.remove('show');
+    scrim.classList.remove('show');
+  }
+
+  document.querySelectorAll('button.m[data-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openTile(btn.dataset.id));
+  });
+  document.getElementById('d-close').addEventListener('click', closeDrawer);
+  scrim.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
+
+  // ---- search ----
+  const search = document.getElementById('search');
+  const results = document.getElementById('results');
+  search.addEventListener('input', ()=>{
+    const q = search.value.trim().toLowerCase();
+    if(q.length < 2){ results.classList.remove('show'); results.innerHTML=''; return; }
+    const hits = DATA.filter(d =>
+      (d.tile + d.source + d.basis + d.next_step + d.section + d.confidence).toLowerCase().includes(q)
+    ).slice(0, 8);
+    results.innerHTML = hits.map(d => `
+      <div class="result-item" data-id="${d.id}">
+        <div class="rsec">${d.section}</div>
+        <div>${d.tile}</div>
+      </div>
+    `).join('') || '<div class="result-item" style="cursor:default;">No matches.</div>';
+    results.classList.add('show');
+    results.querySelectorAll('.result-item[data-id]').forEach(el=>{
+      el.addEventListener('click', ()=> openTile(el.dataset.id));
+    });
+  });
+</script>
+</body>
+</html>

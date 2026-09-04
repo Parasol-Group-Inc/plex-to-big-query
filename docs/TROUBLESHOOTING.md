@@ -2,7 +2,7 @@
 
 Quick-reference commands for every common error. Copy-paste ready — substitute your project values where shown.
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl` — one of **16** live jobs (8 report families × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl` for e.g. `plex-etl-quality-nonconformance-test`.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **16** live jobs (8 report families × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -25,7 +25,7 @@ Quick-reference commands for every common error. Copy-paste ready — substitute
 ```bash
 # Logs for the most recent execution (last 100 lines)
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders" \
   --project=voxdatalake --limit=100 \
   --format="value(timestamp,textPayload)"
 
@@ -37,12 +37,12 @@ gcloud logging read \
 
 # Only errors
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl AND severity>=ERROR" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders AND severity>=ERROR" \
   --project=voxdatalake --limit=50 \
   --format="value(timestamp,textPayload)"
 
 # Open in Cloud Console (browser)
-# https://console.cloud.google.com/run/jobs/details/us-central1/plex-etl?project=voxdatalake
+# https://console.cloud.google.com/run/jobs/details/us-central1/plex-etl-sales-orders?project=voxdatalake
 ```
 
 ---
@@ -205,7 +205,7 @@ One of three required fields is missing from the Cloud Run job: API key, `REPORT
 
 ```bash
 # Check what env vars are currently deployed
-gcloud run jobs describe plex-etl \
+gcloud run jobs describe plex-etl-sales-orders \
   --region=us-central1 --project=voxdatalake --format=json \
   | python3 -c "
 import json,sys
@@ -416,7 +416,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 # does nothing (every job's `lifecycle { ignore_changes = [image] }` means
 # terraform apply won't do this either). Loop over all 16, or use
 # deploy/cloudbuild.yaml's deploy-all step instead of steps 2-3 entirely:
-for job in plex-etl plex-etl-test plex-etl-work-orders plex-etl-work-orders-test \
+for job in plex-etl-sales-orders plex-etl-sales-orders-test plex-etl-work-orders plex-etl-work-orders-test \
            plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test \
            plex-etl-part-obsolescence plex-etl-part-obsolescence-test \
            plex-etl-inventory-activity plex-etl-inventory-activity-test \
@@ -430,12 +430,12 @@ done
 cd terraform && terraform apply -var-file=terraform.tfvars
 
 # 5. Run manually to verify
-gcloud run jobs execute plex-etl \
+gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 --project=voxdatalake --wait
 
 # 6. Check logs
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders" \
   --project=voxdatalake --limit=50 \
   --format="value(timestamp,textPayload)"
 ```
@@ -500,6 +500,6 @@ echo -n 'CODE'     | gcloud secrets versions add plex-company-code  --data-file=
 # nothing there yet on a brand-new report_configs bucket.
 
 # 7. Run each job to verify — at minimum, loop the *-test variants:
-gcloud run jobs execute plex-etl \
+gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 --project=new-project-id --wait
 ```

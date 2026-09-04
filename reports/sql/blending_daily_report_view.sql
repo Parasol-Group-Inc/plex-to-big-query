@@ -58,7 +58,7 @@ SELECT
 
 FROM prod
 
-JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
   ON SAFE_CAST(prod.Job_Op_Key AS INT64) = SAFE_CAST(jo.Job_Op_Key AS INT64)
 
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc

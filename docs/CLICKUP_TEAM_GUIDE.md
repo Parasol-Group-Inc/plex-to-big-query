@@ -45,8 +45,8 @@ Note: this table predates several newer Cloud Run jobs added since 2026-07-20 (p
 
 | Job | What | Writes to | Schedule (Mountain) |
 |---|---|---|---|
-| `plex-etl` | Sales Orders — **production** | `PlexProd` | 7:00 PM daily |
-| `plex-etl-test` | Sales Orders — test | `PlexTest` | 7:10 PM daily |
+| `plex-etl-sales-orders` | Sales Orders — **production** | `PlexProd` | 7:00 PM daily |
+| `plex-etl-sales-orders-test` | Sales Orders — test | `PlexTest` | 7:10 PM daily |
 | `plex-etl-work-orders` | Work Orders — **production** | `PlexProd` | 7:20 PM daily |
 | `plex-etl-work-orders-test` | Work Orders — test | `PlexTest` | 7:30 PM daily |
 
@@ -102,7 +102,7 @@ Runs are scheduled nightly, but you can trigger one any time (safe to re-run —
 
 **CLI:**
 ```bash
-gcloud run jobs execute plex-etl-test --region=us-central1 --project=voxdatalake --wait
+gcloud run jobs execute plex-etl-sales-orders-test --region=us-central1 --project=voxdatalake --wait
 ```
 
 > ⚠ **Rule of thumb: always run the `-test` job first.** Test jobs write to `PlexTest` — safe to run repeatedly. Only trigger the prod job after the test email comes back SUCCESS.

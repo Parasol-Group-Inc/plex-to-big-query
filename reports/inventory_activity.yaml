@@ -49,6 +49,15 @@ extractions:
 # re-extracting (same shared-table rule as work_orders.yaml).
 
 bq_view:
-  name: inventory_activity_report
-  display_name: "Inventory Activity Detail Usage Per Month"
-  sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql
+  - name: inventory_activity_report
+    display_name: "Inventory Activity Detail Usage Per Month"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql
+  # Added 2026-09-01 — Vox Nutrition Scorecard migration
+  # (score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md). Thin alias
+  # over inventory_activity_report above — must stay listed after it.
+  # Converted bq_view from a single mapping to a list to support this
+  # second entry — main.py's bq_view_configs() already normalizes both
+  # forms (see main.py), so this is safe against the currently-deployed code.
+  - name: inventory_avg_daily_usage_report
+    display_name: "Vox Scorecard | Avg Daily Usage"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_avg_daily_usage_view.sql

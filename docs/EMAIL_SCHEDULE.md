@@ -38,7 +38,7 @@ had a chance to finish before the retry checks for failures).
 
 | Category | Reports produced (email body lists each by this name) | Prod job | Prod time | Test job | Test time |
 |---|---|---|---|---|---|
-| **Sales** | Sales Orders, Vox \| Open Sales Orders, Pending Approval Orders, Report for Orders Past 14 Days Old, Orders Over $10k, Orders Over 10k Bottles, Customer List by Sales Rep, Revenue per Sales Rep, Orders Pending Approval by Accounting | `plex-etl` | 7:00 PM | `plex-etl-test` | 7:10 PM |
+| **Sales** | Sales Orders, Vox \| Open Sales Orders, Pending Approval Orders, Report for Orders Past 14 Days Old, Orders Over $10k, Orders Over 10k Bottles, Customer List by Sales Rep, Revenue per Sales Rep, Orders Pending Approval by Accounting | `plex-etl-sales-orders` | 7:00 PM | `plex-etl-sales-orders-test` | 7:10 PM |
 | **Production** | Work Orders, MFG Job Schedule, Labeling \| Open WO: Results, Printing Open Work Orders | `plex-etl-work-orders` | 7:20 PM | `plex-etl-work-orders-test` | 7:30 PM |
 | **Supply Chain** | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 7:40 PM | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
 | **Supply Chain** | Vox \| Products to be Discontinued | `plex-etl-part-obsolescence` | 8:00 PM | `plex-etl-part-obsolescence-test` | 8:10 PM |
@@ -106,7 +106,7 @@ Queried directly against `PlexProd.job_run_log`/`PlexTest.job_run_log`
 execution, and use a different `job_name` key so they can't corrupt real
 retry-skip logic):
 
-- `plex-etl` / `plex-etl-test`: running since 2026-07-21, 23–26
+- `plex-etl-sales-orders` / `plex-etl-sales-orders-test`: running since 2026-07-21, 23–26
   `success` rows each — the oldest, most stable jobs.
 - `plex-etl-work-orders`: 23 `success` + **1 `failed`** (2026-07-21) — the
   one real example of the retry mechanism actually mattering in this
@@ -192,7 +192,7 @@ retry-skip logic):
   going to all 3 recipients (`emilio.dominguez@`/`jennilyn.tockstein@`/
   `marketing@parasolgroupinc.com`). Revisit only if that inbox noise
   actually becomes a problem in practice.
-- **Renaming `plex-etl`/`plex-etl-test`** to match the newer
+- **Renaming `plex-etl-sales-orders`/`plex-etl-sales-orders-test`** to match the newer
   `plex-etl-{report}` pattern was considered and **rejected as not worth
   it** — Cloud Run Job names are immutable, so this would mean Terraform
   destroying and recreating the job (losing execution history) plus

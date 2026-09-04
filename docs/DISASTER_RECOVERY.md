@@ -123,7 +123,7 @@ done
 gcloud storage cp reports/sql/*.sql gs://NEW-PROJECT-ID-report-configs/sql/
 
 # 8. Test before trusting it — loop all 8 *-test jobs, not just one
-for job in plex-etl-test plex-etl-work-orders-test plex-etl-purchasing-open-orders-test \
+for job in plex-etl-sales-orders-test plex-etl-work-orders-test plex-etl-purchasing-open-orders-test \
            plex-etl-part-obsolescence-test plex-etl-inventory-activity-test \
            plex-etl-inventory-snapshot-test plex-etl-quality-nonconformance-test \
            plex-etl-part-on-hand-inventory-test; do

@@ -14,7 +14,7 @@ This pipeline **copies Plex ERP data into BigQuery** so your data team can query
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report configuration files — edit them to change what gets extracted, no code deployment needed
 
-The pipeline is actually 8 report families (16 Cloud Run jobs, prod+test) on a cascade of schedules from **7:00 PM through 9:30 PM Mountain (America/Denver)**, 10 minutes apart — `plex-etl` (Sales Orders) at 7:00 PM Mountain is just the first one. Full schedule: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be triggered manually any time.
+The pipeline is actually 8 report families (16 Cloud Run jobs, prod+test) on a cascade of schedules from **7:00 PM through 9:30 PM Mountain (America/Denver)**, 10 minutes apart — `plex-etl-sales-orders` (Sales Orders) at 7:00 PM Mountain is just the first one. Full schedule: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be triggered manually any time.
 
 ---
 
@@ -28,7 +28,7 @@ graph TB
         SQL["sql/sales_orders_view.sql\n(BigQuery JOIN logic — editable)"]
     end
 
-    subgraph CR["Cloud Run Job — plex-etl"]
+    subgraph CR["Cloud Run Job — plex-etl-sales-orders"]
         CONTAINER["Python Container\nmain.py"]
     end
 
@@ -66,7 +66,7 @@ graph TB
     CR -->|"7. send report"| EMAIL
 ```
 
-*Shown: the Sales Orders pipeline (`plex-etl`), as a worked example — the
+*Shown: the Sales Orders pipeline (`plex-etl-sales-orders`), as a worked example — the
 same shape repeats for all 8 report families (16 jobs total).*
 
 ---
@@ -78,8 +78,8 @@ graph LR
     GCS["gs://voxdatalake-report-configs"]
 
     subgraph PROD["🟢 Production"]
-        PJ["Cloud Run Job\nplex-etl"]
-        PS["Scheduler\nplex-daily-sync\n7:00 PM Mountain"]
+        PJ["Cloud Run Job\nplex-etl-sales-orders"]
+        PS["Scheduler\nplex-sales-orders-sync\n7:00 PM Mountain"]
         PH["Plex Host\nvox.odbc.plex.com\n✅ confirmed"]
         PD["BigQuery\nPlexProd dataset"]
         PS --> PJ
@@ -88,8 +88,8 @@ graph LR
     end
 
     subgraph TEST["🔵 Test"]
-        TJ["Cloud Run Job\nplex-etl-test"]
-        TS["Scheduler\nplex-daily-sync-test\n7:10 PM Mountain"]
+        TJ["Cloud Run Job\nplex-etl-sales-orders-test"]
+        TS["Scheduler\nplex-sales-orders-sync-test\n7:10 PM Mountain"]
         TH["Plex Host\nvox.test.odbc.plex.com\n✅ active"]
         TD["BigQuery\nPlexTest dataset"]
         TS --> TJ
@@ -108,13 +108,13 @@ graph LR
 > [docs/OPERATIONS.md → Failure Retry](docs/OPERATIONS.md#failure-retry-6-am-mountain)
 > for how it works and how to check `job_run_log`.
 
-> **Both environments active and running.** Test (`plex-etl-test` → `vox.test.odbc.plex.com` → `PlexTest`) and prod (`plex-etl` → `vox.odbc.plex.com` → `PlexProd`) both run on their daily schedule today — see `docs/EMAIL_SCHEDULE.md` for real run history across all 16 jobs.
+> **Both environments active and running.** Test (`plex-etl-sales-orders-test` → `vox.test.odbc.plex.com` → `PlexTest`) and prod (`plex-etl-sales-orders` → `vox.odbc.plex.com` → `PlexProd`) both run on their daily schedule today — see `docs/EMAIL_SCHEDULE.md` for real run history across all 16 jobs.
 
 ## Active Reports
 
 | Report | Cloud Run Job (prod) | Cloud Run Job (test) | Schedule | Views extracted | BQ View(s) |
 |---|---|---|---|---|---|
-| **Sales Orders** | `plex-etl` | `plex-etl-test` | 7:00 PM / 7:10 PM Mountain | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
+| **Sales Orders** | `plex-etl-sales-orders` | `plex-etl-sales-orders-test` | 7:00 PM / 7:10 PM Mountain | 13 Sales + Part + Common + Plexus_Control | `sales_orders_report`, `sales_orders_open_report` |
 | **Work Orders** | `plex-etl-work-orders` | `plex-etl-work-orders-test` | 7:20 PM / 7:30 PM Mountain | 12 Part/Quality/Personnel/Common/Maintenance views | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report` |
 | **Purchasing Open Orders** | `plex-etl-purchasing-open-orders` | `-test` | 7:40 PM / 7:50 PM Mountain | 6 Purchasing + Common + Part | `purchasing_open_orders_report` |
 | **Part Obsolescence** | `plex-etl-part-obsolescence` | `-test` | 8:00 PM / 8:10 PM Mountain | 1 Part_v_Part (filtered) | `part_obsolescence_report` |
@@ -122,8 +122,16 @@ graph LR
 | **Inventory Snapshot** | `plex-etl-inventory-snapshot` | `-test` | 8:40 PM / 8:50 PM Mountain | 3 Part DB views (Snapshot, Snapshot_Cost_Sub_Type_Breakdown, Cost_Sub_Type_Breakdown_History) | `inventory_snapshot_report`, `inventory_valuation_summary_report` |
 | **Quality Non-Conformance** | `plex-etl-quality-nonconformance` | `-test` | 9:00 PM / 9:10 PM Mountain | 1 Quality_v_Problem + Part; 1 Quality_v_Deviation + 4 junction tables (Deviation_Job, _Problem, _Part, _Workcenter) + 2 lookup tables (_Type, _Status) | `quality_nonconformance_report`, `quality_turnaround_time_report`, `quality_deviation_report` |
 | **Part On-Hand Inventory** | `plex-etl-part-on-hand-inventory` | `-test` | 9:20 PM / 9:30 PM Mountain | 2 Part_v_Container(_Status) + Part | `part_on_hand_inventory_report` |
+| **Purchasing Pending Requisitions** | `plex-etl-purchasing-pending-requisitions` | `-test` | 9:40 PM / 9:50 PM Mountain | Purchasing requisition + status + Req_PO_Release | `purchasing_pending_requisitions_report` |
+| **Sales Quotes** | `plex-etl-sales-quotes` | `-test` | 10:00 PM / 10:10 PM Mountain | `Sales_v_Quote` + `_Status` | `sales_quotes_open_report` |
+| **Sales Returns** | `plex-etl-sales-returns` | `-test` | 10:20 PM / 10:30 PM Mountain | `Sales_v_Return` family | `sales_returns_open_report` |
+| **Quality Supplier Returns** | `plex-etl-quality-supplier-returns` | `-test` | 10:40 PM / 10:50 PM Mountain | Supplier return + status | `quality_supplier_returns_pending_report` |
 
-> Each report's `category`/`display_name` (in its `reports/*.yaml`) drives its email subject — Sales Orders/Purchasing Open Orders/etc. are `category` values, and each BQ View listed above has its own `display_name` shown in the email (not always the same as the raw view name). See `docs/EMAIL_SCHEDULE.md` for the exact subject format.
+> **12 report families, 24 Cloud Run jobs** (prod + test each), cascading 7:00 PM → 10:50 PM Mountain, 10 minutes apart. The BQ View column lists the headline views only — several pipelines produce many more (`sales_orders` alone produces 24). Full list: [docs/reports/REPORT_CATALOG.md](reports/REPORT_CATALOG.md).
+>
+> **Email subject** is `[Plex ETL] - {Category}: {Pipeline} — {date}` (e.g. `[Plex ETL] - Sales: Orders — 2026-09-04`), built from each config's `category` plus its pipeline name. A leading category word is stripped so `quality_nonconformance` reads `Quality: Nonconformance`, not "Quality: Quality Nonconformance". Prod and test share a subject on purpose — the environment shows as a badge in the body, so the two don't fork into separate-looking threads. Each view's `display_name` appears in the body's report list, not the subject. See `docs/EMAIL_SCHEDULE.md`.
+>
+> ⚠ **`scorecard_goals` is not in this table and never runs.** It's a maintained BigQuery table fed from a Google Sheet by an Apps Script (`deploy/goals_sheet_to_bigquery.gs`), not by any Cloud Run job — but three views read it and fail to create if it's dropped. See [docs/reports/scorecard_goals.md](reports/scorecard_goals.md).
 >
 > `raw_Part_v_Part` is **shared** across several reports — owned by the Sales Orders pipeline (runs first); others reference it in their JOIN view without re-extracting it.
 >
@@ -146,7 +154,7 @@ sequenceDiagram
     participant PLEX as 🏭 Plex ODBC
     participant BQ as 📊 BigQuery
 
-    SCHED->>CR: POST /jobs/plex-etl:run
+    SCHED->>CR: POST /jobs/plex-etl-sales-orders:run
     CR->>GCS: GET reports/sales_orders.yaml
     GCS-->>CR: extractions list + bq_view config
     loop For each of 13 Plex views
@@ -315,7 +323,7 @@ docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
              -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
-gcloud run jobs update plex-etl --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
+gcloud run jobs update plex-etl-sales-orders --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 
 # Apply Terraform changes (new env vars, infrastructure — NOT the image)
 cd terraform
@@ -326,12 +334,12 @@ terraform apply -var-file=terraform.tfvars
 
 ```bash
 # Trigger the test job and wait for it to finish
-gcloud run jobs execute plex-etl-test \
+gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 
 # Watch live logs as it runs
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-test" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders-test" \
   --project=voxdatalake --limit=50 --freshness=10m --format="value(textPayload)"
 ```
 
@@ -348,7 +356,7 @@ gcloud storage cp reports/sql/sales_orders_view.sql \
   gs://voxdatalake-report-configs/sql/
 
 # 3. Trigger a run to pick up the changes
-gcloud run jobs execute plex-etl-test \
+gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 ```
 
@@ -700,7 +708,7 @@ terraform plan -var-file=terraform.tfvars
 ```bash
 # Get the last 100 log lines from the most recent test job execution
 gcloud logging read \
-  'resource.type="cloud_run_job" AND resource.labels.job_name="plex-etl-test"' \
+  'resource.type="cloud_run_job" AND resource.labels.job_name="plex-etl-sales-orders-test"' \
   --project=voxdatalake --limit=100 \
   --format='value(textPayload)' \
   --freshness=1d
@@ -733,3 +741,129 @@ The current report extracts these 13 Plex views to produce 16 output columns:
 
 **Status workflow (Vox Nutrition):**
 `2585` Pending Sales Approval → `2587` Deposit Review → `2586` Released → **`2073` Pending Fulfillment** (= Date Approved) → `2638` Pending Payment Review → `2639` Pending Shipment → `2074` Closed / `2076` Cancelled
+
+---
+
+## Reference — Status Codes, Conventions & Business Rules
+
+Everything below is **confirmed live against this tenant**, not inferred from
+standard Plex schema. Added 2026-09-04 after the same facts got re-derived
+three times across separate sessions.
+
+### ⚠ Booleans: Plex uses BOTH `-1 = true` and `1 = true`
+
+**This is the single most expensive gotcha in this repo.** There is no
+universal convention — it varies by table family, and assuming the wrong one
+produces a view that returns zero rows forever without erroring.
+
+| Convention | Confirmed on | Examples |
+|---|---|---|
+| **`-1` = true** | `Part_v_*` family | `Part_v_Container.Active`, `Part_v_Container_Status.OK_Status`, `Part_v_Production.Rejected` |
+| **`1` = true** | `Sales_v_*` status lookups | `Sales_v_Shipper_Status.Shipped`, `Sales_v_PO_Status.Is_Quote`, `Sales_v_PO_Status.Cancelled_Status`, `Sales_v_PO_Type.Blanket` |
+
+**Rule: check real rows before writing the filter.** Never copy a convention
+from a sibling view in a different table family.
+
+Related trap — a boolean column existing does not mean it's populated:
+`Sales_v_Quote_Status.Open_Quote` is `0` on **all 8** configured statuses, so
+a naive `Open_Quote = 1` filter returns nothing. `sales_quotes_open_view.sql`
+uses a status-exclusion proxy instead.
+
+### Sales Order status keys (`Sales_v_PO_Status`)
+
+| Key | Status | Notes |
+|---|---|---|
+| `2585` | Pending Sales Approval | Starting status — all new orders land here. Also counted in **Total Pipeline**. |
+| `2587` | Deposit Review | |
+| `2586` | Released | |
+| **`2073`** | **Pending Fulfillment** | ⭐ **= "Date Approved" and = "Sales MTD"** — see below |
+| `2638` | Pending Payment Review | |
+| `2639` | Pending Shipment | |
+| `2074` | Closed | |
+| `2076` | Cancelled | |
+
+`Sales_v_PO_Change` holds the status history: one row per change, carrying
+`PO_Status_Key` + `Change_Date`. **This is the only status-history table with
+a status column** — `Sales_v_PO_Line_Change` has none, so order status is
+header-level only, never per-line.
+
+### Quote status keys (`Sales_v_Quote_Status`)
+
+`3821` New · `3825` Estimating · `3826` Quoted · `3827` Won · `3828` Lost ·
+`3829` Approved · `3830` Cancelled · `3831` No Quote
+
+"Open" = not Won/Lost/Approved/Cancelled/No Quote (i.e. only
+New/Estimating/Quoted) — a decision, not a NetSuite-confirmed rule.
+
+### Vox scorecard metric definitions
+
+Given directly by Jennilyn Tockstein (data scientist), 2026-09-01 —
+`meetings-reference/Sep-1/`. **These are four different numbers and are not
+interchangeable.**
+
+| Metric | Definition | Source |
+|---|---|---|
+| **Revenue** | Units that physically went out the door — `Quantity × Price` on shipped shipment lines. **Shipping module, NOT Sales.** | `Sales_v_Shipper*` |
+| **Sales MTD** | Order lines whose order **first entered `2073` Pending Fulfillment** that month, dated by the status change (not the order date). Counts even if it later moved on. | `Sales_v_PO_Change` |
+| **WIP** | Order lines not shipped yet. ⚠ **Two readings given** — broad ("not a quote, not cancelled, not shipped") vs strict ("literally Pending Fulfillment"). No production/job status involved either way. | `Sales_v_PO` + shipper bridge |
+| **Total in Shipping** | Value of units **ready but not yet shipped** — only the ready quantity, never the order total. | `Sales_v_Shipper*` (open/pending) |
+
+Why Sales, not Shipping, is wrong for Revenue, in her words: *"the sales one
+will be less reliable since it will not count in when we close things short
+or ship partials."*
+
+**Known price gap:** `Sales_v_Shipper_Line.Price` is `0` until a shipment
+actually goes out, so "Total in Shipping" falls back to the customer
+base-tier price list. That's an estimate, not an invoiced figure.
+
+### Out-of-stock rule (Vox's own definition)
+
+All four conditions required:
+
+1. `Part_v_Part.Part_No LIKE '33%'` — only 33-parts count; 1/2/5-parts have
+   minimum stock levels too but are out of scope
+2. `Minimum_Inventory_Quantity > 0` — a literal `0` counts as **not assigned**
+3. quantity available (on-hand − allocated) `< 0`
+4. **exclude Custom parts** — `Part_v_Part_Product_Type.Product_Type` starting
+   `Custom` (e.g. "Custom Formula Capsules"). *"Those are okay to be negative,
+   because that's just showing us we're in the process of making this part."*
+
+### Date conversion — use this pattern for every date column
+
+Raw dates arrive as INT64 nanoseconds, TIMESTAMP, **or** STRING depending on
+how the table loaded. Every branch must route through `CAST(col AS STRING)`
+first, because that cast is legal from any type — a direct
+`SAFE_CAST(INT64 AS DATE)` is an invalid cast pair and **fails at view-creation
+time, not at runtime**.
+
+```sql
+COALESCE(
+  DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(c AS STRING) AS INT64), 0), 1000))),
+  NULLIF(SAFE_CAST(CAST(c AS STRING) AS DATE), DATE '1970-01-01'),
+  NULLIF(DATE(SAFE_CAST(CAST(c AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+)
+```
+
+`1970-01-01` is Plex's "no date" epoch sentinel → always map it to NULL.
+
+### Always `SAFE_CAST` both sides of a join
+
+An empty raw table gets autodetected as all-`STRING` while a populated sibling
+gets real types, and a one-sided comparison breaks **view creation outright**
+(`No matching signature for operator =`). This bit five reports before the
+root cause was fixed in `query_plex()`. `SAFE_CAST` is a free no-op once the
+table has real typed data — keep it on new joins regardless.
+
+### Price tier selection
+
+`Part_v_Customer_Part_Price` has one row per quantity breakpoint. Every view
+in this repo picks the **base tier** (lowest `Breakpoint_Quantity`) via
+`ROW_NUMBER()`. No dollar figure anywhere includes tax or freight.
+
+### Things Plex genuinely cannot produce
+
+Goals/targets of any kind, CRM opportunities and forecast, OSHA safety
+records. These need a maintained table, not a better query — no ERP
+extraction produces a negotiated number. `Sales_v_PO.Master_Price` exists but
+is **sparsely populated** on this tenant; treat computed
+`price × quantity` as primary and `Master_Price` as a cross-check only.

@@ -2,7 +2,7 @@
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl` — one of **16** live jobs (8 report families × prod/test). Substitute any other job name in the commands below the same way.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **16** live jobs (8 report families × prod/test). Substitute any other job name in the commands below the same way.
 
 ---
 
@@ -108,13 +108,13 @@ gcloud secrets get-iam-policy plex-access-token --project=voxdatalake
 
 ```bash
 # Run and wait for completion (shows exit status in terminal)
-gcloud run jobs execute plex-etl \
+gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --wait
 
 # Run without waiting (fire and forget)
-gcloud run jobs execute plex-etl \
+gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake
 ```
@@ -122,7 +122,7 @@ gcloud run jobs execute plex-etl \
 ### Describe the job (see current config and env vars)
 
 ```bash
-gcloud run jobs describe plex-etl \
+gcloud run jobs describe plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake
 ```
@@ -130,7 +130,7 @@ gcloud run jobs describe plex-etl \
 ### Update a single environment variable
 
 ```bash
-gcloud run jobs update plex-etl \
+gcloud run jobs update plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com
@@ -141,7 +141,7 @@ gcloud run jobs update plex-etl \
 ### Update multiple environment variables at once
 
 ```bash
-gcloud run jobs update plex-etl \
+gcloud run jobs update plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com,PLEX_SERVER_DATASOURCE=ProductionDataSource
@@ -160,7 +160,7 @@ gcloud run jobs update plex-etl \
 
 ```bash
 gcloud run jobs executions list \
-  --job=plex-etl \
+  --job=plex-etl-sales-orders \
   --region=us-central1 \
   --project=voxdatalake
 ```
@@ -190,7 +190,7 @@ gcloud scheduler jobs list \
 ### Trigger the job immediately (same as the scheduled trigger)
 
 ```bash
-gcloud scheduler jobs run plex-daily-sync \
+gcloud scheduler jobs run plex-sales-orders-sync \
   --location=us-central1 \
   --project=voxdatalake
 ```
@@ -198,20 +198,20 @@ gcloud scheduler jobs run plex-daily-sync \
 ### Pause the schedule (stops auto-runs, keeps everything deployed)
 
 ```bash
-gcloud scheduler jobs pause plex-daily-sync \
+gcloud scheduler jobs pause plex-sales-orders-sync \
   --location=us-central1 \
   --project=voxdatalake
 ```
 
-> **Every job also has a separate 9:45 PM Mountain retry scheduler** (e.g. `plex-daily-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
+> **Every job also has a separate 9:45 PM Mountain retry scheduler** (e.g. `plex-sales-orders-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
 > ```bash
-> gcloud scheduler jobs pause plex-daily-sync-retry --location=us-central1 --project=voxdatalake
+> gcloud scheduler jobs pause plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
 > ```
 
 ### Resume the schedule
 
 ```bash
-gcloud scheduler jobs resume plex-daily-sync \
+gcloud scheduler jobs resume plex-sales-orders-sync \
   --location=us-central1 \
   --project=voxdatalake
 ```
@@ -303,11 +303,11 @@ gcloud beta run jobs executions tail-logs <execution-name> \
   --project=voxdatalake
 ```
 
-### Read recent logs from the plex-etl job
+### Read recent logs from the plex-etl-sales-orders job
 
 ```bash
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders" \
   --project=voxdatalake \
   --limit=50 \
   --format="table(timestamp,textPayload)"
@@ -317,7 +317,7 @@ gcloud logging read \
 
 ```bash
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl AND severity>=ERROR" \
+  "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders AND severity>=ERROR" \
   --project=voxdatalake \
   --limit=20 \
   --format="table(timestamp,textPayload)"
@@ -335,7 +335,7 @@ gcloud logging read \
 
 ### GCP Console path for logs
 
-Console → **Cloud Run** → **Jobs** → `plex-etl` → click any execution → **Logs** tab. Usually easier to read than CLI output.
+Console → **Cloud Run** → **Jobs** → `plex-etl-sales-orders` → click any execution → **Logs** tab. Usually easier to read than CLI output.
 
 ---
 
@@ -470,7 +470,7 @@ docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
              -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest . && \
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA && \
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest && \
-gcloud run jobs update plex-etl --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
+gcloud run jobs update plex-etl-sales-orders --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
 Repeat the last `gcloud run jobs update` per job, or loop over all 16 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the full loop), or just run `gcloud builds submit --config deploy/cloudbuild.yaml` instead — it does all of this in one call.
 
@@ -567,7 +567,7 @@ gcloud secrets versions list plex-access-token --project=voxdatalake
 ### What env vars does Cloud Run have?
 
 ```bash
-gcloud run jobs describe plex-etl --region=us-central1 --project=voxdatalake
+gcloud run jobs describe plex-etl-sales-orders --region=us-central1 --project=voxdatalake
 # Look for the "Env vars:" section near the bottom
 ```
 
@@ -575,7 +575,7 @@ gcloud run jobs describe plex-etl --region=us-central1 --project=voxdatalake
 
 ```bash
 gcloud run jobs executions list \
-  --job=plex-etl --region=us-central1 --project=voxdatalake \
+  --job=plex-etl-sales-orders --region=us-central1 --project=voxdatalake \
   --limit=5
 # Look at COMPLETION_STATUS column — EXECUTION_SUCCEEDED or EXECUTION_FAILED
 ```
@@ -590,7 +590,7 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 ### Is the scheduler enabled?
 
 ```bash
-gcloud scheduler jobs describe plex-daily-sync \
+gcloud scheduler jobs describe plex-sales-orders-sync \
   --location=us-central1 --project=voxdatalake
 # Look for "state: ENABLED" or "state: PAUSED"
 ```
@@ -601,7 +601,7 @@ gcloud scheduler jobs describe plex-daily-sync \
 echo "=== Token ===" && \
 gcloud secrets versions list plex-access-token --project=voxdatalake && \
 echo "=== Last 3 executions ===" && \
-gcloud run jobs executions list --job=plex-etl --region=us-central1 --project=voxdatalake --limit=3 && \
+gcloud run jobs executions list --job=plex-etl-sales-orders --region=us-central1 --project=voxdatalake --limit=3 && \
 echo "=== Scheduler state ===" && \
-gcloud scheduler jobs describe plex-daily-sync --location=us-central1 --project=voxdatalake --format="value(state)"
+gcloud scheduler jobs describe plex-sales-orders-sync --location=us-central1 --project=voxdatalake --format="value(state)"
 ```

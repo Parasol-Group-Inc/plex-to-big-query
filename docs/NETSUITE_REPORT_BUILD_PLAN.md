@@ -45,13 +45,13 @@ infrastructure (not just local Docker tests). Sequence, since it matters:
    immediately via Terraform, triggered via the (then-authenticated) Cloud
    Run Admin API, and verified `succeededCount: 1` on each.
 2. The new `main.py` (`bq_view`-list support) was built, pushed to Artifact
-   Registry, and deployed to `plex-etl`/`plex-etl-test` via
+   Registry, and deployed to `plex-etl-sales-orders`/`plex-etl-sales-orders-test` via
    `gcloud builds submit --config deploy/cloudbuild.yaml` — its smoke-test
-   step (runs `plex-etl-test` automatically) passed.
+   step (runs `plex-etl-sales-orders-test` automatically) passed.
 3. Only once that image was live: `reports/sales_orders.yaml`'s new list-form
    `bq_view` was pushed to GCS (via `terraform apply`), and the
    `inventory_snapshot` Cloud Run jobs + schedulers were created. Triggered
-   both `plex-etl-test` and `plex-etl-inventory-snapshot-test` — both
+   both `plex-etl-sales-orders-test` and `plex-etl-inventory-snapshot-test` — both
    succeeded, and `sales_orders_open_report` (3 rows) confirmed alongside the
    original `sales_orders_report` (4 rows) from the same real execution.
 
@@ -332,12 +332,12 @@ or filtered in place.
 
 > ⚠ **Deploy-ordering hazard:** `reports/sales_orders.yaml` is the config
 > for an **already-deployed, currently-running** production report
-> (`plex-etl` / `plex-etl-test` Cloud Run jobs, 2 AM / 3 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule)). The
+> (`plex-etl-sales-orders` / `plex-etl-sales-orders-test` Cloud Run jobs, 2 AM / 3 AM UTC (superseded 2026-08-19 — see docs/EMAIL_SCHEDULE.md for the current schedule)). The
 > currently-deployed container image predates the `bq_view`-list change —
 > its `main.py` calls `.get()` on `bq_view` assuming a single mapping, which
 > **would crash with an `AttributeError` on a list**. Do not push this YAML
 > change to `gs://voxdatalake-report-configs/reports/sales_orders.yaml`
-> until the new `main.py` is built and deployed to `plex-etl`/`plex-etl-test`
+> until the new `main.py` is built and deployed to `plex-etl-sales-orders`/`plex-etl-sales-orders-test`
 > first. This repo's local copy of the YAML has already been updated in
 > anticipation of that deploy — it is safe sitting in git, just not yet safe
 > in GCS.

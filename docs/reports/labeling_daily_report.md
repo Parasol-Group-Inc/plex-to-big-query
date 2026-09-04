@@ -1,6 +1,6 @@
 # Labeling Daily Report
 
-> **Status:** ✅ Fixed and verified in both Test and Prod 2026-08-26 — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.labeling_daily_report` exists and is queryable again (0 rows, benign — see Flags below) · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Fixed 2026-09-01 (join bug, see Flags below) and reverified against `PlexTest` — still 0 rows, now confirmed for a real reason (no Labeling production logged yet on this tenant), not the join bug · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -19,6 +19,7 @@ Pulls from the same production-log data already extracted for Work Orders, then 
 
 ## Flags and open questions
 
+- **Fixed 2026-09-01 — was silently dropping real production rows.** Same root cause and fix as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-09-01 entry — see there for the full detail. The `Part_v_Job_Op` join changed from `INNER JOIN` to `LEFT JOIN`; still 0 rows after reverifying against `PlexTest`, but now confirmed to be a real "no Labeling production yet" fact rather than the join silently eating rows.
 - **Fixed 2026-08-24 — real "PARTIAL PRODUCTION" view-creation failure.** Same root cause and fix as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-24 entry — see there for the full detail. Fixed by adding `SAFE_CAST(... AS INT64)` to the `Job`->`Part` join.
 - **Verified 2026-08-25 — Test fixed, Prod still broken.** Same result as [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-25 entry: `PlexTest.labeling_daily_report` exists and is queryable (0 rows, benign); `PlexProd.labeling_daily_report` still doesn't exist — needs the prod job's next run.
 - **Resolved 2026-08-26** — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.labeling_daily_report` exists and is queryable (0 rows, still benign — see [`encap_daily_report.md`](encap_daily_report.md)'s 2026-08-26 entry for the full detail).

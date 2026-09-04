@@ -17,6 +17,10 @@ extractions:
     date_col: Production_Date
 
 bq_view:
-  name: inventory_activity_report
-  display_name: "Inventory Activity Detail Usage Per Month"
-  sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql
+  - name: inventory_activity_report
+    display_name: "Inventory Activity Detail Usage Per Month"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_activity_view.sql
+  # Added 2026-09-01 — see reports/inventory_activity.yaml for the full story.
+  - name: inventory_avg_daily_usage_report
+    display_name: "Vox Scorecard | Avg Daily Usage"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_avg_daily_usage_view.sql

@@ -64,3 +64,10 @@ bq_view:
   - name: mfg_job_schedule_inventory_availability_report
     display_name: "MFG Job Schedule - Inventory Availability (partial)"
     sql_file: gs://voxdatalake-report-configs/sql/mfg_job_schedule_inventory_availability_view.sql
+  # Added 2026-09-01 — Vox Nutrition Scorecard migration
+  # (score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md). Thin alias
+  # over part_on_hand_inventory_report above — must stay listed after it.
+  # Quantity ranking only, see SQL file header for the deferred $-value scope.
+  - name: inventory_top_quantity_report
+    display_name: "Vox Scorecard | Top Quantity Ranking"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_top_quantity_view.sql

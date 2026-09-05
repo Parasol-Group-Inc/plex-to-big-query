@@ -758,8 +758,16 @@ produces a view that returns zero rows forever without erroring.
 
 | Convention | Confirmed on | Examples |
 |---|---|---|
-| **`-1` = true** | `Part_v_*` family | `Part_v_Container.Active`, `Part_v_Container_Status.OK_Status`, `Part_v_Production.Rejected` |
-| **`1` = true** | `Sales_v_*` status lookups | `Sales_v_Shipper_Status.Shipped`, `Sales_v_PO_Status.Is_Quote`, `Sales_v_PO_Status.Cancelled_Status`, `Sales_v_PO_Type.Blanket` |
+| **`-1` = true** | some `Part_v_*` columns | `Part_v_Production.Rejected` |
+| **`1` = true** | `Sales_v_*` status lookups, **and `Part_v_Container`** | `Sales_v_Shipper_Status.Shipped`, `Sales_v_PO_Status.Is_Quote`, `Sales_v_PO_Status.Cancelled_Status`, `Sales_v_PO_Type.Blanket`, **`Part_v_Container.Active`**, **`Part_v_Container_Status.OK_Status`** |
+
+> ⚠ **This table said the opposite until 2026-09-04, and it cost real time.**
+> `Part_v_Container.Active` and `Part_v_Container_Status.OK_Status` were listed
+> as `-1 = true` on the strength of a 2026-08-11 note. Checked against live
+> rows they hold **1/0**. Three inventory views filtered `= -1`, matched zero
+> rows, and every doc concluded the upstream extract was empty — while 122 real
+> containers sat there the whole time. **The family is not a reliable guide.
+> Check the column.**
 
 **Rule: check real rows before writing the filter.** Never copy a convention
 from a sibling view in a different table family.

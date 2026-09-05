@@ -1,0 +1,446 @@
+Unknown Speaker  00:01
+Okay, so based on the last meeting, so some of the things were.
+
+Unknown Speaker  00:06
+That title is massive. Some things were adjusted to pure sales, pure
+
+Unknown Speaker  00:20
+things that were maybe being mixed with like the price for the revenue. So as for the artifact, so right now it's standing on more detail on every tile.
+
+Unknown Speaker  00:38
+So what you have within each of these like the same as before, but it will also show you the the table for the big query where this is being placed, and also this data for now this is like the data for today, so for example, for today we have that amount of of units
+
+Unknown Speaker  01:11
+and the dollar amount for that, and that's going to be the same for these ones.
+
+Unknown Speaker  01:20
+As for the for the goals, well, we have discussed about that before, but I think it could be time to just create the either a table within the dataset, so even a just a spreadsheet can can place information into that into that table. So if you would like me to to do that, that's okay, because that blocks some of the of the percentages and things like that need that. So as for those tiles here, so it would be good if you could kind of check them out if the information is currently being accurate.
+
+Unknown Speaker  02:09
+It's being reset every day, but I don't know about the process.
+
+Unknown Speaker  02:16
+If someone is placing that automatically, or it's a manual process for you to just check what the what the data can be in certain day. But for now, we have these 25 units and $65 for that. And what is being taken into account?
+
+Unknown Speaker  02:41
+These these view right and the the notes that you also instructed before like revenue units that shipped certain flex shipping module so for the September september 1, 17,000 units, 25, and then it was reset, and now we have this lower lower amount.
+
+Unknown Speaker  03:15
+Right, that's for revenue.
+
+Unknown Speaker  03:28
+Yeah, yeah, because it's going to be reset, right? So,
+
+Unknown Speaker  03:35
+so that's well for now because it's the test environment, but that's that's the thing, right?
+
+Unknown Speaker  03:45
+As for also total in shipment, because you also have adjustments to be made there.
+
+Unknown Speaker  03:55
+So that that was for now is being held By Monday, but it is being replaced with this view shipping.
+
+Unknown Speaker  04:10
+Shipping the table is shipping pending revenue report.
+
+Unknown Speaker  04:16
+What the data is about right now or yesterday,
+
+Unknown Speaker  04:22
+these units and also this dollar amount,
+
+Unknown Speaker  04:28
+and the notes count only the ready quantity, never the fully ordered quantity.
+
+Unknown Speaker  04:36
+Verified 20,000 ready units, the total amount, and the flag for that's just a series of questions in this artifact, but yeah. So this is going to be displaying this replace because it's you know trying to match what the what Monday had, and now with the BigQuery data or BigQuery dataset table available,
+
+Unknown Speaker  05:10
+so that's totally in shipping. You can also run some
+
+Unknown Speaker  05:17
+that.
+
+Unknown Speaker  05:22
+This is for the blanket orders with the the filter
+
+Unknown Speaker  05:32
+ready to ship. Work in progress. Working progress has a flag and.
+
+Unknown Speaker  05:43
+And this is like also like since the goal is to build this into the Looker Studio, it also has like this how to how to build the tile.
+
+Unknown Speaker  05:57
+That's the what the artifact has there. Uh
+
+Unknown Speaker  06:10
+huh. Uh
+
+Unknown Speaker  06:14
+huh. Hmm.
+
+Unknown Speaker  06:25
+Okay.
+
+Unknown Speaker  06:43
+Correct. Yeah, yeah. It's taking a lot of data from September 1 that it has a lot of information, 1000s, 1000s of units, and it's getting that tracked, that history there, Right, but yeah,
+
+Unknown Speaker  07:05
+out of stock.
+
+Unknown Speaker  07:07
+This is also what we discussed before.
+
+Unknown Speaker  07:11
+The part numbers that start with three three has a minimum stock level and available quantity is negative.
+
+Unknown Speaker  07:20
+Custom parts excluded, and for now it's returning zero. But this is a question that is also below. But what constitutes the minimum or width that the part has reached the minimum, because some parts during the you know the verification show show zero, but that's maybe like in the future it could be because also the person didn't input the minimum quantity, so it just it is as is like zero.
+
+Unknown Speaker  07:57
+So because you have stated like okay, let's take minimum quantity into into account, but maybe that that's just a warning for the you know data entry phase in which if there is no minimum quantity, right,
+
+Unknown Speaker  08:21
+then.
+
+Unknown Speaker  08:23
+Issue issue have like issue have a minimum quantity place right into place.
+
+Unknown Speaker  08:42
+Hmm.
+
+Unknown Speaker  09:00
+Hmm.
+
+Unknown Speaker  09:02
+Okay.
+
+Unknown Speaker  09:13
+Hmm.
+
+Unknown Speaker  09:27
+Hmm.
+
+Unknown Speaker  09:42
+Hmm.
+
+Unknown Speaker  09:46
+huh. Okay.
+
+Unknown Speaker  09:57
+Hmm. Okay. Uh
+
+Unknown Speaker  10:01
+huh.
+
+Unknown Speaker  10:42
+Yes, it is not being ordered, and that reorder point. Who is the person like, or where do you get that?
+
+Unknown Speaker  10:55
+Is that something like, like from the amount, some average from the sales history of the year, or if there is an order, if there is truly an order associated to that part and to that customer, maybe.
+
+Unknown Speaker  11:25
+Hmm.
+
+Unknown Speaker  11:42
+Hmm.
+
+Unknown Speaker  11:59
+Right now.
+
+Unknown Speaker  12:12
+Okay, so reorder maps to minimum quantity, reorder points, right?
+
+Unknown Speaker  12:37
+Well, you can.
+
+Unknown Speaker  12:39
+Yeah, you can join that maybe, but you will need.
+
+Unknown Speaker  12:45
+Yeah, that needs to be researched there.
+
+Unknown Speaker  12:57
+Hmm.
+
+Unknown Speaker  13:10
+Right now,
+
+Unknown Speaker  13:14
+so that's
+
+Unknown Speaker  13:21
+hmm.
+
+Unknown Speaker  13:28
+Yeah, definitely.
+
+Unknown Speaker  13:31
+Okay, that's the other stuff, right? Right.
+
+Unknown Speaker  13:35
+Yeah, based on the the data, even just conditionals, some conditionals can be placed there.
+
+Unknown Speaker  13:44
+It doesn't have like the full scope of that part, but yeah.
+
+Unknown Speaker  13:50
+Noted shipping daily,
+
+Unknown Speaker  13:55
+so that's the shipping daily report, right?
+
+Unknown Speaker  14:02
+So September one, Northern 470 packages.
+
+Unknown Speaker  14:09
+and that's going to be
+
+Unknown Speaker  14:15
+yeah, totally by by Plex. For now, it's just one order and one package for for second and second of September.
+
+Unknown Speaker  14:26
+Save. days is the same, like the same we have discussed. Maybe just create the the table right within the dataset and get as the spreadsheet that you were showing, like maybe another version of the spreadsheet, just that has that those tabs like the goals, the save days, things that are manually input, and just get the script, like the app script, to send that to the to the big query table, right?
+
+Unknown Speaker  14:59
+Sales that we also discuss quite quite a bit.
+
+Unknown Speaker  15:05
+So,
+
+Unknown Speaker  15:06
+a sale is counted the month its order first, which pending fulfillment, divided by that status change, deliberately a different number from revenue that was purified on September four seven real orders For 35,000 units September, but zero because none of those parts have a customer price.
+
+Unknown Speaker  15:35
+So, session five. So, this comes from
+
+Unknown Speaker  15:42
+from what price is going to be taken into account on on the sale on the sale order because it can be zero until it reaches another another step, right?
+
+Unknown Speaker  16:04
+Okay.
+
+Unknown Speaker  16:10
+Okay.
+
+Unknown Speaker  17:01
+This is.
+
+Unknown Speaker  17:12
+Okay. Uh
+
+Unknown Speaker  17:19
+huh.
+
+Unknown Speaker  17:38
+Okay.
+
+Unknown Speaker  17:42
+Hello. Hmm.
+
+Unknown Speaker  18:14
+Hmm. And yeah. Uh
+
+Unknown Speaker  18:20
+huh.
+
+Unknown Speaker  18:31
+Yeah, but Lex track the change status of the change in the history.
+
+Unknown Speaker  18:40
+So yeah.
+
+Unknown Speaker  18:44
+Okay, so that's for sales.
+
+Unknown Speaker  18:52
+Any idea if you are implementing also the representatives
+
+Unknown Speaker  19:03
+in sales by rep?
+
+Unknown Speaker  19:09
+Okay. Hmm.
+
+Unknown Speaker  19:37
+Okay.
+
+Unknown Speaker  19:39
+Nice.
+
+Unknown Speaker  19:44
+Hmm.
+
+Unknown Speaker  20:00
+Right now.
+
+Unknown Speaker  20:36
+This
+
+Unknown Speaker  20:43
+one.
+
+Unknown Speaker  21:06
+Yeah, we'll give a look at the at the other word there.
+
+Unknown Speaker  21:13
+Could be helpful.
+
+Unknown Speaker  21:19
+Okay, so.
+
+Unknown Speaker  21:27
+That's the same for sales here today.
+
+Unknown Speaker  21:31
+Sales detail.
+
+Unknown Speaker  21:37
+Yeah, we discussed this a little bit. The
+
+Unknown Speaker  21:44
+notes are two orders on the test tenant have reached pending fulfillment, so these returns realms,
+
+Unknown Speaker  21:56
+and this just takes the the
+
+Unknown Speaker  22:01
+sales value
+
+Unknown Speaker  22:06
+joined from.
+
+Unknown Speaker  22:08
+these these fields,
+
+Unknown Speaker  22:13
+but yeah, that's um like you were saying like getting the the line getting the line price or the base price because right now it's just showing showing zero, so that that needs an adjustment there.
+
+Unknown Speaker  22:31
+Okay, for the pipelines that were all about Monday.
+
+Unknown Speaker  22:42
+So there there are some views that are now into place.
+
+Unknown Speaker  22:42
+So there, there are some views that are now into place,
+
+Unknown Speaker  22:54
+getting some data there
+
+Unknown Speaker  22:59
+from the tural Pipeline, so the full tile ads the Monday. Oh yeah.
+
+Unknown Speaker  23:12
+So the idea, as we have discussed, is also to like get breathed entirely of Monday data, right? From the from the box scorecards live or
+
+Unknown Speaker  23:30
+okay.
+
+Unknown Speaker  23:40
+Hmm.
+
+Unknown Speaker  24:32
+Okay.
+
+Unknown Speaker  24:35
+Right. Thank you. So, production.
+
+Unknown Speaker  24:43
+That's the actual versus the goal,
+
+Unknown Speaker  24:49
+where the goal is going to be placed, and that
+
+Unknown Speaker  24:55
+data set table.
+
+Unknown Speaker  24:57
+But for now, it's just showing
+
+Unknown Speaker  25:02
+the total of units,
+
+Unknown Speaker  25:08
+encapsulation, bartling, and labeling.
+
+Unknown Speaker  25:16
+So these come from from the work center, right,
+
+Unknown Speaker  25:22
+associated to
+
+Unknown Speaker  25:27
+the the current status of of that or the process, right?
+
+Unknown Speaker  25:40
+Yes.
+
+Unknown Speaker  25:54
+Hmm. I know.
+
+Unknown Speaker  25:59
+Yeah, Berlin's shows.
+
+Unknown Speaker  26:03
+this amount for also the August the 31st.
+
+Unknown Speaker  26:14
+Okay, so quality.
+
+Unknown Speaker  26:29
+Filter area to encapsulation barley of labeling, and
+
+Unknown Speaker  26:36
+this is the the current information that was broke.
+
+Unknown Speaker  26:47
+So we works.
+
+Unknown Speaker  26:51
+I think we didn't reach this last in the last meeting,
+
+Unknown Speaker  26:58
+but this is the the fields that are being taken into account on the quantity.
+
+Unknown Speaker  27:06
+Are you using any of the reports here, like
+
+Unknown Speaker  27:13
+on that rework logic, or
+
+Unknown Speaker  27:20
+what constitutes a rework?
+
+Unknown Speaker  27:52
+Okay. Yeah, because I think we discussed also before that, like the the the claim or the problem didn't have a job, a job associated on the on the spreadsheet. Like it was more like associated to the date, right?
+
+Unknown Speaker  28:14
+So, but yeah, that's
+
+Unknown Speaker  28:20
+that's one pending definition here, and if you get like a report or something, well, not not a report because everything is there, but but but more like how are you going to assign a rework or what's the logic behind the rework?
+
+Unknown Speaker  28:42
+The same for deviation,
+
+Unknown Speaker  28:48
+because it has Plex has these you know these capabilities like the deviation type status, and also all these different statuses associated For that
+
+Unknown Speaker  29:05
+and the destruction
+
+Unknown Speaker  29:13
+right now is that quality cost by category report.
+
+Unknown Speaker  29:18
+What are the fields like problem category problem non nonconformance because it has a big neuroplex has this big part of nonconformance but if you get to define that with a team or if you are already having some of those rewards yeah could be could be helpful just to to know how you are going to handle those.
+
+Unknown Speaker  29:51
+So that's that operations
+
+Unknown Speaker  29:57
+open caps.
+
+
+Transcribed by https://otter.ai

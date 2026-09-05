@@ -14,6 +14,61 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-04 (later)
+
+### Fixed — inventory reported 0 rows for weeks because two filters were inverted
+- **`Part_v_Container.Active` and `Part_v_Container_Status.OK_Status` hold
+  `1/0`, not `-1`.** Three views — `part_on_hand_inventory_view`,
+  `inventory_out_of_stock_view`, `inventory_risk_analysis_view` — filtered
+  `= -1` and therefore matched **nothing**. `raw_Part_v_Container` had **122
+  real rows** the entire time. Every doc, including this changelog and
+  `docs/CHEATSHEET.md`, had been repeating "upstream extract still empty" as
+  the explanation. It never was.
+- **`docs/CHEATSHEET.md`'s boolean table was the source of the error** and is
+  now corrected, with a warning that the `Part_v_*` / `Sales_v_*` split is not
+  a reliable guide — the column has to be checked. The original entry cited a
+  2026-08-11 "confirmed live" note, which is exactly how a wrong fact survives.
+- **The status test is no longer `OK_Status`,** because it cannot express Vox's
+  rule (Jennilyn, Sep-4): on-hand = **Hold + Inspection Required + OK + Hold
+  for Design Order**, excluding **Defective and Expired**. Against the real
+  lookup `OK_Status` is **0 on Hold and Inspection Required** (which must be
+  included) and **1 on Allocated, Loaded, Shipped and Staged** (which must not
+  be, or shipped goods count as on-hand). The four statuses are now named
+  explicitly.
+- **Dropped the `Container_Status` lookup join.** Nothing selected from it, and
+  the extracted copy is **stale**: Plex has 16 statuses including
+  `HOLD FOR DESIGN ORDER` (key 10281); the raw table has 15 and is missing
+  exactly that one. An INNER join would silently drop containers in any status
+  the stale lookup hasn't caught up with — the same failure already fixed in
+  the 4 Daily Reports. Filtering on the container's own status string avoids it.
+- **Verified against Plex's own UI.** The corrected view returns
+  **1,164 OK + 2 Hold = 1,166 active containers**, matching Vox's "Inventory
+  Status Summary" screen exactly (OK 99.83%, Hold 0.17%, total 1,166). 91
+  inactive Hold containers are correctly excluded.
+
+### Added — sales order LINE price, fixing the $0 tiles
+- **`Sales_v_Price` extracted** (keyed on `PO_Line_Key`) and wired into
+  `sales_mtd_by_status_change_view`, `sales_order_value_by_status_view` and
+  `pipeline_plex_value_view` as the **primary** price, with
+  `Part_v_Customer_Part_Price` demoted to fallback.
+  Jennilyn, Sep-4: *"No, it'll always have a price in there. So it needs to be
+  the line item price."* The customer price list matched nothing for the 7 real
+  Pending Fulfillment orders, which is why WIP and Sales MTD both read **$0
+  across 35,201 real units** — not a broken join, since quote-stage orders
+  priced fine through it ($900,975); those parts simply have no list row.
+- Each view now exposes **`price_from_fallback_list`** so a row priced off the
+  generic list rather than its own order line is visible, not silently mixed in.
+- Tier rule: prefer `Primary_Price`, then lowest `Breakpoint_Quantity`, then
+  most recent `Effective_Date`; inactive rows dropped.
+
+### Notes
+- All six modified views dry-run clean. `terraform plan`: **0 to add, 8 to
+  change, 0 to destroy.** Not applied — apply is blocked by the local
+  permission classifier.
+- The price fix **cannot be verified until the extraction runs**, since
+  `raw_Sales_v_Price` does not exist yet. Syntax was checked against a stubbed
+  table. Re-verify after the next `plex-etl-sales-orders-test` run.
+
 ## 2026-09-04
 
 ### Added — goals now have a home, and every "% to Goal" tile is buildable

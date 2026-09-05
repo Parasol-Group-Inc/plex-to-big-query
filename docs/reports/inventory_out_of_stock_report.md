@@ -19,6 +19,9 @@ Three conditions, all required: the part number starts with `33`; `Part_v_Part.M
 
 ## Flags and open questions
 
+- **⚠ Container filter fixed 2026-09-04** — same inverted-boolean bug as [`part_on_hand_inventory_report`](part_on_hand_inventory_report.md); on-hand was always 0, so nothing could ever flag. See that doc for the detail.
+- **Usage/consumption dropped for go-live** (Jennilyn, Sep-4): *"maybe we won't consider usage for go live and we'll just base it off of is there a minimum inventory quantity and is the quantity available negative."* She also confirmed **reorder point IS the minimum inventory quantity** — the two are the same field, not a join.
+
 - **0 rows today for a real, checked reason**: `Sales_v_Release_Allocation` (needed for the "allocated" half of the calculation) has zero rows on this tenant right now — confirmed live, not assumed. The rest of the logic is checked against real data: only 7 real parts start with `33` today (all Semi-Finished Goods, none yet Custom-classified), and 410 parts on this tenant have a real `Minimum_Inventory_Quantity` set.
 - **`Sales_v_Release_Allocation`'s boolean/Active convention (if it has one) has never been checked** — there are no real rows yet to check it against. No `Active` filter is applied here; revisit once rows exist.
 - **Boolean convention note**: `Part_v_Container.Active`/`Container_Status.OK_Status` (used for on-hand) use `-1 = true` — the *other* convention from the one confirmed on `Sales_v_Shipper_Status`/`Sales_v_PO_Status` in this session's sibling reports. Don't mix them up.

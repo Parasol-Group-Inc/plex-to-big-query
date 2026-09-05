@@ -1,0 +1,403 @@
+﻿✍️ Quick notes
+Emilio / Jennilyn
+
+
+Sep 4, 2026
+Emilio Dominguez Jennilyn Tockstein
+
+
+Dashboard updates and shipping reports with inventory calculations via BigQuery integration.
+
+
+Data Reporting and Visualization
+* Dashboard tiles are configured to display BigQuery-sourced tables reflecting current daily unit and dollar amounts.
+* Sales figures calculation relies on the total line item price at the stage of pending fulfillment.
+* Glossary terminology has been standardized to use BDM instead of the legacy outside sales rep label.
+* Monday retains ownership of opportunities and forecasts, while Plex provides data for quotes and pending orders.
+
+
+Inventory and Stock Management
+* Out-of-stock status triggers for 33-series part numbers when quantity on hand minus sold quantities remains negative.
+* Reorder points correlate directly to the minimum inventory quantity defined within Plex.
+* Total inventory calculations include 'Hold,' 'Inspection Required,' 'OK,' and 'Hold for Design' statuses, while excluding defective or expired items.
+
+
+Production and Quality Metrics
+* Production performance tracking aggregates recorded production based on specific work center groups.
+* Rework and deviation data currently reside in Google Sheets, awaiting transition to native Plex reporting logic.
+
+
+Next steps
+* [Emilio Dominguez] Create goal table: Develop a new table within the data set to house goal information. This enables spreadsheets to input data directly into the system.
+* [Jennilyn Tockstein] Verify tile accuracy: Review the daily reset tiles to ensure the information reflects accurate units and dollar amounts.
+* [Jennilyn Tockstein] Consult Amber: Ask Amber for the location of data concerning inventory sold to customers.
+* [Jennilyn Tockstein] Email project lead: Include Emilio Dominguez in the email thread with Amber regarding inventory data.
+* [Emilio Dominguez] Clone scorecard: Duplicate the existing scorecard and integrate the BigQuery views into the new version.
+* [The group] Define rework logic: Establish business rules for identifying rework and deviations. This will standardize how the quality reporting captures these events.
+* [Jennilyn Tockstein] Review ship estimates: Evaluate the decisions required for the ready to ship dollars estimate. Provide the final determination for the logic to be implemented.
+
+
+
+
+
+
+Want to see more? View the full notes
+Tip: You can always access your full notes from the left sidebar.
+
+
+
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+📝 Full notes
+Sep 4, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+
+
+Summary
+Dashboard updates and shipping reports with inventory calculations via BigQuery integration.
+
+Dashboard and Shipping Updates
+Discussion on dashboard tiles and shipping pending revenue report using BigQuery data.
+
+Out of Stock Logic
+Decision made to drop usage consideration for go-live relying solely on minimum inventory quantity.
+
+Inventory and Pipeline Sources
+Review of pipeline data sources and inventory valuation statuses.
+
+
+
+
+Decisions
+Aligned
+* Out-of-stock calculation standard for go-live The go-live out-of-stock calculation excludes usage rates and relies exclusively on minimum inventory quantity and negative available quantity.
+* Sales representative glossary term update The primary sales representative term is updated in the glossary from outside sales rep to BDM.
+* Monday data retention and Plex migration policy Opportunities, forecasts, and sales team scorecard views remain on Monday, while quotes and pending sales orders migrate to Plex.
+* Inventory on-hand status inclusion criteria Inventory on-hand totals include hold, inspection required, okay, and hold for design order statuses, while excluding defective or expired inventory.
+
+
+
+
+Next steps
+* [Emilio Dominguez] Create goal table: Develop a new table within the data set to house goal information. This enables spreadsheets to input data directly into the system.
+* [Jennilyn Tockstein] Verify tile accuracy: Review the daily reset tiles to ensure the information reflects accurate units and dollar amounts.
+* [Jennilyn Tockstein] Consult Amber: Ask Amber for the location of data concerning inventory sold to customers.
+* [Jennilyn Tockstein] Email project lead: Include Emilio Dominguez in the email thread with Amber regarding inventory data.
+* [Emilio Dominguez] Clone scorecard: Duplicate the existing scorecard and integrate the BigQuery views into the new version.
+* [The group] Define rework logic: Establish business rules for identifying rework and deviations. This will standardize how the quality reporting captures these events.
+* [Jennilyn Tockstein] Review ship estimates: Evaluate the decisions required for the ready to ship dollars estimate. Provide the final determination for the logic to be implemented.
+
+
+
+
+Details
+* Dashboard Tiles and Revenue Data: Emilio Dominguez discusses updates to dashboard tiles for pure sales and incorporating BigQuery tables, showing data for the current day such as 25 units and $65 (00:00:35). Emilio Dominguez notes that data resets daily, referencing September 1st with 17,000 units and $25. Jennilyn Tockstein realizes that the displayed data is from yesterday (00:02:29). Emilio Dominguez suggests creating a table or spreadsheet to feed goals and percentages (00:00:35).
+  
+
+* Shipping Pending Revenue Report: Emilio Dominguez explains that the total in shipping tile is held by Monday data and will be replaced by the shipping pending revenue report view using BigQuery data, counting only ready quantities rather than fully ordered quantities with 20,000 ready units (00:04:05). Jennilyn Tockstein clarifies that the total in shipping came from a Google sheet scraped into BigQuery rather than Monday, and they note differences between data and notes due to different dates (00:05:49).
+  
+
+* Out of Stock Part Calculation Logic: Emilio Dominguez addresses out-of-stock parts where part numbers start with 33, available quantity is negative, and custom parts are excluded (00:07:26). Jennilyn Tockstein details the calculation, explaining that they look at negative available quantity (on hand minus sold), check usage, and verify valid reorder points or minimum inventory quantity in Plex (00:09:11). Jennilyn Tockstein decides that they will drop usage consideration for go-live due to lack of usage rates, relying solely on minimum inventory quantity and negative available quantity (00:12:12). Emilio Dominguez mentions the daily shipping report and creating a spreadsheet with App Script to send manual inputs like save days and goals to BigQuery (00:13:45).
+  
+
+* Sales Order Pricing and Sales Representatives: Emilio Dominguez notes that sales are counted the month an order reaches pending fulfillment status, citing September examples where orders had zero prices because they lacked customer prices. Jennilyn Tockstein corrects this, stating that sales orders always have a line item total price in Plex even before payments are made (00:15:34). Emilio Dominguez asks about sales representatives, and Jennilyn Tockstein confirms that representatives are pulled in, noting that outside sales reps have been glossarized as Business Development Managers in sales order assignments (00:17:53).
+  
+
+* Pipeline and Forecast Data Sources: Emilio Dominguez discusses moving pipeline views to BigQuery and asks about entirely removing Monday data. Jennilyn Tockstein clarifies that they will keep using Monday data for opportunities and forecasts, as well as detailed sales team scorecards including close rates and opportunity counts, while quotes and pending sales orders will come from Plex (00:22:55).
+  
+
+* Production and Quality Metrics: Emilio Dominguez covers production actual versus goals based on work center groups such as encapsulation and bar labeling showing August 31st amounts. Emilio Dominguez and Jennilyn Tockstein discuss quality filter areas, reworks, deviations, and non-conformances, noting that rework logic and quality cause categories from Plex reports need to be finalized and handled with the team (00:25:07).
+  
+
+* Inventory Valuation and Statuses: Emilio Dominguez reports that the inventory value currently returns zero rows. Jennilyn Tockstein specifies that on-hand inventory should include statuses like hold, inspection required, ok, and hold for design order, while defective or expired inventory should be excluded (00:30:04). Jennilyn Tockstein commits that they will ask Amber about where customer-sold inventory lives (00:33:37).
+  
+
+* Next Steps and Follow-up Scheduling: Emilio Dominguez proposes starting to pull views and BigQuery into a clone of the scorecard to review the first page. Jennilyn Tockstein agrees, suggesting that they copy the scorecard and attach data. Jennilyn Tockstein schedules a follow-up meeting for Wednesday and Friday next week, and commits that they will email Amber regarding inventory ready to be sold and add Emilio Dominguez to the email (00:36:58).
+  
+
+
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+📖 Transcript
+Sep 4, 2026
+Emilio / Jennilyn - Transcript
+00:00:35
+
+
+Emilio Dominguez: Okay. So based on the last meeting, so some of the things were that title is massive. Um some things were adjusted to uh pure sales, pure um uh things that were maybe being mixed with like the price for the revenue. Uh so as for their artifact, so right now it's standing on more detail on every tile. So what you'll have within each of these is like the same as before but it will also uh show you the the table for the bigquery where this is being placed and also this data for now this is like the data for today. So for example for today we have that amount of u of units and and the dollar amount for that and that's going to be the same for these ones. As for the for the goals, well, we have discussed about that before, but I think it could be time to just create the either a table within the data set. So, even just a a spreadsheet can can um place information into that into that table. So, if you would like me to to do that, um that's okay because that blocks uh some of the other the percentages and things like that need that.
+
+
+
+
+00:02:29
+
+
+Emilio Dominguez: So, as for those tiles here, so it would be good if you could kind of check them out if the information is currently being accurate. It's being reset every day. But um I don't know about the process uh if someone is placing that automatically or is a manual process for you to just check and what the what the data can be in certain day. But for now, we have this uh 25 units and $65 for that. And what is being taken into account this um this uh view, right? and the the notes uh that you also instructed before like revenue units that shipped source from flex shipping module um so for the September September 1st uh 17,000 units 25 and then it was reset and now we have this uh lower lower amount Right. That's for revenue.
+Jennilyn Tockstein: Oh, and these are from yesterday. I keep forgetting that.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I was like, oh, I'll double check and see see if it matches. But it's yesterday,
+Emilio Dominguez: Yeah. Yeah.
+
+
+
+
+00:04:05
+
+
+Emilio Dominguez: Because it's going to be reset,
+Jennilyn Tockstein: so
+Emilio Dominguez: right? So, so that's uh well, for now because it's the test environment, but that's that's the thing, right? Um as for also total in shipping because you also had uh adjustments to be made there. So that that was for now it's being held by Monday but it is being replaced with this view uh shipping shipping the table is shipping pending revenue report. um what the data is about right now or yesterday. These units and also this dollar amount and the notes count only the ready quantity never the fully ordered quantity. So verify 20,000 ready units the total amount and the flag for that's just a a series of questions in this artifact but yeah so this is going to be displaying this replace because it's you know trying to match what the what Monday had now with the bigquery data or a bigquery u data that table available. Right? So that's totally in shipping. You can also run some on on
+
+
+
+
+00:05:49
+
+
+Jennilyn Tockstein: Nice.
+Emilio Dominguez: that. This is for the blanket orders. with the with the filter ready to ship. Work in progress. Work in progress has a flag. Um, and this is like uh also like since the goal is to build this into the Lucer Studio, it also has like this how to how to build it the tile. That's the what the artifact has there.
+Jennilyn Tockstein: Okay. The I was looking at the total in shipping. So,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: that one wasn't Monday fed. Um,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: that one was coming from a a Google sheet that I was I think scraping and putting into BigQuery.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Uh but besides that, it looks good. When it says though, the data in there now and the notes, those are different, but that could be the notes were from a different day than the data in there now.
+Emilio Dominguez: Correct. Yeah.
+Jennilyn Tockstein: So,
+Emilio Dominguez: Uh yeah,
+Jennilyn Tockstein: okay.
+Emilio Dominguez: it's taking a lot of data from September 1st that it has a lot of information.
+
+
+
+
+00:07:26
+
+
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: um thousands thousands of units and it's getting that tracked that history there, right? But yeah, um out of stock, this is also what we discussed before. Uh the part numbers that start with 33 has a minimum stock level and available quantity is negative. Custom parts excluded and for now it's returning zero but this is a question that is also um below but what constitutes the minimum or reach that the part has reached the minimum because some parts during the you know the verification show show zero but uh that's maybe like in the future it could be because also the person didn't input the minimum quantity. So it just it is as is like zero. So because you have uh stated like okay let's take minimum quantity into into account but maybe that that's a a warning for the um you know data entry phase in which if there is no minimum quantity right then um it It should have like if you have a minimum quantity place right into Plex.
+Jennilyn Tockstein: So what it is this is how it's currently being calculated.
+
+
+
+
+00:09:11
+
+
+Jennilyn Tockstein: We're looking at I mean these will all be three three part numbers in flex. We're looking at the quantity available. So that's what's on hand minus what's sold. So this has to be negative.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So like these ones are negative. Then it looks at do we use it? So if this is a zero or an NA, it'll drop it. And then it looks at we don't care about what the minimum quantity is. That's this one. Just does it have one. So if we have no minimum quantity but the current quantity is available is negative. So say this is negative and say there is a daily usage but there's no reorder point like this one has no reorder point then it gets dropped.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So those three pieces have to fall into place and then we just need a count. So right now this is our current count. There's five.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So see it's saying like yeah it's negative.
+
+
+
+
+00:10:36
+
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: It's below zero. Yes there's a daily usage. Um really this should be bringing over column J but doesn't really matter. All I'm doing is counting these if if these three fields meet those requirements. So, is it a negative quantity available? Do we use it? And is the reorder point valid? Because some of these have a reorder point of zero. So once this one goes negative, we don't care.
+Emilio Dominguez: Yeah, since it is not being ordered and that reorder point, who is the person like or where do you get that um is that something like like from the I'm an average of some average from the sales history the of the year or if there is an order if there is truly an order associated to that part and to that customer Okay.
+Jennilyn Tockstein: So there should be it In Plex, it's going to be called minimum inventory quantity. quantity. So this has to be greater than zero. I don't know if we will get the usage.
+
+
+
+
+00:12:12
+
+
+Jennilyn Tockstein: So maybe we won't consider usage for go live and we'll just base it out off of is there a minimum inventory
+Emilio Dominguez: Right
+Jennilyn Tockstein: quantity and is the quantity available negative.
+Emilio Dominguez: on.
+Jennilyn Tockstein: So, we would just not consider this one for go live because we're not going to have usage rates. Um, but we will have these two things.
+Emilio Dominguez: Okay. So reorder maps to minimum quantity reorder points
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: right.
+Jennilyn Tockstein: Yep. That's the minimum inventory quantity. And then I don't know if Plex has this available somewhere. It's the quantity on hand minus the quantity sold minus the
+Emilio Dominguez: Well,
+Jennilyn Tockstein: demand,
+Emilio Dominguez: you can yeah you you can join that maybe but you will
+Jennilyn Tockstein: right?
+Emilio Dominguez: need yeah that needs to be researched there.
+Jennilyn Tockstein: Yeah, it might be pulling in this and this from two different places and you know this might come from two different places and then a view kind of combines them all to give
+Emilio Dominguez: Right
+Jennilyn Tockstein: me this count.
+
+
+
+
+00:13:45
+
+
+Emilio Dominguez: on. So that's
+Jennilyn Tockstein: And that's one of the ones that that the team will think is one of the most important because um they talk about it every day.
+Emilio Dominguez: Yeah, definitely.
+Jennilyn Tockstein: Literally every day.
+Emilio Dominguez: Okay, that's out of stock, right? Like uh yeah, based on the the data, even just conditionals, some conditionals can be placed there. Uh if it doesn't have like the full scope of that part, but yeah. Um noted shipping daily. So that's the shipping daily report, right? So September one, one order for 17 pack packages and going to be fed yeah totally by by Plex. For now, it's just one order and one package for for second. and 2nd of September. Save days is the same like same we have discussed like maybe a just create the the table right within the data set and get uh as the spreadsheet that you were showing like maybe another version of the spreadsheet just that has that those tabs like the goals the save days things that are manually input and just get uh the script like the app script to send that to the to the bigquery table, right?
+
+
+
+
+00:15:34
+
+
+Emilio Dominguez: Sales that we also discussed quite quite a bit. Um, so a sale is counted the month its order first reach pending fulfillment by the status change deliberately a different number from revenue that was purified on September 4. Seven real orders for 35,000 units September uh but zero because none of those parts have a customer price. So see decision five. So this comes from from what price is going to be taken into account on on the sale on the sale order because it can be zero until it reaches another another step, right? Um,
+Jennilyn Tockstein: No, it'll always have a price in there.
+Emilio Dominguez: okay.
+Jennilyn Tockstein: So, it needs to be the line item price.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So, when we make a sales order, um, let me just So it's going to be. This is the price of each. Thought somewhere it showed. Oh, here it is.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, the sales order would be the sum, the total. So, if we made multiple lines and I don't know
+
+
+
+
+00:17:53
+
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: where you would get it. Let me just get a second line on here. So, it's this. It's this total price on the sales order.
+Emilio Dominguez: Okay, head on up.
+Jennilyn Tockstein: Yeah. So, it's that customer total right there. Although I don't know if the one you're looking at will change once they've made payments.
+Emilio Dominguez: and yeah.
+Jennilyn Tockstein: We still want the total even if they haven't made a payment on
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: it.
+Emilio Dominguez: Yeah, but Plex does uh track the change the status also change and the history. Uh so yeah. Okay. So that's for sales. Um any idea if you are implementing also the representatives um and sales by rep.
+Jennilyn Tockstein: Yeah. So, the reps are in there now. So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: the main rep that we're going to be pulling in on the report is now glosserized as the BDM. I think they were called outside sales rep originally. That like might be the table name of it.
+
+
+
+
+00:20:00
+
+
+Jennilyn Tockstein: Um, but when we look at sales orders now, it's this.
+Emilio Dominguez: Okay, nice.
+Jennilyn Tockstein: And I think it appears now when we look at our sales order, see it's right here. You can search by person. And here she is.
+Emilio Dominguez: All right. Huh.
+Jennilyn Tockstein: But we just changed that in the glossery. And I think it was this one or no that's action. It was just assigned to right here. So I think it used to be called outside sales and now it's called BDM but this is the term Unlock your iPhone first.
+Emilio Dominguez: Yeah, we'll give a look at the at the other word in there like would be helpful. Okay. So that's the same for sales year to date sales detail. Um yeah, we discussed this a little bit. Um the notes are two orders on the test tenant have reached pending fulfillment. So this returns real rows and that just takes the sales value join from these uh these fields, right? But yeah, that's um like you were saying like getting the the line getting the line price or the base price because right now it's just showing showing zero.
+
+
+
+
+00:22:55
+
+
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: So that that needs an adjustment there. Okay. for the pipelines that were all about Monday. So there there are some views that are now into place. getting some data there from the total pipeline. So the full title adds the Monday. But yeah, so the idea as we have discuss is also to like get rid entirely of Monday data right from the from the box. It's live or
+Jennilyn Tockstein: No. So, we'll keep using some of that Monday data.
+Emilio Dominguez: okay.
+Jennilyn Tockstein: It's the only place where our forecast and um what do they call it? Two parts of that funnel live in Monday. It is the opportunities and the forecast. Um, the quotes and pending sales orders will now come from Plex, but the opportunities and forecast will always come from Monday. And the other information for the sales team scorecard has more detailed stuff from Monday like how many opportunities each rep has, what's their close rate, a lot of that kind of stuff. Um, I have in views and we're going to keep all of that.
+
+
+
+
+00:25:07
+
+
+Emilio Dominguez: Okay, right on. Thank you. So, uh, production, that's the actual versus the goal and where the goal is going to be placed. to that data set table. Now just showing uh these total events encapsulation uh bling and labeling. So these come from from the work center, right? Associated to the the current status of of that of the process, right?
+Jennilyn Tockstein: Yeah, we want to know how many how much rec production was recorded based on work center group.
+Emilio Dominguez: Right. Yeah. Bland shows this amount for also the August 31st. Yeah. Okay. So quality filter area to encapsulation bar labeling and this is the the current information that was broth. So reworks um I think we didn't reach this the last on the last meeting but this is the the fields that are t being taken into account on the quantity. Are you using any of the reports here like on that rework logic or what constitutes the rework?
+Jennilyn Tockstein: We we need to.
+
+
+
+
+00:27:56
+
+
+Emilio Dominguez: Um,
+Jennilyn Tockstein: So right now everything that is in quality type stuff is all um currently on Google Sheets. But yes, that's where it will come from is from these Plex reports.
+Emilio Dominguez: M okay. Yeah, because I think we discussed also before that like the the the claim or the problem didn't have a job a job associated on the on the spreadsheet like it was more like associated to the date. Right. So but yeah that's uh that's one pending um definition here on and if you get like a report or something well not not a report because everything is there but but uh but more like how are you going to assign a rework or what's the logic behind the rework right the same for deviation because it has uh Plex has this you know these capabilities like the deviation type status and also all this uh different statuses associated for that and the destruction right Is that quality cause by category report? What are the fields like problem category probably nonconformance because it has a big neuroplex has this big part of non-conformance.
+
+
+
+
+00:30:04
+
+
+Emilio Dominguez: But if you get to define that with a team or if you are already having some of those
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: reworks yeah could be could be helpful just to to know how you are going to handle those. So that's that um operations open caps that comes from this report. So that's um that's from production. This this comes from production. Open barrels and this this is also flag as needs like the input table right inventory. So the total inventory value for now it's just zero rows on inventory but let's Okay. So that's missing because it's not bringing anything and it's clearly there like inventory. But uh is the inventory being you know any any filters uh taken into account there for the for the inventory that you may want because I I just okay right now but the status
+Jennilyn Tockstein: f***. Um, can you pull it up again?
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: The inventory
+Emilio Dominguez: Yeah. Oh, yeah. Sorry.
+Jennilyn Tockstein: Um I mean inventory that we want to consider as on hand would be hold Inspection required and okay and the other hold hold for design order.
+
+
+
+
+00:33:37
+
+
+Emilio Dominguez: sign.
+Jennilyn Tockstein: So that's all inventory quantity.
+Emilio Dominguez: And this does this this inventory is being affected by the parts being assigned to to the customers or is that like a grand total or something that
+Jennilyn Tockstein: This is going to be the grand total of inventory of what we have. And then those are the statuses of the inventory. Um,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: and we don't want to include defective or expired inventory into that total. Um, and then the amount that is sold to customers is going to be I don't know where we would see it.
+Emilio Dominguez: This is the inventory summary. I share life production jail.
+Jennilyn Tockstein: I might have to ask Amber that one because I I really don't know where that would live actually.
+Emilio Dominguez: Okay. unbuilt inventory. Okay. So that's for inventory on hand quantity. the average daily usage formulation. divided by days in month. Let me check. Okay. Psycho account. um some of the Monday sources, the manual tables, and um maybe if you have some time, you can check these decisions needed.
+
+
+
+
+00:36:58
+
+
+Emilio Dominguez: So there's a couple of them that you may want to have a look at in regards of well this is going to be quite straightforward like this is just a data a table within the data set but for this one for example they're ready to ship dollars estimate or units only. And it has like these options where you can just have a look at and you can tell me what will be the
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: like like the answer to those. Right.
+Jennilyn Tockstein: Yeah. I don't know to go through that.
+Emilio Dominguez: Right on. So I think the next step is just making those adjustments that you talked me about and with this information and uh I don't know if you want me to like start pulling the the views and the bigquery into a clone of the of the scorecard and just go over like the first page because that's like the first page like you send me, right? So
+Jennilyn Tockstein: Yeah, if you want to will it let you It should let you copy the scorecard in data and make a new one and then just start attaching
+Emilio Dominguez: yeah. Yeah.
+Jennilyn Tockstein: it.
+Emilio Dominguez: Okay. Sure. Okay. So we can meet next uh next quick on your preference, right?
+Jennilyn Tockstein: Yeah, let's schedule that. Let's see. Let's do Wednesday. Let's do Wednesday, Friday.
+Emilio Dominguez: All right.
+Jennilyn Tockstein: Okay, I added that for next week.
+Emilio Dominguez: Nice. Thank you then.
+Jennilyn Tockstein: Oh, thank you. I'm gonna add
+Emilio Dominguez: So, Okay. So, anything uh that you might come up with the questions uh or the inventory ready to be sold from Amber? Well, it's going to be um you
+Jennilyn Tockstein: Yeah, I'll ask her about what's the best place to find that right
+Emilio Dominguez: know.
+Jennilyn Tockstein: now. Um, and I'll add you to that email.
+Emilio Dominguez: Okay. Thank you, Jennilyn.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: That's it.
+Jennilyn Tockstein: have a great weekend.
+Emilio Dominguez: Have a good one. Goodbye. Take care.
+Jennilyn Tockstein: See you.
+Emilio Dominguez: Come on.
+
+
+
+
+Transcription ended after 00:42:48
+
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

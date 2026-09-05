@@ -125,6 +125,18 @@ extractions:
     date_col: ""
 
   # Customer master — Customer_No → customer name and info
+  # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
+  # Jennilyn: "No, it'll always have a price in there. So it needs to be the
+  # line item price." Keyed on PO_Line_Key, so it is the price actually agreed
+  # on that order line — NOT Part_v_Customer_Part_Price, which is a generic
+  # customer/part list and had no matching row for any of the 7 real Pending
+  # Fulfillment orders, leaving WIP and Sales MTD reading $0 across 35,201
+  # real units.
+  - plex_view: Sales_v_Price
+    bq_table: raw_Sales_v_Price
+    filter: ""
+    date_col: ""
+
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""

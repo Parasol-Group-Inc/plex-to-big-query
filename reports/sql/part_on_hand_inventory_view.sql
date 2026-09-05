@@ -9,8 +9,8 @@
 --
 -- GRAIN: one row per part. On-hand quantity is SUM(Quantity) across all
 -- Part_v_Container rows for that part, filtered to containers that are
--- both Active and in an OK-type status (Container_Status.OK_Status = -1 —
--- Plex represents boolean true as -1, confirmed live 2026-08-11).
+-- both Active and in an OK-type status (see the WHERE clause below — the status rule is an explicit
+-- name list, and Active is 1, not -1).
 --
 -- Part_v_Container is the real on-hand-inventory carrier in this Plex
 -- tenant — it lives under the Part module, not Warehouse
@@ -42,10 +42,32 @@ on_hand AS (
     SUM(SAFE_CAST(c.Quantity AS FLOAT64)) AS on_hand_qty,
     COUNT(*)                             AS container_count
   FROM `{gcp_project}.{dataset}.raw_Part_v_Container` c
-  JOIN `{gcp_project}.{dataset}.raw_Part_v_Container_Status` cs
-    ON CAST(c.Container_Status AS STRING) = CAST(cs.Container_Status AS STRING)
-  WHERE SAFE_CAST(c.Active AS INT64) = -1
-    AND SAFE_CAST(cs.OK_Status AS INT64) = -1
+  -- ⚠ REWRITTEN 2026-09-04 — the previous filter matched ZERO rows.
+  -- It read `c.Active = -1 AND cs.OK_Status = -1`. Confirmed live against
+  -- this tenant: Part_v_Container.Active holds 1/0 and
+  -- Part_v_Container_Status.OK_Status holds 1/0 — NOT the -1 convention the
+  -- old comment claimed. 122 real containers existed the whole time while
+  -- every inventory report reported 0 rows and the docs blamed an "empty
+  -- upstream extract."
+  --
+  -- The status test is now an explicit name list, not OK_Status, because
+  -- OK_Status cannot express Vox's rule (given 2026-09-04): on-hand =
+  -- Hold + Inspection Required + OK + Hold for Design Order, excluding
+  -- Defective and Expired. Against the real lookup, OK_Status is 0 on Hold
+  -- and Inspection Required (which must be INCLUDED) and 1 on Allocated,
+  -- Loaded, Shipped and Staged (which must NOT be, or shipped goods count
+  -- as on hand). Naming the four statuses is the only faithful encoding.
+  --
+  -- The Container_Status lookup join is gone on purpose: nothing here
+  -- selected from it, and the extracted copy is STALE — Plex has 16
+  -- statuses including 'HOLD FOR DESIGN ORDER' (key 10281) while the raw
+  -- table has 15 and is missing exactly that one. An INNER join would drop
+  -- any container in a status the stale lookup hasn't caught up with, which
+  -- is the same class of silent-row-loss bug already fixed in the 4 Daily
+  -- Reports. Filtering on the container's own status string avoids it.
+  WHERE SAFE_CAST(c.Active AS INT64) = 1
+    AND UPPER(TRIM(CAST(c.Container_Status AS STRING))) IN (
+          'OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
   GROUP BY part_key
 )
 

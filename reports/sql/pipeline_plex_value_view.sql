@@ -54,7 +54,37 @@
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per (PO, PO_Line, Release) in a pipeline stage.
 
-WITH base_price AS (
+WITH
+
+-- SALES ORDER LINE PRICE — the primary price source (added 2026-09-04).
+-- Jennilyn, Sep-4: "No, it'll always have a price in there. So it needs to be
+-- the line item price." Sales_v_Price is keyed on PO_Line_Key, so this is the
+-- price actually agreed on that order line, not a generic list price.
+-- base_price (Part_v_Customer_Part_Price) is kept only as a FALLBACK: it
+-- matched nothing for the 7 real Pending Fulfillment orders, leaving WIP and
+-- Sales MTD at $0 across 35,201 real units.
+line_price AS (
+  SELECT
+    PO_Line_Key,
+    Price
+  FROM (
+    SELECT
+      SAFE_CAST(PO_Line_Key AS INT64)             AS PO_Line_Key,
+      SAFE_CAST(Price AS FLOAT64)                 AS Price,
+      ROW_NUMBER() OVER (
+        PARTITION BY SAFE_CAST(PO_Line_Key AS INT64)
+        ORDER BY
+          COALESCE(SAFE_CAST(Primary_Price AS INT64), 0) DESC,
+          SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC,
+          SAFE_CAST(CAST(Effective_Date AS STRING) AS STRING) DESC
+      ) AS rn
+    FROM `{gcp_project}.{dataset}.raw_Sales_v_Price`
+    WHERE COALESCE(SAFE_CAST(Active AS INT64), 1) != 0
+  )
+  WHERE rn = 1
+),
+
+base_price AS (
   SELECT
     SAFE_CAST(Customer_Part_Key AS INT64)      AS Customer_Part_Key,
     SAFE_CAST(Price AS FLOAT64)                AS Price
@@ -109,8 +139,10 @@ SELECT
   p.Name                                                AS part_name,
 
   SAFE_CAST(rel.Quantity AS FLOAT64)                    AS qty_quoted,
-  bp.Price                                              AS price_ea,
-  (bp.Price * SAFE_CAST(rel.Quantity AS FLOAT64))       AS pipeline_value
+  COALESCE(lp.Price, bp.Price)                          AS price_ea,
+  (lp.Price IS NULL AND bp.Price IS NOT NULL)           AS price_from_fallback_list,
+  (COALESCE(lp.Price, bp.Price) * SAFE_CAST(rel.Quantity AS FLOAT64))
+                                                         AS pipeline_value
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
 
@@ -133,6 +165,9 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u1
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pol.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
+
+LEFT JOIN line_price lp
+  ON SAFE_CAST(pol.PO_Line_Key AS INT64) = lp.PO_Line_Key
 
 LEFT JOIN base_price bp
   ON SAFE_CAST(pol.Customer_Part_Key AS INT64) = bp.Customer_Part_Key

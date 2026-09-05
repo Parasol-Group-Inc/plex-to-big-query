@@ -96,6 +96,32 @@ The biggest open item on the scorecard is closed. Goals live in a Google Sheet
 - **⚠ Ships via Cloud Build, not `terraform apply`** — this is a code change to
   `email_utils.py`, baked into the container image. A Terraform apply will not
   pick it up.
+- **DEPLOYED 2026-09-04.** Cloud Build `0113e1f1` succeeded and its `deploy-all`
+  step moved **all 24 Cloud Run jobs** to `etl:6c33c51`. Confirmed the final
+  code is in that image: `email_utils.py` was last written 22:58 UTC, the build
+  was created 23:09 UTC, and there is no `.gcloudignore`, so the whole working
+  tree was uploaded.
+- **Provenance wrinkle, recorded not hidden:** the image is tagged `6c33c51`
+  but contains changes that were still uncommitted when it was built (they are
+  now in `15cded9`). The tag is a `git rev-parse` label taken at submit time,
+  not a guarantee of what went in. **The next build from a clean tree makes the
+  tag truthful again** — no action needed unless you're tracing which commit
+  produced a running image, in which case treat `6c33c51` as "at least
+  6c33c51".
+
+### Changed — `terraform.tfvars` housekeeping (gitignored, not in this commit)
+- **`image_url` bumped again, `:8ba5717` → `:6c33c51`**, matching what the
+  Cloud Build run actually left on the jobs. This variable drifted **twice in
+  one day**, which is the point: `lifecycle.ignore_changes` on `image` lets the
+  live jobs run ahead of it by design, and it only matters when a rename
+  destroys and recreates a job — that job comes up on this value. The comment
+  block now says how to re-check it rather than narrating one past bump.
+- Corrected the stale `report_subject` comment, which still described the old
+  enumerate-every-report subject format.
+- **Backed up to `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`**,
+  the path the file's own header documents. Bucket versioning confirmed
+  enabled, so earlier copies stay recoverable. Contains no secrets — only
+  Secret Manager *identifiers* (`plex-access-token` etc.), never values.
 
 ### Changed — renamed the Sales Orders job off its legacy generic name
 - **`plex-etl` → `plex-etl-sales-orders`** and **`plex-etl-test` →

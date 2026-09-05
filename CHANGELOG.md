@@ -61,6 +61,53 @@ don't need an entry.
 - Tier rule: prefer `Primary_Price`, then lowest `Breakpoint_Quantity`, then
   most recent `Effective_Date`; inactive rows dropped.
 
+### Added — real goals loaded, and they already existed
+- **`VoxScorecardsLive.sales_goals` is a real maintained table** — 8 reps x 7
+  months (Jun-Dec 2026) — and the company-wide monthly figures were sitting
+  hardcoded as a 12-row `UNION ALL` inside `vw_sales_mtd_vs_goal`'s SQL. Both
+  were loaded into `scorecard_goals` **by query, not retyped**, so there is no
+  transcription risk. 4 placeholder rows deleted; 68 real rows in.
+- **Nothing was fabricated to fill the gaps.** Revenue and production goals
+  stay EMPTY because no real source exists for either — both live in Google
+  Sheets nobody has exported. Entering the scorecard's rounded display values
+  ($4.7M, 100.00M) would have made every "% to Goal" subtly wrong forever with
+  nothing recording where the numbers came from.
+- **A discrepancy worth surfacing:** the company-wide September goal is
+  **$5,040,000**, but the eight per-rep goals sum to **$4,690,000**. Two
+  different numbers, both currently driving the live scorecard. Loaded both,
+  distinguished by `scope`, and flagged rather than reconciled.
+- Verified end to end: `sales_vs_goal_report` now returns all 8 reps plus
+  `(company-wide)` with real targets at 0% (the test tenant has no rep-assigned
+  sales), and `(no rep assigned)` — the test data — correctly flagged
+  `sales_without_goal`. The FULL OUTER JOIN is doing exactly what it was built
+  for.
+
+### Changed — ready-to-ship is no longer priced off a guess
+- `shipping_pending_revenue_view` now prefers **shipper price → sales ORDER
+  LINE price → customer list**, and exposes **`price_source`** naming which was
+  used. The Shipper_Line → Release → PO_Line bridge was already in the view, so
+  the order-line key was sitting there unused. This substantially answers the
+  open "estimate or units only?" question: the order line's own agreed price is
+  neither a guess nor unavailable before shipment.
+
+### Research — three open questions answered from data, not opinion
+- **Work centre groups confirmed:** Blending, Bottling, Encapsulating,
+  Labeling, Pre-Weigh, Preparation, Printing, Rework. Bottling and Labeling
+  match the tile names exactly; only "Encapsulation" differs (`Encapsulating`).
+- **Two-rep orders don't exist yet** — 0 of the orders carrying a rep have more
+  than one, so the credit-split question is currently moot.
+- **Ship date vs invoice date is currently moot too** — on the one shipped line
+  they are identical, and no shipped line lacks an invoice date.
+- **The out-of-stock count lines up:** Plex has **7 parts starting with 33 and
+  exactly 5 with a minimum quantity above zero** — matching the count of 5 on
+  Jennilyn's own sheet. On-hand is fixed; the only missing piece is the
+  sold/demand figure, and `raw_Sales_v_Release_Allocation` has **0 rows in both
+  environments**.
+- **Container statuses:** `Rework` carries `Include_In_MRP = 1` (Plex treats it
+  as available supply) while `Lab Analysis - Sample (Shipped)` carries `0` and
+  its name says the sample has gone. Recommended include/exclude respectively —
+  neither currently holds a container, so the stakes are low.
+
 ### Notes
 - All six modified views dry-run clean. `terraform plan`: **0 to add, 8 to
   change, 0 to destroy.** Not applied — apply is blocked by the local

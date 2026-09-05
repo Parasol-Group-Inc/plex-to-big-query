@@ -44,6 +44,40 @@
 
 WITH
 
+-- SALES ORDER LINE PRICE — added 2026-09-04, and it changes what this view
+-- reports. Sales_v_Price is keyed on PO_Line_Key, so it is the price actually
+-- agreed on the order line behind this shipment. The view already bridges
+-- Shipper_Line -> Shipper_Line_Release -> Release -> PO_Line, so that key was
+-- sitting right here unused.
+--
+-- WHY IT MATTERS: Shipper_Line.Price is 0 until a shipment actually goes out,
+-- so this tile previously fell back to the customer price LIST — a genuine
+-- estimate, and the open question was whether an estimate was acceptable at
+-- all or whether the tile should show units only. The order line's own price
+-- is neither: it's the real agreed price for that line, available before the
+-- shipment leaves. Preference is now shipper price, then order line price,
+-- then the customer list as a last resort.
+line_price AS (
+  SELECT
+    PO_Line_Key,
+    Price
+  FROM (
+    SELECT
+      SAFE_CAST(PO_Line_Key AS INT64)             AS PO_Line_Key,
+      SAFE_CAST(Price AS FLOAT64)                 AS Price,
+      ROW_NUMBER() OVER (
+        PARTITION BY SAFE_CAST(PO_Line_Key AS INT64)
+        ORDER BY
+          COALESCE(SAFE_CAST(Primary_Price AS INT64), 0) DESC,
+          SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC,
+          SAFE_CAST(CAST(Effective_Date AS STRING) AS STRING) DESC
+      ) AS rn
+    FROM `{gcp_project}.{dataset}.raw_Sales_v_Price`
+    WHERE COALESCE(SAFE_CAST(Active AS INT64), 1) != 0
+  )
+  WHERE rn = 1
+),
+
 base_price AS (
   SELECT
     SAFE_CAST(Customer_Part_Key AS INT64)      AS Customer_Part_Key,
@@ -71,10 +105,20 @@ SELECT
   SAFE_CAST(sl.Quantity AS FLOAT64)                     AS qty_ready,
   SAFE_CAST(sl.Price AS FLOAT64)                        AS shipper_line_price,
   bp.Price                                              AS customer_price_fallback,
-  COALESCE(NULLIF(SAFE_CAST(sl.Price AS FLOAT64), 0), bp.Price)
+  lp.Price                                              AS order_line_price,
+  COALESCE(NULLIF(SAFE_CAST(sl.Price AS FLOAT64), 0), lp.Price, bp.Price)
                                                          AS effective_price,
+
+  -- Where the price actually came from, so an estimate is never mistaken for
+  -- a real one: 'shipper' = finalised on the shipment, 'order_line' = the
+  -- agreed price on the sales order line, 'customer_list' = generic fallback.
+  CASE
+    WHEN NULLIF(SAFE_CAST(sl.Price AS FLOAT64), 0) IS NOT NULL THEN 'shipper'
+    WHEN lp.Price IS NOT NULL                                  THEN 'order_line'
+    WHEN bp.Price IS NOT NULL                                  THEN 'customer_list'
+  END                                                    AS price_source,
   (SAFE_CAST(sl.Quantity AS FLOAT64)
-    * COALESCE(NULLIF(SAFE_CAST(sl.Price AS FLOAT64), 0), bp.Price))
+    * COALESCE(NULLIF(SAFE_CAST(sl.Price AS FLOAT64), 0), lp.Price, bp.Price))
                                                          AS ready_value,
 
   (SAFE_CAST(potype.Blanket AS INT64) = 1)               AS is_blanket_order
@@ -104,6 +148,9 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release` rel
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Line` pol
   ON SAFE_CAST(rel.PO_Line_Key AS INT64) = SAFE_CAST(pol.PO_Line_Key AS INT64)
+
+LEFT JOIN line_price lp
+  ON SAFE_CAST(pol.PO_Line_Key AS INT64) = lp.PO_Line_Key
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO` po
   ON SAFE_CAST(pol.PO_Key AS INT64) = SAFE_CAST(po.PO_Key AS INT64)

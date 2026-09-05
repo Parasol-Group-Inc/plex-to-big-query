@@ -32,9 +32,11 @@ therefore expose `goal_without_sales` / `goal_without_production` so an
 unmatched goal row surfaces instead of sitting invisible. Same applies to rep
 names, including the literal `(no rep assigned)` bucket.
 
-Verified against seeded placeholder goals, not just dry-run: Bottling
-**3,000 of 5,000 (60%)**, Pre-Weigh **429 of 1,000 (43%)**. Built, **not yet
-deployed** — needs `terraform apply` plus a job run.
+**Deployed and verified in both datasets 2026-09-04.** `PlexTest`: Bottling
+**3,000 of 5,000 (60%)**, Pre-Weigh **429 of 1,000 (43%)**, revenue $65 against
+a $200,000 placeholder, and **0 unmatched scope names** — the exact-string
+join is behaving. `PlexProd`: all three exist and return 0 rows, correct since
+it has neither actuals nor goals yet.
 
 ## Build pass — 2026-09-04: everything that wasn't actually blocked
 

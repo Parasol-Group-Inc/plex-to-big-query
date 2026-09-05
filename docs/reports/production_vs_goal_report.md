@@ -1,6 +1,6 @@
 # Vox Scorecard | Production vs Goal
 
-> **Status:** 🛠 Built 2026-09-04, verified against seeded goals · **Category:** Production · **Runs:** rides the Work Orders pipeline
+> **Status:** ✅ Deployed and verified 2026-09-04 in both datasets — PlexTest: 3,429 of 6,000 units, 0 unmatched group names · **Category:** Production · **Runs:** rides the Work Orders pipeline
 
 ## What this tells you
 

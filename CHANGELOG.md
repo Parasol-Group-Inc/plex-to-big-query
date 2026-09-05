@@ -46,11 +46,16 @@ The biggest open item on the scorecard is closed. Goals live in a Google Sheet
     with a target and no sales yet shows at 0%. That's the case someone is
     actually checking at the start of a month; an inner join hides it.
   - `production_vs_goal_report` (`work_orders.yaml`) — same reasoning.
-- **All three verified against real seeded data**, not just dry-run:
-  Bottling **3,000 of 5,000 (60%)**, Pre-Weigh **429 of 1,000 (43%)**,
-  September revenue $65 against a $200,000 placeholder. 4 placeholder rows
-  seeded in `PlexTest` only, every one noted `PLACEHOLDER — replace from the
-  sheet`; the first real push replaces them. `PlexProd` left empty.
+- **All three deployed and verified in BOTH datasets**, by querying each view
+  directly rather than trusting job exit codes. `PlexTest`: Bottling **3,000 of
+  5,000 (60%)**, Pre-Weigh **429 of 1,000 (43%)**, September revenue $65 against
+  a $200,000 placeholder, and **0 unmatched scope names** on either the rep or
+  work-centre-group join — the exact-string-match trap is not currently biting.
+  `PlexProd`: all three exist and return 0 rows, correct on both counts since it
+  has neither actuals nor goals yet.
+- 4 placeholder rows seeded in `PlexTest` only, every one noted `PLACEHOLDER —
+  replace from the sheet`; the first real Apps Script push replaces them.
+  `PlexProd.scorecard_goals` left empty.
 
 ### Found — the scope join is an exact string match, and Plex disagrees with the tile names
 - **Plex's work centre group is `Encapsulating`; the scorecard tile says

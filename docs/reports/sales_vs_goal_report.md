@@ -1,6 +1,6 @@
 # Vox Scorecard | Sales vs Goal by Rep
 
-> **Status:** 🛠 Built 2026-09-04, verified against seeded goals · **Category:** Sales · **Runs:** rides the Sales Orders pipeline
+> **Status:** ✅ Deployed and verified 2026-09-04 in both datasets — PlexTest: $0 actual vs $150,000 placeholder goal, 0 unmatched rep names · **Category:** Sales · **Runs:** rides the Sales Orders pipeline
 
 ## What this tells you
 

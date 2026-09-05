@@ -92,9 +92,9 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Vox Scorecard \| Pipeline Value (Plex half only) | Sales | ✅ Deployed and verified 2026-09-04 — $900,975 across 15 quotes · Monday half unresolved | [pipeline_plex_value_report.md](pipeline_plex_value_report.md) |
 | Vox Scorecard \| Production by Work Center Group & Month | Production | ✅ Deployed and verified 2026-09-04 — 3,429 units, 2 groups | [production_monthly_by_workcenter_group_report.md](production_monthly_by_workcenter_group_report.md) |
 | Vox Scorecard \| Goals Table (`scorecard_goals`) | Reference data | ✅ Table created 2026-09-04 in both datasets — fed from a Google Sheet, **not** the ETL | [scorecard_goals.md](scorecard_goals.md) |
-| Vox Scorecard \| Revenue vs Goal | Sales | 🛠 Built 2026-09-04, verified against seeded goals, not yet deployed | [revenue_vs_goal_report.md](revenue_vs_goal_report.md) |
-| Vox Scorecard \| Sales vs Goal by Rep | Sales | 🛠 Built 2026-09-04, verified against seeded goals, not yet deployed | [sales_vs_goal_report.md](sales_vs_goal_report.md) |
-| Vox Scorecard \| Production vs Goal | Production | 🛠 Built 2026-09-04, verified (Bottling 60%, Pre-Weigh 43%), not yet deployed | [production_vs_goal_report.md](production_vs_goal_report.md) |
+| Vox Scorecard \| Revenue vs Goal | Sales | ✅ Deployed and verified 2026-09-04 (both datasets) | [revenue_vs_goal_report.md](revenue_vs_goal_report.md) |
+| Vox Scorecard \| Sales vs Goal by Rep | Sales | ✅ Deployed and verified 2026-09-04 (both datasets) | [sales_vs_goal_report.md](sales_vs_goal_report.md) |
+| Vox Scorecard \| Production vs Goal | Production | ✅ Deployed and verified 2026-09-04 — 3,429 of 6,000 units (both datasets) | [production_vs_goal_report.md](production_vs_goal_report.md) |
 | Vox Scorecard \| NC Cost by Category | Quality | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely empty upstream) | [quality_cost_by_category_report.md](quality_cost_by_category_report.md) |
 | Vox Scorecard \| FPY by Area & Month | Quality | ✅ Deployed and verified 2026-09-01 — real data (100% FPY, Bottling & Pre-Weigh) | [quality_fpy_by_area_month_report.md](quality_fpy_by_area_month_report.md) |
 | Vox Scorecard \| Open Caps (Encapsulation) | Production | ✅ Deployed and verified 2026-09-01 — real data (2 jobs, 4.64M pending) | [mfg_job_open_caps_report.md](mfg_job_open_caps_report.md) |

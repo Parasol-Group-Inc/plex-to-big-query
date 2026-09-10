@@ -72,10 +72,26 @@ concepts live under `Part_v_{ViewName}`, not `Warehouse_v_{ViewName}`.
 
 ### Cycle Count / Physical Inventory
 
+> **⚠ RESOLVED 2026-09-09 — these two do NOT exist, but cycle counting DOES.**
+> `Warehouse_v_Cycle_Count` and `Warehouse_v_Cycle_Count_Line` both return
+> *"Base table … not found"* from the ODBC driver — they are confirmed absent,
+> not merely unverified. **Cycle counting lives under the Part module
+> instead**: `Part_v_Cycle_Inventory` (with `Location`, `Accuracy`,
+> `Accounted_For`, `Moved`, `Unaccounted_For`, `Cycle_Inventory_Date`,
+> `Cycle_Inventory_By`, `Accuracy_Quantity`), plus `Part_v_Cycle_Count_Type`
+> and `Part_v_Cycle_Frequency` (which carries `Accuracy_Threshold`), and
+> `Part_v_Container.Cycle_Inventory_Status` on every container.
+>
+> This is the **same Part-not-Warehouse pattern** that already caught us on
+> on-hand inventory, where `Warehouse_v_Part_Quantity` was the intuitive
+> guess and `Part_v_Container` was the real carrier. When a warehouse-shaped
+> concept comes back missing on this tenant, look under Part before
+> concluding Plex can't do it.
+
 | View | Status | Description |
 |---|---|---|
-| `Cycle_Count` | ❓ | Cycle count header |
-| `Cycle_Count_Line` | ❓ | Cycle count line items (expected vs. counted qty) |
+| `Cycle_Count` | ❌ | **Confirmed absent** — use `Part_v_Cycle_Inventory` |
+| `Cycle_Count_Line` | ❌ | **Confirmed absent** — use `Part_v_Cycle_Inventory` |
 | `Physical_Inventory` | ❓ | Full physical inventory event |
 | `Physical_Inventory_Line` | ❓ | Physical inventory count lines |
 

@@ -20,6 +20,8 @@ A simple sum of the already-deployed `inventory_valuation_summary_report`'s per-
 ## Flags and open questions
 
 - **One total only — not split by WIP/Finished Goods/Raw Material.** `Cost_Sub_Type_Key` (the column that would distinguish those categories) has no confirmed label lookup anywhere in this repo. Fine if the Flow funnel's "Inventory Val" phase just needs one grand total; not fine if it needs to be broken into categories — that's a separate, currently-blocked question.
+- **⚠ `VoxScorecardsLive.Product_Cost` looks like the answer to any missing-cost problem here. It is not.** Tested 2026-09-09 as a valuation source: 199 rows of `part` + `cost_ea`, which join to **5 of 6,221** Plex parts and **none** of the `33` parts. Its `part` values are bare stems (`12335`) against Plex's full part numbers (`12335-01VOXNU-1`), it contains duplicate rows, and even stem-matching fails almost everywhere. **Before anyone builds on it, ask what its `part` column keys to** — it may be a NetSuite-era list for a different catalogue. Recorded here because it is the obvious thing to reach for the moment a report needs a cost and Plex's own cost tables are empty.
+
 ## More detail
 
 [`score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md`](../../score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md) and [`docs/reports/inventory_valuation_summary_report.md`](inventory_valuation_summary_report.md).

@@ -81,7 +81,27 @@ hand-created and outside Terraform.
 
 `PlexTest` holds **68 real goal rows** — 8 reps x 7 months of sales goals loaded straight from Vox's existing `VoxScorecardsLive.sales_goals` table, plus 12 company-wide monthly figures lifted out of the hardcoded SQL in `vw_sales_mtd_vs_goal`. Both were loaded **by query, not retyped**, so there is no transcription risk. The 4 placeholder rows seeded 2026-09-04 were deleted once the real ones landed.
 
-**Revenue and production goals are still empty, deliberately.** No real source exists for either — both live in Google Sheets nobody has exported. Entering the scorecard's rounded display values would have made every "% to Goal" subtly wrong forever with nothing recording where the numbers came from. Confirmed 2026-09-09 that revenue goals *do* exist and can be front-loaded, while production goals *"usually don't"* exist at all.
+**Revenue goals were loaded 2026-09-09 — as overrides, and under a stated
+assumption.** All 12 monthly figures now exist as `metric = 'revenue'` rows in
+**`scorecard_goals_app`**, not here. Two things about that worth knowing:
+
+- **Why the app table and not this one:** this table is replaced
+  `WRITE_TRUNCATE` on every spreadsheet push, so anything hand-loaded here
+  disappears the moment somebody saves the sheet. The app table is
+  append-only, which is exactly what an override is for.
+- **⚠ The assumption:** they are copied from the **company-wide sales goal**,
+  because that is the only company-wide monthly target that exists anywhere in
+  BigQuery (it was hardcoded as a 12-row `UNION ALL` inside
+  `VoxScorecardsLive.vw_sales_mtd_vs_goal`, which measures it against
+  `vw_sales.amount` by `date_approved` — i.e. **ordered**, not shipped).
+  Revenue and Sales are deliberately different metrics in this pipeline, so
+  **using the same target for both is a business assumption, not something the
+  data proves.** Jennilyn said revenue goals "exist and we could frontload"
+  them and no separate revenue target exists, so these are almost certainly
+  what she meant. Every row carries a `note` saying exactly this, and
+  retracting them is one tombstone away.
+
+**Production goals are still empty, deliberately.** No real source exists for either — both live in Google Sheets nobody has exported. Entering the scorecard's rounded display values would have made every "% to Goal" subtly wrong forever with nothing recording where the numbers came from. Confirmed 2026-09-09 that revenue goals *do* exist and can be front-loaded, while production goals *"usually don't"* exist at all.
 
 `PlexProd` is empty.
 

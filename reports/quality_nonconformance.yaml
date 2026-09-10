@@ -86,6 +86,43 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-09-09 — DISPOSITION VALUE LISTS, to answer "where are
+  # destructions logged?"
+  #
+  # Jennilyn's open question from the 2026-09-09 call: "destructions is like a
+  # disposition, but I'm not sure where we would find that... I actually need
+  # to ask because I'm not sure where they note that they destroyed
+  # something."
+  #
+  # Quality_v_Problem already carries Initial_Disposition and
+  # Final_Disposition as INLINE TEXT (no _Key suffix — the confirmed
+  # convention in this repo for a text value rather than a lookup key), plus a
+  # note field for each, and quality_nonconformance_report already surfaces
+  # final_disposition. What was missing is the list of values Vox can actually
+  # choose, which is what these two lookups hold — one row per permitted
+  # string. Extracting them enumerates the options instead of guessing at
+  # them, and tells us directly whether "destroyed"/"scrap" is one.
+  #
+  # Quality_v_Disposition_Type is a SEPARATE, KEYED concept (Disposition_Type_Key
+  # + Disposition_Type) that does not join to Quality_v_Problem's text
+  # columns. Extracted alongside them because it is the other place a
+  # destruction concept could plausibly live, and one cheap lookup now avoids
+  # a second round trip if the text lists come back without it.
+  - plex_view: Quality_v_Final_Disposition
+    bq_table: raw_Quality_v_Final_Disposition
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Initial_Disposition
+    bq_table: raw_Quality_v_Initial_Disposition
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Disposition_Type
+    bq_table: raw_Quality_v_Disposition_Type
+    filter: ""
+    date_col: ""
+
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
 #
@@ -114,3 +151,16 @@ bq_view:
   - name: quality_cost_by_category_report
     display_name: "Vox Scorecard | NC Cost by Category"
     sql_file: gs://voxdatalake-report-configs/sql/quality_cost_by_category_view.sql
+
+  # ── Added 2026-09-09 — the Destruction $ / Rework $ grain.
+  # Grouped by what was DONE with the material (final disposition) rather than
+  # by problem category, because that is where destructions actually live:
+  # Vox's disposition list has no "Destroy" value, it has `Scrap`. Read the
+  # SQL header before touching this — it documents that finding, the fact that
+  # "Rework" also exists as a container status (which is the source Jennilyn
+  # named for the Rework tile), and why VoxScorecardsLive.Product_Cost is NOT
+  # usable as a cost source.
+  # Thin alias over quality_nonconformance_report — must stay listed after it.
+  - name: quality_disposition_cost_report
+    display_name: "Vox Scorecard | NC Cost by Disposition (Destruction/Rework)"
+    sql_file: gs://voxdatalake-report-configs/sql/quality_disposition_cost_view.sql

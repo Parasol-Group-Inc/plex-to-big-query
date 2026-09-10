@@ -4957,6 +4957,13 @@ resource "google_storage_bucket_object" "inventory_out_of_stock_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "quality_disposition_cost_view_sql" {
+  name         = "sql/quality_disposition_cost_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/quality_disposition_cost_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "quality_cost_by_category_view_sql" {
   name         = "sql/quality_cost_by_category_view.sql"
   bucket       = google_storage_bucket.report_configs.name

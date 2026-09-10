@@ -14,6 +14,99 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-09 (last) — three open questions closed from data
+
+None of these needed a meeting. Each was answered by querying something.
+
+### Answered — where destructions are logged. Plex calls it `Scrap`.
+- Jennilyn's open question: *"destructions is like a disposition, but I'm not
+  sure where we would find that... I actually need to ask because I'm not sure
+  where they note that they destroyed something."*
+- Extracted **`Quality_v_Final_Disposition`**, **`Quality_v_Initial_Disposition`**
+  and **`Quality_v_Disposition_Type`** and read the value lists in full:
+
+  | List | Values |
+  |---|---|
+  | `Final_Disposition` | *(blank)* · Re-introduce · Return · Rework · **Scrap** · Use as is |
+  | `Initial_Disposition` | *(blank)* · Hold · Return · Rework · Scrap · Sort & Rework · Sort & Scrap · Use as is |
+
+- **There is no "Destroy" value. Plex calls destruction `Scrap`** — which is
+  why searching for a destruction field found nothing. Destroyed material is a
+  nonconformance record whose **final** disposition is `Scrap`.
+  `Quality_v_Disposition_Type` came back with **0 rows**, so the other
+  candidate home for the concept is eliminated rather than left open.
+- **New `quality_disposition_cost_report`** groups nonconformance cost and
+  quantity by what was *done* with the material rather than by problem
+  category. Destruction $ is now a filter (`disposition_class = 'Destruction'`).
+  0 rows today because the quality tables are empty — but the value lists are
+  real, which is what made this answerable now.
+- **⚠ Rework deliberately NOT settled.** It exists both as a disposition here
+  and as a container inventory status, and Jennilyn named the **container**
+  one: *"rework should have the inventory status of rework."* Those are
+  different populations that will not agree. This report exposes the
+  disposition view; the container-status version is not built, because it
+  needs a per-container cost. Documented rather than silently picked.
+- The dollar figure is Plex's own `Quality_v_Problem.Cost`, so it needs no
+  external cost table — but it may be patchy, so **`records_missing_cost`**
+  ships beside it rather than letting a half-populated total read as a small
+  number.
+
+### Answered — revenue goals existed all along, as the company-wide sales goal
+- **All 12 monthly revenue goals loaded**, and `v2_revenue_vs_goal_report` now
+  returns a real goal and variance (Sept: **$65 actual against $5,040,000**)
+  while the untouched original still returns `NULL` — the migration seam
+  working exactly as designed.
+- **Loaded into `scorecard_goals_app`, not `scorecard_goals`.** The latter is
+  replaced `WRITE_TRUNCATE` on every spreadsheet push, so a hand-loaded row
+  there would vanish the next time somebody saved the sheet. This is what the
+  append-only override layer is for.
+- **⚠ It rests on a stated assumption.** The figures are copied from the
+  **company-wide sales goal**, the only company-wide monthly target that
+  exists anywhere in BigQuery — it was hardcoded as a 12-row `UNION ALL`
+  inside `VoxScorecardsLive.vw_sales_mtd_vs_goal`, which measures it against
+  `vw_sales.amount` by `date_approved`, i.e. **ordered, not shipped.** Revenue
+  and Sales are deliberately different metrics here, so using one target for
+  both is a business call, not an equivalence the data proves. Every loaded
+  row carries a `note` saying so, and retracting them is one tombstone away.
+- Confirmed there is **no revenue-goal or production-goal table** anywhere in
+  `VoxScorecardsLive` (all 39 tables and views listed), which matches
+  Jennilyn's *"revenue goals exist and we could frontload... the production
+  ones usually don't."*
+
+### Answered — cycle counting is under Part, not Warehouse
+- `reports-list/warehouse.md` and `catalog/plex_warehouse_views_catalog.md`
+  had `Warehouse_v_Cycle_Count` / `_Line` marked ❓ estimated-only. They are
+  now **confirmed absent** — the ODBC driver returns "Base table … not found".
+- But cycle counting is alive under the **Part** module:
+  **`Part_v_Cycle_Inventory`** (`Location`, `Accuracy`, `Accounted_For`,
+  `Moved`, `Unaccounted_For`, `Cycle_Inventory_Date`, `Cycle_Inventory_By`,
+  `Accuracy_Quantity`), plus `Part_v_Cycle_Count_Type`,
+  `Part_v_Cycle_Frequency` (`Accuracy_Threshold`) and
+  `Part_v_Container.Cycle_Inventory_Status`.
+- **The same Part-not-Warehouse trap as on-hand inventory**, where
+  `Warehouse_v_Part_Quantity` was the intuitive guess and `Part_v_Container`
+  was the real carrier. Now in `docs/CHEATSHEET.md` as a general rule: when a
+  warehouse-shaped concept comes back missing, look under Part before
+  concluding Plex can't do it.
+- Cycle Count moves from 🔍 *candidate* to 🎯 *buildable, awaiting a scope
+  decision*. Nothing is extracted yet and row counts are unknown.
+
+### Fixed — a cost source that looks right and is not
+- **`VoxScorecardsLive.Product_Cost` is not usable**, and it is the obvious
+  thing to reach for whenever a report needs a part cost and Plex's cost
+  tables are empty. Tested: 199 rows of `part` + `cost_ea` joining to **5 of
+  6,221** Plex parts and **none** of the `33` parts. Its `part` values are
+  bare stems (`12335`) against Plex's full numbers (`12335-01VOXNU-1`), and it
+  contains duplicate rows. Even stem-matching fails almost everywhere.
+- Recorded in `docs/CHEATSHEET.md` and on
+  `inventory_valuation_total_report.md`, because this nearly went the other
+  way: it was about to be reported as unblocking deviation value and Rework $,
+  and only the join test caught it. **Ask what its `part` column keys to
+  before building on it.**
+- Consequence: **deviation value and container-based Rework $ are still
+  blocked** on a cost source, but the question is now specific rather than
+  open-ended.
+
 ## 2026-09-09 (later still) — two goal sources, side by side
 
 Goals can now be edited in a **web app** instead of a spreadsheet, without

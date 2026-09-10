@@ -824,6 +824,49 @@ or ship partials."*
 actually goes out, so "Total in Shipping" falls back to the customer
 base-tier price list. That's an estimate, not an invoiced figure.
 
+### Quality dispositions — and where destructions live
+
+Confirmed live 2026-09-09 by extracting the value lists. `Quality_v_Problem`
+carries `Initial_Disposition` and `Final_Disposition` as **inline text** (no
+`_Key` suffix = a text value, the confirmed convention here), each with a note
+field.
+
+| List | Permitted values |
+|---|---|
+| `Final_Disposition` | *(blank)* · Re-introduce · Return · Rework · **Scrap** · Use as is |
+| `Initial_Disposition` | *(blank)* · Hold · Return · Rework · Scrap · Sort & Rework · Sort & Scrap · Use as is |
+
+**There is no "Destroy" value — Plex calls destruction `Scrap`.** That is why
+searching for a destruction field comes up empty. `Quality_v_Disposition_Type`
+is a separate keyed lookup and is **empty** on this tenant, so it is not the
+answer either.
+
+⚠ **Rework exists twice**: as a disposition above AND as a
+`Part_v_Container.Container_Status`. Jennilyn named the **container status**
+for the Rework $ tile. They are different populations and will not agree.
+
+### ⚠ `VoxScorecardsLive.Product_Cost` is not a usable cost source
+
+It is the obvious thing to grab whenever a report needs a part cost and Plex's
+cost tables are empty. Tested 2026-09-09: 199 rows of `part` + `cost_ea`,
+joining to **5 of 6,221** Plex parts and **none** of the `33` parts. Its
+`part` values are bare stems (`12335`) against Plex's full numbers
+(`12335-01VOXNU-1`), and it has duplicate rows. **Ask what it keys to before
+building on it.**
+
+### Cycle counting is under Part, not Warehouse
+
+`Warehouse_v_Cycle_Count` / `_Line` are **confirmed absent** ("Base table not
+found"). The real data is `Part_v_Cycle_Inventory` (`Location`, `Accuracy`,
+`Accounted_For`, `Moved`, `Unaccounted_For`, `Cycle_Inventory_Date`,
+`Cycle_Inventory_By`), plus `Part_v_Cycle_Count_Type`, `Part_v_Cycle_Frequency`
+(`Accuracy_Threshold`) and `Part_v_Container.Cycle_Inventory_Status`.
+
+**Same trap as on-hand inventory**, where `Warehouse_v_Part_Quantity` was the
+intuitive guess and `Part_v_Container` was the real carrier. When a
+warehouse-shaped concept comes back missing, look under Part before concluding
+Plex can't do it.
+
 ### Out-of-stock rule (Vox's own definition)
 
 All four conditions required:

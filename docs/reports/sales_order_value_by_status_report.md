@@ -1,6 +1,6 @@
 # Vox Scorecard | WIP Order Value
 
-> **Status:** ✅ Rebuilt and verified 2026-09-01 (corrected definition) — 32 real WIP lines across 15 orders, $875,475 total · **Category:** Sales · **Runs:** rides the Sales Orders pipeline
+> **Status:** ✅ Definition settled and verified 2026-09-09 — Pending Fulfillment + Hold only; $17,950 in `PlexTest` · **Category:** Sales · **Runs:** rides the Sales Orders pipeline
 
 ## What this tells you
 
@@ -19,12 +19,11 @@ Rebuilt the same day it was first written. The original version flagged a line a
 
 ## Flags and open questions
 
-- **⚠ The definition is genuinely ambiguous, and both readings are now available as a filter (added 2026-09-04).** Jennilyn described WIP two different ways in the same conversation, and they do not produce the same number:
-  - **Broad** — *"if it's not a quote, if it's not cancelled or whatever, and if that order line isn't shipped, then it's WIP."*
-  - **Strict** — *"it's basically anything that is pending fulfillment really, any order lines that are pending fulfillment."*
+- **✅ The ambiguity is settled (2026-09-09), and the old number was badly wrong.** Jennilyn had described WIP two incompatible ways on Sep 1; neither was quite it. Her ruling: *"really, it should just be pending fulfillment. I guess hold as well would be WIP because it was sold but it hasn't shipped yet. So it just be those two statuses"*, and *"we don't want to count pending sales approval because that's not considered an order yet."* So WIP is **Pending Fulfillment + Hold**, unshipped balance only.
 
-  The broad reading additionally sweeps in orders still sitting in **Pending Sales Approval** and **Deposit Review**. This report implements the broad reading (every row qualifies) and adds an **`is_pending_fulfillment`** column so the strict number is one filter away — nobody has to rebuild anything once she picks, and the gap between the two figures is measurable today.
-- **⚠ Some of these dollars are also counted in Total Pipeline.** The new **`also_counts_in_pipeline`** column flags rows in Pending Sales Approval, which [`pipeline_plex_value_report`](pipeline_plex_value_report.md) counts separately. Under the broad reading the same money appears in both tiles. Surfaced rather than quietly netted out, because which tile should own it is a business call, not a SQL decision.
+  The previous "broad" filter was *not a quote, not cancelled*, which under Vox's status set also included **Pending Sales Approval, Deposit Review and Closed**. Correcting it dropped WIP from **$43,723 to $17,950** — the old figure was inflated about 2.4x. If you have screenshots of this tile from before 9 Sep, they overstate it.
+- **✅ The Total Pipeline double-count is gone, not merely flagged.** Quote and Pending Sales Approval can no longer appear here at all, so no dollar can sit in both tiles. `also_counts_in_pipeline` is kept as a hardcoded `FALSE` purely so anything selecting it by name doesn't break; **`is_on_hold`** replaces it as a real flag.
+- **Partial shipments are netted off.** Per *"if partials have shipped, we only want the WIP as the value of all of the order lines that haven't shipped yet"*, a release contributes only its unshipped balance.
 - **Scope narrowed.** This view now covers WIP only. The original version's "ready to ship" concept moved to the new [`shipping_pending_revenue_report`](shipping_pending_revenue_report.md) — Jennilyn described that as a distinct, Shipping-module-sourced metric, not the same thing as WIP.
 - **Live-verified with real data**: 32 real WIP lines, 15 distinct orders, $875,475 total — a much richer, more real result than the Job_Status-based version ever produced. 2 of the 32 lines have no price match (customer/part combination not found in the price list) and are excluded from the total.
 - **`Sales_v_PO_Status.Is_Quote`/`Cancelled_Status` use `1 = true`**, not the `-1 = true` convention used elsewhere in this pipeline — confirmed by checking the real status rows before writing this.

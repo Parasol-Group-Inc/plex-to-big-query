@@ -1,0 +1,431 @@
+Emilio / Jennilyn
+
+Sep 9, 2026
+Emilio Dominguez Jennilyn Tockstein
+
+Inventory tracking discussions led into data automation strategies and quality report reviews.
+
+Inventory and Sales Data Logic
+Jennilyn proposed utilizing the job allocations report to accurately compare required quantities against inventory amounts.
+Define out-of-stock items as parts labeled "33" with negative available inventory, calculated as inventory minus required quantities.
+Exclude pending sales approval and deposit review statuses from demand calculations; include only pending fulfillment and hold statuses in work-in-progress.
+Limit work-in-progress values to the balance of order lines not yet partially shipped.
+
+Goal Tracking and Database Interface
+Transition from manual Google Sheets to a BigQuery-linked web interface using Google App Script to mitigate data entry errors.
+Implement an interface allowing users to manually update individual sales representative goals and team production targets.
+Continue tracking both individual rep goals and total company goals, accepting discrepancies between the two.
+Note that revenue goals are currently loaded for future months, while production goals require manual input.
+
+Quality Report Data Scope
+Exclude rework, lab analysis samples, defective items, and expired inventory from standard quality reports.
+Identify rework using the "rework" inventory status; calculate deviation value based on affected pieces per part number.
+
+Technical Deployment and Integration
+Acknowledge that Google App Script deployments require manual version updates to reflect code changes.
+Note that the application deployment process may result in updated URLs for the web interface.
+
+Next steps
+[Jennilyn Tockstein] Test Stock: Validate the out of stock function for parts labeled 33 by adding inventory data.
+[Emilio Dominguez] Send Artifact: Forward the updated file containing new data sources and questions to the recipient.
+[Emilio Dominguez] Develop Interface: Create a web application for updating production and sales targets in the database.
+[Jennilyn Tockstein] Clarify Destructions: Investigate where destruction records are located within the system to ensure they are captured correctly.
+[Emilio Dominguez] Research Integration: Explore whether Google Sites can connect directly to the database for centralized management.
+
+
+
+Want to see more? View the full notes
+Tip: You can always access your full notes from the left sidebar.
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+
+
+Sep 9, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+Summary
+Inventory tracking discussions led into data automation strategies and quality report reviews.
+
+Inventory and Job Allocations
+Job allocations proved superior to summary reports for tracking inventory parts.
+
+Automating Data Input
+Custom web apps built with Google App Script will update BigQuery tables.
+
+Sales Order Statuses
+Deposit reviews and pending approvals are excluded from demand calculations until fulfillment.
+
+
+Decisions
+Needs Further Discussion
+Determining deviation and destruction values Deviation values are proposed to be calculated using the number of affected pieces and part numbers, while destruction data sources require further confirmation.
+
+Aligned
+Using job allocations for inventory tracking Job allocations will be used to track required ingredient inventory amounts for parts 33.
+Excluding unapproved orders from demand Deposit reviews and pending sales approvals are excluded from demand calculations until they reach pending fulfillment.
+Defining work-in-process order statuses WIP calculations will include pending fulfillment and hold statuses for unshipped order lines.
+Excluding shipped rework and lab samples Rework and lab analysis samples that have shipped are excluded from current counts.
+
+
+Next steps
+[Jennilyn Tockstein] Test Stock: Validate the out of stock function for parts labeled 33 by adding inventory data.
+[Emilio Dominguez] Send Artifact: Forward the updated file containing new data sources and questions to the recipient.
+[Emilio Dominguez] Develop Interface: Create a web application for updating production and sales targets in the database.
+[Jennilyn Tockstein] Clarify Destructions: Investigate where destruction records are located within the system to ensure they are captured correctly.
+[Emilio Dominguez] Research Integration: Explore whether Google Sites can connect directly to the database for centralized management.
+
+
+Details
+Inventory and Job Allocations Report Logic: Emilio Dominguez and Jennilyn Tockstein discussed inventory tracking methods, agreeing that job allocations work better than inventory summary reports. Jennilyn Tockstein explained that available inventory is calculated by subtracting required quantities (sold amounts) from the inventory quantity on hand. If the resulting number is negative for a "three three" part and meets the minimum stock level, it is classified as out of stock (00:02:33). Emilio Dominguez noted that tracking "three three" parts is currently done by scanning the part name, and Jennilyn Tockstein confirmed they will keep this reliable method rather than using a drop-down part type menu that could break the process (00:04:11).
+
+Automating Data Input with Google App Script and BigQuery: Emilio Dominguez and Jennilyn Tockstein discussed tracking metrics like days without incidents and sales goals, noting that relying on standard Google Sheets causes them to break frequently (00:07:19). Jennilyn Tockstein presented a custom solution built with Google App Script and HTML that functions as a web app allowing users to input data directly into BigQuery tables (00:09:17). Jennilyn Tockstein noted that while BigQuery tables for sales goals and representatives already exist, they currently lack a user interface, requiring manual updates (00:11:45). Emilio Dominguez agreed to take over building these interfaces using App Script. They also discussed a discrepancy where the companywide September goal of 5,040,000 did not match the sum of the eight representatives' goals totaling 4,000,000, and Jennilyn Tockstein clarified that both the team goal and individual goals will be maintained separately (00:13:19).
+
+Review of Artifact Questions Regarding Plex Sales Order Statuses: Jennilyn Tockstein and Emilio Dominguez reviewed specific artifact questions, addressing sales order statuses in Plex. Jennilyn Tockstein clarified that deposit reviews and pending sales approvals are not counted as demand or sold until they reach pending fulfillment. Jennilyn Tockstein noted that sales order statuses have been reduced to include only quote, pending sales approval, deposit review, pending fulfillment, sold, hold, closed, and cancelled. For work-in-progress calculations, Jennilyn Tockstein specified that only unshipped items in pending fulfillment or hold statuses should be counted, excluding any order lines that have already shipped partially (00:17:20) (00:20:23).
+
+Review of Quality Reports, Rework, and Deviations: Reviewing container statuses, Jennilyn Tockstein stated that rework, lab analysis, defective, and expired statuses should be excluded from current calculations since reworked containers return to regular inventory (00:21:54). Regarding quality report tiles, Jennilyn Tockstein explained that rework values use the rework inventory status, deviations are calculated using the affected part number and number of pieces affected over specific dates, and destructions require further investigation to determine how they are logged (00:24:22).
+
+App Script Deployment and Testing Timeline: Jennilyn Tockstein and Emilio Dominguez discussed technical details regarding Google App Script web app deployments, noting that code updates require creating a new version and deploying it, which can sometimes change the URL (00:30:33). Emilio Dominguez mentioned plans to research using Google Sites as a bundled alternative that connects to BigQuery (00:32:07). Regarding the testing schedule, Jennilyn Tockstein noted that data is entered on weekdays, and they agreed to test the updated scorecard data flow following their upcoming Friday meeting and subsequent data entries (00:33:37).
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+
+
+Sep 9, 2026
+Emilio / Jennilyn - Transcript
+00:00:00
+
+Emilio Dominguez: good? Everything good. Thank you. Um trying to make some progress. So I saw the reply from remember on the well she also asked a question right but she pointed out the report that we were seeing I think the inventory summary and then she asked something
+Jennilyn Tockstein: Yeah. in her report. Let's see.
+Emilio Dominguez: Thank you.
+Jennilyn Tockstein: I don't I don't think that that will meet our needs. I kind of think that the job allocations might work better. Um,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: so this one
+Emilio Dominguez: Javishation.
+Jennilyn Tockstein: you can see how much is required and the inventory amount. So the required is the um amount sold by part and then we have the inventory. So we would do the ingredients that are a three that have less have a negative or whose sum of job required is more than the inventory. There we go. That would be how we could see it.
+Emilio Dominguez: Mhm. Right on. It will be only on the parts uh 33, right?
+
+
+00:02:33
+
+Emilio Dominguez: Double three still.
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: Okay. So that means that the the second line will take place there with how much is required. The inventory says zero there but it's
+Jennilyn Tockstein: That's because I didn't add any fake inventory today.
+Emilio Dominguez: Yeah. Mhm.
+Jennilyn Tockstein: But it should show it.
+Emilio Dominguez: But you will place
+Jennilyn Tockstein: So we could test that again tomorrow.
+Emilio Dominguez: like maybe you know 1 million and then that will be like the the amount to then check what you said about required versus
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: how much is available and then how much could be the negative. Oh,
+Jennilyn Tockstein: Yeah. So, inventory would be um quantity on hand. Required is going to be our sold and inventory minus required should be the quantity available. And if that number is negative and it's a three and then if we bring it over from the parts database if that threepart number has a minimum stock level then it is considered out of stock.
+Emilio Dominguez: Right on. Yeah.
+
+
+00:04:11
+
+Emilio Dominguez: About the ingredient that three three that's going to be kept on the on the character. Uh because the parts just have that they don't have a type, right? They just still the the process will be still scan the characters into the either part name here it shows the ingredient I haven't seen that but I have seen like the part name uh so but that's because it it is it is a process right now like just to track the name and get the 33 and then say okay those are but in the future that's going to be kept. It's not going to be kind of like a a part type um drop down that you will just choose and
+Jennilyn Tockstein: You could also pick um where the part type is semifinished good but the Art group is not semi finished. Good. Those well no.
+Emilio Dominguez: Yeah, I think it would be like the name. But if they kept the if the name is kept is not a problem just that it's some at some point then you decide like okay let's add the drop down or add the part type then it's going to break right because for now it's just scanning the the name
+
+
+00:05:45
+
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: okay is 33 let's get that into into the out of stock uh function.
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: Um.
+Jennilyn Tockstein: the 33 is the most reliable way.
+Emilio Dominguez: Right on. Nice. And it's like I said, like it's going to be kept.
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: It's not for seen to be added at some point on a drop down and changed at all. Right.
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: So that's for um that's for the latest uh on on those news. She also well I think she We're finish it. Good. You can look at this other. Okay. I'm going to send you the the artifact because it has been updated with some of the latest. I haven't started like adding the data sources data sources to the to the scorecard. Um let me just send you this. There are some questions that they have been updated. You may have answered the the previous ones or not it but they are quite new. Five of them are new and the the other ones uh went away with some of the you know review in the data.
+
+
+00:07:19
+
+Emilio Dominguez: So you can have a look at the seven of them that they are currently on that artifact. Let me know you have permissions to see. Yeah, everyone. So as we have discuss discussed also in the previous meeting like um for the goals and things like the days without problems um spreadsheet so that's agreed on having a spreadsheet that will fitquery the Only thing is I don't quite recollect if I I am going to be the one to do that work the spreadsheet or if you
+Jennilyn Tockstein: for what one? Sorry, you cut out.
+Emilio Dominguez: uh for the yeah for the problem uh incidents like days without incidents that that's manual like manual input into the a spreadsheet Right.
+Jennilyn Tockstein: Yeah, making the tables. um into Big Query.
+Emilio Dominguez: Mhm. So, but should you like should we keep like a spreadsheet for that and just like even the one of the existent spreadsheets could be used and S. uh apply an app app script to throw the data or will you prefer to have a different spreadsheet to be created with the goals and manual things that are going to be placed there
+
+
+00:09:17
+
+Jennilyn Tockstein: I mean, give me a sec.
+Emilio Dominguez: if the spreadsheets aren't going away. Uh well, we can kind of like keep those and keep the pipeline extracting those
+Jennilyn Tockstein: Ideally, I want to do something like this. Um, where it's just like a little script and this writes to a table in Big Query for the sales KPIs.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I was thinking I would make one like this for like record an incident, right?
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: And then you it would write into Big Query and then the same thing with like the
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: goals like update production goals and you can say end cap goal for you know you'd pick the month and the goal amount and same with the reps and their sales goals. You pick the sales rep and the goal amount. I just haven't had time. Um, I don't want to do it in a sheet because people tend to break the Google Sheets all the
+Emilio Dominguez: What is that? Yeah. Yeah.
+Jennilyn Tockstein: time.
+Emilio Dominguez: Yeah, definitely.
+
+
+00:10:42
+
+Jennilyn Tockstein: Um, I don't know if you have time. If not,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: we could do a sheet.
+Emilio Dominguez: What's that that you're showing that's from Google or is that something like that builder like that form? Where did you build that?
+Jennilyn Tockstein: We can't see the URL. Um, it's a Google app app script.
+Emilio Dominguez: Nice.
+Jennilyn Tockstein: So, uh, this is how I do web development. It's all in Google Appcripts. Uh,
+Emilio Dominguez: But that's great.
+Jennilyn Tockstein: but it's just a little Google Appcript with a little HTML piece,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: but then this um,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: writes to BigQuery table.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: So, there's the BigQuery tables for the sales KPIs.
+Emilio Dominguez: Ah,
+Jennilyn Tockstein: So, every day they fill this form out and submit it.
+Emilio Dominguez: nice.
+Jennilyn Tockstein: Um, and then it just writes straight into Big Query and it's way less messy than the sheets they were using before. I was thinking I want to do the same thing with the goals where
+
+
+00:11:45
+
+Emilio Dominguez: Yep. Mhm.
+Jennilyn Tockstein: we just make it really easy for them to just fill out this little form with drop- down options. It'll update the database. if they want to update the goal five times, they can.
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: They choose the time period, what goal they're updating, etc.
+Emilio Dominguez: right on.
+Jennilyn Tockstein: Um and then right now um me right now in the big query we've got um we've got the tables for some of these. I just don't have a interface for them. So
+Emilio Dominguez: But are they on the data sets or
+Jennilyn Tockstein: yeah. So right now like the reps So this is the table that the the one I just showed you. it writes to this.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Um, for the sales goals, it's in here, but there's no interface to write to it. So, when we want to make changes, I actually just have to come in here and change them,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: which is kind of annoying,
+Emilio Dominguez: Sure.
+
+
+00:13:19
+
+Jennilyn Tockstein: but it's less annoying than fish fixing their Google Sheets.
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: Um,
+Emilio Dominguez: definitely.
+Jennilyn Tockstein: but it would be nice to have a little interface. So, like Tyler's goals for October and November need to get updated. Um, so it'd be nice to have an interface for them to be able to update it and have it update BigQuery. Um, instead of using a sheet.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: So, if that's something you want to do, that's awesome.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: But otherwise,
+Emilio Dominguez: Yeah. Yeah. No worries. I I I can jump into that. Um the code also verify that because uh since they exist already. So we have eight uh representatives representatives and then it seems like the sum the sum of them like the companywide September goal is 5 million 40 40,000 and then for the representatives it's 4 million. So it's kind of deviated kind of deviated at some point but I think it's it's like what you were saying like it could be um because you are ma manually uh getting that input ready.
+
+
+00:14:41
+
+Emilio Dominguez: So it could be that Yeah.
+Jennilyn Tockstein: All right. Yeah. Are you saying if you sum their goals,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: it doesn't equal 5 million? I I used to have it so that they had to divvy out the goal between the reps. and and we just took that away because
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: they want to have goals that don't that don't add up, I guess.
+Emilio Dominguez: Yeah, definitely.
+Jennilyn Tockstein: So,
+Emilio Dominguez: Um, yeah, it was just a flag on that because maybe on the what you know
+Jennilyn Tockstein: yeah. Yeah.
+Emilio Dominguez: what what goal was the one to be taken into account, right? If their representatives or the they the one from the company, right? But yeah,
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: um
+Jennilyn Tockstein: we we'll have both. So, we'll have the total month goal like for the team and then we'll have their individual goals.
+Emilio Dominguez: Mhm. Right on.
+Jennilyn Tockstein: And so they we want to be able to pull out their individual ones um where they are compared to their goals individually.
+
+
+00:15:56
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And then even if their individual goals don't add up to this goal, we're just going to sum everything for the team.
+Emilio Dominguez: Sure. Yeah. Right now it's just like 500,000 like deviated on that. Uh well yeah the the code scan that and that's the this question number three on the artifact that surely um could be uh either either way either way like getting that um noted from the from them like okay it's dev it has deviated but that's that Um so yeah um noted on that appcript interface. So and having more control over the input of that and maybe the the appcript verifying something like I don't know when they put the goals like they input the goals is that like every end of month or something like or is like
+Jennilyn Tockstein: I have their they like made them at the beginning of the year and then every now and then they change them and so I think initially they added
+Emilio Dominguez: Okay. Okay.
+Jennilyn Tockstein: up but um as we've had turnover now They don't add up
+
+
+00:17:20
+
+Emilio Dominguez: Yeah, definitely.
+Jennilyn Tockstein: anymore.
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: So
+Emilio Dominguez: I was more uh thinking like if the script could also verify like okay um at the end of every input for every rep like okay for now the sum of all representatives is this just so they can know that the script is getting that uh and if it's not a matter like okay so we we know we know that it's going to be a drift in a way or oh okay so let's even right but yeah um right on so let's um just on the on the questions
+Jennilyn Tockstein: Um, on question two, it's no. So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: um, I did change it in Plex because I saw that it was showing demand
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: for deposit review and pending sales approval. Um, we don't count those as demand until they're pending fulfillment.
+Emilio Dominguez: Okay. Makes sense. Yeah. Then number three, yeah, the things that we were discussing. Number four,
+Jennilyn Tockstein: Overwhelmed.
+Emilio Dominguez: uh sales goals are loaded, revenue and productions goals aren't.
+
+
+00:19:05
+
+Emilio Dominguez: Um, and this is going to be maybe worked upon the getting that interface and getting some of that revenue and production and
+Jennilyn Tockstein: Yeah, by loaded you're meaning we already have the upcoming months but we don't for the
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: others. Yeah,
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: they they revenue goals exist and we could frontload. Um the production ones usually don't.
+Emilio Dominguez: Um,
+Jennilyn Tockstein: And yeah, the interface for all of them would be great so that when they do change goals, they can do it without either ruining a Google sheet or having to have me
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: do it in BigQuery. Okay.
+Emilio Dominguez: Correct. Yeah, definitely. Yeah. And appcript is great because it's native, so you can just talk to bequery and throw the data right away. Right on. So number five, work in progress. everything un shipped or only pending fulfillment.
+Jennilyn Tockstein: Everything un shipped.
+Emilio Dominguez: So,
+Jennilyn Tockstein: that is not a quote pending sales approval or deposit review.
+Emilio Dominguez: I
+
+
+00:20:23
+
+Jennilyn Tockstein: So everything that's open um so so we don't want to count pending sales approval because that's not considered an order yet. Um, and if obviously if it's canceled or closed, it wouldn't go in there. We did limit our statuses, so there are less statuses now for sales orders
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: because there was way too many. and I was like,"Guys, we can't do this." Um, and now the only sales order statuses are quote, pending sales approval, deposit review, all of those, it's not considered sold yet. Then pending fulfillment, sold, hold, closed, cancelled. So really, it should just be pending fulfillment. I guess hold as well would be whip because it was sold but it hasn't shipped yet.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So it just be those two statuses.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: Um but if partials have shipped, we only want the whip is the value of all of the line or the order lines that haven't shipped yet. So if some of the order lines have shipped, we don't want to include them in our whip total.
+
+
+00:21:54
+
+Emilio Dominguez: Nice. Okay. Uh question number six is to container statuses were never ruled on. Um so that maybe is related to that. Uh but Plex as the previous uh some verification was having this rework and lab analysis sample like shipped but they are not counted today.
+Jennilyn Tockstein: I wouldn't include any of those
+Emilio Dominguez: Okay. Because
+Jennilyn Tockstein: rework lab analysis. Um once the container is reworked, it won't be in a rework status anymore. And at that point, it will be um it'll be inventory. Uh we also don't want to include defective or expired. Oh, it's already excluding defective and expired. Yeah,
+Emilio Dominguez: Yeah, just those ones were like not in the scope.
+Jennilyn Tockstein: not sure.
+Emilio Dominguez: Uh but yeah and
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: talking also about that same rework status like on the seventh question which category value means rework deviation and destruction
+Jennilyn Tockstein: Yeah. Um,
+Emilio Dominguez: or that's going to be kept also like um some variable variable or
+Jennilyn Tockstein: Are these for the quality reports?
+
+
+00:24:22
+
+Emilio Dominguez: Correct. On the title for reworks, deviation, destruction and re destruction dollar amount. Rework dollar amount.
+Jennilyn Tockstein: So rework should have the inventory status of rework. work.
+Emilio Dominguez: Okay. Because right now it's like a big a big set of uh fields when you click on the tile on on reworks. What's up?
+Jennilyn Tockstein: Um, with deviations and stuff. I need them to test this more. Um, once we have deviations in here,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: it's going to be the I think the pieces affected is the number and the part number. And that's how we could get the, you know, the value of the part times that many pieces.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: would be that deviation value.
+Emilio Dominguez: Okay. Let me check.
+Jennilyn Tockstein: And I think that they Okay, there's No. blank.
+Emilio Dominguez: The deviation is can be assoc associated to jobs to problems to parts to even to status to work center. And yeah, that one landed.
+Jennilyn Tockstein: So it's this part this many pieces.
+
+
+00:27:53
+
+Jennilyn Tockstein: this.
+Emilio Dominguez: Is this effective? All right.
+Jennilyn Tockstein: Um, and we'd be looking at the effective date in any sort of date fields as far as like is this a month-to-ate deviation, a yeartoate deviation? Um, for the destructions, I'm actually not totally sure. instructions is like a disposition, but I'm not sure
+Emilio Dominguez: Yeah, there are some disposition types.
+Jennilyn Tockstein: I'm not sure where we where we would find that. Like I would think it's like here like we'd say we destroyed it.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: I actually need to ask because I'm not sure where they note that they destroyed
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: something. It's a good question.
+Emilio Dominguez: Right on. Okay. So, I think that's pretty much for the What was pending? Okay. So if I um I get to start building the things with appscript appscript. Um, do you need to create that like first like as as as a document or something then then admit or the I do it the other way around like I I create them and then I add you so you can have them to what's it because on the spreadsheets like before like those were come into your inbox right and then a trip would be injected into those but I don't know the process in which the form that you show showed me before like if it's sharable if you can just okay make this person and yeah
+
+
+00:30:33
+
+Jennilyn Tockstein: my the app script is what you're asking for sales form.
+Emilio Dominguez: yeah because I don't know if you need like to create just a boiler plate like you know placeholder app script and then okay add me there like as a owner admin or I don't know if um what permission They include there.
+Jennilyn Tockstein: Um, yeah, I just added you to the app script. Um, so it just has the code and the HTML files in it.
+Emilio Dominguez: Okay. Oh,
+Jennilyn Tockstein: Um,
+Emilio Dominguez: nice.
+Jennilyn Tockstein: have you used these to publish little web apps before?
+Emilio Dominguez: No, not really. I just uh used but Google sites like what some time ago but I didn't know about about those because they they look quite good.
+Jennilyn Tockstein: They um the only annoying thing is the deployments. Well, it's annoying to me. Um, if you when you make one, if you make any changes to the code, even if you save it and run it, it won't update it unless you come in here and and um make a new version and deploy it.
+
+
+00:32:07
+
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: And sometimes that changes the URL. Just a heads up. It was really annoying. I didn't know. So, like the first time I made revisions, I didn't understand why people weren't seeing my revisions until I learned
+Emilio Dominguez: Sure. Yeah. Thank you.
+Jennilyn Tockstein: that.
+Emilio Dominguez: Thank you for that. And but when you need the representatives or whoever that inputs data, you also like share just a link that is quite easy to to get to or
+Jennilyn Tockstein: Yep. Yeah. So when you deploy it, it gives you a URL and because it's not a public um web app,
+Emilio Dominguez: Yeah. Only the company.
+Jennilyn Tockstein: you can yeah, since it's only in the company, um they make it really easy. So, I just sent you the link, But like anyone I think in the parasol with a parasol group
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: inc um can come in here and
+Emilio Dominguez: Mhm. Nice.
+Jennilyn Tockstein: do it um
+Emilio Dominguez: Yeah, I will maybe research on that on Google sites because you can even have like a a subdomain with Google sites and since we have this Google Workspace thing, then maybe the the scripts can be bundled there, right?
+
+
+00:33:37
+
+Emilio Dominguez: So you don't have like a bunch of URLs there. But yeah, I would research on that to not because that deployment as you said like you you have a change and then you need to deploy again and and Google size is not like that. You just it's a builder right at least.
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: But yeah, I will research on whether it can connect to BigQuery because that's like the main the main focus right why using the appcript platform is needed but yeah um yeah I don't know if you have any questions for now
+Jennilyn Tockstein: Not at this moment. Um, do you still have questions that you need me to answer or
+Emilio Dominguez: Uh right now since I'm going to be building some of those manual things uh I made send some of them. Um and yeah data is also being input daily right.
+Jennilyn Tockstein: Yeah, we did it today. So, tomorrow's will look blank. I mean,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: there'll be some things in there, but but yeah, we're mostly doing it every weekday.
+
+
+00:34:57
+
+Jennilyn Tockstein: Hey,
+Emilio Dominguez: Yeah, because like when you are also when you have like three days maybe straight or even odd ones, but you can get also uh a better picture, right, of the data even with just three days or or four days because that's the month, right? That's the that's the one to be fed into the scorecard.
+Jennilyn Tockstein: thanks.
+Emilio Dominguez: So,
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: but that's the major problem, right? Since what I will need to do is just have a maybe a history or something because right now P is what we wiped out every day,
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: right? So you have pieces and things like that, but then the other day you have nothing, right? And then how do you test if uh just maybe for Oh yeah, maybe the data set can hold that data. Yeah, but yeah. So I will keep you updated with that and I think we have um a meeting for Friday.
+Jennilyn Tockstein: writing.
+Emilio Dominguez: Okay. So, let me get some of the things that you uh already answered into play.
+Jennilyn Tockstein: He
+Emilio Dominguez: Are so today you didn't put data or you did uh intolex.
+Jennilyn Tockstein: No,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: I mean there'll be a little bit in there um but not that
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: much.
+Emilio Dominguez: So yeah, maybe like Friday when things are looking better on every like not pending tiles. So maybe Monday you can place a little bit more of info around those even like the tricky parts of deviation or rewards like uh so so Tuesday can be tested or even Monday right Monday can be tested okay let's get the scorec card to be showing the data that we expect to to be showing right but So that's that. Thank you for answering the questions, Jennilyn.
+Jennilyn Tockstein: Yep.
+Emilio Dominguez: Let's meet again then.
+Jennilyn Tockstein: Um, I'll see you Friday.
+Emilio Dominguez: Right on. Thank you.
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: Have a good one.
+Jennilyn Tockstein: Me, too.
+Emilio Dominguez: Goodbye. Take care.
+
+
+Transcription ended after 00:37:51
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

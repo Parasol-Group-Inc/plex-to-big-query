@@ -35,29 +35,33 @@
 -- populate only once actually shipped), so there's no shipped price to
 -- reuse here.
 --
--- ⚠ AMBIGUITY IN THE REQUIREMENT — RESOLVED INTO DATA, NOT GUESSED
--- (documented 2026-09-04). Jennilyn defined WIP two different ways in the
--- same conversation, and they do not produce the same number:
---   BROAD  — "we just need to know if the order line, if it's not a quote,
---             if it's not cancelled or whatever, and if that order line
---             isn't shipped, then it's WIP."
---   STRICT — "it's basically anything that is pending fulfillment really,
---             any order lines that are pending fulfillment."
--- The broad reading additionally sweeps in orders still sitting in Pending
--- Sales Approval (2585) and Deposit Review (2587) — which the strict
--- reading excludes, and which Total Pipeline separately counts.
+-- ✅ THE BROAD/STRICT AMBIGUITY IS SETTLED (2026-09-09). It sat open from
+-- 2026-09-04, when Jennilyn had defined WIP two ways in one conversation —
+-- broad ("not a quote, not cancelled, not shipped") and strict ("anything
+-- that is pending fulfillment"). Neither was quite it. Her ruling:
 --
--- This view implements the BROAD reading (every row here qualifies) and
--- exposes `is_pending_fulfillment` so the STRICT number is one filter away.
--- `also_counts_in_pipeline` marks the rows that double-count against Total
--- Pipeline. Nobody has to rebuild anything once she picks — both figures
--- are already queryable, and the gap between them is measurable today.
+--   "really, it should just be pending fulfillment. I guess hold as well
+--    would be WIP because it was sold but it hasn't shipped yet. So it just
+--    be those two statuses."
+--   "we don't want to count pending sales approval because that's not
+--    considered an order yet."
+--   "if partials have shipped, we only want the WIP as the value of all of
+--    the order lines that haven't shipped yet."
 --
--- Status keys are CONFIRMED LIVE on this tenant, not inferred — the full
--- Vox workflow (catalog/plex_catalog_index.md, docs/CHEATSHEET.md) is
---   2585 Pending Sales Approval -> 2587 Deposit Review -> 2586 Released ->
---   2073 Pending Fulfillment -> 2638 Pending Payment Review ->
---   2639 Pending Shipment -> 2074 Closed / 2076 Cancelled
+-- So: PENDING FULFILLMENT + HOLD, unshipped balance only. This view now
+-- implements exactly that in its WHERE clause — SUM(wip_value) is the
+-- number, with no flag to filter on and no second reading. The overlap with
+-- Total Pipeline is eliminated rather than measured, since neither Quote nor
+-- Pending Sales Approval survives the filter.
+--
+-- ⚠ THE STATUS LIST CHANGED 2026-09-09 — Vox cut it from 10 to 7. Confirmed
+-- live that day: Quote (2653), Pending Sales Approval (2585), Deposit Review
+-- (2587), Pending Fulfillment (2073), Hold (2075), Closed (2074), Cancelled
+-- (2076). **Pending Payment Review (2638), Pending Shipment (2639) and Quote
+-- Lost (2655) are gone** ("we did limit our statuses, so there are less
+-- statuses now for sales orders because there was way too many"). Any view
+-- carrying a hardcoded list of those keys is now silently wrong — this is
+-- exactly why the filter below reads Plex's Include_In_MRP flag instead.
 --
 -- Not re-extracted — bq_view entry in reports/sales_orders.yaml. Uses the
 -- Sales_v_Shipper_Line_Release bridge table added 2026-09-01 for the
@@ -137,21 +141,21 @@ SELECT
   SAFE_CAST(po.PO_Status_Key AS INT64)                  AS status_key,
   sts.PO_Status                                         AS so_status,
 
-  -- ── The two readings of "WIP", side by side ────────────────────────────
-  -- See the AMBIGUITY block in this file's header. Every row in this view
-  -- satisfies the BROAD reading. This flag narrows it to the STRICT one, so
-  -- both numbers come out of one view instead of needing a rebuild once
-  -- Jennilyn picks:
-  --   broad  (as-is)                    -> SUM(wip_value)
-  --   strict (literally the status)     -> SUM(wip_value) WHERE is_pending_fulfillment
+  -- ── SETTLED 2026-09-09 — the broad/strict ambiguity is over ────────────
+  -- Jennilyn: "really, it should just be pending fulfillment. I guess hold as
+  -- well would be WIP because it was sold but it hasn't shipped yet. So it
+  -- just be those two statuses." Both flags stay as flags (not filters) so
+  -- the split is visible, but the WHERE clause below now admits only those
+  -- two statuses, so SUM(wip_value) is THE number — no filter needed and no
+  -- second reading to choose between.
   (SAFE_CAST(po.PO_Status_Key AS INT64) = 2073)         AS is_pending_fulfillment,
+  (SAFE_CAST(po.PO_Status_Key AS INT64) = 2075)         AS is_on_hold,
 
-  -- Rows where this is TRUE are ALSO counted in Total Pipeline, which per
-  -- the same meeting sums "the quotes and pending sales approval sales
-  -- orders." Under the broad reading those dollars appear in both tiles.
-  -- Surfaced so the overlap can be measured and netted out, rather than
-  -- quietly inflating two tiles at once.
-  (SAFE_CAST(po.PO_Status_Key AS INT64) = 2585)         AS also_counts_in_pipeline,
+  -- The Pipeline overlap is GONE, not merely measurable. Pipeline sums
+  -- quotes and pending-sales-approval orders; this view no longer contains
+  -- either, so no dollar can appear in both tiles. Kept as a hardcoded FALSE
+  -- rather than dropped, because downstream consumers select it by name.
+  FALSE                                                 AS also_counts_in_pipeline,
 
   cust.Name                                             AS customer_name,
 
@@ -159,10 +163,20 @@ SELECT
   p.Name                                                AS part_name,
 
   rel.Release_Key                                       AS release_key,
-  SAFE_CAST(rel.Quantity AS FLOAT64)                    AS qty_pending,
+  -- Net of anything already shipped, per the same conversation: "if partials
+  -- have shipped, we only want the WIP as the value of all of the order lines
+  -- that haven't shipped yet." The shipped-release exclusion below already
+  -- drops a release once a shipment exists against it; this handles the case
+  -- where Quantity_Shipped is set without a shipper link, so a part-shipped
+  -- release can never contribute more than its remaining balance.
+  GREATEST(SAFE_CAST(rel.Quantity AS FLOAT64)
+             - COALESCE(SAFE_CAST(rel.Quantity_Shipped AS FLOAT64), 0), 0)
+                                                         AS qty_pending,
   COALESCE(lp.Price, bp.Price)                          AS price_ea,
   (lp.Price IS NULL AND bp.Price IS NOT NULL)           AS price_from_fallback_list,
-  (COALESCE(lp.Price, bp.Price) * SAFE_CAST(rel.Quantity AS FLOAT64))
+  (COALESCE(lp.Price, bp.Price)
+     * GREATEST(SAFE_CAST(rel.Quantity AS FLOAT64)
+                  - COALESCE(SAFE_CAST(rel.Quantity_Shipped AS FLOAT64), 0), 0))
                                                          AS wip_value
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
@@ -191,6 +205,21 @@ LEFT JOIN base_price bp
 LEFT JOIN release_shipped rs
   ON SAFE_CAST(rel.Release_Key AS INT64) = rs.Release_Key
 
-WHERE COALESCE(SAFE_CAST(sts.Is_Quote AS INT64), 0) = 0
-  AND COALESCE(SAFE_CAST(sts.Cancelled_Status AS INT64), 0) = 0
+-- ── REWRITTEN 2026-09-09 — WIP is Pending Fulfillment + Hold, nothing else.
+-- The old filter was "not a quote, not cancelled", which under Vox's status
+-- set also swept in Pending Sales Approval, Deposit Review and Closed. All
+-- three are wrong: Jennilyn, 2026-09-09 — "we don't want to count pending
+-- sales approval because that's not considered an order yet."
+--
+-- The gate is Plex's own Include_In_MRP flag rather than a hardcoded status
+-- list, and that is now exact: she CHANGED the flags in Plex the same day
+-- ("I did change it in Plex because I saw that it was showing demand for
+-- deposit review and pending sales approval"). Confirmed live 2026-09-09 —
+-- Include_In_MRP is 1 on Pending Fulfillment and Hold, and 0 on Quote,
+-- Pending Sales Approval, Deposit Review, Closed and Cancelled. So the flag
+-- encodes her definition at the source, and this view tracks it if the
+-- statuses change again. Vox also cut the status list from 10 to 7 in the
+-- same pass (Pending Payment Review, Pending Shipment and Quote Lost are
+-- gone), which a hardcoded list would have silently outlived.
+WHERE COALESCE(SAFE_CAST(sts.Include_In_MRP AS INT64), 0) = 1
   AND rs.Release_Key IS NULL

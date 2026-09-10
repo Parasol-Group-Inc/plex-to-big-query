@@ -4910,6 +4910,46 @@ resource "google_storage_bucket_object" "shipping_daily_report_view_sql" {
   content_type = "text/plain"
 }
 
+# ── Goals migration seam (2026-09-09). The resolver reads the Apps Script
+# web app's table first and falls back to the spreadsheet ETL's table, and the
+# v2_* goal views are generated copies of the originals that read it. Both
+# generations ship side by side until the spreadsheet ETL is sunset; see
+# scripts/gen_v2_goal_views.py.
+resource "google_storage_bucket_object" "v2_scorecard_goals_resolved_view_sql" {
+  name         = "sql/v2_scorecard_goals_resolved_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/v2_scorecard_goals_resolved_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "v2_revenue_vs_goal_view_sql" {
+  name         = "sql/v2_revenue_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/v2_revenue_vs_goal_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "v2_sales_vs_goal_view_sql" {
+  name         = "sql/v2_sales_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/v2_sales_vs_goal_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "v2_production_vs_goal_view_sql" {
+  name         = "sql/v2_production_vs_goal_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/v2_production_vs_goal_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "inventory_available_to_sell_view_sql" {
+  name         = "sql/inventory_available_to_sell_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_available_to_sell_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "inventory_out_of_stock_view_sql" {
   name         = "sql/inventory_out_of_stock_view.sql"
   bucket       = google_storage_bucket.report_configs.name

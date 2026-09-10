@@ -48,6 +48,26 @@ test host and writes a CSV to `./output/`, no BigQuery write, no email.
 Safe, read-only, and the fastest way to confirm Docker/ODBC/credentials
 all still work.
 
+## Each pipeline has TWO config files, and test is not generated from prod
+
+`reports/<pipeline>.yaml` and `reports/test/<pipeline>.yaml` are **separate,
+hand-maintained files** — Terraform's `*_config_prod` points at the first and
+`*_config_test` at the second (`source = ".../reports/test/sales_orders.yaml"`).
+The test copy is the same extraction/view list with `report_name` suffixed
+`_test` and the comments stripped; nothing generates it.
+
+**So any change to an `extractions:` or `bq_view:` list must be made in both
+files.** Editing only the prod one and then running the *test* job looks like a
+successful deploy and is not: on 2026-09-09 a run picked up the old test config,
+logged `Report 'sales_orders_test' loaded: 22 extraction(s)` instead of 24,
+created none of the new raw tables, and **still exited 0**. The tell is that
+count line in the logs — check it against `grep -c 'plex_view:'` on the config
+you think you deployed:
+
+```bash
+grep -c 'plex_view:' reports/sales_orders.yaml reports/test/sales_orders.yaml
+```
+
 ## Verifying a report deploy actually worked
 
 **`gcloud run jobs execute ... --wait` exiting 0 does NOT mean the report's

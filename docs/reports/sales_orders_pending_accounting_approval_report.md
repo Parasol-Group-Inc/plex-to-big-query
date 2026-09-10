@@ -1,6 +1,6 @@
 # Orders Pending Approval by Accounting
 
-> **Status:** ✅ Built and deployed 2026-08-21 · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ⚠ Repointed 2026-09-09 after the status it targeted was deleted in Plex — returns 2 rows again, but the new status choice needs confirming · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
 
 ## What this tells you
 
@@ -19,8 +19,9 @@ Uses the same order/customer/rep/part/price data already extracted for the Sales
 
 ## Flags and open questions
 
-- **The status choice is a best-criteria guess, not NetSuite-confirmed.** "Pending Payment Review" is the only accounting-flavored stage in Plex's confirmed order-status workflow, and it sits in a plausible spot (after Released/Pending Fulfillment, before Pending Shipment) — but nobody has checked this against a real NetSuite screenshot of the "by Accounting" search. Flagged for data-scientist review before trusting this report's row counts.
-- **This was a 2026-08-21 decision to keep, not a new finding** — the same status choice was reconsidered and confirmed as "no better candidate exists" rather than replaced.
+- **⚠ This report was silently dead, and nothing would have revealed it.** It filtered the order status **Pending Payment Review**, and on 2026-09-09 Vox consolidated their sales-order statuses from 10 down to 7 — that status, along with Pending Shipment and Quote Lost, **no longer exists**. The report returned zero rows, which reads exactly like "no orders are pending accounting approval" rather than "this filter can never match anything ever again." A sweep of every report SQL file for the three deleted statuses found this as the only one affected.
+- **⚠ Repointed to Deposit Review — and this is the second guess, so please confirm it.** In the new 7-status list, Deposit Review is the only accounting-flavoured stage (a deposit is a money gate, sitting between Pending Sales Approval and Pending Fulfillment). It now returns **2 real rows**. But the original "Pending Payment Review" choice was *also* a reasonable-looking inference that was flagged for review and never confirmed — and it was wrong-by-deletion within three weeks. The **`status`** column is in the output so you can see which status produced each row rather than taking this doc's word for it.
+- **The filter now matches on the status name, not its numeric key.** A key that vanished is precisely what broke this report; a rename is easier to spot than a silent empty result.
 
 ## More detail
 

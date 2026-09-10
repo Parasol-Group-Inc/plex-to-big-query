@@ -10,6 +10,7 @@ Source, Function, Users, Link, Priority.
 | Inventory Risk Analysis - Item Stock Type | NetSuite | ✅ Deployed, decided 2026-08-21 | Same underlying view as the row above — both `Part_v_Part.Part_Type` and the real `part_product_type` classification (`Part_v_Part_Product_Type`, added 2026-08-19) are included per-part so it can be grouped/filtered by stock type from the same report. |
 | Open Purchase Orders Report V1 | NetSuite | ✅ Already built | Parity report `purchasing_open_orders_report` (#75) covers this concept |
 | **Approaching MSL** | Google Sheet | 🔍 Candidate — Google Sheet, critical priority, existing overlap | Described as providing "the daily average and current available inventory to the MFG Job Schedule and other sources." This may be the **current manual source** of the exact number `part_on_hand_inventory_report` (built from `Part_v_Container`) now automates — high-value to get real content for and compare directly. Priority: Critical (daily use) |
+| **Quantity Available / OOS source** | Asked directly by Jennilyn (email 2026-09-04) | ✅ Built and verified 2026-09-09 | *"We're wondering where to best see the Quantity Available of parts... Quantity on Hand − Quantity (Sold, Demand, Allocated, etc)."* Amber answered with Plex's **Inventory Summary** (VP screen) for on-hand and **Sales Order Line Inventory Check** for available-to-sell, the latter being one part at a time. Built as `inventory_available_to_sell_report` — the same calculation for every part at once, with demand from sales-order **releases** gated on Plex's own `Include_In_MRP` flag, plus BOM-exploded component demand ("Order Reqd"). `part_on_hand_inventory_report` was extended to full parity with the Inventory Summary screen's columns (adds Revision, Weight, Locations). Verified live: 71 parts, 30 carrying real demand, 508,807 units open. See `docs/reports/inventory_available_to_sell_report.md`. **Two definitions still need Jennilyn** — whether unapproved orders count as demand, and whether availability nets BOM demand; both readings are published as columns rather than chosen for her. |
 | MFG Job Schedule | Google Sheet | ✅ Already built | See `spreadsheets/mfg_job_schedule.md` |
 | Bottling Job Schedule | Google Sheet | 🔍 Mapped | See `spreadsheets/bottling_job_schedule.md` |
 | NEW COA Library | Google Sheet | 🔍 Candidate — Google Sheet, existing overlap | "Tracks the testing of raw materials, finished goods and extensions" — overlaps with `Quality_v_Checksheet`/`Sample_Plan`, already extracted for `mfg_job_schedule_report` |
@@ -42,7 +43,17 @@ inventory — is buildable natively: `Part_v_BOM`/`Part_v_Flat_BOM`/
 Plex-native answer "Approaching MSL" is manually approximating, and/or the
 lead for `docs/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption"
 row. See `catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values
-section for the full detail. Not yet built — needs a decision on scope
-before writing SQL (MSL/reorder-point threshold logic hasn't been located
-anywhere in the schema, so this covers the "requirements vs. available"
-half, not a full MSL alert).
+section for the full detail.
+
+**Update 2026-09-09 — the BOM-explosion half of that lead is now built.**
+`inventory_available_to_sell_report` does exactly the "requirements exploded
+through BOM, compared against on-hand inventory" calculation, using
+`Part_v_Flat_BOM` (now extracted) against `Part_v_Container`. The difference
+from the screenshot is the demand source: this explodes **sales-order**
+demand, not **scheduled-job** demand, because `Part_v_Job`/`Part_v_Job_Op`
+are still 0 rows on this tenant. When jobs carry real rows, adding
+"Job Reqd" to that view completes the Scheduled Job Requirements concept
+without new infrastructure. Reorder-point/MSL threshold logic is still
+unlocated in the schema — except that Jennilyn confirmed (Sep-4) **reorder
+point IS `Part_v_Part.Minimum_Inventory_Quantity`**, the same field, which
+means the threshold half may not need a new source at all.

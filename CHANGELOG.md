@@ -14,6 +14,323 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-09 (later still) — two goal sources, side by side
+
+Goals can now be edited in a **web app** instead of a spreadsheet, without
+cutting over: both sources run in parallel and the scorecard picks per goal.
+
+### Added — `scorecard_goals_app` and `v2_scorecard_goals_resolved`
+- **A second goal table**, `scorecard_goals_app`, created by hand in
+  `PlexTest` and `PlexProd`. Same columns as `scorecard_goals` plus
+  `is_deleted`. **Append-only**: every save inserts a row and the newest per
+  `(metric, period_month, scope)` wins, so two people editing the same goal
+  minutes apart cannot lose each other's write, and every edit stays as
+  history.
+- **`v2_scorecard_goals_resolved`** is the seam: **app first, sheet as
+  fallback.** A goal entered in the form wins; a goal absent there falls
+  through to the spreadsheet, so nothing goes blank mid-migration.
+- **Deleting is a tombstone, not a delete.** `is_deleted = TRUE` means "the
+  app has nothing to say about this key", which restores the *spreadsheet*
+  value rather than blanking the tile — the only sensible reading while both
+  sources are live.
+- Exposes **`goal_source`** (`app` / `sheet`) so it is always visible which
+  source fed a given goal.
+
+### Added — `v2_*_vs_goal` views, generated rather than copied
+- `v2_revenue_vs_goal_report`, `v2_sales_vs_goal_report` and
+  `v2_production_vs_goal_report` are **generated** by
+  `scripts/gen_v2_goal_views.py` from the three originals, with the single
+  goal-source `FROM` swapped to the resolver. Edit the original and re-run
+  the generator; never hand-edit them.
+- **The originals stay deployed and unchanged**, so Looker Studio migrates
+  **one tile at a time** rather than in a cutover. Verified: each v2 view
+  returns *exactly* what its original returns while the app table is empty
+  (sales 69 = 69, production 2 = 2, revenue 1 row) — so adopting them changes
+  nothing until someone uses the form.
+- The generator **refuses to run** if an original stops referencing the goal
+  table exactly once, rather than silently producing a wrong copy. It caught
+  the revenue view naming the table in a header comment on the first run.
+- `goal_source` is deliberately **not** surfaced on the v2 report views —
+  that keeps each generated file a minimal diff from its original. Query the
+  resolver directly to see provenance.
+- The resolver is listed in **both** the sales_orders and work_orders configs
+  on purpose: goal views live in both pipelines and each must be able to
+  create its own dependency without waiting on the other's run. The SQL is
+  identical, so whichever runs second replaces an identical view.
+
+### Added — `deploy/goals_web_app/`
+An Apps Script web app (`Code.gs` + `Index.html` + README), modelled on
+Jennilyn's existing sales-KPI form. *"I don't want to do it in a sheet
+because people tend to break the Google Sheets all the time."*
+
+- **Scope dropdowns are read from the reports, never typed.** `scope` is an
+  exact string join, so a typo produces a NULL goal that reads as 0% forever
+  with no error — the live example being Plex's `Encapsulating` against the
+  tile's "Encapsulation". Options come from `sales_mtd_summary_report` and
+  `production_monthly_by_workcenter_group_report`, which makes that class of
+  mistake impossible.
+- **Shows the running sum of rep goals against the company-wide target as you
+  type** — Emilio's ask on the call. The two are allowed to differ (turnover;
+  $5,040,000 team vs $4,690,000 across eight reps), so it reports the gap
+  rather than blocking on it.
+- Enforces the month being the **1st** (reports group by month, so a
+  mid-month goal would form its own bucket and never match), rejects negative
+  and non-numeric values, and stores company-wide as a blank scope to match
+  what the reports emit.
+- Writes via `tabledata.insertAll` rather than DML, because BigQuery limits
+  concurrent DML on a table and a shared form can hit it. The cost is a few
+  seconds before a saved row is queryable — documented, with a warning not to
+  save twice.
+- `skipInvalidRows: false` on purpose: schema drift should fail loudly rather
+  than quietly write a goal no report will match.
+- The README carries the trap that bit Jennilyn: **saving Apps Script code
+  does not update a live web app** — it needs a new version deployed, and the
+  URL can change.
+
+### Verified
+Precedence and fallback tested against the 68 real goal rows on `PlexTest`:
+an app row for a key the sheet already had flipped that key to `app` **with
+the row count unchanged at 68** (the override displaced its twin rather than
+duplicating it), and a tombstone for the same key fell back to the sheet's
+**60,000** exactly. Test rows removed; the app table is empty until the form
+is used.
+
+**Not yet in `PlexProd`** — the four views arrive there on tonight's
+scheduled production run. Not forced manually, since a prod run emails the
+team.
+
+### Sunset plan
+When the spreadsheet ETL goes: delete the three original views, drop the
+`v2_` prefix, delete the `sheet` branch from the resolver (it becomes a thin
+read of the app table), and delete the generator. No consumer of the `v2_`
+views has to change.
+
+## 2026-09-09 (later) — the Sep-9 meeting
+
+`meetings-reference/sep-9/`. Four open questions answered, and Jennilyn fixed
+one of them **in Plex** rather than in our SQL, which changed live numbers.
+
+### Changed — WIP is Pending Fulfillment + Hold. The broad/strict ambiguity is closed.
+- Open since 2026-09-04, when she had defined WIP two incompatible ways in one
+  conversation. Her ruling: *"really, it should just be pending fulfillment. I
+  guess hold as well would be WIP because it was sold but it hasn't shipped
+  yet. So it just be those two statuses"*, and *"we don't want to count
+  pending sales approval because that's not considered an order yet."*
+- The old filter was "not a quote, not cancelled", which under Vox's status set
+  also swept in **Pending Sales Approval, Deposit Review and Closed**.
+  **WIP fell from $43,723 to $17,950** once corrected — the old figure was
+  inflated by roughly 2.4x.
+- Also nets `Quantity_Shipped` off the release, per *"if partials have
+  shipped, we only want the WIP as the value of all of the order lines that
+  haven't shipped yet."*
+- **The Pipeline double-count is eliminated, not just measured.** Quote and
+  Pending Sales Approval can no longer appear in WIP at all, so
+  `also_counts_in_pipeline` is now a hardcoded FALSE (kept by name for
+  downstream consumers) and `is_on_hold` replaces it as a real flag.
+
+### Changed — demand now excludes unapproved orders, because Plex says so
+- *"I did change it in Plex because I saw that it was showing demand for
+  deposit review and pending sales approval. We don't count those as demand
+  until they're pending fulfillment."* Confirmed live the same day:
+  **`Include_In_MRP` is now 1 on exactly Pending Fulfillment and Hold**, and 0
+  on Quote, Pending Sales Approval, Deposit Review, Closed and Cancelled.
+- **This needed no code change**, because the demand gate was already Plex's
+  own flag rather than a hardcoded status list. Order demand in
+  `inventory_available_to_sell_report` dropped from **508,807 units to 5,000**
+  on its own. That design choice paid for itself within a day.
+- **The `_firm_` columns are deleted rather than kept.** Their definition
+  (`Hold = 0`) would now wrongly drop the `Hold` status she explicitly wants
+  counted, and a stale second reading is worse than none. Availability is down
+  from four columns to two — `available_vs_orders` and
+  `available_vs_total_demand` — the only remaining choice being whether
+  BOM-exploded demand counts, which for `33` parts it must.
+  `order_demand_from_held_orders_qty` keeps the Hold portion visible.
+
+### Fixed — a report had been silently dead, and nobody could have noticed
+- **Vox cut the sales-order status list from 10 to 7** in the same pass:
+  **Pending Payment Review (2638), Pending Shipment (2639) and Quote Lost
+  (2655) no longer exist.**
+- `sales_orders_pending_accounting_approval_view.sql` filtered
+  `PO_Status_Key = 2638`. It returned 0 rows and would have returned 0 rows
+  forever, reading as "no orders pending approval" rather than "this filter
+  can never match". A repo-wide sweep for the three dead keys found this as
+  the only view filtering on one (the other hits were comments).
+- Repointed to **Deposit Review**, matched on the status **name rather than
+  the key** — a vanished key is what broke it. **It now returns 2 real rows.**
+  This is the second inference about what "by Accounting" means, and the first
+  was already flagged unconfirmed, so it still needs Jennilyn; the `status`
+  column is in the output so a reader can see what produced each row.
+
+### Confirmed — decisions that needed no code change
+- **The `33` part rule stays name-based.** *"The 33 is the most reliable
+  way"* — she explicitly rejected switching to a part-type dropdown because it
+  would break the rule. Worth recording, since scanning a part number looks
+  like the fragile choice and isn't.
+- **Container statuses: exclude rework, lab analysis, defective and expired.**
+  *"Once the container is reworked, it won't be in a rework status anymore. And
+  at that point it will be inventory."* The current on-hand list (OK, Hold,
+  Inspection Required, Hold for Design Order) already does exactly this, so
+  the open question closes with no change — and the earlier suggestion to
+  *include* Rework as available supply was **rejected**.
+- **The goal discrepancy is accepted, not a bug to fix.** *"We'll have both.
+  So we'll have the total month goal like for the team and then we'll have
+  their individual goals... even if their individual goals don't add up to this
+  goal, we're just going to sum everything for the team."* The
+  $5,040,000-vs-$4,690,000 gap is by design, caused by rep turnover.
+- **Revenue goals exist and can be front-loaded; production goals usually
+  don't exist.**
+
+### Still open after this meeting
+- **Where destructions are logged.** *"I'm actually not totally sure...
+  I actually need to ask because I'm not sure where they note that they
+  destroyed something."* Assigned to Jennilyn.
+- **Deviation value** = pieces affected x part value, dated by effective
+  date — but *"I need them to test this more"* before building.
+- **Rework $ should come from the container `Rework` inventory status**, not
+  the quality nonconformance category. Not built: the quantity is reachable
+  today, the dollar value needs a cost source, and inventory valuation is
+  still empty.
+
+## 2026-09-09
+
+### Added — `inventory_available_to_sell_report`, and the real reason OOS was empty
+Jennilyn asked directly (email, 2026-09-04) where to see **Quantity
+Available**: *"Traditionally, we use Quantity on Hand − Quantity (Sold,
+Demand, Allocated, etc)."* Amber answered with two Plex screens, and the
+screenshots of them settled a question this repo had been guessing at for
+weeks.
+
+- **`Sales_v_Release_Allocation` was never going to work, and that is why
+  `inventory_out_of_stock_report` returned 0 rows for its entire life**
+  against a count of 5 on Jennilyn's own sheet. It has 0 rows in `PlexTest`
+  and `PlexProd` and always has. Allocation is a **picking/staging** concept
+  — which container is committed to which shipment — not demand. The docs
+  had been recording this as "genuinely empty upstream," which is true and
+  entirely beside the point.
+- **Demand lives on sales-order releases.** Plex's own "Sales Order Line
+  Inventory Check" screen splits it into **Orders** (the part is on an order
+  line), **Order Reqd** (a parent finished good is on order and this part is
+  a component) and **Job Reqd**. `Sales_v_Release` — already extracted —
+  carries `Quantity`, `Order_Quantity` and `Quantity_Shipped`. Note
+  `Sales_v_PO_Line` has **no quantity column at all**; the quantity is on the
+  release.
+- **Which statuses count as demand is now Plex's answer, not ours:**
+  `Sales_v_PO_Status.Include_In_MRP`. Read live across all 10 statuses — it
+  is 1 on Pending Sales Approval, Deposit Review, Pending Fulfillment,
+  Pending Payment Review, Pending Shipment and Hold, and 0 on Quote, Quote
+  Lost, Closed and Cancelled. So quotes and cancellations drop out for free,
+  and a status added later keeps tracking. It deliberately does **not** gate
+  on `Open_Status`: the `Hold` status carries `Open_Status = 0` but
+  `Include_In_MRP = 1`, because held goods are still owed to a customer.
+- **`Part_v_Flat_BOM` and `Part_v_BOM` extracted**, for BOM-exploded
+  component demand. This is not optional decoration: verified 2026-09-09
+  that **not one `33` part appears in the availability calculation without
+  it** — they have neither containers nor direct sales orders, so their
+  demand arrives entirely through the finished goods that consume them,
+  which is exactly the population the OOS tile is about. Flat_BOM is
+  pre-flattened (per-unit quantity already extended through intermediate
+  levels), so this is a multiply-and-sum, not a recursive CTE.
+- **Four availability columns published, not one.** `available_vs_orders`,
+  `available_vs_total_demand` and the two `_firm_` variants, matching the
+  four boxes in the screen's own "Available to Sell" panel — because which
+  one is "Quantity Available" is a business definition. Same for the
+  approval question: `PO_Status.Hold` separates orders that have cleared
+  approval/deposit from those that haven't, and **the gap is material** — on
+  `PlexTest`, part `93127-00MAXW1-1` carries 10,000 units of Pending Sales
+  Approval demand against 1,500 of Pending Fulfillment. Both are exposed and
+  flagged rather than silently resolved.
+- **"Job Reqd" is deliberately absent.** It needs `Part_v_Job`/`Part_v_Job_Op`,
+  0 rows on this tenant every time they have been checked; the column would
+  be a confidently-wrong zero. First thing to add when jobs carry real rows.
+- Verified live on `PlexTest`: **71 parts, 41 with inventory, 30 with real
+  open demand totalling 508,807 units** (454,800 of it firm).
+
+### Changed — `part_on_hand_inventory_report` matches Plex's Inventory Summary screen
+- Adds **`revision`, `on_hand_weight`, `container_locations`, `unit` and
+  `part_key`**, giving column-for-column parity with the VisionPlex
+  "Inventory Summary" screen Amber named as the place to see on-hand
+  (Part Number / Revision / Description / Containers / Quantity / Weight).
+  Weight is `Net_Weight`, **not** `Gross_Weight` (which includes the
+  container's own tare) nor `Part_Operation_Weight` (a per-operation
+  standard, not what is physically in the container).
+- **`part_key` exists so the container filter stops being copy-pasted.**
+  `inventory_available_to_sell_view` reads this report instead of
+  re-deriving on-hand for a third time — three copies of that filter is
+  precisely how the `Active = -1` bug survived in all three at once.
+
+### Changed — `inventory_out_of_stock_report` is now a filter, not a calculation
+- Rewritten to `SELECT` from `inventory_available_to_sell_report` with
+  Jennilyn's three conditions unchanged (`33%`, minimum quantity > 0,
+  availability negative, excluding Custom). It uses the widest availability
+  reading on purpose: for an out-of-stock **alert**, surfacing a part that a
+  soon-to-be-approved order will exhaust beats finding out afterwards. The
+  narrow figure ships beside it as `quantity_available_firm_only`.
+- **Still expected to return 0 rows until the BOM extraction has run** —
+  documented as such rather than presented as verified.
+
+### Fixed — docs that were confidently wrong
+- **`docs/CHEATSHEET.md`** — the out-of-stock rule said availability was
+  "on-hand − allocated". Corrected, with the release-based demand model, the
+  full `Include_In_MRP`/`Hold` status table, and the `Sales_v_PO_Line` has
+  no quantity column trap added.
+- **`docs/reports/part_on_hand_inventory_report.md`** — dropped two stale
+  flags: "not yet verified against real quantities" (it reconciles exactly
+  with Plex's Inventory Status Summary) and the open "Current QTY Available
+  is on-hand minus something we can't find" question, which is now answered
+  and has its own report.
+- **`reports-list/supply-chain.md`** — the 2026-08-21 "Scheduled Job
+  Requirements" lead (BOM explosion vs on-hand) is now half-built; recorded
+  what differs, namely that this explodes sales-order demand rather than
+  scheduled-job demand.
+
+### Verified after deploy (same day, real run)
+`terraform apply` + `plex-etl-sales-orders-test`, then every view queried
+directly:
+
+- **The Sep-4 price fix is finally verified.** `raw_Sales_v_Price` landed (4
+  rows) and the two tiles that had read **$0 across 35,201 units** now carry
+  real money: **WIP $43,723, Sales MTD $17,950.** That fix had been sitting
+  unverified since Sep-4 purely because the extraction had never run.
+- **BOM extraction works and was decisive.** 431 `Flat_BOM` rows, 137
+  `Part_v_BOM` rows, **635,362 units of BOM-exploded component demand across
+  11 parts.** Before it, no `33` part appeared in the availability view at
+  all; after it, `33127-01VOXNU-1` shows **305,000 units of demand and
+  −305,000 availability.**
+- **The flat-BOM quantity assumption checked out as far as this tenant
+  allows:** 81 (parent, component) pairs exist in both the flat and
+  single-level BOM and the quantities are **identical on all 81**, with
+  **max BOM_Level = 1**. The multi-level case remains unproven because no Vox
+  BOM is deeper than one level yet — noted in the SQL header rather than
+  claimed as verified.
+- **`inventory_out_of_stock_report` still returns 0, and now for a precise
+  reason that is not a bug:** both `33` parts on the tenant have
+  `Minimum_Inventory_Quantity = 0`, which the rule treats as "not assigned".
+  The part short by 305,000 units is therefore correctly excluded. **The
+  report cannot fire for anything until minimum inventory quantities are
+  entered in Plex** — data entry, not code. An earlier count of "7 parts, 5
+  with a minimum above zero" predates a `PlexTest` reset and cannot be
+  reconciled against current data.
+
+### Fixed — the test pipeline has its own config file, which the first deploy missed
+- `reports/test/sales_orders.yaml` is a **separate file** from
+  `reports/sales_orders.yaml` (Terraform's `sales_orders_config_test` points
+  at it), so the first apply + run loaded **22 extractions, not 24** and
+  silently produced no BOM tables at all while still exiting 0. Both files now
+  carry the two BOM extractions and the new `bq_view`, in the same order.
+  **Any change to a pipeline's extraction or view list has to be made in both
+  files** — the test config is not generated from the prod one.
+
+### Notes
+- **Finished goods have no on-hand stock at Vox**, confirmed in both the live
+  Plex screens and BigQuery — everything sits as components, packaging and
+  WIP, because Vox builds to order. So an FG part with an open order shows
+  negative availability, correctly. Worth knowing before anyone reports it
+  as a bug.
+- `Part_v_Flat_BOM` was created in both datasets with its real ODBC-declared
+  schema ahead of the first extraction, so the new view could be dry-run and
+  queried before deploy rather than "checked against a stub". The ETL
+  overwrites it on the next run.
+
 ## 2026-09-04 (later)
 
 ### Fixed — inventory reported 0 rows for weeks because two filters were inverted

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  :root{
+    --ink:#1b2126; --muted:#5d6b75; --line:#d8e0e5; --bg:#f4f7f8; --card:#fff;
+    --accent:#0d6e63; --accent-bg:#e2f1ee;
+    --warn:#8a5a10; --warn-bg:#fdf2dd;
+    --bad:#93331f; --bad-bg:#fae9e5;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 20px}
+  .sub code{background:#e7edf0;padding:1px 5px;border-radius:3px;font-size:12.5px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px;margin-bottom:16px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .row > div{flex:1;min-width:190px}
+  label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;
+        letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
+  select,input,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:5px;
+    font:inherit;background:#fff;color:var(--ink);
+  }
+  select:focus,input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  textarea{resize:vertical;min-height:52px}
+  .hint{font-size:12px;color:var(--muted);margin-top:5px}
+
+  .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
+  button{
+    font:inherit;font-weight:600;padding:10px 18px;border-radius:5px;
+    border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;
+  }
+  button.ghost{background:#fff;color:var(--bad);border-color:var(--bad)}
+  button:disabled{opacity:.5;cursor:default}
+
+  .msg{padding:11px 13px;border-radius:5px;font-size:14px;margin-bottom:14px;display:none}
+  .msg.ok{display:block;background:var(--accent-bg);color:#0a4a43;border:1px solid var(--accent)}
+  .msg.err{display:block;background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad)}
+
+  .sumbox{background:var(--warn-bg);border:1px solid var(--warn);border-radius:6px;
+          padding:12px 14px;font-size:13.5px;color:#4a3208;display:none}
+  .sumbox.show{display:block}
+  .sumbox .figs{display:flex;gap:22px;margin-top:7px;flex-wrap:wrap}
+  .sumbox .fig b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+  .sumbox .fig span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;opacity:.8}
+  .sumbox.match{background:var(--accent-bg);border-color:var(--accent);color:#0a4a43}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase}
+  .tag.app{background:var(--accent-bg);color:#0a4a43}
+  .tag.sheet{background:#e7edf0;color:var(--muted)}
+  .scroll{overflow-x:auto}
+  .empty{color:var(--muted);font-size:13.5px;padding:8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Vox Scorecard Goals</h1>
+  <p class="sub">
+    Writes straight to BigQuery — no spreadsheet involved. Editing a goal here
+    <b>overrides</b> the value coming from the goals spreadsheet; retracting one
+    puts the spreadsheet value back.
+    <br>Dataset: <code id="ds">loading…</code>
+  </p>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="metric">Goal type</label>
+        <select id="metric"></select>
+      </div>
+      <div>
+        <label for="month">Month</label>
+        <input type="month" id="month">
+        <div class="hint">Stored as the 1st of the month.</div>
+      </div>
+    </div>
+
+    <div class="row" id="scopeRow">
+      <div>
+        <label for="scope" id="scopeLabel">Scope</label>
+        <select id="scope"></select>
+        <div class="hint" id="scopeHint">
+          These come from the reports themselves, so the spelling always matches.
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="value">Goal <span id="unitLabel"></span></label>
+        <input type="number" id="value" step="any" min="0" placeholder="e.g. 5040000">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="note">Note (optional)</label>
+        <textarea id="note" placeholder="Why this changed, if it's worth knowing later"></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="save">Save goal</button>
+      <button id="del" class="ghost">Retract this goal</button>
+    </div>
+  </div>
+
+  <div id="sumbox" class="sumbox">
+    <div id="sumtext"></div>
+    <div class="figs">
+      <div class="fig"><b id="repTotal">–</b><span>Sum of rep goals</span></div>
+      <div class="fig"><b id="coTotal">–</b><span>Company-wide goal</span></div>
+      <div class="fig"><b id="gap">–</b><span>Difference</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label style="margin-bottom:10px">Goals on file</label>
+    <div class="scroll">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Type</th><th>Month</th><th>Scope</th>
+            <th class="num">Goal</th><th>Source</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div id="tblEmpty" class="empty" style="display:none">No goals on file yet.</div>
+  </div>
+
+</div>
+
+<script>
+var DATA = null;
+
+function el(id){ return document.getElementById(id); }
+
+function show(kind, text){
+  var m = el('msg');
+  m.className = 'msg ' + kind;
+  m.textContent = text;
+  if (kind === 'ok') { window.scrollTo(0, 0); }
+}
+
+function fmt(n, unit){
+  if (n == null || isNaN(n)) return '–';
+  var s = Number(n).toLocaleString(undefined, {maximumFractionDigits: 2});
+  return unit === 'USD' ? '$' + s : s;
+}
+
+function monthInputToDate(v){
+  // <input type="month"> gives YYYY-MM; goals are stored on the 1st.
+  return v ? v + '-01' : '';
+}
+function dateToMonthInput(d){ return d ? d.slice(0, 7) : ''; }
+
+function currentMetric(){ return el('metric').value; }
+function metricCfg(){ return DATA.metrics[currentMetric()]; }
+
+function renderScope(){
+  var cfg = metricCfg();
+  var row = el('scopeRow'), sel = el('scope');
+  el('unitLabel').textContent = cfg.unit === 'USD' ? '($)' : '(units)';
+
+  if (cfg.scopeMode === 'none'){
+    row.style.display = 'none';
+    sel.innerHTML = '';
+    updateSum();
+    return;
+  }
+  row.style.display = '';
+  el('scopeLabel').textContent = cfg.scopeLabel;
+
+  var opts = [];
+  if (currentMetric() === 'sales'){
+    opts = ['(company-wide)'].concat(DATA.salesReps.filter(function(r){
+      return r !== '(company-wide)';
+    }));
+  } else if (currentMetric() === 'production'){
+    opts = DATA.workcenterGroups.slice();
+  }
+
+  sel.innerHTML = '';
+  if (!opts.length){
+    var o = document.createElement('option');
+    o.value = ''; o.textContent = '(no options found — see note below)';
+    sel.appendChild(o);
+    el('scopeHint').textContent =
+      'Nothing came back from the report that supplies these. The goal can ' +
+      'still be saved once the report has rows.';
+  } else {
+    opts.forEach(function(v){
+      var o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      sel.appendChild(o);
+    });
+    el('scopeHint').textContent =
+      'These come from the reports themselves, so the spelling always matches.';
+  }
+  updateSum();
+}
+
+function renderTable(){
+  var tbody = el('tbody');
+  tbody.innerHTML = '';
+  var goals = DATA.goals || [];
+  el('tblEmpty').style.display = goals.length ? 'none' : '';
+
+  goals.forEach(function(g){
+    var tr = document.createElement('tr');
+    function td(text, cls){
+      var d = document.createElement('td');
+      if (cls) d.className = cls;
+      d.textContent = text;
+      return d;
+    }
+    tr.appendChild(td(DATA.metrics[g.metric] ? DATA.metrics[g.metric].label : g.metric));
+    tr.appendChild(td(g.period_month.slice(0, 7)));
+    tr.appendChild(td(g.scope || '(company-wide)'));
+    tr.appendChild(td(fmt(g.goal_value, g.unit), 'num'));
+
+    var src = document.createElement('td');
+    var tag = document.createElement('span');
+    tag.className = 'tag ' + (g.goal_source === 'app' ? 'app' : 'sheet');
+    tag.textContent = g.goal_source === 'app' ? 'this app' : 'spreadsheet';
+    src.appendChild(tag);
+    tr.appendChild(src);
+
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * The running total: sum of rep goals vs the company-wide target for the
+ * chosen month. The two are allowed to differ — this makes the drift visible
+ * while someone is typing, rather than leaving it to be found in a report.
+ */
+function updateSum(){
+  var box = el('sumbox');
+  if (currentMetric() !== 'sales' || !el('month').value){
+    box.className = 'sumbox';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(r){
+      var gap = r.repTotal - r.companyTotal;
+      el('repTotal').textContent = fmt(r.repTotal, 'USD');
+      el('coTotal').textContent = fmt(r.companyTotal, 'USD');
+      el('gap').textContent = (gap >= 0 ? '+' : '−') + fmt(Math.abs(gap), 'USD');
+      var matched = Math.abs(gap) < 0.005;
+      box.className = 'sumbox show' + (matched ? ' match' : '');
+      el('sumtext').textContent = matched
+        ? r.repCount + ' rep goals for this month add up to the company-wide target exactly.'
+        : r.repCount + ' rep goals for this month do not add up to the company-wide target. ' +
+          'That is allowed — both figures are kept, and the team number is the one summed for ' +
+          'the team tile. Shown so the gap is never a surprise.';
+    })
+    .withFailureHandler(function(e){
+      box.className = 'sumbox';
+      console.warn(e);
+    })
+    .getRepGoalSum(monthInputToDate(el('month').value));
+}
+
+function collect(){
+  return {
+    metric: currentMetric(),
+    period_month: monthInputToDate(el('month').value),
+    scope: metricCfg().scopeMode === 'none' ? '' : el('scope').value,
+    goal_value: el('value').value,
+    note: el('note').value
+  };
+}
+
+function busy(on){
+  el('save').disabled = on;
+  el('del').disabled = on;
+}
+
+function afterWrite(res){
+  show('ok', res.message);
+  el('note').value = '';
+  busy(true);
+  // Re-read so the table and the running total reflect the write. Rows land
+  // through the streaming buffer, so allow a moment before re-querying.
+  setTimeout(function(){
+    google.script.run.withSuccessHandler(function(d){
+      DATA = d; renderTable(); updateSum(); busy(false);
+    }).withFailureHandler(function(e){
+      show('err', String(e)); busy(false);
+    }).getFormData();
+  }, 2500);
+}
+
+function boot(d){
+  DATA = d;
+  el('ds').textContent = d.project + '.' + d.dataset;
+
+  var sel = el('metric');
+  Object.keys(d.metrics).forEach(function(k){
+    var o = document.createElement('option');
+    o.value = k; o.textContent = d.metrics[k].label;
+    sel.appendChild(o);
+  });
+
+  // Default to the current month, which is what someone is almost always here to edit.
+  var now = new Date();
+  el('month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+  renderScope();
+  renderTable();
+
+  if (d.goalsError) show('err', 'Could not read existing goals: ' + d.goalsError);
+
+  sel.addEventListener('change', renderScope);
+  el('month').addEventListener('change', updateSum);
+  el('scope').addEventListener('change', updateSum);
+
+  el('save').addEventListener('click', function(){
+    var f = collect();
+    if (!f.period_month) { show('err', 'Pick a month.'); return; }
+    if (f.goal_value === '') { show('err', 'Enter a goal value.'); return; }
+    busy(true);
+    google.script.run
+      .withSuccessHandler(afterWrite)
+      .withFailureHandler(function(e){ show('err', String(e)); busy(false); })
+      .saveGoal(f);
+  });
+
+  el('del').addEventListener('click', function(){
+    var f = collect();
+    if (!f.period_month) { show('err', 'Pick a month.'); return; }
+    var who = f.scope || 'company-wide';
+    if (!confirm('Retract the ' + DATA.metrics[f.metric].label + ' goal for ' +
+                 who + ', ' + f.period_month.slice(0, 7) + '?\n\n' +
+                 'If the goals spreadsheet still has a value for it, that value comes back.')) return;
+    busy(true);
+    google.script.run
+      .withSuccessHandler(afterWrite)
+      .withFailureHandler(function(e){ show('err', String(e)); busy(false); })
+      .deleteGoal(f);
+  });
+}
+
+google.script.run
+  .withSuccessHandler(boot)
+  .withFailureHandler(function(e){ show('err', 'Could not load: ' + String(e)); })
+  .getFormData();
+</script>
+</body>
+</html>

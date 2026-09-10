@@ -40,7 +40,22 @@ on_hand AS (
   SELECT
     SAFE_CAST(c.Part_Key AS INT64)      AS part_key,
     SUM(SAFE_CAST(c.Quantity AS FLOAT64)) AS on_hand_qty,
-    COUNT(*)                             AS container_count
+    COUNT(*)                             AS container_count,
+    -- Added 2026-09-09 for parity with Plex's own "Inventory Summary" (VP)
+    -- screen, which Amber named as the place to see on-hand: its columns are
+    -- Part Number / Revision / Description / Containers / Quantity / Weight.
+    -- Quantity and Containers were already here; Weight is Net_Weight (NOT
+    -- Gross_Weight, which includes the container's own Tare_Weight, nor
+    -- Part_Operation_Weight, which is a per-operation standard, not what is
+    -- physically in the container).
+    SUM(SAFE_CAST(c.Net_Weight AS FLOAT64)) AS on_hand_weight,
+    -- Location is per-container, so at part grain it can only be a set. The
+    -- screen offers a Building filter rather than a column; this keeps the
+    -- information without inventing a single "the" location for a part whose
+    -- containers are spread across several.
+    STRING_AGG(DISTINCT NULLIF(TRIM(CAST(c.Location AS STRING)), ''), ', '
+               ORDER BY NULLIF(TRIM(CAST(c.Location AS STRING)), ''))
+                                         AS container_locations
   FROM `{gcp_project}.{dataset}.raw_Part_v_Container` c
   -- ⚠ REWRITTEN 2026-09-04 — the previous filter matched ZERO rows.
   -- It read `c.Active = -1 AND cs.OK_Status = -1`. Confirmed live against
@@ -73,11 +88,21 @@ on_hand AS (
 
 SELECT
 
+  -- part_key exposed 2026-09-09 so downstream views can join on the key
+  -- instead of matching on part_no text. inventory_available_to_sell_view
+  -- reads this view rather than re-deriving the container filter for a THIRD
+  -- time — the copy-paste of that filter is exactly how the `= -1` bug
+  -- survived in three places at once until 2026-09-04.
+  oh.part_key                  AS part_key,
   p.Part_No                   AS part_no,
+  p.Revision                   AS revision,
   p.Name                      AS part_name,
   pt.Product_Type              AS part_product_type,
+  p.Unit                       AS unit,
   oh.on_hand_qty               AS on_hand_qty,
-  oh.container_count           AS container_count
+  oh.on_hand_weight            AS on_hand_weight,
+  oh.container_count           AS container_count,
+  oh.container_locations       AS container_locations
 
 FROM on_hand oh
 

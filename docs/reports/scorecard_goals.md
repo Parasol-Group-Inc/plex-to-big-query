@@ -1,6 +1,6 @@
 # Vox Scorecard | Goals Table
 
-> **Status:** ✅ Table created 2026-09-04 in `PlexTest` and `PlexProd` · **Category:** Reference data · **Fed by:** a Google Sheet, via Apps Script — *not* the ETL
+> **Status:** ✅ Created 2026-09-04 in `PlexTest` and `PlexProd`; joined by a second, app-fed table 2026-09-09 · **Category:** Reference data · **Fed by:** a Google Sheet via Apps Script — *not* the ETL
 
 ## What this is
 
@@ -43,6 +43,31 @@ One row per (metric, month, scope) rather than a wide table with a column per me
 
 A mismatch produces a NULL goal, not an error. All three views expose a flag (`goal_without_sales`, `goal_without_production`) so an unmatched goal row shows up rather than silently reading as 0%.
 
+## There are now TWO goal tables
+
+From 2026-09-09 a second table sits alongside this one:
+
+```
+voxdatalake.<dataset>.scorecard_goals       ← this page: the spreadsheet ETL
+voxdatalake.<dataset>.scorecard_goals_app   ← the Apps Script WEB APP
+```
+
+Reports do not read either one directly any more — they read
+[`v2_scorecard_goals_resolved`](v2_scorecard_goals_resolved.md), which
+**prefers the app table and falls back to this one** for any goal not entered
+in the form. Read that page for the precedence rules, the tombstone behaviour
+and the sunset plan.
+
+`scorecard_goals_app` shares this table's columns and adds one:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `is_deleted` | BOOL | `TRUE` retracts an override, so the goal falls back to the spreadsheet value rather than blanking the tile |
+
+It is **append-only** — the newest row per `(metric, period_month, scope)`
+wins — whereas this table is replaced wholesale on every push. Both are
+hand-created and outside Terraform.
+
 ## How the push works
 
 `deploy/goals_sheet_to_bigquery.gs`, run on a time-driven trigger from the spreadsheet.
@@ -54,7 +79,11 @@ A mismatch produces a NULL goal, not an error. All three views expose a flag (`g
 
 ## Current contents
 
-`PlexTest` holds **4 placeholder rows** seeded 2026-09-04 so the joins could be verified end to end. Every one has `note = 'PLACEHOLDER — replace from the sheet'`. The first real Apps Script push replaces them. `PlexProd` is empty.
+`PlexTest` holds **68 real goal rows** — 8 reps x 7 months of sales goals loaded straight from Vox's existing `VoxScorecardsLive.sales_goals` table, plus 12 company-wide monthly figures lifted out of the hardcoded SQL in `vw_sales_mtd_vs_goal`. Both were loaded **by query, not retyped**, so there is no transcription risk. The 4 placeholder rows seeded 2026-09-04 were deleted once the real ones landed.
+
+**Revenue and production goals are still empty, deliberately.** No real source exists for either — both live in Google Sheets nobody has exported. Entering the scorecard's rounded display values would have made every "% to Goal" subtly wrong forever with nothing recording where the numbers came from. Confirmed 2026-09-09 that revenue goals *do* exist and can be front-loaded, while production goals *"usually don't"* exist at all.
+
+`PlexProd` is empty.
 
 ## Rebuild DDL
 
@@ -68,5 +97,18 @@ CREATE TABLE IF NOT EXISTS `voxdatalake.PlexTest.scorecard_goals` (
   note         STRING,
   updated_by   STRING,
   updated_at   TIMESTAMP
+);
+
+-- The app-fed override table (2026-09-09). Same columns plus is_deleted.
+CREATE TABLE IF NOT EXISTS `voxdatalake.PlexTest.scorecard_goals_app` (
+  metric       STRING   NOT NULL,
+  period_month DATE     NOT NULL,
+  scope        STRING,
+  goal_value   FLOAT64  NOT NULL,
+  unit         STRING,
+  note         STRING,
+  updated_by   STRING,
+  updated_at   TIMESTAMP,
+  is_deleted   BOOL
 );
 ```

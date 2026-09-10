@@ -813,7 +813,7 @@ interchangeable.**
 |---|---|---|
 | **Revenue** | Units that physically went out the door — `Quantity × Price` on shipped shipment lines. **Shipping module, NOT Sales.** | `Sales_v_Shipper*` |
 | **Sales MTD** | Order lines whose order **first entered `2073` Pending Fulfillment** that month, dated by the status change (not the order date). Counts even if it later moved on. | `Sales_v_PO_Change` |
-| **WIP** | Order lines not shipped yet. ⚠ **Two readings given** — broad ("not a quote, not cancelled, not shipped") vs strict ("literally Pending Fulfillment"). No production/job status involved either way. | `Sales_v_PO` + shipper bridge |
+| **WIP** | **Pending Fulfillment + Hold only**, unshipped balance (settled 2026-09-09 — the earlier broad/strict ambiguity is closed; the broad reading had inflated it 2.4x by including the approval stages and Closed). No production/job status involved. | `Sales_v_PO` + shipper bridge |
 | **Total in Shipping** | Value of units **ready but not yet shipped** — only the ready quantity, never the order total. | `Sales_v_Shipper*` (open/pending) |
 
 Why Sales, not Shipping, is wrong for Revenue, in her words: *"the sales one
@@ -831,10 +831,77 @@ All four conditions required:
 1. `Part_v_Part.Part_No LIKE '33%'` — only 33-parts count; 1/2/5-parts have
    minimum stock levels too but are out of scope
 2. `Minimum_Inventory_Quantity > 0` — a literal `0` counts as **not assigned**
-3. quantity available (on-hand − allocated) `< 0`
+3. quantity available (on-hand − **demand**) `< 0` — see the next section.
+   ⚠ This read "on-hand − **allocated**" until 2026-09-09 and was wrong; that
+   is why the report returned 0 rows against a real count of 5.
 4. **exclude Custom parts** — `Part_v_Part_Product_Type.Product_Type` starting
    `Custom` (e.g. "Custom Formula Capsules"). *"Those are okay to be negative,
    because that's just showing us we're in the process of making this part."*
+
+### ⚠ Demand does NOT live in `Sales_v_Release_Allocation`
+
+`Sales_v_Release_Allocation` has **0 rows in `PlexTest` and `PlexProd` and
+always has.** Allocation is a *picking/staging* concept — which container is
+committed to which shipment — not demand. Anything built on it for
+availability will silently report zero forever.
+
+Demand lives on **sales order releases**, which is what Plex's own
+"Sales Order Line Inventory Check" screen uses. Plex splits it three ways and
+so does `inventory_available_to_sell_view.sql`:
+
+| Plex column | Meaning | Source here |
+|---|---|---|
+| **Orders** | the part is itself on a sales order line | `Sales_v_Release.Quantity` − `Quantity_Shipped`, via `PO_Line_Key` |
+| **Order Reqd** | a *parent* finished good is on order and this part is a component of it | order demand × `Part_v_Flat_BOM.Quantity` |
+| **Job Reqd** | an open job needs the part | ⚠ not built — `Part_v_Job*` is 0 rows on this tenant |
+
+**`Sales_v_PO_Line` has NO quantity column** — the quantity is on the release,
+not the line. Don't go looking for it there.
+
+### Which order statuses count as demand — `Include_In_MRP`
+
+Use `Sales_v_PO_Status.Include_In_MRP`, which is Plex's own flag, rather than a
+hand-written status list. That is not a stylistic preference — it is the reason
+this pipeline survived a same-day change to Vox's Plex configuration without a
+code edit.
+
+**⚠ The status list changed on 2026-09-09 — from 10 statuses to 7.** Jennilyn
+consolidated them (*"we did limit our statuses... there was way too many"*) and
+separately turned OFF MRP demand for the two approval stages (*"we don't count
+those as demand until they're pending fulfillment"*). Both landed in the same
+extract. Current state, confirmed live 2026-09-09 **after** her change:
+
+| Status | Key | `Include_In_MRP` | `Hold` |
+|---|---|---|---|
+| Pending Fulfillment | 2073 | **1** | 0 |
+| Hold | 2075 | **1** | 1 |
+| Quote | 2653 | 0 | 0 |
+| Pending Sales Approval | 2585 | 0 | 1 |
+| Deposit Review | 2587 | 0 | 1 |
+| Closed | 2074 | 0 | 0 |
+| Cancelled | 2076 | 0 | 0 |
+
+**GONE — any view filtering these keys is now silently, permanently empty:**
+`2638` Pending Payment Review · `2639` Pending Shipment · `2655` Quote Lost.
+This killed `sales_orders_pending_accounting_approval_report` (it filtered
+2638 and read as "nothing pending" rather than "impossible filter"). **Match on
+the status name, not the key**, and never hardcode this list.
+
+So `Include_In_MRP = 1` now means exactly **Pending Fulfillment + Hold**, which
+is simultaneously Vox's definition of demand *and* of WIP.
+
+One trap remains: **don't gate on `Open_Status`** — the `Hold` status has
+`Open_Status = 0` but `Include_In_MRP = 1`, because held goods are still owed to
+a customer and still count.
+
+### Finished goods have no on-hand stock at Vox
+
+Confirmed against both the live Plex screens and BigQuery: finished-goods
+on-hand is **zero** — all inventory is components, packaging and WIP, because
+Vox builds to order. So any FG part with an open order shows negative
+availability, and that is correct, not a bug. It is also why `33` parts get
+their demand almost entirely through BOM explosion rather than directly: they
+are rarely ordered by a customer, only consumed by a finished good.
 
 ### Date conversion — use this pattern for every date column
 

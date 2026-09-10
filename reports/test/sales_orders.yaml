@@ -127,6 +127,19 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Added 2026-09-09 — BOM, for BOM-exploded component demand. See
+  # reports/sales_orders.yaml for why this is needed at all (Plex's own
+  # "Order Reqd" demand column) and why Flat_BOM is the one to use.
+  - plex_view: Part_v_Flat_BOM
+    bq_table: raw_Part_v_Flat_BOM
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_BOM
+    bq_table: raw_Part_v_BOM
+    filter: ""
+    date_col: ""
+
 # See reports/sales_orders.yaml for why bq_view is a list — the same
 # deploy-ordering caveat (main.py's bq_view-list support must ship before
 # this reaches the test Cloud Run job) applies here too.
@@ -183,6 +196,11 @@ bq_view:
   - name: shipping_daily_report
     display_name: "Vox Scorecard | Shipping Daily (Packages/Orders/Revenue)"
     sql_file: gs://voxdatalake-report-configs/sql/shipping_daily_report_view.sql
+  # ── Added 2026-09-09 — mirrors reports/sales_orders.yaml. MUST stay listed
+  # before inventory_out_of_stock_report, which SELECTs from it.
+  - name: inventory_available_to_sell_report
+    display_name: "Inventory | Available to Sell (On-Hand less Demand)"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_available_to_sell_view.sql
   - name: inventory_out_of_stock_report
     display_name: "Vox Scorecard | Out of Stock (33-parts)"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_out_of_stock_view.sql
@@ -213,3 +231,28 @@ bq_view:
   - name: sales_vs_goal_report
     display_name: "Vox Scorecard | Sales vs Goal by Rep"
     sql_file: gs://voxdatalake-report-configs/sql/sales_vs_goal_view.sql
+
+  # ── Added 2026-09-09 — the goals migration seam. Two goal sources now run
+  # side by side: the Apps Script WEB APP writes scorecard_goals_app, and the
+  # SPREADSHEET ETL still writes scorecard_goals. v2_scorecard_goals_resolved
+  # prefers the app and falls back to the sheet, so nothing goes blank while
+  # both are live, and the v2_* report views are generated copies of the
+  # originals above that read the resolver instead of the sheet table.
+  #
+  # The originals stay deployed and unchanged so Looker Studio can migrate one
+  # tile at a time. When the spreadsheet ETL is sunset: delete the originals,
+  # drop the v2_ prefix, delete the resolver's sheet branch.
+  #
+  # ORDER MATTERS — the resolver must be created before any view that reads
+  # it. Both v2 views also depend on the same actuals views as their originals.
+  # v2_*_vs_goal_view.sql files are GENERATED — edit the original and re-run
+  # scripts/gen_v2_goal_views.py, never hand-edit them.
+  - name: v2_scorecard_goals_resolved
+    display_name: "Goals | Resolved (app first, sheet fallback)"
+    sql_file: gs://voxdatalake-report-configs/sql/v2_scorecard_goals_resolved_view.sql
+  - name: v2_revenue_vs_goal_report
+    display_name: "Vox Scorecard | Revenue vs Goal (v2 goals)"
+    sql_file: gs://voxdatalake-report-configs/sql/v2_revenue_vs_goal_view.sql
+  - name: v2_sales_vs_goal_report
+    display_name: "Vox Scorecard | Sales vs Goal by Rep (v2 goals)"
+    sql_file: gs://voxdatalake-report-configs/sql/v2_sales_vs_goal_view.sql

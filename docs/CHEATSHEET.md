@@ -995,6 +995,11 @@ reads. It is generated, not written:
 python scripts/distill_glossary.py
 ```
 
+**The input is not in the repo.** `catalog/Glossary-*.csv` is gitignored — it is
+6.4 MB of Plex's own export, and only the distilled result is worth versioning.
+Re-export it from Plex (Glossary screen) if you need to re-run this; the output
+is deterministic, so a fresh export of the same data produces the same file.
+
 It reads the 6.4 MB / 61,022-entry export in `catalog/` and keeps only terms
 that match vocabulary found in `reports/` — 93 of them. Matching normalises
 underscores and case, so `Minimum_Inventory_Quantity` finds Plex's "Minimum

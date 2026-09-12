@@ -14,6 +14,28 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-11 (housekeeping) — audio and the raw glossary out of git
+
+Two files went in with the day's first commit that should not have: the **5.5 MB
+meeting recording** and Plex's **6.4 MB glossary export**.
+
+The recording is the one that matters. It is a conversation between named
+people, and the transcript and summary sitting beside it carry everything we
+act on — there is no reason for the audio itself to travel with a repo that
+gets shared.
+
+**Removed from history, not just untracked.** Nothing had been pushed
+(`origin/main` was five commits behind), so `git filter-branch` over the three
+new commits strips the blobs outright rather than leaving them retrievable.
+Commit messages and structure are unchanged; only the hashes moved.
+
+Both files stay on disk and are now gitignored, so the distiller still runs —
+verified: same 93 terms, byte-identical output.
+
+`catalog/Glossary-*.csv` being absent from the repo is worth knowing before
+someone tries to re-run `distill_glossary.py` on a fresh clone. Noted in
+`docs/CHEATSHEET.md`: re-export it from Plex, and the result is deterministic.
+
 ## 2026-09-11 (final) — board closed out at 7 open items
 
 Two open actions from the Sep-11 call were living inside tile notes rather than

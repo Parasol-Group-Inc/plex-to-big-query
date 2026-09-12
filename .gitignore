@@ -15,3 +15,15 @@ __pycache__/
 terraform/*.tfstate.*.backup
 # Vendor driver packages and license (proprietary binaries + license serial — never commit)
 zipfiles/
+
+# Meeting audio — transcripts and summaries are committed, recordings are not.
+# A recording of a conversation with named people does not belong in a repo
+# that gets shared; the text next to it carries everything we act on.
+meetings-reference/**/*.mp3
+meetings-reference/**/*.m4a
+meetings-reference/**/*.wav
+
+# Plex's raw glossary export (~6.4 MB). The distilled result lives in
+# docs/PLEX_GLOSSARY.md and IS committed; this is only the input.
+# Re-export from Plex if you need to re-run scripts/distill_glossary.py.
+catalog/Glossary-*.csv

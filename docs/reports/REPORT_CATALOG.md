@@ -53,6 +53,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Sales Order Allocation | Sales | ✅ Built | [sales_order_allocation_report.md](sales_order_allocation_report.md) |
 | Open Quotes | Sales | ✅ Built and deployed 2026-08-23 | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
 | Open RMAs | Sales | ✅ Built and deployed 2026-08-23 | [sales_returns_open_report.md](sales_returns_open_report.md) |
+| Label Design Queue | Sales | 🛠 Built, awaiting `terraform apply` | [label_design_report.md](label_design_report.md) |
 | Work Orders | Production | ✅ Built | [work_orders_report.md](work_orders_report.md) |
 | MFG Job Schedule | Production | ✅ Built | [mfg_job_schedule_report.md](mfg_job_schedule_report.md) |
 | Labeling \| Open WO: Results | Production | ✅ Built | [labeling_open_work_orders_report.md](labeling_open_work_orders_report.md) |

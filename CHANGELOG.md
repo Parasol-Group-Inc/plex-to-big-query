@@ -14,6 +14,144 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-12 — Label Design: a job to run in, the real sheet, and Vox branding
+
+### Added — the `label_design` infrastructure that was never there
+The pipeline shipped 2026-09-11 as configs and SQL with **nothing behind them**
+— no Cloud Run job, no scheduler, no GCS config objects. Confirmed against the
+live project before building anything: 24 Cloud Run jobs exist and **not one of
+them is `plex-etl-label-design`**. So `label_design_report` has never existed,
+and the answer to "has the pipeline run yet" is no, not once.
+
+`terraform/main.tf` now carries the missing half — prod and test jobs, both
+schedulers each, and the three GCS objects — derived from the
+`quality_supplier_returns` block so the env-var list is identical rather than
+retyped. Both jobs added to `_ALL_JOBS` in `deploy/cloudbuild.yaml`, without
+which they would silently never receive a new image again.
+
+**Twice a day, every day: 9:30 AM and 1:30 PM Mountain** (test :40). Not the
+single overnight run every other pipeline uses — this is an operational queue
+the sales and design teams work from. The times sit **30 minutes ahead of the
+Apps Script's 10:00/14:00 triggers** on purpose, because Apps Script only
+guarantees the hour, not the minute; move one side and you must move the other.
+Weekends included: orders are entered then, and a weekday-only refresh hands the
+team a two-day-stale queue on Monday morning.
+
+`terraform plan`: **9 to add, 0 to change, 0 to destroy** — which also confirms
+no other pipeline's prod config had drifted. `terraform validate` and
+`terraform fmt -check` clean. Checked `image_url` against a live job first, per
+this repo's own rule: `:6c33c51` on both, no drift, so the new jobs come up on
+the same image the rest of the fleet runs.
+
+**NOT YET APPLIED** — the local permission classifier blocks `terraform apply`,
+so it needs a human. Until then the jobs do not exist and the view cannot be
+created.
+
+### Changed — the Apps Script writes the sheet's columns, not its own
+`deploy/label_design_sync/Code.gs` wrote 11 snake_case columns of its own
+invention. The sheet it writes to has 15 human ones. `SHEET_MAP` is now the
+MONDAY tab's real header row, in its real order, and rows are positioned by the
+**tab's** header index rather than ours — so someone reordering columns gets
+their order respected instead of a scrambled sheet. Real quirks in that export
+are handled and tested: the trailing space in `"Label "`, `Phone` on one tab and
+`Phone Number` on the other, and six blank trailing headers that are the sheet's
+unused columns rather than columns anyone added.
+
+**Unfilled columns are flagged to the team, split by why.** Only one kind is a
+to-do: *Reason Code / Label / Bottle Material / LCR* are filled in by a person
+during review and blank is permanently correct; *WO Number* and *Item* are ones
+Plex could plausibly supply and does not. Reporting both as "blank" every run
+would train everyone to skip the section that also carries the real gaps.
+
+**Never writing `historical` is now enforced rather than remembered** — every
+write path goes through `assertNotHistory_()`. If the MONDAY tab's layout is
+unreadable, rows go to a dated `REVIEW <date>` tab. A new tab, never the
+archive, and nothing is discarded.
+
+### Added — a guard on the thing that would quietly cost the most
+The sheet says `Sales Order #SO0110212` and Plex says `SO0110212`, so both are
+reduced to a token before comparison. **That reduction is the single point of
+failure for the whole queue**: if it ever stops matching, every row looks new at
+once and the entire archive gets re-imported onto the sheet and onto the Monday
+board. `assessKeys_()` watches for exactly that shape — many new rows, *zero*
+matches against a non-empty archive — and holds the run back to a review tab
+instead of pushing. Rows are kept, not dropped; a person looks first.
+
+### Changed — schedules and recipients
+Sync **every day**, summary **Monday to Friday**. Monday's summary covers
+Saturday and Sunday too: the window is "since the last summary was sent" rather
+than "today", or two days of weekend activity would be reported to nobody.
+
+- **Technical**, every run: Jennilyn, Emilio, `marketing@parasolgroupinc.com`.
+- **Summary**, weekdays: Ashley, Kelli, Jennilyn, Emilio, marketing.
+
+### Changed — Vox Nutrition branding on every email
+`templates/report.html` rebuilt from Parasol's dark-header layout to the Vox
+theme in `assets/css-theme.css` — Leaf Blue bar, Slate Navy Georgia headings,
+the Vox wordmark. The Apps Script emails now match, so the pipeline's own emails
+and the queue's emails read as one system.
+
+Three things that are easy to get wrong, and were got right deliberately:
+
+- **The logo is an inline CID attachment.** Gmail strips `data:` URIs, and a
+  hosted URL would mean making a bucket object publicly readable. Converted
+  webp → PNG because **Outlook renders no WebP at all**. A missing logo file
+  degrades to alt text and never blocks a send — a failure report still has to
+  reach an inbox.
+- **Styles are inline attributes, not a `<style>` block** — Gmail strips
+  `<style>` from a received message body.
+- **The stats row is a table, not flexbox** — Outlook renders `display:flex` as
+  a vertical stack, which would break the layout for exactly the desktop readers
+  most likely to open it.
+
+`scripts/build_logo_gs.py` regenerates both the PNG and the base64 in `Logo.gs`
+(Apps Script cannot read a repo file), so the "generated file" header is true.
+The Dockerfile copies **only** `assets/vox-logo.png`, not all of `assets/` —
+that directory also holds the 5,000-row sheet exports.
+
+**This is a code change, so it ships via Cloud Build, not `terraform apply`** —
+and it has to wait until *after* the apply, because the build's `deploy-all`
+step updates every job in `_ALL_JOBS` and the two new ones do not exist yet.
+
+### Added — contact details on `label_design_view.sql`
+`customer_email`, `customer_phone`, `customer_part_description`, so the sheet's
+Email / Phone Number / Description columns fill from Plex instead of shipping
+blank. **Zero new extractions** — both source tables were already joined. These
+are account-level details; Plex also holds a per-line contact, and which one the
+label team wants has never been asked, so the choice is left visible in the SQL
+rather than made silently downstream.
+
+### Added — `deploy/label_design_sync/test_logic.js`
+25 checks of the pure logic against the **real** exports in `assets/`, including
+all 5,182 historical rows. Verifies that an already-archived order is recognised
+across both spellings, that team and gap columns land blank, that rows are
+placed by the tab's own column order, and that the alarm trips on a key mismatch
+while staying quiet on a busy day and on an empty archive. Needs no credentials
+and touches nothing. All pass.
+
+Worth running after any change to `SHEET_MAP`, the tokenisers, or header
+resolution — a broken dedupe does not throw, it re-imports the archive.
+
+### Added — `scripts/backup_to_bucket.ps1`
+Backs up the repo and, more to the point, the **gitignored files that exist on
+exactly one laptop**: `terraform.tfvars`, `.env`, the `assets/` sheet exports,
+and any stray local tfstate. A timestamped folder per run plus a `latest/`, with
+a manifest naming the commit and listing what was and was not present.
+
+The archive is `git archive HEAD`, not a zip of the working directory, so it can
+never smuggle in the very credentials that are gitignored for a reason.
+
+**Run and verified**: 16 objects up, 8 in `latest/`, sizes confirmed by listing
+the bucket rather than trusted from the script's own output —
+`gs://voxdatalake-terraform-state/plex-to-big-query/backups/`.
+
+One Windows-specific bug found in the first real run and fixed: `gcloud` writes
+progress to **stderr even on success**, and PowerShell 5.1 wraps native stderr
+in an ErrorRecord, so under `$ErrorActionPreference = 'Stop'` a *successful*
+upload killed the script. The preference is now relaxed across each native call
+and the outcome judged by `$LASTEXITCODE`, which is the only reliable signal for
+a native exe here.
+
 ## 2026-09-11 (housekeeping) — audio and the raw glossary out of git
 
 Two files went in with the day's first commit that should not have: the **5.5 MB

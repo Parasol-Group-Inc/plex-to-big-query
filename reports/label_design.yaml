@@ -1,0 +1,81 @@
+report_name: label_design
+category: Sales
+description: "VOX | Label Design queue for the Monday holding board — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ORIGIN: Jennilyn's Plex stored procedure "Label Design Report"
+# (sproc338756_18319605_1407579), agreed 2026-09-11. Replaces a twice-daily
+# manual loop — download from NetSuite, paste into a Google Sheet, check for
+# duplicates by hand, upload the new rows to Monday.
+#
+# NOT a scorecard tile. It is an operational queue the sales and design teams
+# work from, which is why it gets its own pipeline rather than riding
+# sales_orders: it runs at 10:00 and 14:00 Mountain, not once overnight.
+#
+# Four of the eight tables this needs are already extracted by sales_orders
+# (Sales_v_PO, _PO_Line, _Release, _PO_Status, Common_v_Customer,
+# Sales_v_Order_Salesperson, Plexus_Control_v_Plexus_User). They are extracted
+# AGAIN here on purpose: this job runs midday, hours after sales_orders ran
+# overnight, and a label-design queue built on a 14-hour-old part list would
+# miss exactly the new orders it exists to surface.
+# ─────────────────────────────────────────────────────────────────────────────
+
+extractions:
+  - plex_view: Sales_v_PO
+    bq_table: raw_Sales_v_PO
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_PO_Line
+    bq_table: raw_Sales_v_PO_Line
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Release
+    bq_table: raw_Sales_v_Release
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_PO_Status
+    bq_table: raw_Sales_v_PO_Status
+    filter: ""
+    date_col: ""
+
+  # New — not extracted anywhere else in the repo before 2026-09-11.
+  - plex_view: Sales_v_Release_Status
+    bq_table: raw_Sales_v_Release_Status
+    filter: ""
+    date_col: ""
+
+  # The Job Note. This was the hard part of the original stored procedure to
+  # locate, so it is extracted whole rather than filtered at source — the
+  # Note_Type filter lives in the SQL where it can be seen and changed.
+  - plex_view: Sales_v_PO_Line_Note
+    bq_table: raw_Sales_v_PO_Line_Note
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Customer_Part
+    bq_table: raw_Part_v_Customer_Part
+    filter: ""
+    date_col: ""
+
+  - plex_view: Common_v_Customer
+    bq_table: raw_Common_v_Customer
+    filter: ""
+    date_col: ""
+
+  - plex_view: Sales_v_Order_Salesperson
+    bq_table: raw_Sales_v_Order_Salesperson
+    filter: ""
+    date_col: ""
+
+  - plex_view: Plexus_Control_v_Plexus_User
+    bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+
+bq_view:
+  - name: label_design_report
+    display_name: "Label Design Queue"
+    sql_file: gs://voxdatalake-report-configs/sql/label_design_view.sql

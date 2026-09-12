@@ -1,0 +1,444 @@
+<!--
+  Vox — Manual Data entry
+  =======================
+  The form is GENERATED from the DATASETS registry in Code.gs. Adding a manual
+  dataset should never mean editing this file: if it does, the registry is
+  missing a field type rather than this being the right place to special-case.
+-->
+<style>
+  :root{
+    --paper:#F5F6F8; --card:#FFFFFF; --sunk:#EDEFF3;
+    --ink:#16202B; --muted:#5B6672; --faint:#8C96A2;
+    --hair:#DCE1E7; --hair-2:#C2CAD3;
+    --navy:#0B3C6B; --navy-bg:#E4EEF8;
+    --good:#1C6647; --good-bg:#E0EFE8;
+    --warn:#8A4B0A; --warn-bg:#FBEEDA;
+    --bad:#96301F;  --bad-bg:#F9E7E3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding-block:26px 60px;padding-left:18px;padding-right:18px}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:18px}
+  h1{font-size:23px;margin:0 0 4px;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0}
+  .env{
+    display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;padding:2px 8px;border-radius:3px;margin-left:8px;
+    background:var(--warn-bg);color:var(--warn);vertical-align:2px;
+  }
+  .env.prod{background:var(--bad-bg);color:var(--bad)}
+
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .tabs button{
+    font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+    background:var(--card);color:var(--muted);
+    border:1px solid var(--hair);border-radius:3px;padding:8px 14px;
+  }
+  .tabs button[aria-selected="true"]{
+    background:var(--navy);border-color:var(--navy);color:#fff;
+  }
+
+  .card{background:var(--card);border:1px solid var(--hair);border-radius:4px;padding:18px 20px;margin-bottom:16px}
+  .blurb{color:var(--muted);font-size:13.5px;margin:0 0 16px;padding-bottom:14px;border-bottom:1px solid var(--hair)}
+
+  .field{margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+  .req{color:var(--bad);font-weight:400}
+  input,select,textarea{
+    font:inherit;width:100%;padding:9px 11px;border:1px solid var(--hair-2);
+    border-radius:3px;background:var(--card);color:var(--ink);
+  }
+  textarea{min-height:70px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--navy);outline-offset:-1px;border-color:var(--navy)}
+  .help{font-size:12.5px;color:var(--faint);margin-top:4px}
+
+  .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--hair)}
+  button.primary{
+    font:inherit;font-weight:700;font-size:15px;cursor:pointer;
+    background:var(--navy);color:#fff;border:none;border-radius:3px;padding:11px 22px;
+  }
+  button.primary[disabled]{opacity:.55;cursor:default}
+  button.link{
+    font:inherit;font-size:13px;cursor:pointer;background:none;border:none;
+    color:var(--navy);text-decoration:underline;padding:0;
+  }
+
+  .msg{border-radius:3px;padding:11px 14px;font-size:14px;margin-top:14px;border:1px solid}
+  .msg.ok{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+  .msg.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+  .msg.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+
+  .check{background:var(--sunk);border-left:3px solid var(--hair-2);border-radius:0 3px 3px 0;padding:10px 13px;font-size:13.5px;color:var(--muted);margin-top:4px}
+  .check b{color:var(--ink)}
+  .check .gap-on{color:var(--warn);font-weight:600}
+
+  h2{font-size:15px;margin:22px 0 8px;letter-spacing:-.1px}
+  .tblwrap{overflow-x:auto;border:1px solid var(--hair);border-radius:4px;background:var(--card)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--hair);white-space:nowrap}
+  th{background:var(--sunk);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  tr.dead td{color:var(--faint);text-decoration:line-through}
+  .empty{color:var(--faint);font-size:13.5px;padding:14px 0}
+
+  .loading{color:var(--muted);padding:40px 0;text-align:center}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Vox — Manual Data<span id="env" class="env">…</span></h1>
+    <p class="sub">Numbers that have to be typed rather than pulled from Plex. Saved here, they reach the scorecard on their own.</p>
+  </header>
+
+  <div id="boot" class="loading">Loading…</div>
+
+  <div id="app" hidden>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="card">
+      <p class="blurb" id="blurb"></p>
+      <form id="form" autocomplete="off"></form>
+      <div class="actions">
+        <button type="button" class="primary" id="save">Save</button>
+        <button type="button" class="link" id="reset">Clear</button>
+      </div>
+      <div id="msg"></div>
+    </div>
+
+    <h2>Recently entered</h2>
+    <div id="recent"></div>
+  </div>
+</div>
+
+<script>
+var DATA = null;
+var active = null;
+
+function el(tag, attrs, kids){
+  var n = document.createElement(tag);
+  Object.keys(attrs||{}).forEach(function(k){
+    if (k === 'text') n.textContent = attrs[k];
+    else if (k === 'html') n.innerHTML = attrs[k];
+    else n.setAttribute(k, attrs[k]);
+  });
+  (kids||[]).forEach(function(c){ n.appendChild(c); });
+  return n;
+}
+
+function boot(){
+  google.script.run
+    .withSuccessHandler(function(d){
+      if (d.setupNeeded){ renderSetup(d); return; }
+      DATA = d;
+      document.getElementById('boot').hidden = true;
+      document.getElementById('app').hidden = false;
+      var env = document.getElementById('env');
+      env.textContent = d.dataset;
+      if (/prod/i.test(d.dataset)) env.className = 'env prod';
+      renderTabs();
+      select(Object.keys(d.datasets)[0]);
+    })
+    .withFailureHandler(function(e){
+      document.getElementById('boot').innerHTML =
+        '<div class="msg bad">Could not load: ' + String(e) + '</div>';
+    })
+    .getFormData();
+}
+
+// A brand-new Apps Script project has no properties and no BigQuery service.
+// Both are editor settings rather than code, so the app can only point at them.
+var SETUP_VALUES = {
+  GCP_PROJECT: 'voxdatalake',
+  BQ_DATASET:  'PlexTest  (PlexProd at go-live)',
+  SHEET_ID:    "the spreadsheet's id — the long string in its URL between /d/ and /edit"
+};
+
+function renderSetup(d){
+  var rows = d.missing.map(function(k){
+    return '<tr><td style="font-family:ui-monospace,monospace;font-weight:700">' + k +
+           '</td><td>' + SETUP_VALUES[k] + '</td></tr>';
+  }).join('');
+
+  document.getElementById('boot').innerHTML =
+    '<div class="card" style="text-align:left">' +
+      '<h2 style="margin-top:0">Almost there — two editor settings</h2>' +
+      '<p class="blurb" style="border:none;padding:0">Nothing is wrong with the deployment. These are set in the Apps Script editor rather than in code, so a new project always needs them once.</p>' +
+      '<p><b>1. Project Settings → Script Properties</b> — add:</p>' +
+      '<div class="tblwrap"><table>' +
+        '<thead><tr><th>Property</th><th>Value</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table></div>' +
+      (d.bigQueryReady
+        ? '<p style="margin-top:16px"><b>2. BigQuery service</b> — already added. ✓</p>'
+        : '<div class="msg bad" style="margin-top:16px"><b>2. Services (+) → BigQuery API → Add</b><br>Not enabled yet — the form cannot read or write without it.</div>') +
+      '<p style="margin-top:16px;color:var(--muted);font-size:13.5px">Then <b>reload this page</b>. Properties are read on each request, so this needs no new deployment — unlike a code change, which does.</p>' +
+    '</div>';
+  document.getElementById('boot').classList.remove('loading');
+}
+
+function renderTabs(){
+  var bar = document.getElementById('tabs');
+  bar.innerHTML = '';
+  Object.keys(DATA.datasets).forEach(function(k){
+    var b = el('button', { type:'button', role:'tab', text: DATA.datasets[k].label });
+    b.setAttribute('aria-selected', 'false');
+    b.onclick = function(){ select(k); };
+    b.dataset.key = k;
+    bar.appendChild(b);
+  });
+}
+
+function select(key){
+  active = key;
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
+    b.setAttribute('aria-selected', String(b.dataset.key === key));
+  });
+  document.getElementById('blurb').textContent = DATA.datasets[key].blurb;
+  document.getElementById('msg').innerHTML = '';
+  renderForm();
+  renderRecent();
+}
+
+// Options for a field: either a fixed set, or one chosen by another field's
+// current value (a goal's scope depends on whether it is sales or production).
+function optionsFor(f){
+  if (f.optionsFromBy){
+    var driver = document.querySelector('[name="' + f.dependsOn + '"]');
+    var set = driver ? f.optionsFromBy[driver.value] : null;
+    return set ? (DATA.options[set] || []) : null;   // null = field not applicable
+  }
+  return DATA.options[f.optionsFrom] || [];
+}
+
+function renderForm(){
+  var form = document.getElementById('form');
+  form.innerHTML = '';
+
+  DATA.datasets[active].fields.forEach(function(f){
+    var wrap = el('div', { class:'field' });
+    wrap.dataset.field = f.name;
+
+    var lab = el('label', { for:'f_' + f.name, text: f.label });
+    if (f.required) lab.appendChild(el('span', { class:'req', text:' *' }));
+    wrap.appendChild(lab);
+
+    var input;
+    if (f.type === 'select'){
+      input = el('select', { name:f.name, id:'f_' + f.name });
+      input.appendChild(el('option', { value:'', text:'— choose —' }));
+      (optionsFor(f) || []).forEach(function(o){
+        input.appendChild(el('option', { value:o.value, text:o.label }));
+      });
+      if (f.allowOther) input.appendChild(el('option', { value:'__other__', text:'Other…' }));
+    } else if (f.type === 'longtext'){
+      input = el('textarea', { name:f.name, id:'f_' + f.name });
+    } else if (f.type === 'month'){
+      input = el('input', { type:'month', name:f.name, id:'f_' + f.name });
+    } else if (f.type === 'date'){
+      input = el('input', { type:'date', name:f.name, id:'f_' + f.name });
+    } else if (f.type === 'number' || f.type === 'money'){
+      input = el('input', { type:'number', step:'any', name:f.name, id:'f_' + f.name });
+      if (f.min != null) input.setAttribute('min', f.min);
+      if (f.max != null) input.setAttribute('max', f.max);
+      if (f.defaultValue != null) input.value = f.defaultValue;
+    } else {
+      input = el('input', { type:'text', name:f.name, id:'f_' + f.name });
+    }
+    wrap.appendChild(input);
+
+    if (f.allowOther){
+      var other = el('input', { type:'text', name:f.name + '__other', placeholder:'Type it in' });
+      other.hidden = true;
+      other.style.marginTop = '6px';
+      wrap.appendChild(other);
+      input.addEventListener('change', function(){ other.hidden = input.value !== '__other__'; });
+    }
+
+    if (f.help) wrap.appendChild(el('div', { class:'help', text:f.help }));
+
+    // A dropdown that came back empty means its report didn't answer. Say so
+    // rather than showing an empty list that looks like "no options exist".
+    if (f.type === 'select' && !f.optionsFromBy && DATA.optionErrors && DATA.optionErrors[f.optionsFrom]){
+      wrap.appendChild(el('div', { class:'msg warn',
+        text:'Could not read the list for this field, so it is empty. The report behind it may not exist in ' + DATA.dataset + ' yet.' }));
+    }
+
+    form.appendChild(wrap);
+  });
+
+  // Dependent fields re-render when their driver changes.
+  DATA.datasets[active].fields.forEach(function(f){
+    if (!f.dependsOn) return;
+    var driver = document.querySelector('[name="' + f.dependsOn + '"]');
+    if (driver) driver.addEventListener('change', function(){ refreshDependent(f); });
+  });
+
+  if (DATA.datasets[active].liveCheck) wireLiveCheck();
+}
+
+function refreshDependent(f){
+  var wrap = document.querySelector('[data-field="' + f.name + '"]');
+  if (!wrap) return;
+  var sel = wrap.querySelector('select');
+  var opts = optionsFor(f);
+
+  // null means the field does not apply at all — revenue has no scope.
+  wrap.hidden = (opts === null);
+  if (opts === null) { sel.value = ''; return; }
+
+  var current = sel.value;
+  sel.innerHTML = '';
+  sel.appendChild(el('option', { value:'', text:'— choose —' }));
+  opts.forEach(function(o){ sel.appendChild(el('option', { value:o.value, text:o.label })); });
+  sel.value = current;
+}
+
+// The rep-goal running total, shown as the month or value changes.
+function wireLiveCheck(){
+  var form = document.getElementById('form');
+  var box = el('div', { class:'check', id:'livecheck' });
+  box.hidden = true;
+  form.appendChild(box);
+
+  function update(){
+    var metric = (document.querySelector('[name="metric"]')||{}).value;
+    var month = (document.querySelector('[name="period_month"]')||{}).value;
+    if (metric !== 'sales' || !month){ box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = 'Checking rep totals…';
+    google.script.run
+      .withSuccessHandler(function(r){
+        var typed = Number((document.querySelector('[name="goal_value"]')||{}).value || 0);
+        var gap = r.companyTotal - r.repTotal;
+        box.innerHTML =
+          '<b>' + money(r.repTotal) + '</b> across ' + r.repCount + ' rep goals, against a ' +
+          '<b>' + money(r.companyTotal) + '</b> company target' +
+          (gap ? ' — <span class="gap-on">' + money(Math.abs(gap)) + (gap > 0 ? ' short' : ' over') + '</span>' : ' — matching') +
+          '.<br>They are allowed to differ; this is here so the gap is visible now rather than in a report later.' +
+          (typed ? ' Your entry is not counted until saved.' : '');
+      })
+      .withFailureHandler(function(){ box.hidden = true; })
+      .getRepGoalSum(month + '-01');
+  }
+
+  ['metric','period_month'].forEach(function(n){
+    var f = document.querySelector('[name="' + n + '"]');
+    if (f) f.addEventListener('change', update);
+  });
+}
+
+function money(n){
+  return '$' + Number(n||0).toLocaleString(undefined, { maximumFractionDigits:0 });
+}
+
+function collect(){
+  var out = {};
+  DATA.datasets[active].fields.forEach(function(f){
+    var input = document.querySelector('[name="' + f.name + '"]');
+    if (!input) return;
+    var v = input.value;
+    if (v === '__other__'){
+      var other = document.querySelector('[name="' + f.name + '__other"]');
+      v = other ? other.value : '';
+    }
+    // A month input yields YYYY-MM; the server wants a full date and enforces
+    // the 1st anyway.
+    if (f.type === 'month' && v && v.length === 7) v = v + '-01';
+    out[f.name] = v;
+  });
+  return out;
+}
+
+function say(cls, text){
+  document.getElementById('msg').innerHTML =
+    '<div class="msg ' + cls + '">' + text + '</div>';
+}
+
+document.getElementById('save').onclick = function(){
+  var btn = this;
+  btn.disabled = true;
+  say('', 'Saving…');
+  google.script.run
+    .withSuccessHandler(function(r){
+      btn.disabled = false;
+      say(r.pushed ? 'ok' : 'warn', r.message + (r.pushMessage ? '<br>' + r.pushMessage : ''));
+      renderForm();
+      reloadRecent();
+    })
+    .withFailureHandler(function(e){
+      btn.disabled = false;
+      say('bad', String(e).replace(/^Error:\s*/, ''));
+    })
+    .saveRow(active, collect());
+};
+
+document.getElementById('reset').onclick = function(){
+  // Re-rendering rather than form.reset(), so fields with a default (the
+  // month-repeat count) come back as their default instead of empty.
+  renderForm();
+  document.getElementById('msg').innerHTML = '';
+};
+
+function reloadRecent(){
+  google.script.run.withSuccessHandler(function(d){
+    DATA.recent = d.recent;
+    renderRecent();
+  }).getFormData();
+}
+
+function renderRecent(){
+  var host = document.getElementById('recent');
+  var rows = (DATA.recent || {})[active] || [];
+  if (!rows.length){
+    host.innerHTML = '<div class="empty">Nothing entered yet.</div>';
+    return;
+  }
+
+  var cols = DATA.datasets[active].fields.map(function(f){ return f.name; })
+               .concat(['submitted_by','submitted_at']);
+
+  var table = el('table');
+  var head = el('tr');
+  cols.forEach(function(c){ head.appendChild(el('th', { text:c.replace(/_/g,' ') })); });
+  head.appendChild(el('th', { text:'' }));
+  table.appendChild(el('thead', {}, [head]));
+
+  var body = el('tbody');
+  rows.forEach(function(r){
+    var dead = String(r.is_deleted).toLowerCase() === 'true';
+    var tr = el('tr', dead ? { class:'dead' } : {});
+    cols.forEach(function(c){ tr.appendChild(el('td', { text: r[c] == null ? '' : String(r[c]) })); });
+
+    var cell = el('td');
+    if (!dead){
+      var b = el('button', { class:'link', type:'button', text:'Retract' });
+      b.onclick = function(){ retract(r); };
+      cell.appendChild(b);
+    }
+    tr.appendChild(cell);
+    body.appendChild(tr);
+  });
+  table.appendChild(body);
+
+  host.innerHTML = '';
+  host.appendChild(el('div', { class:'tblwrap' }, [table]));
+}
+
+function retract(row){
+  if (!confirm('Retract this entry?\n\nIt stays in the log as history — nothing is deleted. For a goal, the spreadsheet value comes back if it has one.')) return;
+  say('', 'Retracting…');
+  google.script.run
+    .withSuccessHandler(function(r){
+      say(r.pushed ? 'ok' : 'warn', r.message + (r.pushMessage ? '<br>' + r.pushMessage : ''));
+      reloadRecent();
+    })
+    .withFailureHandler(function(e){ say('bad', String(e).replace(/^Error:\s*/, '')); })
+    .retractRow(active, row);
+}
+
+boot();
+</script>

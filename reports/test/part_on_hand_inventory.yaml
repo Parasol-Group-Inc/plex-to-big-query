@@ -15,6 +15,18 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Added 2026-09-11 — cycle counting. See reports/part_on_hand_inventory.yaml.
+  - plex_view: Part_v_Cycle_Inventory
+    bq_table: raw_Part_v_Cycle_Inventory
+    filter: ""
+    date_col: ""
+
+  # Carries Accuracy_Threshold. Not joined yet — see the prod config.
+  - plex_view: Part_v_Cycle_Frequency
+    bq_table: raw_Part_v_Cycle_Frequency
+    filter: ""
+    date_col: ""
+
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
 # raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story.
 
@@ -32,3 +44,6 @@ bq_view:
   - name: inventory_top_quantity_report
     display_name: "Vox Scorecard | Top Quantity Ranking"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_top_quantity_view.sql
+  - name: part_cycle_count_report
+    display_name: "Vox Scorecard | Cycle Count Accuracy"
+    sql_file: gs://voxdatalake-report-configs/sql/part_cycle_count_view.sql

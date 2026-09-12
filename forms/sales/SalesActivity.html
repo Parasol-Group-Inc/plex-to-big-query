@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Sales Activity Log</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+    :root {
+      --teal:       #2A7F7F;
+      --teal-light: #E6F4F4;
+      --teal-mid:   #4AADAD;
+      --amber:      #E8A838;
+      --amber-pale: #FDF5E6;
+      --slate:      #1E2A2A;
+      --mist:       #F2F7F7;
+      --divider:    #C8DEDE;
+      --text:       #2E3D3D;
+      --subtext:    #637070;
+      --white:      #FFFFFF;
+      --danger:     #C0392B;
+      --radius:     10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--mist);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--slate);
+      color: var(--white);
+      padding: 22px 32px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 3px solid var(--teal-mid);
+    }
+    .logo-mark {
+      width: 38px; height: 38px;
+      background: var(--teal-mid);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-weight: 500;
+      font-size: 16px;
+      color: var(--white);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+    header p  { font-size: 13px; color: #8AAFAF; margin-top: 2px; }
+
+    /* ── Container ── */
+    .container {
+      max-width: 640px;
+      margin: 32px auto 0;
+      padding: 0 16px;
+    }
+
+    /* ── PTO Banner ── */
+    .pto-card {
+      background: var(--amber-pale);
+      border: 1.5px solid var(--amber);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+      cursor: pointer;
+    }
+    .pto-card input[type="checkbox"] { display: none; }
+    .pto-toggle {
+      width: 44px; height: 24px;
+      background: #ddd;
+      border-radius: 12px;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .pto-toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      background: white;
+      border-radius: 50%;
+      top: 3px; left: 3px;
+      transition: left 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .pto-active .pto-toggle { background: var(--amber); }
+    .pto-active .pto-toggle::after { left: 23px; }
+    .pto-text strong { font-size: 14px; font-weight: 600; color: var(--slate); }
+    .pto-text span   { font-size: 12px; color: var(--subtext); display: block; margin-top: 2px; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1.5px solid var(--divider);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 18px;
+    }
+
+    /* ── Form rows ── */
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--subtext);
+    }
+    label .req { color: var(--teal); margin-left: 2px; }
+
+    input[type="date"],
+    select {
+      height: 44px;
+      border: 1.5px solid var(--divider);
+      border-radius: 8px;
+      padding: 0 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--white);
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input[type="date"]:focus,
+    select:focus { border-color: var(--teal); }
+
+    /* ── Activity fields ── */
+    .activity-list { display: flex; flex-direction: column; gap: 14px; }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 1fr 110px;
+      align-items: center;
+      gap: 12px;
+    }
+    .activity-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .activity-label .badge {
+      font-size: 10px;
+      background: var(--teal-light);
+      color: var(--teal);
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-weight: 600;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .activity-label .note {
+      font-size: 11px;
+      color: var(--subtext);
+      font-weight: 400;
+      display: block;
+      margin-top: 1px;
+    }
+
+    /* Plain number input */
+    .plain-num {
+      height: 44px;
+      border: 1.5px solid var(--divider);
+      border-radius: 8px;
+      padding: 0 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--white);
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+      -moz-appearance: textfield;
+    }
+    .plain-num:focus { border-color: var(--teal); }
+    .plain-num::-webkit-outer-spin-button,
+    .plain-num::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    /* Slider fields */
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .slider-wrap input[type="range"] {
+      width: 64px;
+      accent-color: var(--teal);
+      cursor: pointer;
+    }
+    .slider-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--teal);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    /* Spinner fields (leads only) */
+    .spinner-wrap {
+      display: flex;
+      align-items: center;
+      border: 1.5px solid var(--divider);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .spinner-wrap button {
+      width: 36px; height: 42px;
+      background: var(--mist);
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: var(--teal);
+      font-weight: 600;
+      flex-shrink: 0;
+      transition: background 0.1s;
+    }
+    .spinner-wrap button:hover { background: var(--teal-light); }
+    .spinner-wrap input[type="number"] {
+      width: 100%;
+      border: none;
+      text-align: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      outline: none;
+      padding: 0;
+      -moz-appearance: textfield;
+    }
+    .spinner-wrap input::-webkit-outer-spin-button,
+    .spinner-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .divider { border: none; border-top: 1px solid var(--divider); margin: 6px 0; }
+
+    /* ── Totals bar ── */
+    .totals-bar {
+      background: var(--teal);
+      border-radius: var(--radius);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0;
+      color: var(--white);
+    }
+    .totals-label {
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .totals-count {
+      font-family: 'DM Mono', monospace;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -1px;
+    }
+    .totals-goal {
+      font-size: 12px;
+      opacity: 0.65;
+      margin-top: 2px;
+    }
+    .progress-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--amber);
+      border-radius: 3px;
+      transition: width 0.3s;
+      max-width: 100%;
+    }
+
+    /* ── Submit ── */
+    .submit-btn {
+      width: 100%;
+      height: 52px;
+      background: var(--teal);
+      color: var(--white);
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .submit-btn:hover  { background: #226868; }
+    .submit-btn:active { transform: scale(0.99); }
+    .submit-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--slate);
+      color: var(--white);
+      padding: 14px 24px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 999;
+      white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success { background: var(--teal); }
+    .toast.error   { background: var(--danger); }
+
+    @media (max-width: 480px) {
+      .row-2 { grid-template-columns: 1fr; }
+      header { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">VX</div>
+  <div>
+    <h1>Daily Sales Activity Log</h1>
+    <p>Track your activities &mdash; goal is 40 per day</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- PTO Toggle -->
+  <label class="pto-card" id="ptoCard">
+    <input type="checkbox" id="ptoCheck" onchange="togglePTO()" />
+    <div class="pto-toggle"></div>
+    <div class="pto-text">
+      <strong>PTO / Out of Office</strong>
+      <span>Removes the 40-activity requirement for this day</span>
+    </div>
+  </label>
+
+  <!-- Who & When -->
+  <div class="card">
+    <div class="card-title">Rep & Date</div>
+    <div class="row-2">
+      <div class="field">
+        <label for="repName">Sales Rep <span class="req">*</span></label>
+        <select id="repName" required>
+          <option value="">-- Select your name --</option>
+          <option>Kami Butcher</option>
+          <option>Tyler Hall</option>
+          <option>Janet Pacheco</option>
+          <option>Ruben Espinosa</option>
+          <option>Landen Epperson</option>
+          <option>Aishah Alqasim</option>
+          <option>Zeljan Avdic</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="actDate">Date <span class="req">*</span></label>
+        <input type="date" id="actDate" required />
+      </div>
+    </div>
+  </div>
+
+  <!-- Activities that count toward 40 -->
+  <div class="card">
+    <div class="card-title">Activities &mdash; counted toward daily goal</div>
+    <div class="activity-list">
+
+      <div class="activity-row">
+        <div class="activity-label">Emails Sent</div>
+        <input type="number" id="emailsSent" class="plain-num" value="" placeholder="0" min="0" max="999" oninput="recalc()" required />
+      </div>
+
+      <div class="activity-row">
+        <div class="activity-label">Calls Made</div>
+        <input type="number" id="callsMade" class="plain-num" value="" placeholder="0" min="0" max="999" oninput="recalc()" required />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="activity-row">
+        <div class="activity-label">
+          Client Meetings
+          <span class="badge">slider</span>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="meetings" min="0" max="20" value="0" oninput="updateSlider('meetings'); recalc()" />
+          <div class="slider-val" id="meetingsVal">0</div>
+        </div>
+      </div>
+
+      <div class="activity-row">
+        <div class="activity-label">
+          Visits to Vox
+          <span class="badge">slider</span>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="visitsToVox" min="0" max="10" value="0" oninput="updateSlider('visitsToVox'); recalc()" />
+          <div class="slider-val" id="visitsToVoxVal">0</div>
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="activity-row">
+        <div class="activity-label">LinkedIn / Social DMs</div>
+        <input type="number" id="socialDMs" class="plain-num" value="" placeholder="0" min="0" max="999" oninput="recalc()" required />
+      </div>
+
+      <div class="activity-row">
+        <div class="activity-label">Other</div>
+        <input type="number" id="other" class="plain-num" value="" placeholder="0" min="0" max="999" oninput="recalc()" required />
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Totals bar -->
+  <div class="totals-bar" id="totalsBar">
+    <div>
+      <div class="totals-label">Today's Total Activities</div>
+      <div class="totals-goal" id="goalText">Goal: 40 activities</div>
+    </div>
+    <div style="text-align:right">
+      <div class="totals-count" id="totalCount">0</div>
+    </div>
+  </div>
+  <div style="background:var(--teal); border-radius:0 0 var(--radius) var(--radius); padding: 0 24px 14px; margin-bottom:16px;">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Leads (tracked, not summed) -->
+  <div class="card">
+    <div class="card-title">Leads &mdash; tracked separately, not counted in goal</div>
+    <div class="row-2">
+      <div class="field">
+        <label for="leadsAssigned">Leads Assigned <span class="req">*</span></label>
+        <div class="spinner-wrap">
+          <button type="button" onclick="spin('leadsAssigned',-1)">&#8722;</button>
+          <input type="number" id="leadsAssigned" value="0" min="0" max="999" required />
+          <button type="button" onclick="spin('leadsAssigned',1)">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="leadsContacted">Leads Contacted <span class="req">*</span></label>
+        <div class="spinner-wrap">
+          <button type="button" onclick="spin('leadsContacted',-1)">&#8722;</button>
+          <input type="number" id="leadsContacted" value="0" min="0" max="999" required />
+          <button type="button" onclick="spin('leadsContacted',1)">+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes (optional) -->
+  <div class="card">
+    <div class="card-title">Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--subtext);font-size:11px">(optional)</span></div>
+    <textarea id="notes" rows="3" placeholder="Anything worth flagging today..."
+      style="width:100%;border:1.5px solid var(--divider);border-radius:8px;padding:10px 12px;
+             font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);resize:vertical;outline:none;
+             transition:border-color 0.15s;" onfocus="this.style.borderColor='var(--teal)'" onblur="this.style.borderColor='var(--divider)'"></textarea>
+  </div>
+
+  <button class="submit-btn" id="submitBtn" onclick="submitForm()">Log Today's Activities</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Set today's date ──
+  const today = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('actDate').value =
+    `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+
+  // ── Slider sync ──
+  function updateSlider(id) {
+    document.getElementById(id+'Val').textContent = document.getElementById(id).value;
+  }
+
+  // ── Spinner (leads only) ──
+  function spin(id, delta) {
+    const el = document.getElementById(id);
+    const val = Math.max(0, (parseInt(el.value)||0) + delta);
+    el.value = val;
+  }
+
+  // ── Recalc total ──
+  // activityFields maps to the actual element IDs (no activitiesCompleted anymore)
+  const activityFields = ['emailsSent','callsMade','meetings','visitsToVox','socialDMs','other'];
+
+  function recalc() {
+    const total = activityFields.reduce((sum, id) => sum + (parseInt(document.getElementById(id).value)||0), 0);
+    document.getElementById('totalCount').textContent = total;
+    const pto = document.getElementById('ptoCheck').checked;
+    const pct = pto ? 0 : Math.min(100, Math.round(total / 40 * 100));
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // ── PTO toggle ──
+  function togglePTO() {
+    const checked = document.getElementById('ptoCheck').checked;
+    const card = document.getElementById('ptoCard');
+    card.classList.toggle('pto-active', checked);
+    document.getElementById('goalText').textContent = checked
+      ? 'PTO day — no activity requirement'
+      : 'Goal: 40 activities';
+    recalc();
+  }
+
+  // ── Toast ──
+  function showToast(msg, type='') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.className = 'toast', 3500);
+  }
+
+  // ── Submit ──
+  function submitForm() {
+    const rep  = document.getElementById('repName').value;
+    const date = document.getElementById('actDate').value;
+    if (!rep)  { showToast('Please select your name.', 'error'); return; }
+    if (!date) { showToast('Please select a date.',    'error'); return; }
+
+    const emails  = parseInt(document.getElementById('emailsSent').value)  || 0;
+    const calls   = parseInt(document.getElementById('callsMade').value)   || 0;
+    const meet    = parseInt(document.getElementById('meetings').value)    || 0;
+    const visits  = parseInt(document.getElementById('visitsToVox').value) || 0;
+    const social  = parseInt(document.getElementById('socialDMs').value)   || 0;
+    const other   = parseInt(document.getElementById('other').value)       || 0;
+
+    const payload = {
+      rep_name:             rep,
+      activity_date:        date,
+      is_pto:               document.getElementById('ptoCheck').checked,
+      emails_sent:          emails,
+      calls_made:           calls,
+      meetings:             meet,
+      visits_to_vox:        visits,
+      social_dms:           social,
+      other:                other,
+      total_activities:     emails + calls + meet + visits + social + other,
+      leads_assigned:       parseInt(document.getElementById('leadsAssigned').value)  || 0,
+      leads_contacted:      parseInt(document.getElementById('leadsContacted').value) || 0,
+      notes:                document.getElementById('notes').value.trim(),
+    };
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    google.script.run
+      .withSuccessHandler(() => {
+        showToast('✓ Activities logged successfully!', 'success');
+        btn.textContent = 'Logged ✓';
+        setTimeout(() => {
+          resetForm();
+          btn.disabled = false;
+          btn.textContent = 'Log Today\'s Activities';
+        }, 2000);
+      })
+      .withFailureHandler(err => {
+        showToast('Error: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Log Today\'s Activities';
+      })
+      .submitActivityLog(payload);
+  }
+
+  // ── Reset form after successful submit ──
+  function resetForm() {
+    document.getElementById('repName').value = '';
+    const today = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    document.getElementById('actDate').value =
+      `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+    // PTO toggle off
+    document.getElementById('ptoCheck').checked = false;
+    document.getElementById('ptoCard').classList.remove('pto-active');
+    document.getElementById('goalText').textContent = 'Goal: 40 activities';
+    // Plain number fields
+    ['emailsSent','callsMade','socialDMs','other'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    // Sliders
+    ['meetings','visitsToVox'].forEach(id => {
+      document.getElementById(id).value = 0;
+      updateSlider(id);
+    });
+    // Leads spinners
+    ['leadsAssigned','leadsContacted'].forEach(id => {
+      document.getElementById(id).value = 0;
+    });
+    // Notes
+    document.getElementById('notes').value = '';
+    // Totals
+    document.getElementById('totalCount').textContent = '0';
+    document.getElementById('progressFill').style.width = '0%';
+  }
+</script>
+</body>
+</html>

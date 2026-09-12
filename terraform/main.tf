@@ -2983,6 +2983,16 @@ resource "google_storage_bucket_object" "mfg_job_schedule_inventory_availability
   content_type = "text/plain"
 }
 
+# Added 2026-09-11 — cycle counting. Warehouse_v_Cycle_Count does not exist on
+# this tenant; the data lives under the Part module, so this rides the
+# part_on_hand_inventory pipeline rather than getting a job of its own.
+resource "google_storage_bucket_object" "part_cycle_count_view_sql" {
+  name         = "sql/part_cycle_count_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_cycle_count_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Part On-Hand Inventory — prod (PlexProd, 4 PM UTC) ────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {

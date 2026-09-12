@@ -30,6 +30,25 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Added 2026-09-11 — cycle counting. Warehouse_v_Cycle_Count / _Line do NOT
+  # exist on this tenant (confirmed live: "Base table ... not found"); cycle
+  # counting lives under the Part module, the same trap as on-hand inventory.
+  # Extracted to answer "is there anything here?" — row counts were unknown
+  # when this was added, so the view is deliberately tolerant of an empty table.
+  - plex_view: Part_v_Cycle_Inventory
+    bq_table: raw_Part_v_Cycle_Inventory
+    filter: ""
+    date_col: ""
+
+  # Carries Accuracy_Threshold — the per-part target a count is judged against.
+  # Not joined by part_cycle_count_view yet: the join key is unconfirmed until
+  # there are real rows to look at. Extracted now so that review needs no
+  # second deploy.
+  - plex_view: Part_v_Cycle_Frequency
+    bq_table: raw_Part_v_Cycle_Frequency
+    filter: ""
+    date_col: ""
+
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).
 #
@@ -71,3 +90,6 @@ bq_view:
   - name: inventory_top_quantity_report
     display_name: "Vox Scorecard | Top Quantity Ranking"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_top_quantity_view.sql
+  - name: part_cycle_count_report
+    display_name: "Vox Scorecard | Cycle Count Accuracy"
+    sql_file: gs://voxdatalake-report-configs/sql/part_cycle_count_view.sql

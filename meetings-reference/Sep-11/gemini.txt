@@ -1,0 +1,510 @@
+Please rate the new Quick notes tab by taking a short survey.
+
+Emilio / Jennilyn
+
+Sep 11, 2026
+Emilio Dominguez Jennilyn Tockstein
+
+Sales report automation and inventory tracking discussed via project updates and technical planning.
+
+Sales Report Automation and Integration
+Jennilyn created a custom query to extract sales data from Plex, replacing manual Netsuite downloads.
+The query includes external sales representative names to help designers identify the correct contact.
+Automated data pushes filter for orders with pending fulfillment status within the last 2 weeks.
+Duplicate prevention checks against order numbers and customer part numbers to ensure data accuracy.
+Proposed routing automated data into a Monday holding board to allow manual review before transfer.
+Notifications will trigger exclusively when system errors occur to prevent email fatigue from successful runs.
+
+Scorecard Metrics and Inventory Configuration
+Deposit review indicates pending accounting approval, while quote and pending sales approval represent internal statuses.
+Minimum inventory quantity fields in Plex serve as the tracking mechanism for stock levels.
+Part cost mapping for rework values requires alignment with Plex part data and customer prices.
+The historical data cutover is scheduled for October 19, retaining Netsuite as a fallback option.
+Cycle counts measure location accuracy and counted item values to monitor inventory tracking performance.
+Performance and bonus standards will integrate into the web app with restricted edit permissions.
+Inventory balance reflects total stock dollar value, with the calculation source pending confirmation.
+
+Testing Procedures and Coordination
+Sheldon will coordinate testing scenarios for data destruction and deviation cases with the team.
+A dedicated meeting is planned with Ashley to finalize workflow notifications and communication preferences.
+
+Next steps
+[Emilio Dominguez] Automate Data Export: Develop an automated process to export sales report data from Plex into Google Sheets or Monday. Ensure the integration filters for orders with a pending fulfillment status.
+[Jennilyn Tockstein] Share Reference Spreadsheet: Grant access permissions to the reference spreadsheet so that testing can proceed. Include the relevant board ID as part of the access provision.
+[Emilio Dominguez] Duplicate Spreadsheet: Create a duplicate of the existing reference spreadsheet to serve as a secure environment for testing data pushes. Verify the integration functionality without impacting live production data.
+[Jennilyn Tockstein] Assign Board Ownership: Assign ownership or editor rights for the new Monday board to ensure proper integration capabilities. Facilitate the necessary permissions for automated data ingestion.
+[Emilio Dominguez] Implement Notifications: Implement a notification system that triggers alerts only when system issues or data errors occur. Configure the system to provide summary reports as requested by stakeholders.
+[Jennilyn Tockstein] Inquire Inventory Balance: Inquire with Justin about the correct source or calculation method for the inventory balance field. Determine if this value can be extracted directly from Plex or an existing costing report.
+[Jennilyn Tockstein] Introduce Sheldon: Facilitate an introduction between Sheldon and Emilio to coordinate testing procedures for data destruction and deviation cases. Provide the necessary context to ensure testing objectives are met.
+[Jennilyn Tockstein] Schedule Testing Meeting: Schedule a thirty minute meeting for Thursday to review testing data with Sheldon and Emilio. Ensure the session allows sufficient time for observing data destruction and deviation logging.
+[Jennilyn Tockstein] Reschedule Tuesday Meeting: Move the Tuesday meeting to noon to accommodate calendar conflicts. Update the calendar invitation to reflect the new start time.
+[The group] Hold Process Meeting: Meet with Ashley on Monday at 1:00 PM to finalize the automation workflow and communication preferences. Discuss how data should be presented to the sales team.
+
+
+
+Want to see more? View the full notes
+Tip: You can always access your full notes from the left sidebar.
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+
+
+Sep 11, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+Summary
+Sales report automation and inventory tracking discussed via project updates and technical planning.
+
+Sales Report Automation Setup
+Automation of sales data from Plex to Google Sheets and Monday confirmed. Error notifications scheduled only for failures.
+
+Scorecard and Inventory Metrics
+Web application authorization discussed alongside accounting statuses and inventory balance tracking.
+
+
+Decisions
+Needs Further Discussion
+Sales report automation into Monday holding board The automation of sales reports from Plex into a Monday holding board is pending stakeholder review and scheduling with Ashley.
+
+Aligned
+Plex history cut-over date configuration The system cut-over date is scheduled for October 19th, maintaining the pre-Plex history usage through October 16th.
+Turnaround time and bonus standards integration Turnaround time and bonus standards will be added to the web app with restricted access controls.
+
+
+Next steps
+[Emilio Dominguez] Automate Data Export: Develop an automated process to export sales report data from Plex into Google Sheets or Monday. Ensure the integration filters for orders with a pending fulfillment status.
+[Jennilyn Tockstein] Share Reference Spreadsheet: Grant access permissions to the reference spreadsheet so that testing can proceed. Include the relevant board ID as part of the access provision.
+[Emilio Dominguez] Duplicate Spreadsheet: Create a duplicate of the existing reference spreadsheet to serve as a secure environment for testing data pushes. Verify the integration functionality without impacting live production data.
+[Jennilyn Tockstein] Assign Board Ownership: Assign ownership or editor rights for the new Monday board to ensure proper integration capabilities. Facilitate the necessary permissions for automated data ingestion.
+[Emilio Dominguez] Implement Notifications: Implement a notification system that triggers alerts only when system issues or data errors occur. Configure the system to provide summary reports as requested by stakeholders.
+[Jennilyn Tockstein] Inquire Inventory Balance: Inquire with Justin about the correct source or calculation method for the inventory balance field. Determine if this value can be extracted directly from Plex or an existing costing report.
+[Jennilyn Tockstein] Introduce Sheldon: Facilitate an introduction between Sheldon and Emilio to coordinate testing procedures for data destruction and deviation cases. Provide the necessary context to ensure testing objectives are met.
+[Jennilyn Tockstein] Schedule Testing Meeting: Schedule a thirty minute meeting for Thursday to review testing data with Sheldon and Emilio. Ensure the session allows sufficient time for observing data destruction and deviation logging.
+[Jennilyn Tockstein] Reschedule Tuesday Meeting: Move the Tuesday meeting to noon to accommodate calendar conflicts. Update the calendar invitation to reflect the new start time.
+[The group] Hold Process Meeting: Meet with Ashley on Monday at 1:00 PM to finalize the automation workflow and communication preferences. Discuss how data should be presented to the sales team.
+
+
+Details
+Sales Report Extraction from Plex: Jennilyn Tockstein explains that the sales team requires sales report data twice daily, currently downloading a report from NetSuite, copying and pasting it into Google Sheets, editing it, and uploading it to Monday. Because this specific report requires custom Structured Query Language written by Jennilyn Tockstein since it does not exist natively in Plex, Jennilyn Tockstein asks Emilio Dominguez if they can automate pulling this data and writing it to a Google sheet. Emilio Dominguez confirms this is feasible using the existing query and data. Jennilyn Tockstein notes that they still need to add outside sales business development managers to the query so designers can reference the correct sales representative on Monday (00:03:31).
+
+Monday Board Automation and Manual Review Process: Emilio Dominguez suggests that Monday could be automatically injected with data to eliminate manual steps. However, Jennilyn Tockstein explains that the sales team prefers a manual review process where they check duplicates against historical data and update notes and reason codes before moving data to their active board (00:05:45). Jennilyn Tockstein proposes adding filters for orders with a status of pending fulfillment and an order date within the last two weeks, or having the code check against existing entries to write only new records based on order number and customer part number (00:07:05).
+
+Testing Environment and Board Setup: Emilio Dominguez requests access to the spreadsheet and states they will duplicate it for testing purposes to avoid hitting live data and causing errors (00:09:54). Jennilyn Tockstein mentions they can ask Ashley if they want to push data directly into a holding board in Monday so staff can modify notes before moving items to the active board (00:11:19). After discussing permissions and marketing login credentials, Jennilyn Tockstein grants Emilio Dominguez editor access and creates a new board, giving Emilio Dominguez ownership so they can pull information from Plex (00:12:47).
+
+Notification Preferences for Data Runs: Emilio Dominguez inquires about the preferred timing and notification format for data runs, suggesting 10:00 AM and 2:00 PM as cut-off hours (00:14:47). To avoid stacking up excessive success emails, Emilio Dominguez proposes that notifications be triggered only when a problem occurs or a run fails, rather than sending constant successful status emails. Jennilyn Tockstein agrees with this approach, stating they want to be included on the problem notification emails (00:17:05).
+Test Data and API Integration: Jennilyn Tockstein notes they were waiting on test data to locate notes in Plex, which was provided that day, making the report ready for automation. Emilio Dominguez confirms they have a long-lasting API key from Janette and can use the new board ID from the URL to access the board (00:18:26). Jennilyn Tockstein instructs Emilio Dominguez to ask Ashley if they have questions regarding data transformation, and suggests setting up the board to push test data while utilizing Monday status defaults or linking import boards to live boards (00:19:36).
+Web Application Authorization and Scorecard Review: Emilio Dominguez updates Jennilyn Tockstein on their progress finishing the web application for manual entries connected to BigQuery, noting they are currently working on authorization and consent screen configuration. Transitioning to the scorecard artifact, Emilio Dominguez points out that the order spending approval by accounting report filtered to pending payment review returns zero rows. Jennilyn Tockstein explains that sales changed the internal sales statuses, noting that quote and pending sales approval are internal sales statuses, deposit review corresponds to pending accounting review, and pending fulfillment occurs after accounting applies payment (00:21:09).
+
+Minimum Inventory Quantity Configuration: Emilio Dominguez asks about minimum set levels for parts. Jennilyn Tockstein clarifies that in Plex, this is configured as the minimum inventory quantity alongside maximum quantity, and states that parts already have these values or can be added to test parts (00:25:12). Jennilyn Tockstein suggests Emilio Dominguez test on existing parts with minimum inventory quantities before switching to specific three-part numbers (00:27:24).
+
+Red Cost Part Key and Unit Cost Tracking: Emilio Dominguez discusses issue number three regarding the red cost part key on the box scorecard live from Monday, explaining that it relates to deviation value and rework dollar amounts and currently fails due to duplicate rows and stem matching issues (00:27:24). Jennilyn Tockstein questions where part costs should be located in Plex, and Emilio Dominguez notes that costs are associated with jobs, containers, and rework costs, suggesting the unit cost part number as a reference (00:29:20).
+
+Quality Department Testing and Deviation Workflows: Jennilyn Tockstein states they met with Sheldon and plan to schedule a time late next week or early the following week with quality to have staff destroy and deviate items so Emilio Dominguez has test data to examine. Jennilyn Tockstein agrees to message Sheldon regarding availability for the end of the next week or the following Monday, emphasizing that test resets require Emilio Dominguez to inspect the data on the same day it is generated (00:32:21).
+Sales Data Cutover Dates and NetSuite Fallback: Emilio Dominguez asks if the spreadsheet tracking year-to-date authoritative Plex history will be maintained until cutover. Jennilyn Tockstein confirms the cutover date is October 19th and they will continue using the current spreadsheet through October 16th. Jennilyn Tockstein adds that since payments are applied in NetSuite, pulling data from NetSuite serves as a fallback option post-cutover if needed (00:35:18).
+Cycle Count Metrics and Location Accuracy: Emilio Dominguez addresses item seven regarding cycle count scope, noting that the part cycle inventory carries location accuracy and accounted-for inventory dates, but warehouse cycle counts are absent (00:35:18). Jennilyn Tockstein explains that staff have not completed many cycle counts this month due to fluctuating activity periods, but management wants to track counted locations, total counted item value, item quantities, and average location accuracy percentage (00:37:02).
+
+Turnaround Time Performance and Bonus Standards: Emilio Dominguez raises item eight concerning turnaround time performance and bonus standards per stock type, noting that Plex lacks a stock type remark and asking if these goals should be manual via the web app (00:37:02). Jennilyn Tockstein confirms the data is stored in a monthly table in the Google sheet based on item stock types and number of days, and agrees it should be added to the web app with restricted editing permissions (00:38:54).
+
+Inventory Balance Dollar Value Tracking: Emilio Dominguez asks about the inventory balance field on the revenue sheet. Jennilyn Tockstein clarifies that it represents the total dollar value of all inventory from raw materials to finished goods, but admits uncertainty regarding where to source this sum in Plex (00:41:06). Jennilyn Tockstein decides to ask Justin for clarification on the inventory balance scorecard and net go-live requirements (00:42:42).
+Upcoming Meeting Schedule and Project Syncs: Emilio Dominguez reviews their progress on the web app and upcoming questions, and the participants coordinate their schedules (00:42:42). Jennilyn Tockstein reschedules their Tuesday meeting to noon to accommodate a calendar conflict, and agrees to connect Emilio Dominguez with Sheldon for a Thursday testing session (00:44:58). Additionally, Jennilyn Tockstein schedules a Monday meeting from 1:00 PM to 1:30 PM with Ashley, Emilio Dominguez, and themself to discuss email notification summaries and Monday data pushes (00:46:40).
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+
+
+Sep 11, 2026
+Emilio / Jennilyn - Transcript
+00:00:03
+
+Emilio Dominguez: each of the settings here. Okay, give me a minute. Mhm.
+Jennilyn Tockstein: Okay, I have something for you. Let's see. So, if you come in here, you know where these are, right?
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Store procedures. There's a new one that I made.
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: Um, this report is Oh, I have a weird echo. Um, this report is something that the sales team needs to be able to get the data from. Um, usually like twice a day. And um right now what they do is they download a report in Netswuite then they copy and paste it into Google Sheets,
+Emilio Dominguez: Hit
+Jennilyn Tockstein: then they make some edits and then they upload it into Monday and they do that every day. I was wondering because this is a report I had to write the SQL for to get the stuff on here since it doesn't just exist with Plex,
+Emilio Dominguez: him.
+Jennilyn Tockstein: trying to get this job note was not fun. Um, I was wondering if there's a way we could pull this data and write it to a Google sheet for them
+
+
+00:03:31
+
+Emilio Dominguez: Yeah, definitely. Even if
+Jennilyn Tockstein: uh twice daily or and maybe have like a a button on the Google sheet where we can allow them to request the data.
+Emilio Dominguez: Yeah, definitely. Even if the report or the the view as a store store procedure is not like available right of right off the bat, there's the the query, right? The query has all the data that just involves all
+Jennilyn Tockstein: Yep. That's what I was going to give it to you.
+Emilio Dominguez: Yeah. Yeah. All the data.
+Jennilyn Tockstein: So, because Yeah,
+Emilio Dominguez: So that's
+Jennilyn Tockstein: them coming in here and running the query and downloading it isn't like a for reals option. It's not something that they're going to do. So,
+Emilio Dominguez: sure.
+Jennilyn Tockstein: I was kind of wondering now that I've figured out all of the pieces,
+Emilio Dominguez: Nice.
+Jennilyn Tockstein: the only one I didn't add to it that would be helpful is the um I think their BDM, their outside sales.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Um I didn't add that to the query yet.
+
+
+00:04:31
+
+Emilio Dominguez: Uh all right. Like Yeah. the the names for them and if will that be a join uh or will they be yeah will they be
+Jennilyn Tockstein: this one
+Emilio Dominguez: having a separate report for each of them? What what's the idea?
+Jennilyn Tockstein: just to have the name on there so when they bring it into Monday when the designers have questions they know which rep to ask.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: So it's just a reference. Um,
+Emilio Dominguez: and it's it wouldn't match maybe like maybe on Monday they have another name or or even just surnames or things. It doesn't need to match what Monday has right
+Jennilyn Tockstein: no, just pull it from here.
+Emilio Dominguez: and okay so first step is like getting from from Plex that's uh already available then what do they do with that um do they what's the interface where do they would like to get the data from or send to an email rather than as a CSV or what what's the idea behind getting the data from here from flex um what is the flow that you are
+
+
+00:05:45
+
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: thinking for them to because if you would like to Monday can also be injected with the right info and they shouldn't like have to do even Hey. Hey. Hey. thing, right? Everything could be automized. Automated. Yeah.
+Jennilyn Tockstein: inject it into Monday potentially.
+Emilio Dominguez: Yeah. Correct.
+Jennilyn Tockstein: We could. So, right now they download it every day and um copy and paste it into here.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: They use this that checks for duplicates. Um,
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: it checks against this historical and they they do kind of like in some ways reviewing it themselves before moving it over here because sometimes
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: they change the notes or update like these reason codes and stuff. Um, I could put you in touch with Ashley if ask if we want
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: to automate it. I mean, there's ways with Monday to connect Monday to the Google sheet so they can just push a button and it imports it.
+
+
+00:07:05
+
+Jennilyn Tockstein: And we had that for a while, but they they didn't like it.
+Emilio Dominguez: Correct. Yeah.
+Jennilyn Tockstein: Long story short,
+Emilio Dominguez: They want like more like of a
+Jennilyn Tockstein: so
+Emilio Dominguez: review uh to just have a manual process in order to trigger that. Yeah, I understand. Um.
+Jennilyn Tockstein: if it was to just appear on here a couple times a day,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: um we would probably add the filter on here to be um two filters I didn't add one, the order status needs to be pending fulfillment and two, the um date on here, the order date. Is this the day they made the sales order? It probably is. Um, we'll just want to keep this like within the last two weeks or something. We don't want it to show all that are in label design
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: or if we do if in your code you wanted to have it um or I wasn't showing the other tab. if you wanted to show have it check against the ones that are in here
+
+
+00:08:41
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: already um and only write to the main tab new ones then that would work as well. So, as long as it's only writing new ones, um,
+Emilio Dominguez: Yeah. No point in the ones. that are already there. uh for the historical the IDs wouldn't be changed I
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: would presume because they have this manual process of writing notes or but they don't change the ID at all or something that will break that chain of because the code will just verify okay so this this ID has already been
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: placed here but maybe they changed that sales order number because of something, but I I wouldn't think so, right?
+Jennilyn Tockstein: Yeah, you do look off of the order number and the customer part number.
+Emilio Dominguez: Mhm. To have more accuracy,
+Jennilyn Tockstein: Like that would be the the two pieces.
+Emilio Dominguez: right?
+Jennilyn Tockstein: So, if the same customer part number appears, but it's on a different order number, then we're good to go ahead and repeat it.
+Emilio Dominguez: Even the date, right?
+
+
+00:09:54
+
+Emilio Dominguez: Or but the dates could be changed by Plex
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: or because you
+Jennilyn Tockstein: the dates can change like they might it would
+Emilio Dominguez: you could like update.
+Jennilyn Tockstein: go order number and part number because if they end
+Emilio Dominguez: Okay. Yeah.
+Jennilyn Tockstein: up cancelling and reopening an order or something like that, we still wouldn't want to Yeah. Part number and order number. will be will be good filters for
+Emilio Dominguez: Okay. Can um could you add me to that to that to that spreadsheet so I can
+Jennilyn Tockstein: this one just kind of as a reference.
+Emilio Dominguez: Yeah, I may duplicate that to not hit that live data, right? And just maybe for the time of testing just send the the information to the duplicate and then just when the there is uh accuracy on on the process because the process wouldn't write to the historical data right but I won't I wouldn't like to have errors on That's so yeah I will just duplicate that for the time being and then for now it
+
+
+00:11:19
+
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: has maybe some code right because of the Monday uh some appcript code there or
+Jennilyn Tockstein: The code just checks duplicates and flags them for them.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, I'm asking Ashley if she'd want us to push it into Monday because because if we did push it directly into Monday, um, we could put it in like a a holding board where they could be,
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: uh, they could still change the notes and stuff before moving it to their active board. She thinks that that would be good if we put it into into a like a holding board.
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: Are you
+Emilio Dominguez: I have the API for Monday uh from Janette and I haven't I did I did brow to that because I was working with the request code for box.
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: So yeah, I have added data to the to the board to the to the leads. I haven't tried with the other ones because we hit some permissions. I think you remember for some of the other boards, but but yeah.
+
+
+00:12:47
+
+Emilio Dominguez: Um
+Jennilyn Tockstein: It would be in this workspace and I think we would just make a new board.
+Emilio Dominguez: okay I think yeah I got together with because you have liberty right to to create I think I don't have with even with that API key or the permission Janette doesn't have um permissions to to add new boards.
+Jennilyn Tockstein: do certain things.
+Emilio Dominguez: Yeah. To Yeah, maybe because of because of the ownership,
+Jennilyn Tockstein: Let me add you.
+Emilio Dominguez: right?
+Jennilyn Tockstein: Are you using the marketing login or do you have another one?
+Emilio Dominguez: Yeah, I could I could use the marketing. We want this to be more I have logged
+Jennilyn Tockstein: Or do you have your own? No. Don't.
+Emilio Dominguez: in with my personal with my parasol. But yeah, maybe we should use a marketing email.
+Jennilyn Tockstein: Okay. It gave you editor. Let me just add a board and give you ownership of it.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, yeah. And you could push from plex into here.
+
+
+00:14:47
+
+Jennilyn Tockstein: I think that would be amazing. Um, and it would be basically this plus, you know, the sales rep filtered to be only pending
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: fulfillment orders. And I'm trying to remember if there's anything else on here that you would actually bring in. I think so.
+Emilio Dominguez: Uh about the times about the times um of the day. And if you would like a summary, it can be either a summary email or or just write into some data table data sets table on the bequery that the you know new orders came through. But what what will the cut hours be like morning and evening or
+Jennilyn Tockstein: I think they do it at like 10 and two or something.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, I would say 10 and two to start and then we can ask these two email addresses their preferences and
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: um those those would be the
+Emilio Dominguez: Would they like Okay.
+Jennilyn Tockstein: people who'd want the daily summaries. I wouldn't need them.
+Emilio Dominguez: Will be preferred that only problems are notified or the summary outcome because like as for now for Plex you get the bunch of emails, right?
+
+
+00:17:05
+
+Emilio Dominguez: Like that amount of summaries. So they can stack up like on even for two of them during the
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: day for a week it will be kind of like 10 emails for a week. So I don't know if they will prefer just when something broke down maybe on Plex or if some uh some of the runs wasn't uh run correctly then the summary will be triggered only by the problem only if a problem occurred but not something like hey everything is successful and then another successful email and then another successful Well,
+Jennilyn Tockstein: Yeah, probably just the problem ones and I can be on that too.
+Emilio Dominguez: okay. that I can keep like myself for even the marketing email to to the summary like the success ones like and the problematic would be like so then you will know okay uh it didn't run for the evening so some order or or amount of orders are not there but that's why would be the
+Jennilyn Tockstein: Okay. Yeah,
+Emilio Dominguez: right on
+Jennilyn Tockstein: that would be great.
+
+
+00:18:26
+
+Jennilyn Tockstein: That was a report. I was waiting on them to make some test data so that I could try to find where the notes are. um since it was not easy to find the notes and and so they they did the testing data
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: for me today. And so it's kind of related because it is it's not a dashboard metric,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: but it is a very critical report. So yeah, and if you were able to automate putting that into Monday for them, that would be great. And now that you're an owner of that board, you should be able to get the info you need on it. But if you can't get like because you should still have like the API keys and stuff.
+Emilio Dominguez: Yeah. And it's a long
+Jennilyn Tockstein: So you just need this new board ID which is part of the URL for it. So yeah.
+Emilio Dominguez: correct.
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: And it's usually uh Yeah, that API key is longl lasting. So that's good.
+
+
+00:19:36
+
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: Okay. So on questions about that, should I talk to you first or should I look with them first if something is needed regarding data transformation or something?
+Jennilyn Tockstein: Um, if you have questions, ask Ashley and I put both of us on there.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, because it's just test data and it's a separate board that's not connected to anything. Um, I would say you could go ahead and set the board up and try to push stuff in there. Um,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Monday, it looks like they have like a a status for the sales rep's names. So, when it comes in as one name, it can default to the rep's status name. You can do some of that kind of stuff. Or we can just link it so that when it comes from the import board to the actual live board, it connects the rep name and stuff like that there, which might be easier. There.
+Emilio Dominguez: Okay. Sure
+Jennilyn Tockstein: Um, yeah, that was a fun thing today.
+
+
+00:21:09
+
+Jennilyn Tockstein: How's all the other things you're working on going?
+Emilio Dominguez: thing. Yeah. Uh so I'm finishing the app to have the these manual entries, right? So since it's going to be also connected to bequery I'm just finishing some authorization all out this was uh consent screen configuration for the project. So that's about it on the what is currently
+Jennilyn Tockstein: Awesome.
+Emilio Dominguez: going on on that web web app. Let me just look at something here. If okay. And for the pending things um from the scorecard. So let me just give you the artifact again. But some of those have internal answers. So let me just share my screen. Good Okay. So on the questions for this one. Um the order spending approval by accounting report filter to pending payment review. It has been returning zero roughs. So it was reported to deposit review and
+Jennilyn Tockstein: So sales changed the uh the statuses.
+Emilio Dominguez: Mhm.
+
+
+00:25:12
+
+Jennilyn Tockstein: So yeah, it's quote and pending sales approval are internal sales statuses. Deposit review is the appending accounting review. Um after accounting applies a payment to it, it goes to pending fulfillment.
+Emilio Dominguez: Okay. All
+Jennilyn Tockstein: So deposit review is the accounting approval.
+Emilio Dominguez: right then. Okay. So for the other one we discussed this um the minimums are going to be placed by you or by the team the minimum set levels right on on the parts that's the part interface where you have showed me the minimum can be placed there. So that's kind of like your work to do, right? To not to not have zero,
+Jennilyn Tockstein: Let's see.
+Emilio Dominguez: right? Um on the on the parts
+Jennilyn Tockstein: We do have minimum stock levels. Let's see. So, it's called minimum inventory quantity.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: That land. Um, so the there's what it says when you hover on it.
+Emilio Dominguez: So minimum quantity and maximum quantity. All right. Okay.
+
+
+00:27:24
+
+Jennilyn Tockstein: So um it's this this minimum
+Emilio Dominguez: And then
+Jennilyn Tockstein: inventory quantity and this is the I keep for it. It's not called minimum stock level in Plex. It's called minimum inventory quantity.
+Emilio Dominguez: most of the parts already have has this, right?
+Jennilyn Tockstein: Yeah. right now. Right now you're looking at primarily the three three part numbers
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: and and we don't have those in live. So we add them to test.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: So you don't have very many to look at. But if you want to look at like the the one two part numbers right now just to have a field to pull, there's a bunch of those in here with minimum inventory quantities. So you could test it on a one two part number and then later switch to a 33 if you want to just hit the field and have something to to hit and come back.
+Emilio Dominguez: Okay, let's go with the other one. So number three, what does the red cost park key to on the box score card live that's from the Monday?
+
+
+00:29:20
+
+Emilio Dominguez: This is related to the deviation value and the dollar amount for the rework. So it is the obvious cost source and it does not work. 199 Ravs of part plus cost join into five of 6,000 Plex parts and none of the three tree parts. Its keys are base stems like one to three against plex. with duplicate rubs and stem matching fails almost everywhere. But this comes from maybe the I don't know if it relates to the part line price or the the amount Yeah. The total amount for each each line.
+Jennilyn Tockstein: So we need a part cost. Do you know where that needs to be? like where in Plex we need that
+Emilio Dominguez: Yeah, that's a tricky part. But
+Jennilyn Tockstein: because I'm not sure. Let's see.
+Emilio Dominguez: Yeah, there is cost but it is associated to jobs to two containers too. Well, there is a rework cost. So, I think this is a good reference maybe on The unit cost part number.
+Jennilyn Tockstein: Yeah, I'm looking at like the Plex parts trying to see where we can because we're going to have customer part prices for finished goods, but I think what you're wanting is a cost on the other stuff.
+
+
+00:32:21
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And I'm not really sure where I add that.
+Emilio Dominguez: All right. uh on number five for deviation of things that we have discussed before test data. So, That's where testing some data and even as you said maybe just putting some data in um could be worth trying.
+Jennilyn Tockstein: Yes. So, um I actually met with Sheldon yesterday and I wanted to set up a time with you and quality uh late next week or early the week after to have them destroy and deviate things and give you
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: some stuff to to go look for um let me pink Sheldon real quick.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, okay. I'm going to ask him his availability end of next week or the Monday
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: after. Um, because test resets, right?
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: He'd have to make some data and you you'd have to go look at it the same day.
+Emilio Dominguez: correct. Yeah, we can match that also with sales maybe to just have a complete set of things to to look at.
+
+
+00:35:18
+
+Emilio Dominguez: But yeah, right on. Uh for number six is uh is sales the the spreadsheet right year to date the authorative plex history prelex history.
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: Um is that going to be kept right all the way um before a cut
+Jennilyn Tockstein: Yep.
+Emilio Dominguez: over? Yeah then.
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: cut over dates October 19th. Um, so we'll keep using the other one through October 16th. And I mean, possibly not that I really want us to think about it but since we are applying the payments in Netswuite I think it will still show us in Netswuite this so if we don't get it that's my fallback option is to still get out of Netswuite so because I
+Emilio Dominguez: All right.
+Jennilyn Tockstein: I think we can still pull the same number from Netswuite um post cut over date I don't want to But it is a fallback option for that one.
+Emilio Dominguez: Okay. Number seven is cycle count in scope. Um there is this part cycle inventory. It carries location accuracy accounted for unaccounted for cycle inventory date because the first one warehouse cycle count is absent.
+
+
+00:37:02
+
+Jennilyn Tockstein: Let me pull that terrible sheet up. Cycle count. So, I think they just haven't cycle counted anything yet this month. Um, they go through periods where they do a whole lot and where they don't do anything.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: They have cycle counted a little bit, it looks like.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Um, but yeah, they they do want to keep track of how much cycle count they've done. They like to know how many locations they counted and the value um the number. Yeah, the number of items that have been counted and the percent of accuracy. I think the percent accuracy has got to be average. Uh, I think it's just saying how many locations were assigned and if it was what it was supposed to be, it was considered accurate or not. And then they just averaged that. So,
+Emilio Dominguez: All right.
+Jennilyn Tockstein: not a very exciting metric.
+Emilio Dominguez: Thank you. Uh number eight, turnaround time has a performance and bonus standard per stock type.
+
+
+00:38:54
+
+Emilio Dominguez: Where is this from? So nothing is resembling a pair stock type remark in Plex. So the you know the goals form or the web app can hold those but yeah they are going to be manual or
+Jennilyn Tockstein: Hold on. One quick thing. Um Okay, you're on number eight.
+Emilio Dominguez: I'm right. Turn around time. If they are manual, they should be implemented with the web app.
+Jennilyn Tockstein: We go. Um, that one might that's one that we want to like limit who can edit it.
+Emilio Dominguez: Right on. Yeah.
+Jennilyn Tockstein: I think though the goal would be to limit who can edit all of these. So it might be fine. Um it is on the Google sheet that monthly cat table there are the performance and the bonus and they're in the table there. Let me let's see it's based off of the item stock type and it's a number of days. Yeah. So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: we have it in a table.
+
+
+00:41:06
+
+Jennilyn Tockstein: We could add it to the web app. That's a great idea. We're just going to make sure we limit who can access it.
+Emilio Dominguez: Okay. Um the last one is what is the inventory balance field on the revenue sheet supposed to be
+Jennilyn Tockstein: What is the inventory balance? Oh, that is the dollar value of our inventory.
+Emilio Dominguez: the one that Amber answer Right. Amber or the
+Jennilyn Tockstein: No, it is
+Emilio Dominguez: one that the formula that just showed me about the negative If you're subtracting the
+Jennilyn Tockstein: It's going to be some sort of costing report.
+Emilio Dominguez: quantity
+Jennilyn Tockstein: I actually don't know. It's It's the sum of value of everything in inventory. And from raw materials to finished goods, it's the dollar value of everything out there. And I actually have no idea where to get that sum,
+Emilio Dominguez: H. Yeah.
+Jennilyn Tockstein: but we like in here we've got like the quantity and the weight. That's all cute, but we This is like the dollar value sum.
+
+
+00:42:42
+
+Jennilyn Tockstein: Um, it might be in some sort of costing report.
+Emilio Dominguez: H.B.
+Jennilyn Tockstein: Gosh, I don't know actually. That one actually we may just want to keep from I don't know. I was going to say we may want to keep it from Plex, but I actually don't know that we do.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: That is a great question. I'm going to ask Justin.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: So the inventory balance scorecard you want or net go live. Okay. All right.
+Emilio Dominguez: Okay, thank you. Uh so I will finish the the web app to get the data there like dummy data maybe to just inject that and just finish with these questions that you answered and the ones that are work in progress just flag them for that. But yeah and I will keep you updated for for that the other project. I don't remember if you have set already the meeting or if if that's going to be also discuss with the same with these same meetings right on the sales automation extraction from from Plex and everything or if Two.
+
+
+00:44:58
+
+Emilio Dominguez: would like us to gather to get together maybe Tuesday. I think we have some meetings for us on Tuesday,
+Jennilyn Tockstein: We have Tuesday.
+Emilio Dominguez: but
+Jennilyn Tockstein: I'm gonna bump it to noon my time. Tuesday.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Somebody put another meeting on my calendar. Um and then I will have um a quality person named Sheldon.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Sheldon will reach out to you um and you guys can um maybe schedule some time on Thursday for him to make some stuff and test. And then you would have well I guess Thursday to try to find it. So I will connect you two. Um but that way we could try to get the destruction the deviation.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: Um maybe we could ask him to try to do a rework or something. Well, whatever he can do we'll try to do and then we'll leave the rest of it for next
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: time.
+Emilio Dominguez: Nice. Thank you. That's for Tuesday and for the other you know um Ashley I I don't remember if that's name for if that's going to be through emails or should a meeting be held just to okay say this is the the process this is how you would receive not notifications
+
+
+00:46:40
+
+Jennilyn Tockstein: Yeah, it would probably be a good idea.
+Emilio Dominguez: There.
+Jennilyn Tockstein: Um, let's see. Let's get rid of that. You guys, we are all free one to 1:30 my time on Monday.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Would that work?
+Emilio Dominguez: Okay. One. Yeah. Yeah. Is it almost 3 p.m. there? uh on your time. Yeah. Okay. We have the same for now and then it reverts to 1 hour maybe ahead when daylight savings time
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: end. Yeah. Okay.
+Jennilyn Tockstein: And I think she's going to want lots of the email. She said she'd want a separate email. I think she'd want to have in her email what was pushed into Monday every day just to
+Emilio Dominguez: Nice.
+Jennilyn Tockstein: have like an email record. Um but yeah,
+Emilio Dominguez: Yeah,
+Jennilyn Tockstein: you can meet one
+Emilio Dominguez: that might be yeah more like a um a summary as you say or monitoring that is maybe not related to the other emails Maybe just a summary all all the way for for the night so she can know. Okay, so two or three or five 10 other orders were added instead of having a bunch of emails. But yeah,
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: we can we can talk about that. Uh are you going to be there or just
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: they Okay,
+Jennilyn Tockstein: I can I'll hop on that one.
+Emilio Dominguez: hang on. Okay, so thanks Jennilyn for answering all the questions.
+Jennilyn Tockstein: And yeah, and then I I'll set up a halfhour meeting Thursday. Um, introduce you to Sheldon and then hopefully he can understand what he needs to do. He can do it that day and you can hopefully pull some of that test data.
+Emilio Dominguez: Okay, right on.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: So,
+Jennilyn Tockstein: sounds good.
+Emilio Dominguez: let's meet again next week.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: Have a good one.
+Jennilyn Tockstein: have a good weekend.
+Emilio Dominguez: Take care. Goodbye.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: Take care.
+Jennilyn Tockstein: see you. Bye.
+Emilio Dominguez: The Friday.
+
+
+Transcription ended after 00:49:16
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

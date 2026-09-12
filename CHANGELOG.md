@@ -14,6 +14,430 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-11 (deployed) — Out of Stock fired for the first time
+
+Credentials refreshed, so everything queued up today actually ran.
+
+### Verified — `inventory_out_of_stock_report` returned FOUR rows
+The tile has been empty for its entire life. At 16:40 it held four real
+shortages — `33102-00VOXNU-0` short **2,964,559** against a 2,086,325 minimum,
+`33125-00VOXNU-0` short **12,002,000**, `33147-00VOXNU-0` short **4,527,800**,
+`33190-00VOXNU-0` short **20,877,000**. Real minimums, real BOM-exploded demand,
+end to end.
+
+**An hour later it read 0 again, and that is the view being right rather than
+flaky.** The minimums are still set; demand on those parts fell to zero because
+orders moved into **Quote** status in Plex between the two reads. Demand counts
+only what Plex flags `Include_In_MRP` — Pending Fulfillment and Hold — so a
+quote is correctly not demand. The same event is visible from the other side:
+quote lines in `pipeline_plex_value_report` jumped **3 → 35** over that hour.
+
+Recorded here because the four-row reading is now the only evidence that exists
+— the tenant has already moved on, and "it has never returned a row" would
+otherwise still be the story.
+
+### Deployed — `part_cycle_count_report`
+Created and answering. Returns 0 rows because nothing has been cycle counted on
+the test tenant; `raw_Part_v_Cycle_Inventory` is empty too, so this is an
+upstream absence rather than a broken view — exactly the distinction the
+`-Quality` switch was added to make. Counting is lumpy by design, so an empty
+month is expected.
+
+### Ran — sales_orders, part_on_hand, work_orders, quality, inventory_snapshot
+All test. Views verified directly, not trusted from exit codes. Now carrying
+data that was empty this morning: **Open Bottles** (3 open jobs), **Open Caps**
+(4), **pipeline** (35 quote lines), **Quantity Available** (112 parts).
+
+**The first real Quality deviation landed** — one record with its part linked,
+ahead of Sheldon's Thursday session.
+
+**Every revenue view reads 0 together**, which is the signature of a tenant with
+no shipments rather than of a view problem.
+
+### Fixed — `scorecard_status.ps1` could not run at all
+Written as UTF-8 **without** a BOM, and PowerShell 5.1 reads `.ps1` as ANSI, so
+every em-dash became mojibake and the parse failed on the first string. Re-saved
+as UTF-8 with BOM.
+
+Worth recording because the syntax check that was supposed to catch this
+**reported success without checking anything**: the `[ref]$e` in it errored
+before `ParseFile` ever ran, and the `else` branch printed "PS1 parses OK".
+A validation step that cannot fail is worse than none.
+
+### Still blocked
+`terraform apply` — the local permission classifier stops it, so it needs a
+human. Pending in it: the `part_cycle_count_view.sql` GCS object (the file is in
+the bucket via `gcloud storage cp`, but Terraform's state does not know), and
+the whole `label_design` job, which has configs and SQL but **no Cloud Run job
+or scheduler resources yet**. `label_design_report` is the one view still
+MISSING, and it cannot be created until that job exists.
+
+## 2026-09-11 (night) — Label Design notifications, and getting ready for Quality
+
+### Added — `deploy/label_design_sync/`
+The Apps Script half of the Label Design queue: reads `label_design_report`,
+decides which rows are new, writes them to the sheet and pushes them to the
+Monday holding board.
+
+**The notifications live here, not in the pipeline**, and that placement is the
+point: the Cloud Run job knows a query succeeded; only this knows what reached
+Monday.
+
+| When | Who | What |
+|---|---|---|
+| Every run (10:00, 14:00) | Emilio, marketing@ | Counts, the new rows, any problems |
+| Nightly (18:00) | Ashley, Kelli, Jennilyn | One digest |
+
+**The "errors only" filter was dropped on request, and it was the right call.**
+A silent success and a job that never fired look identical from outside, and
+the reason this was automated is that nobody notices when a manual step stops
+happening. The nightly summary therefore treats **no sync ran at all** as its
+own loud case, separate from "problems occurred" and from "nothing new today"
+— the last being normal, and said plainly so a quiet day doesn't read as a
+broken one.
+
+**Dedupe is order number + customer part number against BOTH tabs.** The
+`historical` tab is read and never written, because notes and reason codes are
+hand-edited there and re-writing a row would overwrite that work. If either tab
+lacks those columns the run **stops** rather than continuing — without them
+nothing can be deduplicated, and the failure mode is writing the whole queue
+again.
+
+Two Monday-specific traps handled: items are created **one at a time** (a batch
+failing halfway leaves the sheet written with no way to tell which half landed),
+and the API answers **`200` with an `errors` array** rather than an HTTP error,
+so the status code alone would report success on a rejected mutation.
+
+A failed push deliberately does **not** undo the sheet write: the row stays, the
+key is recorded, and the next run won't repeat it. "On the sheet, not on the
+board" is a state the email names, and fixing it is a manual re-push rather than
+a re-run.
+
+**Not finished:** the Monday column IDs in `pushToMonday_` are placeholders
+until the holding board exists — they are per-board and are not the column
+titles.
+
+### Fixed — `scorecard_status.ps1` was already out of date
+It shipped this morning without `label_design_report`, which did not exist yet
+when it was written. Added, under a new Operational group.
+
+### Added — `-Quality` switch, for Thursday
+Sheldon is creating destruction, deviation and rework records this week, and
+**the test tenant resets**, so the evidence has to be inspected the same day it
+is made. The switch counts the **raw** Quality tables alongside the views,
+because a view returning 0 rows cannot distinguish the two failures that matter
+that day:
+
+- **raw table has rows, view has none** → the view is wrong, and that is ours
+  to fix while the data still exists.
+- **both empty** → the record never left Plex; check the extraction ran at all.
+
+Without the raw counts, both look like "the report is broken" and a day of
+someone else's test data gets wasted on the wrong diagnosis.
+
+## 2026-09-11 (evening) — the Sep-11 meeting, and one artifact instead of two
+
+### Added — `label_design` pipeline, replacing a twice-daily manual loop
+Jennilyn's Plex stored procedure `sproc338756_18319605_1407579` ("Label Design
+Report"), rebuilt as `reports/label_design.yaml` + `label_design_view.sql`
+(both configs, 10 extractions each). It replaces: download from NetSuite, paste
+into a sheet, check duplicates by hand, upload to Monday.
+
+**The three additions asked for on the call:**
+- **The outside sales rep / BDM name**, so a designer with a question knows who
+  to ask. **Not guessed at** — Plex holds a primary and a secondary rep and
+  which one Vox calls the BDM has never been stated, so *both* ship and the
+  consumer picks.
+- **Order status = Pending Fulfillment.** The procedure filtered only the
+  *release* status being Label Design, so it also returned lines on orders
+  nobody had approved.
+- **A 14-day rolling window** on the order date.
+
+Matched on the status **name**, not the key — the vanished-key failure that
+killed the accounting-approval report is the reason.
+
+**Dedupe is order number + customer part number**, her rule, and it lives in
+the Apps Script rather than the view: dates change and an order can be
+cancelled and reopened, while the same customer part on a *different* order
+legitimately repeats. Three tables were new to the repo
+(`Sales_v_Release_Status`, `Sales_v_PO_Line_Note`, `Part_v_Customer_Part`).
+
+Seven tables are extracted here **again** despite `sales_orders` owning them:
+this runs at 10:00 and 14:00, hours after that pipeline ran overnight, and a
+label-design queue built on a 14-hour-old order list would miss exactly the new
+orders it exists to surface.
+
+Still to build: the Apps Script on the duplicate sheet, and the push to the
+Monday holding board.
+
+### Fixed — cycle-count accuracy was the wrong kind of average
+The view computed accuracy **weighted by quantity**, reasoning that averaging
+per-count percentages lets a one-container location count the same as a full
+rack. That is defensible arithmetic and it is **not what Vox means**.
+
+Their definition: each assigned location is judged accurate or not — it held
+what it was supposed to or it didn't — and those yes/nos are averaged. A
+per-location hit rate, deliberately blind to how much sat in each location.
+Corrected, with the quantity-weighted figure kept beside it as
+`accuracy_pct_qty_weighted`, because the two diverging means the misses are
+concentrated in the big locations.
+
+Also regrouped to one row per **month** rather than per location per month,
+matching the three numbers the warehouse actually tracks: locations counted,
+items counted, accuracy. Counting is lumpy by design, so `locations_counted`
+must be checked before showing a percentage — an empty month would otherwise
+read as 0% accurate.
+
+### Answered — six decisions closed in one meeting
+- **Deposit Review IS the accounting approval**, and the chain is on record:
+  Quote and Pending Sales Approval are internal *sales* stages; Deposit Review
+  is the accounting review; a payment applied moves the order to Pending
+  Fulfillment. Repointing was right.
+- **The field is `Minimum_Inventory_Quantity`** — not "minimum stock level",
+  which is the phrase everyone says and no field is named. The `33` parts exist
+  only in test, but **plenty of `12` parts already carry real minimums**, so the
+  Out of Stock wiring is testable today rather than blocked on data entry.
+- **Cutover is 19 October**, with the pre-Plex source used through the 16th.
+  Fallback if the Plex figure doesn't arrive: payments are applied in NetSuite,
+  so the same number can still be pulled from there post-cutover.
+- **Cycle count is in scope**, with its three metrics defined (above).
+- **The TAT standards were never missing.** They sit in a table on the Monthly
+  TAT Analysis sheet, keyed by Item Stock Type, in days — agreed they move into
+  the manual-data app, *with restricted edit access*.
+- **"Inventory Balance" is the dollar value of all inventory**, raw materials
+  through finished goods. Definition settled; source is not — Jennilyn is
+  asking Justin, most likely a costing report.
+
+### Added — three decisions nobody had put to anyone
+- **The TAT clock start** (`Problem_Date` vs `Entered_Date`), decided in code
+  and flagged only in the SQL. Now that the standards are known to exist, this
+  matters: if they were set against Entered Date, our figure runs consistently
+  larger and will look like performance dropped on cutover day.
+- **DPMO's `Opportunities_Per_Unit = 1`** placeholder, feeding the second
+  heaviest-used source on the scorecard.
+- **Who may edit the manual-data form.** Raised about the TAT standards and
+  then broadened to all of it. The app is currently open to anyone in Parasol
+  Group Inc — right for a daily activity log, wrong for bonus-bearing
+  standards.
+
+### Changed — one board, not two
+The sign-off artifact **should not have been created**: it and the Migration
+Board tracked the same work from two directions, so a question could be
+answered in one and still look open in the other. Decisions now live on the
+Migration Board next to the tiles they block, and the sign-off URL is a
+retirement notice pointing at it. Both links still resolve; neither was
+recreated.
+
+Also closed there: **deviation and destruction test data has an owner and a
+date** — Sheldon from Quality, session on Thursday. The tenant resets, so the
+data has to be inspected the same day it is made.
+
+## 2026-09-11 (last) — a repeatable way to prove the scorecard has data
+
+### Added — `scripts/scorecard_status.ps1` and `docs/SCORECARD_DATA_LOAD.md`
+Preparing the scorecard for a demo kept meaning "run things and hope". The
+script checks all **31 views the scorecard reads** in one pass and reports each
+as one of three states that look identical on a dashboard tile and mean
+completely different things:
+
+- **`MISSING`** — the view was never created. This is the one to act on, and
+  it is invisible to the thing people check: a `gcloud run jobs execute --wait`
+  exits 0 even when view creation failed, because the extractions succeeded.
+- **`0 rows`** — the view exists and the Plex tenant simply has nothing of that
+  kind. Almost always Vox's side, not ours.
+- **`n rows`** — real data.
+
+The runbook orders the pipeline runs by a dependency that is easy to get wrong:
+**`sales_orders` owns `raw_Part_v_Part`**, which the inventory, parts and work-
+order pipelines read rather than re-extracting, so it has to run first.
+
+It also states plainly which tiles **cannot** be filled from this side —
+production, quality, inventory valuation and Out of Stock are all waiting on
+data entry or costing in the Plex test tenant, not on a deploy. Writing that
+down is the point: it stops a demo being spent debugging an empty tile that was
+never ours to fill.
+
+### Added — Terraform resource for `part_cycle_count_view.sql`
+The new view's SQL had no `google_storage_bucket_object`, so it would never
+have reached GCS and the view would have failed to create with a missing-file
+error on the next run. `terraform validate` passes.
+
+### Blocked — the data load itself
+`bq` and `gcloud` fail with *"Reauthentication failed. cannot prompt during
+non-interactive execution"* despite `gcloud auth list` showing an active
+account — the org policy documented in `CLAUDE.md`. **Needs `gcloud auth login`
+in an interactive terminal**, along with `terraform apply`, which this
+machine's permission classifier blocks. Everything up to that point is
+prepared and validated.
+
+## 2026-09-11 (later) — six sign-off items closed, and two nobody had asked
+
+### Added — company-wide goals and month frontloading
+- **Company-wide is now a scope on every metric, not just revenue.** `(company-wide)`
+  sits at the top of the rep and work-centre-group lists and stores a **blank**
+  scope, which is what the reports emit. **Production had no way in at all**
+  before this, so the production tile could only ever be compared against
+  per-group targets that may not exist.
+- **One entry fills a run of months.** Goals are set once at the start of a
+  year and changed occasionally, so entering twelve one at a time was the
+  common case. Each month is written as **its own row**, so a later edit to one
+  month leaves the rest alone; capped at 24 so a typo can't write years of rows.
+- `repeat_months` is a **transient** field — it shapes what gets written and is
+  not itself a column. `allFields_()` excludes transient fields from both the
+  sheet and the table.
+
+### Added — cycle count extracted, not just catalogued
+`Part_v_Cycle_Inventory` and `Part_v_Cycle_Frequency` now extract on the
+`part_on_hand_inventory` pipeline (**both configs**, 4 extractions each), with
+`part_cycle_count_report` reporting accuracy and coverage per location per
+month.
+
+- **Accuracy is reported twice on purpose.** Plex's own `Accuracy` column is
+  per-count and can't be averaged into a period figure without weighting, so
+  `accuracy_pct` is recomputed from accounted-for / unaccounted-for quantities
+  and `avg_plex_accuracy` sits beside it — a disagreement surfaces rather than
+  one quietly standing in for the other.
+- `no_quantity_counted` is explicit, because a month where nothing was counted
+  would otherwise read as **100% accurate**.
+- `Part_v_Cycle_Frequency` is extracted but **not yet joined** — the join key
+  is unconfirmed until there are real rows, and extracting it now means review
+  needs no second deploy.
+
+### Fixed — the part-cost question was the wrong question
+`Product_Cost` being unusable was treated as "we have no cost source". Wrong:
+**Plex costs parts itself** through `Part_v_Snapshot`, and
+`inventory_valuation_summary_report` is already built on it — it returns 0 rows
+because **nothing has been costed on this tenant**, not because the source is
+missing. That turns an open-ended sourcing question into a Plex operations one,
+and unblocks three tiles at once whenever costing runs: Deviation $, Inventory
+Balance, Rework $.
+
+### Fixed — two placeholders that had never been put to the business
+Re-reading `VOX_SCORECARD_PLEX_MIGRATION_MAP.md` surfaced two numbers decided
+in code and flagged only in a file nobody outside this repo reads:
+
+- **DPMO's `Opportunities_Per_Unit = 1`** — with 1, DPMO and defect rate are
+  the same number wearing different labels. Feeds YTD FPY, the second
+  heaviest-used source on the scorecard (9 charts).
+- **The TAT clock starts at `Problem_Date`, not `Entered_Date`** — the gap is
+  reporting lag, and if the existing standards were measured from Entered Date
+  our figure runs consistently larger and will look like performance dropped on
+  cutover day.
+
+Both are now on the sign-off board as questions rather than as SQL comments.
+
+### Changed — "Inventory Balance" and the TAT standards stopped being mysteries
+- **Inventory Balance** sits on the `Rev_MTD` source beside MTD Revenue,
+  Revenue in Shipping and Revenue in WIP — all dollar values. Read with the
+  Sep-9 on-hand definition, a valued inventory balance is the only reading that
+  fits, which makes it a yes/no rather than "nobody knows what this is".
+- **The TAT standards already exist.** Both TAT tiles are fed by sheets
+  carrying `Item Stock Type` / `Performance Standard` / `Bonus Standard` /
+  `Average Work Days`. The ask changed from "dictate the standards to us" to
+  "share the sheet" — access beats a dictated list, and can't be typed wrong.
+
+### Changed — sign-off board v10
+Down to **6 open from 10**. Four closed on the Sep-9 answers (revenue target,
+production goals, minimum stock levels, deviation test data), two by building
+rather than asking (cycle count, pre-Plex history parked). Every remaining item
+names the **tile** it blocks.
+
+**One correction worth recording:** the call's *"on question two, it's no"* was
+answering the **demand** question, not "Orders Pending Approval by Accounting".
+Reading it as the latter would have repointed a live report on an answer that
+was never given, so that item stays open — with Deposit Review named as the
+leading candidate and the reasoning shown.
+
+## 2026-09-11 — one app for every manual number, with the sheet back in the middle
+
+### Changed — `deploy/goals_web_app/` → `deploy/manual_data_app/`
+The goals app covered **one** of the manual inputs the Sep-9 call actually
+named. Re-read against the transcript, the ask was broader: *record an
+incident*, production goals, rep sales goals — and the sign-off board adds
+turnaround standards and (conditionally) part costs. Rebuilt as **one app with
+a dataset registry** rather than four near-identical forms.
+
+- **Adding a manual dataset is now a registry entry plus `setupSheets()`** —
+  no new form code. `Index.html` generates itself from the registry; if adding
+  a dataset needs an edit there, the registry is missing a field type.
+- **Four datasets ship:** `goals` → `scorecard_goals_app` (unchanged contract,
+  so `v2_scorecard_goals_resolved` and the three `v2_*_vs_goal` views keep
+  working untouched), `incidents` → `safety_incidents`, `turnaround_standards`,
+  `part_costs` → `part_cost_manual`. The last is gated on sign-off item 04 and
+  is inert until something reads it.
+- The old directory is **deleted, not deprecated** — it was never deployed, so
+  there is nothing to migrate and leaving it would give two plausible apps to
+  paste into Apps Script.
+
+### Fixed — the script's Cloud project is not the data's Cloud project
+`GCP_PROJECT` was doing two jobs: naming the project that runs the BigQuery
+jobs *and* qualifying every table reference. The Apps Script project lives in
+**`parasoldatalake`** while the data lake is **`voxdatalake`**, so every query
+would have gone looking for `parasoldatalake.PlexTest.*` — a not-found error
+that reads like a missing view rather than a misrouted project.
+
+Split into `GCP_PROJECT` (runs and bills the jobs) and a new optional
+`BQ_DATA_PROJECT` (where the tables are), the latter defaulting to the former
+so a single-project setup needs no extra property. The load job now writes to
+the data project while still running in the script's own.
+
+### Fixed — a fresh deployment now explains itself
+The first real deploy hit `Could not load: ScriptError: Script property
+GCP_PROJECT is not set`, which is accurate and tells you nothing about where to
+go. `getFormData()` now returns unset properties as a **state** rather than
+throwing, and the form renders a setup panel naming each missing property, its
+value, and whether the BigQuery advanced service is enabled — both are editor
+settings rather than code, so a new project always needs them once. It also
+says that properties are read per request, so fixing them needs a **reload**
+rather than a new deployment version.
+
+### Changed — the sheet is back, as a log nobody types into
+`web app → Google Sheet (one tab per dataset) → BigQuery`, replacing the
+previous direct `tabledata.insertAll`.
+
+- **The sheet is the record of truth**; the BigQuery table is a mirror that
+  `pushAll()` rebuilds from it. It survives a dropped table or a test→prod
+  dataset swap, and it is readable by someone with no BigQuery access.
+- **Nobody types into it** — the app is the only writer, and each tab says so
+  in its header row. That keeps the break-the-sheet failure mode away while
+  still getting a human-readable log.
+- **The push is a load job, not a streaming insert**, which removes the one
+  piece of user-visible weirdness the old design had to document: a saved row
+  is queryable *immediately* instead of sitting in a streaming buffer for a
+  few seconds looking like it hadn't worked.
+- **A failed push does not fail the save.** The row is in the sheet; the form
+  says the push lagged, and an hourly `pushAll()` trigger repairs it. Losing
+  what someone typed for a reason unrelated to them is the worse outcome.
+- **The load job is waited on** (`waitForJob_`). A load job is asynchronous —
+  without this a failure is invisible and the form reports success for a push
+  that never happened.
+- Tabs stay **append-only**, so `WRITE_TRUNCATE` carries the full history
+  across on every push and the newest-row-per-key semantics are unchanged.
+
+### Changed — sign-off board rewritten so every item is answerable
+`reference_vox_signoff_board` artifact, v8. Several items were addressed to
+the data rather than to Jennilyn — *"what does `Product_Cost.part` key to?"*
+is a question for whoever owns that table, and she could not have closed it.
+
+- Every item is now **pick an option, name a person, confirm a date, or supply
+  a number**, grouped by which.
+- **Each carries a stated default** (*"if we don't hear"*), so silence closes
+  an item instead of parking it — which is what makes the list clearable in
+  one meeting.
+- The three genuinely blocked on Plex data entry are grouped under a heading
+  that admits they can't be defaulted, so it is obvious those are the only
+  real carry-over.
+- Options trimmed where a third was a variant rather than a real branch
+  (revenue target, accounting status, production goals); kept where the
+  branches are genuinely different (cost source, cycle count metric).
+
+### Removed — transcript quotes from anything that gets pasted into Apps Script
+`Code.gs` / `README.md` quoted the Sep-9 call verbatim with attribution. Those
+files are pasted into a project Jennilyn may be added to, the way she added us
+to hers. The reasoning is kept; the quotes and names are gone. The full
+transcript record stays in `meetings-reference/` and `CHANGELOG.md`, which
+don't leave the repo.
+
 ## 2026-09-09 (last) — three open questions closed from data
 
 None of these needed a meeting. Each was answered by querying something.

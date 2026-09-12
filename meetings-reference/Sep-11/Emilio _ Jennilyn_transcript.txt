@@ -1,0 +1,281 @@
+Emilio Dominguez  00:06
+Okay, give me a minute.
+
+Jennilyn Tockstein  01:42
+Okay, I have something for you. Let's see. So, if you come in here, you know where these are, right? Stored procedures. There's a new one that I made. Um, this report is. Oh, I have a weird echo. Um, this report is something that the sales team needs to be able to get the data from. Usually, like twice a day, and right now, what they do is they download a report in NetSuite, then they copy and paste it into Google Sheets, then they make some edits, and then they upload it into Monday, and they do that every day. I was wondering because this is a report I had to write the SQL for to get the stuff on
+
+Emilio Dominguez  03:01
+here
+
+Jennilyn Tockstein  03:02
+since it doesn't just exist with Plex. Trying to get this job note was not fun. Um, I was wondering if there's a way we could pull this data and write it to a Google Sheet for them.
+
+Emilio Dominguez  03:19
+Yeah, definitely.
+
+Jennilyn Tockstein  03:20
+Twice daily, or and maybe have like a a button on the Google sheet where we can allow them to request the data.
+
+Emilio Dominguez  03:32
+Yeah, definitely. Even if the report or the the view as a store store procedure is not like available right of right of the bat, there's the the query right. The query has all the data that just yeah yeah so because
+
+Jennilyn Tockstein  03:53
+yeah them coming in here and running the query and downloading it isn't like a for reals option. It's not something that they're gonna do. So I was kind of wondering now that I've figured out all of the pieces.
+
+Emilio Dominguez  04:06
+The only
+
+Jennilyn Tockstein  04:07
+one I didn't add to it that would be helpful is the. I think their BDM, their outside sales. I didn't add that to the query.
+
+Emilio Dominguez  04:20
+All right, like yeah, the the names for them, and if will that be a join, or will they
+
+Jennilyn Tockstein  04:29
+be
+
+Emilio Dominguez  04:30
+yeah? Will they be having a separate report for each of them? What what's the idea?
+
+Jennilyn Tockstein  04:36
+Just to have the name on there, so when they bring it into Monday, when the designers have questions, they know which rep to ask. So it's just a reference,
+
+Emilio Dominguez  04:47
+and it's it wouldn't match. Maybe like maybe on Monday they have another name or or even just surnames or things. It doesn't need to match what Monday has, right?
+
+Jennilyn Tockstein  05:00
+No, just pull it from here.
+
+Emilio Dominguez  05:02
+And okay, so first step is like getting from from Plex that's already available. Then, what do they do with that? Do they? What's the interface where they would like to get the data from, or sent to an email rather than as a CSV. Or what? What's the idea behind getting the data from here from Flex? What is the flow that you are thinking for them to? Because if you would like to, Monday can also be injected with the right info, and they shouldn't like have to do even a thing, right? Everything could be automized, optimized, automated, injected
+
+Jennilyn Tockstein  05:51
+into Monday. Yeah,
+
+Emilio Dominguez  05:52
+correct.
+
+Jennilyn Tockstein  05:53
+Potentially, we could. So right now, they download it every day, and Um, copy and paste it into
+
+Emilio Dominguez  06:04
+here.
+
+Jennilyn Tockstein  06:06
+They use this that checks for duplicates. Correct. Um, it checks against this historical, and they they do kind of like in some ways, reviewing it themselves before moving it over here, because sometimes they change the notes or update like these reason codes and stuff. Um, I could put you in touch With Ashley, if and ask if we want to automate it. I mean, there's ways with Monday to connect Monday to the Google Sheet, so they can just push a button and it imports it. And we had that for a while, but they they didn't like
+
+Emilio Dominguez  07:00
+it. Correct. Yeah, they were like more like of our view to just have a manual process in order to trigger that. Yeah, I understand.
+
+Jennilyn Tockstein  07:14
+But if it was to just appear on here a couple times a day, we would probably add the filter on here to be two filters. I didn't add one: the order status needs to be pending fulfillment, and two: the dates on here. The order date is this the day they made the sales order? It probably is. Um, we'll just want to keep This like within the last two weeks or something. We don't want it to show all that are in label design. Or if we do, if in your code you wanted to have it, um, I wasn't showing the other tab. If you wanted to show have it check against the ones that are in here already, and only write to the main tab new ones, then that would work as well. So as long as it's only writing new ones, and
+
+Emilio Dominguez  08:42
+yeah, no point in the ones that are already there. For the historical, the IDs wouldn't be changed, I would presume, because they have this manual process of writing notes, or but they don't change the ID at all, or something that will break that chain of, because the code will just verify. Okay, so this this ID has already been placed here, but maybe they changed that sales order number because of something. But I wouldn't think so, right?
+
+Jennilyn Tockstein  09:20
+Yeah, you do look off of the order number and the customer part number, like to
+
+Emilio Dominguez  09:27
+have more accuracy.
+
+Jennilyn Tockstein  09:29
+That would be the the two pieces. So if the same customer part number appears but it's on a different order number, then we're good to go ahead and repeat it.
+
+Emilio Dominguez  09:41
+Even the date, right? Or, but the date could be changed by Plex. So yeah,
+
+Jennilyn Tockstein  09:47
+the dates can change. Like they might
+
+Emilio Dominguez  09:52
+because you you could. I would go order number and
+
+Jennilyn Tockstein  09:54
+part number.
+
+Emilio Dominguez  09:55
+Okay, yeah.
+
+Jennilyn Tockstein  09:58
+Because if they end up canceling and reopening an order or something like that. We still wouldn't want to. Yeah, part number and order number will be will be good filters for.
+
+Emilio Dominguez  10:14
+Okay, can could you add me to that to that to that spreadsheet, so I can this one
+
+Jennilyn Tockstein  10:23
+just kind of as a reference.
+
+Emilio Dominguez  10:26
+Yeah, I may duplicate that to not hit that live data, right? And just maybe for the time of testing, just send the the information to the duplicate, and then just when the there is accuracy on on the process, because the process wouldn't write to the historical data, right? But I want I wouldn't like to have errors on that, so yeah, I will just duplicate that for the time being, and then
+
+Jennilyn Tockstein  11:07
+okay.
+
+Emilio Dominguez  11:08
+For now, it has maybe some code, right? Because of the Monday, some app script code there, or
+
+Jennilyn Tockstein  11:18
+the code just checks duplicates and forum. I'm asking Ashley if she'd want us to push it into Monday, because because if we did push it directly into Monday, we could put it in like a a holding board where they could be they could still change the notes and stuff before moving it to their active board. She thinks that that would be good if we put it into into like a holding board. Yeah,
+
+Emilio Dominguez  11:59
+I have the API for Monday from Jeanette, and I haven't. We I did I did broad to that because I was working with the request code code for Box.
+
+Jennilyn Tockstein  12:16
+Yeah.
+
+Emilio Dominguez  12:17
+So yeah, I have added data to the to the board to the to the leads I haven't tried with the other ones because we hit some permissions I think you remember for some of the other boards but but yeah it
+
+Jennilyn Tockstein  12:36
+would be in this workspace and I think we would just make a new board.
+
+Emilio Dominguez  12:42
+Okay, I think I yeah I got together with because you have liberty right to to create. I think I don't have with even with that API key or the permission. Jeanette doesn't have permissions to. to to add new boards,
+
+Jennilyn Tockstein  13:05
+certain things.
+
+Emilio Dominguez  13:05
+Yeah, to yeah, maybe.
+
+Jennilyn Tockstein  13:09
+Let me add you because
+
+Emilio Dominguez  13:11
+of because of the ownership, right?
+
+Jennilyn Tockstein  13:14
+Are you using the marketing login or do you? Yeah,
+
+Emilio Dominguez  13:17
+I could I could use the marketing we we want or do you have your
+
+Jennilyn Tockstein  13:22
+own?
+
+Emilio Dominguez  13:23
+I have logged in with with my personal with my parasol, but yeah, maybe we should use a marketing email.
+
+Jennilyn Tockstein  13:48
+Okay. It gave you editor. Let me just add a board and give you ownership of it.
+
+Emilio Dominguez  14:16
+Okay.
+
+Jennilyn Tockstein  14:29
+Yeah, and you could push from Plex into here. I think that would be amazing. And it would be basically this plus, you know, the sales rep filtered to be only pending fulfillment orders, and I'm trying to remember if there's anything else on here that you would actually bring in.
+
+Emilio Dominguez  15:23
+And about the times, about the times of the day, and if you would like a summary, it can be either summary email or or just write into some data table, data set table on the on the big query that the you know new orders came through, but what what will the cut hours be like morning and evening or
+
+Jennilyn Tockstein  16:02
+I think they do it at like 10 and two or something.
+
+Emilio Dominguez  16:08
+Okay.
+
+Jennilyn Tockstein  16:09
+Um, I would say 10 and two to start, and then we can ask these two email addresses their preferences, and
+
+Emilio Dominguez  16:31
+will
+
+Jennilyn Tockstein  16:32
+those would be the people who'd want the daily summaries. I wouldn't need okay.
+
+Emilio Dominguez  16:37
+Will be preferred that only problems are notified or the summary outcome, because like as for now for Plex you get a bunch of emails, right? Like that amount of summaries, so they can stack up like on even for two of them during the day for a week, it will be kind of like 10 emails for a week. So I don't know if they will prefer just when something broke down, maybe on Plex, or if some some of the runs wasn't run correctly, then the summary will be triggered only by the problem. Only if a problem occurred, but not something like hey everything successful, and then another successful email, and then another successful email.
+
+Jennilyn Tockstein  17:36
+Yeah, probably just the problem ones, and I can be on that too.
+
+Emilio Dominguez  17:42
+Okay. Yeah, I can keep like myself or even the marketing email to to the summary, like the success ones, like, and the problematic would be like. So then you will know. Okay, it didn't run for the evening, so some order, or or amount of orders are not there, but that's why would be the
+
+Jennilyn Tockstein  18:11
+okay, yeah, that would be great. That was a report. I was waiting on them to make some test data so that I could try to find where the notes are, since it was not easy to find the notes, and and so they they did the testing data for me today, and so
+
+Emilio Dominguez  18:37
+okay,
+
+Jennilyn Tockstein  18:38
+it's kind of related because it is it's not a dashboard metric, but it is a very critical report. So, yeah. And if you are able to automate putting that into Monday for them, that would be great. And now that you're an owner of that board, you should be able to get the info you need on it. But if you can't get like, because you should still have like the API keys and stuff. Yeah, you just need the new board ID, which is part of the URL for it. So,
+
+Emilio Dominguez  19:13
+correct.
+
+Jennilyn Tockstein  19:14
+Yeah. Okay. And
+
+Emilio Dominguez  19:15
+it's usually, uh, yeah, that API key is long lasting, so that's good.
+
+Jennilyn Tockstein  19:24
+Okay.
+
+Emilio Dominguez  19:30
+Okay. So on questions about that, should I talk to you first, or should I loop with them first, if something is needed regarding data transformation or something.
+
+Jennilyn Tockstein  19:57
+Um, if you have questions, ask Ashley and I,
+
+Emilio Dominguez  20:01
+okay,
+
+Jennilyn Tockstein  20:03
+put both of us on there, because it's just test data and it's a separate board that's not connected to anything. I would say you could go ahead and set the board up and try to push stuff in there. Monday, it looks like they have like a a status for the sales reps' names. So when it comes in as one name, it can default to the rep's status name. You can do some of that kind of stuff, or we can just link it so that when it comes from the import board to the actual live board, it connects the rep name and stuff like that there, which might be easier.
+
+Emilio Dominguez  20:46
+Okay.
+
+Jennilyn Tockstein  20:52
+Um. Yeah, that was a fun thing today. How's all the other things you're working on going?
+
+Emilio Dominguez  21:00
+Sure thing. Yeah. So I'm finishing the app to have the these manual entries, right? So since it's going to be also connected to BigQuery, I'm just finishing some authorization. OAH, I suppose. OAH consent screen configuration for the project. So that's about it on the what is currently going on on that web web app. Let me just look at something here. If okay, and for depending things from the Scorecard. So let me just give you. The artifact again, but. Some of those have internal answers, so let me just share my screen. Okay, so on the questions. For this one, the order pending approval by accounting report filtered to pending payment review. It has been returning zero roughs, so it was repointed to deposit review.
+
+Jennilyn Tockstein  24:49
+So sales changed the the statuses. So yeah, it's quote and pending sales approval are internal sales statuses. Deposit review is the pending accounting review. After accounting applies a payment to it, it goes to pending fulfillment.
+
+Emilio Dominguez  25:19
+Okay.
+
+Jennilyn Tockstein  25:22
+So, deposit review is the accounting approval.
+
+Emilio Dominguez  25:29
+Right. Okay. So for the other one, we discuss this. The minimums are going to be placed by you or by the team. The minimum suck levels, right, on on the parts. That's the part interface where you have showed me the minimum can be placed there, so that's kind of like your work to do.
+
+Jennilyn Tockstein  26:15
+Let's
+
+Emilio Dominguez  26:15
+to not to not have zero right on the on the parts.
+
+Jennilyn Tockstein  26:20
+We do have minimum stock levels. Let's see. So it's called minimum inventory quantity. Okay. And um, so the there's what it says when you hover on it.
+
+Emilio Dominguez  27:00
+So minimum quantity and maximum quantity.
+
+Jennilyn Tockstein  27:12
+So, and it's this this minimum inventory quantity, and this is the key for it. It's not called minimum stock level in flux. It's called minimum inventory quantity.
+
+Emilio Dominguez  27:33
+And most of the parts already have has this right.
+
+Jennilyn Tockstein  27:40
+Yeah, right now, right now you're looking at primarily the three three part numbers, and and we don't have those in live, so we add them to test.
+
+Emilio Dominguez  27:55
+Okay,
+
+Jennilyn Tockstein  27:56
+so you don't have very many to look at, but if you want to look at like the the one two part numbers right now, just to have a field to pull. There's a bunch of those in here with minimum inventory quantities, so you could test it on a one two part number and then later switch to a three three if you want to just hit the field and have something to to hit and come back.
+
+Emilio Dominguez  28:25
+Okay. Let's go with the other one. So number three, what does the credit cost that park key key to on the box score card live? That's from the Monday. This is related to the deviation value and the dollar amount for the rework. So it is the obvious cost source, and it does not work 199 wraps of part plus cost joining to five of 6,000plex parts, and none of the three tree parts. Its keys are base stems like one to three against Plex with the packet rubs and stem matching fails almost everywhere, but this comes from maybe the I don't know if it relates to the part line price or the the amount yeah the total amount for each each line
+
+
+Transcribed by https://otter.ai

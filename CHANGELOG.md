@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-11 (final) — board closed out at 7 open items
+
+Two open actions from the Sep-11 call were living inside tile notes rather than
+being tracked as decisions. Both have an owner and neither has an answer, which
+is exactly what the decisions list is for:
+
+- **Where the dollar value of all inventory comes from.** The *meaning* of
+  "Inventory Balance" is now settled; the source is not. Jennilyn is asking
+  Justin. Same underlying blocker as the part-cost question — if Plex costing
+  gets populated, both resolve at once.
+- **The Monday holding board does not exist yet.** Everything on our side of
+  the Label Design queue is built. Monday's column IDs are per-board and are
+  not the column titles, so the push cannot be finished by guessing them.
+
+The board now links to the Field Manual for how each tile is built, so the two
+artifacts have one job each: **status** on the board, **understanding** in the
+manual.
+
 ## 2026-09-11 (docs) — study material, and Plex's glossary made usable
 
 ### Added — `scripts/distill_glossary.py` and `docs/PLEX_GLOSSARY.md`

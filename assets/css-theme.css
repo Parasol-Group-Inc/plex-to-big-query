@@ -1,0 +1,94 @@
+/* Email Theme CSS based on image_80ea04.png */
+
+body {
+    background-color: #f4f7f9; /* Very soft blue-grey background */
+    font-family: Arial, Helvetica, sans-serif;
+    color: #333333; /* Charcoal Grey for readability */
+    margin: 0;
+    padding: 20px;
+}
+
+.email-container {
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    border-top: 5px solid #1f8ccb; /* Vibrant Leaf Blue brand bar */
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.email-header {
+    text-align: center;
+    padding: 25px 20px;
+    border-bottom: 2px solid #aecfe6; /* Divider Light Blue */
+}
+
+/* Georgia maps closely to the classic serif feel of the Vox logo */
+h1,
+h2,
+h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    color: #215a7c; /* Slate Navy */
+    margin-top: 0;
+}
+
+.email-body {
+    padding: 30px;
+    line-height: 1.6;
+}
+
+/* Highlight box for key summary metrics */
+.summary-box {
+    background-color: #f8fafc;
+    border-left: 4px solid #215a7c; /* Slate Navy */
+    padding: 15px 20px;
+    margin: 20px 0;
+    border-radius: 0 4px 4px 0;
+}
+
+.summary-title {
+    color: #215a7c;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.summary-data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.summary-data-table th {
+    text-align: left;
+    border-bottom: 1px solid #aecfe6;
+    padding: 8px 0;
+    color: #215a7c;
+}
+
+.summary-data-table td {
+    padding: 8px 0;
+    border-bottom: 1px solid #eeeeee;
+}
+
+.primary-button {
+    display: inline-block;
+    background-color: #1f8ccb; /* Vibrant Leaf Blue */
+    color: #ffffff;
+    text-decoration: none;
+    padding: 12px 25px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin-top: 15px;
+}
+
+.email-footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 12px;
+    color: #888888;
+    background-color: #fafafa;
+    border-top: 1px solid #eeeeee;
+    border-radius: 0 0 4px 4px;
+}

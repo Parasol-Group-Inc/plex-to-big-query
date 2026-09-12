@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+  body{margin:0;padding:0;background:#f0f2f5;font-family:'Helvetica Neue',Arial,sans-serif;}
+  .wrapper{width:100%;background:#f0f2f5;padding:32px 0;}
+  .card{max-width:620px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);}
+
+  .header{background:#ffffff;padding:24px 32px 20px;border-bottom:1px solid #f0f0f0;box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+  .logo{max-width:160px;height:auto;display:block;}
+  .header-sub{margin:14px 0 0;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#9ca3af;}
+
+  .body{padding:28px 32px 0;}
+  .report-title{font-size:20px;font-weight:700;color:#0d1117;margin:0 0 4px;}
+  .dataset-path{font-size:12px;color:#6b7280;margin:0 0 20px;font-family:'Courier New',monospace;}
+
+  .badge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:0.4px;margin-bottom:24px;}
+  .badge-success{background:#d1fae5;color:#065f46;}
+  .badge-warning{background:#fef3c7;color:#92400e;}
+  .badge-error{background:#fee2e2;color:#991b1b;}
+
+  .stats-row{display:flex;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:28px;}
+  .stat{flex:1;padding:14px 10px;text-align:center;border-right:1px solid #e5e7eb;}
+  .stat:last-child{border-right:none;}
+  .stat-val{font-size:18px;font-weight:700;margin:0 0 3px;}
+  .stat-val-ok{color:#059669;}
+  .stat-val-fail{color:#dc2626;}
+  .stat-val-neutral{color:#374151;}
+  .stat-lbl{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin:0;}
+
+  .sec-head{display:flex;align-items:center;gap:10px;margin:0 0 8px;}
+  .sec-head-label{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;}
+  .sec-head-ok .sec-head-label{color:#059669;}
+  .sec-head-err .sec-head-label{color:#dc2626;}
+  .sec-line{flex:1;height:1px;}
+  .sec-head-ok .sec-line{background:#d1fae5;}
+  .sec-head-err .sec-line{background:#fecaca;}
+
+  .board-table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;}
+  .board-table td{padding:10px 8px;vertical-align:middle;}
+  .board-table tr:nth-child(even){background:#f9fafb;}
+  .bd-icon{width:24px;font-size:14px;}
+  .bd-name{font-weight:600;color:#111827;}
+  .bd-id{color:#9ca3af;font-size:11px;}
+  .bd-stat{text-align:right;font-weight:600;color:#374151;white-space:nowrap;}
+  .bd-cols{text-align:right;color:#9ca3af;font-size:11px;white-space:nowrap;}
+  .bd-err{color:#7f1d1d;}
+  .none-cell{text-align:center;color:#d1d5db;font-style:italic;padding:14px 8px;}
+
+  .footer{background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;margin-top:8px;}
+  .footer-inner{display:flex;justify-content:space-between;align-items:flex-start;}
+  .footer-meta{font-size:11px;color:#9ca3af;line-height:1.8;}
+  .footer-meta b{color:#6b7280;}
+</style>
+</head>
+<body>
+<div class="wrapper">
+<div class="card">
+
+  <div class="header">
+    <img src="https://i0.wp.com/parasolgroupinc.com/wp-content/uploads/2023/02/Parasol-Group-BlackTree.png?fit=1020%2C388&ssl=1"
+         alt="Parasol Group" class="logo">
+    <p class="header-sub">%%SERVICE_NAME%%</p>
+  </div>
+
+  <div class="body">
+    <h1 class="report-title">%%TITLE%%</h1>
+    <p class="dataset-path">%%PROJECT%% &rsaquo; %%DATASET%%</p>
+
+    <span class="badge %%BADGE_CLASS%%">%%STATUS_ICON%% %%STATUS_TEXT%%</span>
+
+    <div class="stats-row">
+      <div class="stat">
+        <p class="stat-val stat-val-neutral">%%RUN_DATE%%</p>
+        <p class="stat-lbl">Date (MT)</p>
+      </div>
+      <div class="stat">
+        <p class="stat-val stat-val-neutral">%%RUN_TIME%%</p>
+        <p class="stat-lbl">Time (MT)</p>
+      </div>
+      <div class="stat">
+        <p class="stat-val stat-val-ok">%%TABLES_OK%%</p>
+        <p class="stat-lbl">Synced</p>
+      </div>
+      <div class="stat">
+        <p class="stat-val %%FAIL_CLASS%%">%%TABLES_FAIL%%</p>
+        <p class="stat-lbl">Failed</p>
+      </div>
+      <div class="stat">
+        <p class="stat-val stat-val-neutral">%%TOTAL_ROWS%%</p>
+        <p class="stat-lbl">Total rows</p>
+      </div>
+    </div>
+
+    <div class="sec-head sec-head-ok">
+      <span class="sec-head-label">&#10003; Successful Syncs</span>
+      <div class="sec-line"></div>
+    </div>
+    <table class="board-table">%%SUCCESS_ROWS%%</table>
+
+    <div class="sec-head sec-head-err">
+      <span class="sec-head-label">&#9888; Errors &amp; Warnings</span>
+      <div class="sec-line"></div>
+    </div>
+    <table class="board-table">%%ERROR_ROWS%%</table>
+  </div>
+
+  <div class="footer">
+    <div class="footer-inner">
+      <div class="footer-meta">
+        <b>Service</b> %%SERVICE_NAME%%<br>
+        <b>Function</b> %%FUNCTION_NAME%%<br>
+        <b>Dataset</b> %%PROJECT%%.%%DATASET%%
+      </div>
+      <div class="footer-meta" style="text-align:right">
+        Parasol Group<br>
+        Automated Data Sync<br>
+        &copy; %%YEAR%%
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</body>
+</html>

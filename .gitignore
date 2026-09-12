@@ -27,3 +27,17 @@ meetings-reference/**/*.wav
 # docs/PLEX_GLOSSARY.md and IS committed; this is only the input.
 # Re-export from Plex if you need to re-run scripts/distill_glossary.py.
 catalog/Glossary-*.csv
+
+# The historical Label Design export (~1.8 MB). It is a live customer list —
+# real names, emails and order history — and the same reasoning that keeps the
+# meeting audio out of a repo that gets shared applies to it.
+#
+# deploy/label_design_sync/test_logic.js uses it when present and skips the
+# archive-dependent checks when it is not, naming this entry so nobody thinks
+# the test is broken. To get it back:
+#
+#   gcloud storage cp "gs://voxdatalake-terraform-state/plex-to-big-query/backups/latest/assets__Copy of Design in Monday- NEW - historical.csv" "assets/Copy of Design in Monday- NEW - historical.csv"
+#
+# The MONDAY tab export IS committed — it is the 15-column header row with no
+# data rows, and it is the contract SHEET_MAP encodes.
+assets/Copy of Design in Monday- NEW - historical.csv

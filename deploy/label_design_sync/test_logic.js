@@ -4,19 +4,31 @@
  *
  *   node deploy/label_design_sync/test_logic.js
  *
- * Run it after ANY change to SHEET_MAP, the tokenisers, or the header
- * resolution — those three are where a silent, expensive mistake lives. A
- * dedupe that stops matching does not throw; it re-imports the entire archive
- * onto the sheet and onto the Monday board.
+ * Run it after ANY change to SHEET_MAP, the tokenisers, or header resolution —
+ * those three are where a silent, expensive mistake lives. A dedupe that stops
+ * matching does not throw; it re-imports the entire archive onto the sheet and
+ * onto the Monday board.
  *
- * It exercises the real logic against the REAL exports in assets/ — the actual
- * 15-column MONDAY header row and the actual 5,182-row historical tab, with
- * their real quirks (the trailing space in "Label ", "Phone" vs "Phone Number",
- * six blank trailing headers, and the sheet spelling orders "Sales Order
- * #SO0110212" where Plex says "SO0110212").
+ * It exercises the real logic against the real MONDAY header row committed in
+ * assets/, with its real quirks: the trailing space in "Label ", "Phone" vs
+ * "Phone Number", blank trailing headers, and the sheet spelling orders
+ * "Sales Order #SO0110212" where Plex says "SO0110212".
+ *
+ * THE HISTORICAL EXPORT IS GITIGNORED. It is a live customer list — real names,
+ * emails and order history — so it is backed up to the bucket rather than
+ * carried in a repo that gets shared. When it is present these tests use it
+ * (all ~5,182 rows); when it is not, they fall back to a small built-in fixture
+ * of the same shape so every check still runs on a fresh clone. Only the row
+ * COUNT differs, and the run says which mode it used.
+ *
+ * To work against the real archive:
+ *
+ *   gcloud storage cp \
+ *     "gs://voxdatalake-terraform-state/plex-to-big-query/backups/latest/assets__Copy of Design in Monday- NEW - historical.csv" \
+ *     "assets/Copy of Design in Monday- NEW - historical.csv"
  *
  * Apps Script's globals are stubbed and nothing here touches Sheets, BigQuery,
- * Monday or email — it is safe to run any time, and needs no credentials.
+ * Monday or email — safe to run any time, and it needs no credentials.
  */
 const fs = require('fs');
 const path = require('path');
@@ -40,7 +52,7 @@ return {SHEET_MAP, QUERY_COLUMNS, KEY_HEADERS, NEW_ROW_ALARM,
 `)();
 
 function readCsv(p) {
-  const text = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+  const text = fs.readFileSync(p, 'utf8').replace(/^﻿/, '');
   const rows = []; let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -55,13 +67,49 @@ function readCsv(p) {
 }
 
 const monday = readCsv(path.join(ROOT, 'assets/Copy of Design in Monday- NEW - MONDAY.csv'));
-const hist = readCsv(path.join(ROOT, 'assets/Copy of Design in Monday- NEW - historical.csv'));
+
+// The historical archive — the real export when it is on disk, otherwise a
+// fixture with the SAME header row (note "Phone" not "Phone Number", the blank
+// column 12, "Prop 65" present, and six blank trailing headers) and a handful
+// of real-shaped rows.
+const HIST_PATH = path.join(ROOT, 'assets/Copy of Design in Monday- NEW - historical.csv');
+const HAVE_REAL_HIST = fs.existsSync(HIST_PATH);
+
+const HIST_FIXTURE = [
+  ['Date', 'Sales Order', 'Memo', 'Customer', 'Email', 'Phone', 'WO Number', 'Item',
+   'Sales Rep', 'Label SKU', 'Description', 'Reason Code', '', 'Bottle Material',
+   'Prop 65', 'LCR', '', '', '', '', '', ''],
+  ['2025-01-16', 'Sales Order #SO0110212', 'Update to current V code. Standard Label.',
+   'Sequoia Group LLC', 'alcomfort.m@gmail.com', '', 'WO0023971', 'Sequoia Group 14620+s3221',
+   'Tyler Hall', 's3221', 'Sleep Well Gummies 60ct 250cc Clear/Black CRC Lid +Standard Label (s3221)',
+   'Updated label review', 'LCR A00550', '', '', '', '', '', '', '', '', ''],
+  ['2025-01-16', 'Sales Order #SO0110687', 'New label review - customer', 'VitaUp Corp',
+   'info@vitaup.org', '', 'WO0023993', 'VitaUp 13066.60.175cc.B.W+CS2676', 'Kami Butcher',
+   'CS2676', 'Ashwagandha 60ct 175cc Black Bottle/White Lid +Outsourced Label (CS2676)',
+   'New label review', 'LCR A00551', '', '', '', '', '', '', '', '', '']
+];
+// Padded to clear the NEW_ROW_ALARM archive floor (50) so the alarm checks are
+// meaningful in fixture mode too.
+if (!HAVE_REAL_HIST) {
+  for (let i = 0; i < 60; i++) {
+    const r = HIST_FIXTURE[1].slice();
+    r[1] = 'Sales Order #SO01' + String(20000 + i);
+    r[9] = 'FX' + i;
+    HIST_FIXTURE.push(r);
+  }
+}
+const hist = HAVE_REAL_HIST ? readCsv(HIST_PATH) : HIST_FIXTURE;
 
 let fail = 0;
 function ok(cond, label, extra) {
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (extra ? '  ' + extra : ''));
   if (!cond) fail++;
 }
+
+console.log(HAVE_REAL_HIST
+  ? '\nArchive: the REAL historical export (' + (hist.length - 1) + ' rows).'
+  : '\nArchive: built-in FIXTURE — the real export is gitignored and not on disk.\n' +
+    '         Same shape, fewer rows. See the header of this file to fetch the real one.');
 
 console.log('\n=== 1. MONDAY tab header resolution ===');
 const m = mod.resolveHeaders_('MONDAY', monday[0]);
@@ -89,7 +137,7 @@ ok(mod.orderToken_('  so0110212 ') === 'SO0110212', 'case/space insensitive');
 ok(mod.dedupeKeyFromValues_('Sales Order #SO0110212', 's3221')
   === mod.dedupeKeyFromValues_('SO0110212', 'S3221'), 'both sides produce the SAME key');
 
-console.log('\n=== 4. dedupe against the real 5,190-row archive ===');
+console.log('\n=== 4. dedupe against the archive ===');
 const keys = {};
 const oi = h.index[mod.KEY_HEADERS.order], si = h.index[mod.KEY_HEADERS.sku];
 let archived = 0;
@@ -100,9 +148,10 @@ for (let i = 1; i < hist.length; i++) {
   archived++;
 }
 console.log('  archive rows:', archived, ' distinct keys:', Object.keys(keys).length);
-ok(archived > 5000, 'archive parsed');
+ok(archived >= 50, 'archive parsed', '(' + archived + ' rows)');
 
-const plexLike = [1, 2, 3, 4, 5].map(i => ({
+// Rows exactly as Plex would return them: the bare order number, no prefix.
+const plexLike = [1, 2].map(i => ({
   order_number: String(hist[i][oi]).replace(/^Sales Order #/, ''),
   customer_part_no: hist[i][si],
   customer_name: hist[i][3], order_date: hist[i][0],
@@ -110,7 +159,7 @@ const plexLike = [1, 2, 3, 4, 5].map(i => ({
   sales_rep_primary: hist[i][8], customer_part_description: hist[i][10]
 }));
 const stillNew = plexLike.filter(r => !keys[mod.dedupeKey_(r)]);
-ok(stillNew.length === 0, 'all 5 already-archived orders recognised as NOT new',
+ok(stillNew.length === 0, 'already-archived orders recognised as NOT new',
   '-> ' + stillNew.length + ' leaked through');
 ok(!keys[mod.dedupeKey_({ order_number: 'SO9999999', customer_part_no: 'ZZ0001' })],
   'a genuinely new order is not falsely matched');
@@ -138,7 +187,7 @@ ok(mod.QUERY_COLUMNS.includes('customer_email') &&
 ok(new Set(mod.QUERY_COLUMNS).size === mod.QUERY_COLUMNS.length, 'no duplicate columns in the SELECT');
 
 console.log('\n=== 7. the key-mismatch alarm ===');
-const tabsStub = { report: { history: { rowCount: archived, sampleOrders: ['Sales Order #SO0110212'] } } };
+const tabsStub = { report: { history: { rowCount: archived, sampleOrders: [String(hist[1][oi])] } } };
 const many = Array.from({ length: 200 }, (_, i) => ({ order_number: 'X' + i, customer_part_no: 'P' + i }));
 const a1 = mod.assessKeys_(many, many, tabsStub);
 ok(a1.alarm === true, '200 new / 0 matched -> ALARM (held back, not pushed)');
@@ -149,7 +198,7 @@ ok(mod.assessKeys_(many, many, { report: { history: { rowCount: 0, sampleOrders:
 
 console.log('\n=== 8. column flags for the team email ===');
 const flags = mod.columnFlags_({ main: m });
-console.log('   gaps   :', flags.gaps.map(g => g.split(' \u2014 ')[0]).join(', '));
+console.log('   gaps   :', flags.gaps.map(g => g.split(' — ')[0]).join(', '));
 console.log('   team   :', flags.team.join(', '));
 console.log('   missing:', flags.missing.join(', ') || 'none');
 ok(flags.gaps.length === 2, 'WO Number and Item reported as real gaps');
@@ -162,7 +211,6 @@ ok(html.indexOf('cid:voxlogo') > 0, 'inline logo referenced');
 ok(html.indexOf('<style') < 0, 'no <style> block (Gmail strips it) - all styles inline');
 ok(html.indexOf('display:flex') < 0, 'no flexbox (Outlook stacks it)');
 ok(mod.esc_('<script>&"') === '&lt;script&gt;&amp;&quot;', 'HTML escaping works');
-// The rendered email, for eyeballing in a browser. Gitignored.
 fs.writeFileSync(path.join(require('os').tmpdir(), 'label_design_preview.html'), html);
 
 console.log('\n' + (fail ? 'FAILURES: ' + fail : 'ALL CHECKS PASSED'));

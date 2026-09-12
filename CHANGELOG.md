@@ -14,6 +14,45 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-11 (docs) — study material, and Plex's glossary made usable
+
+### Added — `scripts/distill_glossary.py` and `docs/PLEX_GLOSSARY.md`
+Plex's glossary export is **61,022 entries / 6.4 MB**. Reading it is not the
+problem; carrying it is. The script reads it once, locally, and keeps only the
+terms matching vocabulary found in `reports/` — **93 of them**, 12 KB.
+
+Matching normalises case and underscores so `Minimum_Inventory_Quantity` finds
+Plex's "Minimum Inventory Quantity", and deliberately does **not**
+substring-match: a first pass that also scanned `catalog/` pulled in ~1,000
+fields from HR and claims modules nobody here touches, which is exactly the
+problem the script exists to solve.
+
+Two findings worth more than the definitions:
+
+- **Plex defines none of the 100 views we extract.** Its glossary covers
+  business terms, not database views. When one comes up in a meeting there is
+  no authority to appeal to — the answer comes from the data or from Vox.
+- **A missing field is either undefined by Plex or named by us.** Worth
+  knowing before saying "Plex calls it that".
+
+### Added — the Scorecard Field Manual
+A study artifact: all 22 tile families taken apart into *what question it
+answers*, *which Plex tables it comes from*, *why it is built that way*, and
+*what might not be true*. Plus the vocabulary traps that have each cost real
+time here (Encapsulating vs "Encapsulation", Scrap vs Destroy, Part vs
+Warehouse, status names vs keys), a consolidated list of every assumption and
+placeholder currently in production, and the distilled glossary with search.
+
+Written for the case where someone asks *"where is that used?"* or *"why do we
+need that at all?"* — questions the existing docs answer only by implication,
+scattered across a changelog and a dozen report files.
+
+### Changed — README and CHEATSHEET
+The README now opens with where to learn this project rather than assuming the
+reader already knows. The cheatsheet gains the glossary workflow and the two
+mistakes that have cost the most time: look under `Part` before believing Plex
+cannot do something, and filter on status **names**, never numeric keys.
+
 ## 2026-09-11 (deployed) — Out of Stock fired for the first time
 
 Credentials refreshed, so everything queued up today actually ran.

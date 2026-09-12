@@ -10,6 +10,19 @@ Pulls operational data from **Plex ERP** via ODBC and loads it into **Google Big
 
 ---
 
+## Learning this project
+
+Three places, in the order you'd want them:
+
+| | |
+|---|---|
+| **[Scorecard Field Manual](https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a)** | Every tile taken apart — its Plex source, why it is built that way, what might not be true. Written to answer *"where is that used?"* and *"why do we need it at all?"* Includes a searchable glossary. |
+| **[Vox Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9)** | Live status per tile, and the decisions still open. Shared with Vox. |
+| **[`docs/PLEX_GLOSSARY.md`](docs/PLEX_GLOSSARY.md)** | Plex's own definitions for the fields this repo reads — 93 of its 61,022 entries, cut down by `scripts/distill_glossary.py`. |
+
+Then `docs/CHEATSHEET.md` for the pipeline mechanics, and `CHANGELOG.md` for
+why anything is the way it is.
+
 ## How it works
 
 ```mermaid

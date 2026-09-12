@@ -985,3 +985,40 @@ records. These need a maintained table, not a better query — no ERP
 extraction produces a negotiated number. `Sales_v_PO.Master_Price` exists but
 is **sparsely populated** on this tenant; treat computed
 `price × quantity` as primary and `Master_Price` as a cross-check only.
+
+## Looking a Plex term up
+
+`docs/PLEX_GLOSSARY.md` holds Plex's own definition for every field this repo
+reads. It is generated, not written:
+
+```bash
+python scripts/distill_glossary.py
+```
+
+It reads the 6.4 MB / 61,022-entry export in `catalog/` and keeps only terms
+that match vocabulary found in `reports/` — 93 of them. Matching normalises
+underscores and case, so `Minimum_Inventory_Quantity` finds Plex's "Minimum
+Inventory Quantity". It deliberately does **not** substring-match: "Part" alone
+pulled in hundreds of entries from modules Vox does not use, which is the
+problem the script exists to solve.
+
+Two things the output tells you that the raw export cannot:
+
+- **Which tables Plex never defines.** All 100 views we extract are unmatched —
+  the glossary describes business terms, not database views. If one comes up in
+  a meeting there is no authority to appeal to; the answer has to come from the
+  data or from Vox.
+- **Which names we invented.** A field missing from the glossary is either
+  undefined by Plex or ours. Worth knowing before saying "Plex calls it that".
+
+## Two mistakes that cost the most time here
+
+**Look under `Part` before believing Plex can't do it.** On-hand inventory and
+cycle counting both live under the Part module. `Warehouse_v_Part_Quantity` and
+`Warehouse_v_Cycle_Count` are the intuitive guesses and neither exists on this
+tenant. Both were written off as "no Plex source" before being found.
+
+**Filter on status names, not status keys.** Vox cut the sales-order status
+list from 10 to 7 and three numeric keys vanished. A report filtering a dead
+key returns 0 rows, which reads exactly like "nothing is pending" rather than
+"this can never match". One report was silently dead for weeks that way.

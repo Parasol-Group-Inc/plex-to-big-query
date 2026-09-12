@@ -5092,3 +5092,375 @@ resource "google_storage_bucket_object" "production_vs_goal_view_sql" {
   source       = "${path.module}/../reports/sql/production_vs_goal_view.sql"
   content_type = "text/plain"
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LABEL DESIGN QUEUE — added 2026-09-12
+#
+# The pipeline's configs and SQL shipped 2026-09-11 with no Cloud Run job or
+# scheduler behind them, so `label_design_report` had never been created and
+# the job had never run at all. This block is the missing half.
+#
+# TWICE A DAY, EVERY DAY — not the single overnight run every other pipeline
+# uses. This is an operational queue the sales and design teams work from, and
+# it feeds `deploy/label_design_sync/Code.gs`, whose Apps Script triggers fire
+# in the 10:00 and 14:00 Mountain hours. The ETL is therefore scheduled 30
+# minutes AHEAD of each of those, so the Apps Script always reads a view
+# refreshed this cycle rather than the previous one. Moving either side means
+# moving both.
+#
+# Saturday and Sunday are included deliberately: orders are entered over the
+# weekend, and a weekday-only refresh would hand the team a two-day-stale
+# queue on Monday morning. The weekday-only part is the *summary email*, and
+# that lives in the Apps Script (SUMMARY_DAYS), not here — see
+# deploy/label_design_sync/README.md.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "label_design_config_prod" {
+  name         = "reports/label_design.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/label_design.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "label_design_config_test" {
+  name         = "test/label_design.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/label_design.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "label_design_view_sql" {
+  name         = "sql/label_design_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/label_design_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Label Design queue — prod (PlexProd, 9:30 AM & 1:30 PM Mountain, daily) ─
+
+resource "google_cloud_run_v2_job" "etl_label_design" {
+  name     = "plex-etl-label-design"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/label_design.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_label_design" {
+  name        = "plex-label-design-sync"
+  description = "Triggers Plex to BigQuery Label Design queue ETL job"
+  schedule    = "30 9,13 * * *" # 9:30 AM and 1:30 PM Mountain, every day — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_label_design_retry" {
+  name        = "plex-label-design-sync-retry"
+  description = "Retries the Label Design queue ETL job if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Label Design queue — test (PlexTest, 9:40 AM & 1:40 PM Mountain, daily) ─
+
+resource "google_cloud_run_v2_job" "etl_label_design_test" {
+  name     = "plex-etl-label-design-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/label_design.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      max_retries = 1
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_label_design_test" {
+  name        = "plex-label-design-sync-test"
+  description = "Triggers Plex to BigQuery Label Design queue ETL job (test)"
+  schedule    = "40 9,13 * * *" # 9:40 AM and 1:40 PM Mountain, every day — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_label_design_test_retry" {
+  name        = "plex-label-design-sync-test-retry"
+  description = "Retries the Label Design queue ETL job (test) if today's scheduled run failed"
+  schedule    = var.retry_scheduler_cron
+  time_zone   = var.retry_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design_test.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RUN_MODE", value = "retry" }]
+        }]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

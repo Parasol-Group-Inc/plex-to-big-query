@@ -94,6 +94,20 @@ SELECT
   up.user_name                                  AS sales_rep_primary,
   us.user_name                                  AS sales_rep_secondary,
 
+  -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
+  -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
+  -- No new extractions: `Common_v_Customer` and `Part_v_Customer_Part` are
+  -- already joined above for the name and the part number.
+  --
+  -- NOTE these are the CUSTOMER-level contact details, not a per-order
+  -- contact. Plex holds a per-line `Contact_No` as well; which one the label
+  -- team actually wants to reach has never been stated, so the account-level
+  -- one ships (it is always populated) and the choice stays visible here
+  -- rather than being silently made in the Apps Script.
+  cust.Email                                    AS customer_email,
+  cust.Phone                                    AS customer_phone,
+  cp.Customer_Part_Description                  AS customer_part_description,
+
   -- Carried so the Apps Script can dedupe and the sheet can show provenance
   -- without re-deriving anything.
   ps.Status                                     AS order_status,

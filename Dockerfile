@@ -47,6 +47,10 @@ COPY main.py .
 COPY email_utils.py .
 COPY extract_schema_catalog.py .
 COPY templates/ templates/
+# Just the logo, not all of assets/ — that directory also holds the 5,000-row
+# sheet exports and the source .webp, none of which belong in the image.
+# email_utils.py attaches this inline as cid:voxlogo on every send.
+COPY assets/vox-logo.png assets/
 COPY catalog/ catalog/
 COPY entrypoint.sh /entrypoint.sh
 RUN mkdir -p /output && chmod +x /entrypoint.sh

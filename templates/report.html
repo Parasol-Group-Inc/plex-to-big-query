@@ -3,35 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<!--
+  Vox Nutrition ETL notification — rebranded 2026-09-12 from the old generic
+  dark-header Parasol layout.
+
+  Palette and type come from assets/css-theme.css (the Vox brand sheet):
+    #1f8ccb  Vibrant Leaf Blue  — brand bar, links, primary action
+    #215a7c  Slate Navy         — headings, section rules
+    #aecfe6  Divider Light Blue
+    Georgia  for headings, matching the serif of the Vox wordmark
+
+  The logo is an INLINE CID ATTACHMENT (cid:voxlogo), not a hosted URL and not
+  a data: URI — Gmail strips data: image URIs outright, and a hosted URL would
+  mean making a bucket object public. email_utils.py attaches assets/vox-logo.png
+  on every send; if that attach ever fails the <img> alt text still names the
+  company rather than showing a broken image.
+
+  Structure is TABLE-based, not the flexbox in assets/template.html: Outlook
+  renders `display:flex` as a vertical stack, which would break the stats row
+  into five full-width blocks for exactly the desktop readers most likely to
+  open this.
+-->
 <style>
-  body { margin: 0; padding: 0; background: #f4f6f8; font-family: Arial, sans-serif; color: #1f2937; }
-  .wrapper { width: 100%; padding: 24px 0; }
-  .card { max-width: 700px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
-  .header { background: #111827; color: #ffffff; padding: 18px 24px; }
-  .header h1 { margin: 0; font-size: 18px; }
-  .header p { margin: 6px 0 0; font-size: 12px; color: #d1d5db; }
-  .body { padding: 22px 24px; }
-  .badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }
-  .badge-success { background: #dcfce7; color: #166534; }
-  .badge-warning { background: #fef9c3; color: #854d0e; }
-  .badge-error { background: #fee2e2; color: #991b1b; }
-  .badge-env-prod { background: #dbeafe; color: #1e40af; }
-  .badge-env-test { background: #fef3c7; color: #92400e; }
-  .grid { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .grid td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
-  .grid td:first-child { width: 200px; color: #6b7280; }
-  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; padding: 14px 10px 4px; }
-  .mono { font-family: "Courier New", monospace; font-size: 12px; }
-  .link-row td { border-bottom: none; padding-top: 6px; padding-bottom: 6px; }
-  .link { color: #2563eb; text-decoration: none; font-size: 12px; }
-  .events-list { margin: 0; padding-left: 16px; font-size: 12px; color: #374151; }
-  .events-list li { padding: 2px 0; }
-  .error-text { color: #991b1b; font-size: 12px; font-family: "Courier New", monospace; }
-  .error-hint { display: block; margin-top: 3px; color: #1e40af; font-size: 11px; font-style: italic; font-family: Arial, sans-serif; }
-  .none-text { color: #9ca3af; font-size: 12px; font-style: italic; }
-  .footer { padding: 14px 24px; background: #f9fafb; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
-  .footer a { color: #6b7280; text-decoration: none; }
-  .footer a:hover { text-decoration: underline; }
+  body { margin:0; padding:0; background:#f4f7f9; font-family:Arial,Helvetica,sans-serif; color:#333333; }
+  .wrapper { width:100%; padding:24px 0; }
+  .card { max-width:700px; margin:0 auto; background:#ffffff; border-top:5px solid #1f8ccb; border-radius:4px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+
+  .header { padding:24px 28px 18px; border-bottom:2px solid #aecfe6; }
+  .logo { width:160px; max-width:160px; height:auto; display:block; border:0; }
+  .header-sub { margin:14px 0 0; font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:#9ca3af; }
+
+  .body { padding:24px 28px; }
+  .report-title { font-family:Georgia,"Times New Roman",serif; font-size:20px; font-weight:700; color:#215a7c; margin:0 0 4px; }
+  .dataset-path { font-size:12px; color:#6b7280; margin:0 0 18px; font-family:"Courier New",monospace; }
+
+  .badge { display:inline-block; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; letter-spacing:0.4px; margin-bottom:18px; }
+  .badge-success { background:#d1fae5; color:#065f46; }
+  .badge-warning { background:#fef3c7; color:#92400e; }
+  .badge-error   { background:#fee2e2; color:#991b1b; }
+  .badge-env-prod { background:#e2eff8; color:#215a7c; }
+  .badge-env-test { background:#fef3c7; color:#92400e; }
+
+  .stats { width:100%; border:1px solid #aecfe6; border-collapse:collapse; border-radius:4px; margin-bottom:22px; }
+  .stats td { padding:12px 8px; text-align:center; border-right:1px solid #e8eef3; }
+  .stats td:last-child { border-right:none; }
+  .stat-val { font-size:16px; font-weight:700; color:#215a7c; display:block; margin-bottom:3px; }
+  .stat-lbl { font-size:10px; color:#9ca3af; text-transform:uppercase; letter-spacing:0.8px; }
+
+  .grid { width:100%; border-collapse:collapse; margin-top:8px; }
+  .grid td { padding:9px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; vertical-align:top; }
+  .grid td:first-child { width:190px; color:#6b7280; }
+  .section-label { font-family:Georgia,"Times New Roman",serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#215a7c; padding:16px 10px 4px; border-bottom:1px solid #aecfe6 !important; }
+  .mono { font-family:"Courier New",monospace; font-size:12px; }
+  .link-row td { border-bottom:none; padding-top:6px; padding-bottom:6px; }
+  .link { color:#1f8ccb; text-decoration:none; font-size:12px; font-weight:bold; }
+  .events-list { margin:0; padding-left:16px; font-size:12px; color:#374151; }
+  .events-list li { padding:2px 0; }
+  .error-hint { display:block; margin-top:3px; color:#215a7c; font-size:11px; font-style:italic; font-family:Arial,sans-serif; }
+  .none-text { color:#9ca3af; font-size:12px; font-style:italic; }
+
+  .footer { padding:18px 28px; background:#fafafa; border-top:1px solid #eeeeee; color:#888888; font-size:11px; line-height:1.7; }
+  .footer a { color:#1f8ccb; text-decoration:none; }
+  .footer-right { text-align:right; color:#9ca3af; }
 </style>
 </head>
 <body>
@@ -39,19 +72,27 @@
   <div class="card">
 
     <div class="header">
-      <h1>Plex &#x2192; BigQuery ETL</h1>
-      <p>{{execution_name}} &nbsp;|&nbsp; {{gcp_project}}</p>
+      <img src="cid:voxlogo" alt="Vox Nutrition" class="logo" width="160">
+      <p class="header-sub">Plex &#x2192; BigQuery &nbsp;&middot;&nbsp; Automated Data Sync</p>
     </div>
 
     <div class="body">
+      <h1 class="report-title">{{company_name}} data sync</h1>
+      <p class="dataset-path">{{gcp_project}} &rsaquo; {{bq_dataset}}</p>
+
       <span class="badge {{status_class}}">{{status}}</span>{{environment_badge_html}}
 
-      <table class="grid">
+      <table class="stats" role="presentation">
+        <tr>
+          <td><span class="stat-val">{{run_date}}</span><span class="stat-lbl">Date</span></td>
+          <td><span class="stat-val">{{run_time}}</span><span class="stat-lbl">Time (UTC)</span></td>
+          <td><span class="stat-val">{{duration_seconds}}s</span><span class="stat-lbl">Duration</span></td>
+          <td><span class="stat-val">{{rows_fetched}}</span><span class="stat-lbl">Rows fetched</span></td>
+          <td><span class="stat-val">{{rows_written}}</span><span class="stat-lbl">Rows written</span></td>
+        </tr>
+      </table>
 
-        <tr><td colspan="2" class="section-label">Run</td></tr>
-        <tr><td>Date</td><td>{{run_date}}</td></tr>
-        <tr><td>Time (UTC)</td><td>{{run_time}}</td></tr>
-        <tr><td>Duration</td><td>{{duration_seconds}} seconds</td></tr>
+      <table class="grid">
 
         {{reports_section_html}}
 
@@ -68,21 +109,30 @@
         <tr><td>Rows written</td><td>{{rows_written}}</td></tr>
 
         <tr><td colspan="2" class="section-label">Events</td></tr>
-        <tr><td colspan="2" style="padding: 10px;">{{events_html}}</td></tr>
+        <tr><td colspan="2" style="padding:10px;">{{events_html}}</td></tr>
 
         <tr><td colspan="2" class="section-label">Errors</td></tr>
-        <tr><td colspan="2" style="padding: 10px;">{{errors_html}}</td></tr>
+        <tr><td colspan="2" style="padding:10px;">{{errors_html}}</td></tr>
 
         <tr><td colspan="2" class="section-label">Links</td></tr>
         <tr class="link-row"><td>Cloud Run logs</td><td><a class="link" href="{{logs_url}}">{{logs_url_label}}</a></td></tr>
-        <tr class="link-row"><td>Repository</td><td><a class="link" href="{{repo_url}}">{{repo_url}}</a></td></tr>
+        <tr class="link-row"><td>Repository</td><td><a class="link" href="{{repo_url}}">plex-to-big-query</a></td></tr>
 
       </table>
     </div>
 
     <div class="footer">
-      <span>Automated notification &mdash; generated on every run.</span>
-      <a href="{{repo_url}}">plex-to-big-query</a>
+      <table role="presentation" width="100%"><tr>
+        <td>
+          <b style="color:#6b7280;">Execution</b> {{execution_name}}<br>
+          <b style="color:#6b7280;">Dataset</b> {{gcp_project}}.{{bq_dataset}}
+        </td>
+        <td class="footer-right">
+          {{company_name}}<br>
+          Automated Data Sync &mdash; sent on every run<br>
+          Please do not reply
+        </td>
+      </tr></table>
     </div>
 
   </div>

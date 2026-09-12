@@ -1,12 +1,15 @@
 import os
 import re
+import base64
 import html
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from sendgrid.helpers.mail import (
+    Mail, Attachment, FileContent, FileName, FileType, Disposition, ContentId,
+)
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +117,43 @@ def _errors_to_text(items: List[str]) -> str:
     return "\n".join(lines)
 
 
+# The Vox Nutrition wordmark, attached inline on every send as `cid:voxlogo`.
+#
+# Inline CID rather than the two obvious alternatives, both of which fail:
+# a `data:` URI is stripped outright by Gmail, and a hosted https URL would
+# mean making an object in the config bucket publicly readable. CID is carried
+# inside the message itself, so it renders with no external fetch and no
+# public asset.
+#
+# Converted from assets/cropped-Vox-Nutrition-Logo-1.webp — PNG because Outlook
+# does not render WebP at all, and at 320px wide so it stays sharp on the
+# retina displays that show it at the template's 160px.
+_LOGO_PATH = Path(__file__).parent / "assets" / "vox-logo.png"
+_LOGO_CID = "voxlogo"
+
+
+def _logo_attachment() -> Optional[Attachment]:
+    """The inline logo, or None if it is missing.
+
+    Deliberately never raises: a missing image must not stop a failure report
+    from reaching an inbox. The template's alt text names the company, so the
+    email degrades to text rather than to a broken layout.
+    """
+    try:
+        encoded = base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+    except Exception as e:  # noqa: BLE001 - see docstring
+        log.warning("Inline logo %s unavailable (%s); sending without it.", _LOGO_PATH, e)
+        return None
+
+    attachment = Attachment()
+    attachment.file_content = FileContent(encoded)
+    attachment.file_type = FileType("image/png")
+    attachment.file_name = FileName("vox-logo.png")
+    attachment.disposition = Disposition("inline")
+    attachment.content_id = ContentId(_LOGO_CID)
+    return attachment
+
+
 def send_report(report: Dict[str, object]) -> bool:
     enabled = os.environ.get("SENDGRID_ENABLED", "false").lower() == "true"
     if not enabled:
@@ -167,7 +207,7 @@ def send_report(report: Dict[str, object]) -> bool:
     plex_filter    = str(report.get("plex_filter", os.environ.get("PLEX_FILTER", ""))) or "none"
     plex_host      = str(report.get("plex_host",   os.environ.get("PLEX_HOST",   "")))
     execution_name = str(report.get("execution_name", os.environ.get("CLOUD_RUN_EXECUTION", "local")))
-    company_name   = os.environ.get("COMPANY_NAME", "Parasol")
+    company_name   = os.environ.get("COMPANY_NAME", "Vox Nutrition")
     repo_url       = "https://github.com/Parasol-Group-Inc/plex-to-big-query"
 
     region = os.environ.get("CLOUD_RUN_REGION", "us-central1")
@@ -359,6 +399,10 @@ def send_report(report: Dict[str, object]) -> bool:
         html_content=html_content,
         plain_text_content=text_content,
     )
+
+    logo = _logo_attachment()
+    if logo is not None:
+        message.attachment = logo
 
     client = SendGridAPIClient(api_key)
     response = client.send(message)

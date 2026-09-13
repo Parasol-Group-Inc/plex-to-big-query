@@ -14,6 +14,54 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-12 (later) — four latent bugs in `label_design_view.sql`, and the view finally exists
+
+`terraform apply` landed and `plex-etl-label-design-test` ran: all 10
+extractions succeeded, and **view creation failed anyway** — the exact
+"PARTIAL, exit 0, no view" shape this repo keeps warning about.
+
+The first error named one bad column. Rather than fix-redeploy-repeat, the
+whole view was validated at once with `bq query --dry_run` against the live
+`PlexTest` tables. That found **four** independent bugs, every one of them
+present since the 2026-09-11 build and invisible until now for a single
+reason: **no job existed, so the view had never once been created.** Nothing
+else in the pipeline reads this SQL, so nothing else could have caught them.
+
+1. **`u.Name` does not exist.** `Plexus_Control_v_Plexus_User` holds
+   `First_Name` / `Last_Name` / `Middle_Name`. Now
+   `CONCAT(First_Name, ' ', Last_Name)` — the idiom the other five rep-name
+   views here already use, and which happens to produce exactly the
+   "Tyler Hall" shape the Label Design sheet's own Sales Rep column has always
+   carried, so new rows match the 5,000 already archived instead of
+   introducing a second spelling of the same person.
+2. **`n.Note_Key` does not exist** on `Sales_v_PO_Line_Note` — it is
+   `PO_Line_Note_Key`.
+3. **`ps.Status` does not exist** on `Sales_v_PO_Status` — it is `PO_Status`.
+   Both the SELECT and the `Pending Fulfillment` filter used it. The output
+   column stays `order_status`, which is what the Apps Script reads.
+4. **The dates were a compile error, not just wrong.** `PO_Date` and
+   `Due_Date` land as **INT64 nanoseconds** since the epoch
+   (`1750118400000000000` = 2025-06-17) because pandas holds them as
+   `datetime64[ns]` and the raw int64 is what gets written —
+   `SAFE_CAST(... AS TIMESTAMP)` from INT64 is rejected outright. Replaced with
+   this repo's existing three-way `COALESCE` idiom (copied from
+   `sales_orders_aging_view.sql`, not reinvented), which reads the value
+   whether the column landed as int64 nanoseconds, a date, or a timestamp
+   string. That robustness is not theoretical: **an extraction that fetches 0
+   rows leaves the column typed from a previous run**, so the same column can
+   be INT64 in test and STRING in prod. `ORDER BY` now sorts on the resolved
+   date too — sorting the raw int64 works only while it stays nanoseconds.
+
+**Verified, not assumed**: SQL pushed to GCS, `plex-etl-label-design-test`
+re-run, and the view queried directly —
+`voxdatalake.PlexTest.label_design_report` **exists and is queryable**, for the
+first time since it was written. `COUNT(*) = 0`, which is a fact about the test
+tenant (3 orders, none of them in Label Design *and* Pending Fulfillment) and
+not a defect; the same benign-zero reading this repo has recorded before.
+
+Still to do: `terraform apply` once more so state matches the hand-pushed SQL
+object, the Cloud Build for the Vox email branding, and the prod job.
+
 ## 2026-09-12 — Label Design: a job to run in, the real sheet, and Vox branding
 
 ### Added — the `label_design` infrastructure that was never there

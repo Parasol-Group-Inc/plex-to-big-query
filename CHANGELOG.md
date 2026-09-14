@@ -14,6 +14,21 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-14 — non-technical team guide, and a written working agreement on patch size
+
+Added [deploy/label_design_sync/TEAM_GUIDE.md](deploy/label_design_sync/TEAM_GUIDE.md)
+— a plain-English "how do I use the two buttons" doc for the design/sales
+team, separate from the technical README (which stays for engineers), plus
+instructions for optionally wiring an on-sheet Drawing button to
+`checkForNewOrdersManual` / `pushToMondayAndArchiveManual` (the menu built by
+`onOpen()` remains the primary, always-available mechanism; a Drawing is
+optional and can go stale if copied without its script assignment).
+
+Added root [CONTRIBUTING.md](CONTRIBUTING.md): a short working agreement to
+keep future changes as small, targeted patches rather than large rewrites,
+and to ask before large speculative investigations — token/compute
+efficiency as an explicit, first-class project concern going forward.
+
 ## 2026-09-13 — Label Design sync split into two manual/auto steps, with a lock + ledger to make the Push-and-archive step safe
 
 The team asked for two buttons on the sheet — one to check for new orders,

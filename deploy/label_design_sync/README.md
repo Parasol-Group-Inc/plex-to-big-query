@@ -1,5 +1,9 @@
 # Label Design sync — BigQuery → Sheet → Monday
 
+> **Looking for the plain-English "how do I use the two buttons" guide
+> instead?** See [TEAM_GUIDE.md](./TEAM_GUIDE.md). This document is the
+> technical design/reference.
+
 Replaces a twice-daily manual loop: download a report from NetSuite, paste it
 into a Google Sheet, check it for duplicates by hand, upload the new rows to
 Monday.

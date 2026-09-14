@@ -182,10 +182,24 @@ about.
 
 ## Still to do
 
-- **The holding board does not exist yet.** Column IDs in `pushToMonday_`
-  (`text_order`, `date_order`, …) are **placeholders** until it does. Monday
-  column IDs are per-board and are not the column titles. Read them from the
-  board, then update the map.
+- **Map the Monday board's columns.** This is the *only* edit needed to turn
+  the push on — the push code itself is finished.
+
+  1. Create the holding board; set `MONDAY_BOARD_ID` and `MONDAY_API_KEY`.
+  2. Run **`listMondayColumns()`** from the editor. It reads nothing, writes
+     nothing and creates nothing — it prints every column's real id and type,
+     plus a ready-to-paste `MONDAY_COLUMNS`.
+  3. **Check the printed map**, then paste it over `MONDAY_COLUMNS` near the
+     top of `Code.gs`. The title matching is a convenience guess, not a
+     decision; a board with two "Email"-ish columns will guess one.
+
+  Monday column ids are **per-board and are not the column titles**, so they
+  cannot be guessed — and a wrong id fails *silently* (Monday answers 200 with
+  an `errors` array), which is miserable to debug by hand. Until at least one
+  id is filled in, the run reports the unmapped map as a problem rather than
+  creating a board full of items with a name and no populated columns.
+
+  A partly-filled map is fine: unmapped fields are skipped, not sent blank.
 - The rep name arrives as plain text. It can be mapped to Monday's status
   column for reps on the board side, or linked when an item moves from holding
   to the live board — the latter was thought to be easier.

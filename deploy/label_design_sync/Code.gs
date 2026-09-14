@@ -141,6 +141,37 @@ var QUERY_COLUMNS = (function () {
 /** The two columns dedupe depends on. Without BOTH, a tab cannot be trusted. */
 var KEY_HEADERS = { order: 'Sales Order', sku: 'Label SKU' };
 
+// ── Monday board columns ───────────────────────────────────────────────────
+//
+// THE ONLY THING YOU NEED TO EDIT TO TURN THE MONDAY PUSH ON.
+//
+// Monday column IDs are **per-board** and are **not** the column titles — a
+// column headed "Sales Order" might have the id `text8` or `text_mkp3q1`. They
+// cannot be guessed, and a wrong id does not error loudly: Monday answers 200
+// with an `errors` array (handled below), so the row simply never appears.
+//
+// Run `listMondayColumns()` from the editor. It prints every column on the
+// board with its real id and type, AND prints a ready-to-paste replacement for
+// this block. Paste it over this object and the push is live.
+//
+// `field` is the column in `label_design_report`. `type` tells the builder how
+// Monday wants the value shaped — a plain text column takes a string, a date
+// column takes `{date: "YYYY-MM-DD"}`, a long-text column takes `{text: "..."}`.
+//
+// An entry whose `id` is still null is SKIPPED rather than sent, so a partly
+// filled-in map pushes the columns you have mapped instead of failing whole.
+// The item's own name is built separately (customer — part), so a board with
+// nothing but its name column still receives usable items.
+var MONDAY_COLUMNS = [
+  { id: null, field: 'order_number',      type: 'text' },
+  { id: null, field: 'customer_part_no',  type: 'text' },
+  { id: null, field: 'customer_name',     type: 'text' },
+  { id: null, field: 'sales_rep_primary', type: 'text' },
+  { id: null, field: 'customer_email',    type: 'text' },
+  { id: null, field: 'job_note',          type: 'long_text' },
+  { id: null, field: 'order_date',        type: 'date' }
+];
+
 /**
  * If a run would write more than this many rows AND the archive is not empty,
  * something is wrong with the KEYS rather than with the business — the
@@ -579,6 +610,41 @@ function appendRows_(target, rows) {
  * few individual failures, because the sheet has already been written and
  * there is no way to tell which half landed.
  */
+/**
+ * Builds one row's `column_values` from MONDAY_COLUMNS.
+ *
+ * Unmapped columns (id still null) and empty values are both omitted rather
+ * than sent blank — Monday rejects some column types outright when handed an
+ * empty string, and a blank write would also clobber a value a reviewer had
+ * already typed on the board.
+ */
+function mondayColumnValues_(r) {
+  var vals = {};
+
+  MONDAY_COLUMNS.forEach(function (c) {
+    if (!c.id) return;                       // not mapped yet — skip, don't send
+    var raw = r[c.field];
+    if (raw == null || raw === '') return;   // nothing to say about this field
+
+    if (c.type === 'date') {
+      // Monday wants YYYY-MM-DD. order_date already arrives in that shape from
+      // BigQuery; the slice guards against a timestamp sneaking in.
+      vals[c.id] = { date: String(raw).slice(0, 10) };
+    } else if (c.type === 'long_text') {
+      vals[c.id] = { text: String(raw) };
+    } else {
+      vals[c.id] = String(raw);
+    }
+  });
+
+  return vals;
+}
+
+/** True once at least one column has been mapped to a real board id. */
+function mondayIsMapped_() {
+  return MONDAY_COLUMNS.some(function (c) { return !!c.id; });
+}
+
 function pushToMonday_(rows) {
   var out = { ok: 0, failed: 0, errors: [] };
   var boardId = optProp_('MONDAY_BOARD_ID');
@@ -591,17 +657,23 @@ function pushToMonday_(rows) {
     return out;
   }
 
+  if (!mondayIsMapped_()) {
+    // Reported as a problem rather than pushed. Items WOULD be created — with
+    // a name and not one populated column — and a board quietly filling up with
+    // empty rows is worse than a clear message saying what is missing.
+    out.errors.push('Monday board columns are not mapped yet: every id in ' +
+                    'MONDAY_COLUMNS is still null, so items would arrive with a ' +
+                    'name and nothing else. Run listMondayColumns() from the Apps ' +
+                    'Script editor, paste the map it prints, and re-run. Rows are ' +
+                    'safe on the sheet and will not be written again.');
+    out.failed = rows.length;
+    return out;
+  }
+
   rows.forEach(function (r) {
     try {
       var name = (r.customer_name || 'Unknown customer') + ' — ' + (r.customer_part_no || '?');
-      var vals = {
-        text_order:     String(r.order_number || ''),
-        text_part:      String(r.customer_part_no || ''),
-        text_rep:       String(r.sales_rep_primary || ''),
-        text_email:     String(r.customer_email || ''),
-        long_text_note: { text: String(r.job_note || '') }
-      };
-      if (r.order_date) vals.date_order = { date: String(r.order_date).slice(0, 10) };
+      var vals = mondayColumnValues_(r);
 
       var query =
         'mutation ($board: ID!, $name: String!, $vals: JSON!) {' +
@@ -632,6 +704,84 @@ function pushToMonday_(rows) {
   });
 
   return out;
+}
+
+/**
+ * Prints the board's real column ids, and a ready-to-paste MONDAY_COLUMNS.
+ * ========================================================================
+ *
+ * Run this once from the editor after the holding board exists, with
+ * MONDAY_API_KEY and MONDAY_BOARD_ID set. It reads nothing else, writes
+ * nothing, creates nothing and emails nobody.
+ *
+ * It exists because Monday's column ids are per-board and are not the column
+ * titles, so the map above cannot be written without looking at the board — and
+ * a wrong id fails silently (200 with an `errors` array), which is a miserable
+ * thing to debug by hand.
+ *
+ * The title match below is a best guess offered for convenience, not a
+ * decision: CHECK the printed map before pasting it. A board with two columns
+ * called something like "Email" will guess one of them.
+ */
+function listMondayColumns() {
+  var boardId = optProp_('MONDAY_BOARD_ID');
+  var apiKey = optProp_('MONDAY_API_KEY');
+  if (!boardId || !apiKey) {
+    Logger.log('Set MONDAY_BOARD_ID and MONDAY_API_KEY in Script Properties first.');
+    return;
+  }
+
+  var res = UrlFetchApp.fetch('https://api.monday.com/v2', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: apiKey, 'API-Version': '2023-10' },
+    payload: JSON.stringify({
+      query: 'query ($board: [ID!]) { boards (ids: $board) { name columns { id title type } } }',
+      variables: { board: [boardId] }
+    }),
+    muteHttpExceptions: true
+  });
+
+  var body = JSON.parse(res.getContentText());
+  if (body.errors) { Logger.log('Monday returned errors: %s', JSON.stringify(body.errors)); return; }
+
+  var board = body.data && body.data.boards && body.data.boards[0];
+  if (!board) { Logger.log('No board with id %s is visible to this token.', boardId); return; }
+
+  Logger.log('Board: %s', board.name);
+  Logger.log('%-28s %-22s %s', 'TITLE', 'ID', 'TYPE');
+  board.columns.forEach(function (c) {
+    Logger.log('%-28s %-22s %s', c.title, c.id, c.type);
+  });
+
+  // Best-effort title guess, purely to save typing.
+  var guessFor = {
+    order_number:      ['sales order', 'order', 'order number', 'so'],
+    customer_part_no:  ['label sku', 'sku', 'customer part', 'part'],
+    customer_name:     ['customer', 'client', 'account'],
+    sales_rep_primary: ['sales rep', 'rep', 'bdm', 'salesperson'],
+    customer_email:    ['email', 'e-mail'],
+    job_note:          ['memo', 'note', 'job note', 'notes'],
+    order_date:        ['date', 'order date', 'created']
+  };
+
+  Logger.log('');
+  Logger.log('--- paste over MONDAY_COLUMNS, AFTER checking each id ---');
+  Logger.log('var MONDAY_COLUMNS = [');
+  MONDAY_COLUMNS.forEach(function (col) {
+    var wanted = guessFor[col.field] || [];
+    var hit = null;
+    for (var w = 0; w < wanted.length && !hit; w++) {
+      board.columns.forEach(function (c) {
+        if (!hit && normHeader_(c.title) === normHeader_(wanted[w])) hit = c;
+      });
+    }
+    Logger.log("  { id: %s, field: '%s', type: '%s' },%s",
+      hit ? "'" + hit.id + "'" : 'null',
+      col.field, col.type,
+      hit ? '   // ' + hit.title + ' (' + hit.type + ')' : '   // NO MATCH — fill in by hand');
+  });
+  Logger.log('];');
 }
 
 // ── Run log, for the summary ───────────────────────────────────────────────

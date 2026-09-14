@@ -7,17 +7,54 @@
  * to Monday.
  *
  * The Cloud Run job `plex-etl-label-design` refreshes `label_design_report` in
- * BigQuery at 09:30 and 13:30 Mountain; this script runs in the 10:00 and
- * 14:00 hours and is what decides which of those rows are NEW. That is why the
- * notifications live here rather than in the pipeline: the pipeline knows a
- * query succeeded, only this knows what reached Monday.
+ * BigQuery at 09:30 and 13:30 Mountain. This script has TWO separate steps,
+ * and only the first one is on a schedule:
  *
- * ── THE ONE RULE ───────────────────────────────────────────────────────────
- * The `historical` tab is READ AND NEVER WRITTEN. Not by this script, not in
- * any failure path, not as a fallback. People hand-edit notes and reason codes
- * there, and re-writing a row would destroy that work. Every write in this
- * file goes to the MONDAY tab or to a dated review tab, and every write path
- * passes through assertNotHistory_() so a future edit cannot quietly break it.
+ *   1. CHECK  — `checkForNewOrdersAuto` (10:00/14:00, automatic) or
+ *               `checkForNewOrdersManual` (the sheet's menu/button). Reads
+ *               BigQuery, dedupes against `historical` + the MONDAY tab, and
+ *               APPENDS new rows to the MONDAY tab. Never touches Monday.com,
+ *               never touches `historical`.
+ *
+ *   2. PUSH   — `pushToMondayAndArchiveManual` (menu/button only — no
+ *               trigger). Reads whatever is currently on the MONDAY tab
+ *               (including anything the team has hand-typed into Reason
+ *               Code / Label / Bottle Material / Prop 65 / LCR during
+ *               review), creates one Monday item per row, then ARCHIVES each
+ *               successfully-pushed row into `historical` and clears it off
+ *               the MONDAY tab.
+ *
+ * Splitting these lets the team review a row on the sheet — filling in the
+ * columns Plex can't — before it goes to Monday, instead of it landing on the
+ * board the instant BigQuery sees it.
+ *
+ * ── WHY A CHECK/PUSH SPLIT NEEDS "BANK-GRADE" HANDLING ─────────────────────
+ * Push does two things that must never happen more than once for the same
+ * row (create a Monday item, archive a sheet row) using two calls (BigQuery/
+ * UrlFetchApp, then SpreadsheetApp) that Apps Script cannot wrap in a single
+ * transaction. Two mechanisms make that safe instead of merely assumed safe:
+ *
+ *   - `withLock_()` — a script-wide lock. Check and Push (manual or
+ *     scheduled) can never run concurrently, so one can never read a sheet
+ *     mid-write by the other. See LOCK_WAIT_MS.
+ *   - The `_PUSH_STATE` ledger — a hidden tab that records a Monday item id
+ *     the INSTANT its create_item call succeeds, before anything else
+ *     happens. That write is the one true "commit point": a crash, timeout
+ *     or double-click before it means nothing happened yet (safe to retry);
+ *     after it, the row is skipped on any future Push rather than re-pushed,
+ *     no matter how many times the button is pressed or how far archiving
+ *     got. See pushToMondayAndArchive_() for the full two-phase walkthrough
+ *     and README.md for the diagrams.
+ *
+ * ── THE ONE RULE, REVISED ───────────────────────────────────────────────────
+ * The `historical` tab is never overwritten, reordered, or read back and
+ * rewritten — hand-edited notes and reason codes there are never at risk.
+ * It is APPENDED TO exactly once per row, only by appendToHistory_(), only
+ * for a row the ledger confirms already reached Monday, and only from
+ * pushToMondayAndArchive_(). Every OTHER write path in this file (the MONDAY
+ * tab, a dated review tab) is blocked from touching it by
+ * assertNotHistory_(), so a future edit to those paths cannot quietly start
+ * writing history again.
  *
  * ── DEDUPLICATION ──────────────────────────────────────────────────────────
  * ORDER NUMBER + LABEL SKU (the customer part number), checked against BOTH
@@ -39,12 +76,16 @@
  *   GCP_PROJECT        parasoldatalake     jobs run and bill here
  *   BQ_DATA_PROJECT    voxdatalake         where the tables are
  *   BQ_DATASET         PlexTest            → PlexProd at go-live
+ *   BQ_LOCATION        US                  BigQuery dataset location
  *   SHEET_ID           <the duplicate sheet, not the live one>
  *   MONDAY_API_KEY     <long-lived token>
  *   MONDAY_BOARD_ID    <from the board URL>
  *
  * Run `testReadOnly()` first — it writes nothing, pushes nothing and emails
- * nobody. Then `installTriggers()` once.
+ * nobody. Then `installTriggers()` once (installs the CHECK schedule and the
+ * daily summary — Push has no trigger, it is menu/button only). Opening the
+ * sheet after that shows a "Label Design Sync" menu with both buttons —
+ * `onOpen()` builds it automatically; no further setup is needed for that.
  */
 
 // ── Who hears about what ───────────────────────────────────────────────────
@@ -120,11 +161,16 @@ var SHEET_MAP = [
   { header: 'Sales Rep',       from: 'sales_rep_primary',         kind: 'plex' },
   { header: 'Label SKU',       from: 'customer_part_no',          kind: 'plex' },
   { header: 'Description',     from: 'customer_part_description', kind: 'plex' },
-  { header: 'Reason Code',     from: null,                        kind: 'team' },
-  { header: 'Label',           from: null,                        kind: 'team' },
-  { header: 'Bottle Material', from: null,                        kind: 'team' },
-  { header: 'LCR',             from: null,                        kind: 'team' },
-  { header: 'Prop 65',         from: null,                        kind: 'team' }
+  // 'team' columns have no `from` — Plex/BigQuery never fills them, a person
+  // does, on the MONDAY tab, during review. `field` is still given so the
+  // PUSH step (which reads the tab's CURRENT values, not the original
+  // BigQuery row) and MONDAY_COLUMNS can both address the same value by the
+  // same key. See historyCellValue_() and pushToMondayAndArchive_().
+  { header: 'Reason Code',     from: null, field: 'reason_code',     kind: 'team' },
+  { header: 'Label',           from: null, field: 'label',           kind: 'team' },
+  { header: 'Bottle Material', from: null, field: 'bottle_material', kind: 'team' },
+  { header: 'LCR',             from: null, field: 'lcr',             kind: 'team' },
+  { header: 'Prop 65',         from: null, field: 'prop_65',         kind: 'team' }
 ];
 
 /** Columns fetched from BigQuery. Derived from SHEET_MAP so the two cannot drift. */
@@ -162,14 +208,27 @@ var KEY_HEADERS = { order: 'Sales Order', sku: 'Label SKU' };
 // filled-in map pushes the columns you have mapped instead of failing whole.
 // The item's own name is built separately (customer — part), so a board with
 // nothing but its name column still receives usable items.
+// TEST BOARD ("Tablero nuevo") — pasted from listMondayColumns() 2026-09-14.
+// Re-run listMondayColumns() and paste over this block again once the PROD
+// board exists with its own column ids; a board recreated in Monday gets new
+// ids even if the titles are identical.
 var MONDAY_COLUMNS = [
-  { id: null, field: 'order_number',      type: 'text' },
-  { id: null, field: 'customer_part_no',  type: 'text' },
-  { id: null, field: 'customer_name',     type: 'text' },
-  { id: null, field: 'sales_rep_primary', type: 'text' },
-  { id: null, field: 'customer_email',    type: 'text' },
-  { id: null, field: 'job_note',          type: 'long_text' },
-  { id: null, field: 'order_date',        type: 'date' }
+  { id: 'date_mm766apm',      field: 'order_date',               type: 'date' },      // Date
+  { id: 'text_mm768xfm',      field: 'order_number',             type: 'text' },      // Sales Order
+  { id: 'long_text_mm76j9e7', field: 'job_note',                 type: 'long_text' }, // Memo
+  { id: 'text_mm76xzde',      field: 'customer_name',            type: 'text' },      // Customer
+  { id: 'email_mm76fdf6',     field: 'customer_email',           type: 'text' },      // Email
+  { id: 'phone_mm76306g',     field: 'customer_phone',           type: 'text' },      // Phone
+  { id: 'text_mm76c8ke',      field: 'wo_number',                type: 'text' },      // WO Number (manual / not in queue yet)
+  { id: 'text_mm76d5qv',      field: 'item',                     type: 'text' },      // Item (manual / not in queue yet)
+  { id: 'text_mm76ch44',      field: 'sales_rep_primary',        type: 'text' },      // Sales Rep
+  { id: 'text_mm76k5a2',      field: 'customer_part_no',         type: 'text' },      // Label SKU
+  { id: 'text_mm76eq1v',      field: 'customer_part_description', type: 'text' },     // Description
+  { id: 'text_mm76pht2',      field: 'reason_code',              type: 'text' },      // Reason Code (manual review)
+  { id: 'text_mm76e86f',      field: 'label',                    type: 'text' },      // Label (manual review)
+  { id: 'text_mm76bem0',      field: 'bottle_material',          type: 'text' },      // Bottle Material (manual review)
+  { id: 'text_mm76wsfk',      field: 'prop_65',                  type: 'text' },      // Prop 65 (manual review)
+  { id: 'text_mm76tgzp',      field: 'lcr',                      type: 'text' }       // LCR (manual review)
 ];
 
 /**
@@ -200,7 +259,38 @@ function optProp_(key) {
 function project_()     { return prop_('GCP_PROJECT'); }
 function dataProject_() { return optProp_('BQ_DATA_PROJECT') || project_(); }
 function dataset_()     { return prop_('BQ_DATASET'); }
+function location_()    { return optProp_('BQ_LOCATION') || 'US'; }
 function sheet_()       { return SpreadsheetApp.openById(prop_('SHEET_ID')); }
+
+// ── Locking ─────────────────────────────────────────────────────────────────
+//
+// A script-wide lock (not per-user, not per-document): Check and Push must
+// never interleave their sheet writes, no matter whether they were triggered
+// by the clock, by one person clicking a button, or by two people clicking
+// two buttons at once. LockService.getScriptLock() is shared across every
+// execution of this project, which is exactly the scope needed here.
+
+var LOCK_WAIT_MS = 25 * 1000;
+
+/**
+ * Runs `fn` only while holding the script lock, and always releases it
+ * afterwards. If the lock cannot be obtained within LOCK_WAIT_MS, throws
+ * WITHOUT calling `fn` at all — "someone else is mid-run" must never mean
+ * "run anyway and hope the interleaving is harmless".
+ */
+function withLock_(taskName, fn) {
+  var lock = LockService.getScriptLock();
+  var got = lock.tryLock(LOCK_WAIT_MS);
+  if (!got) {
+    throw new Error('Could not start "' + taskName + '" — a Check or Push is already running ' +
+                    'elsewhere. Nothing was touched; try again in a minute.');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 // ── Text normalisation ─────────────────────────────────────────────────────
 
@@ -241,15 +331,18 @@ function dedupeKey_(row) {
   return dedupeKeyFromValues_(row.order_number, row.customer_part_no);
 }
 
-// ── The run ────────────────────────────────────────────────────────────────
+// ── The check ────────────────────────────────────────────────────────────
+//
+// Fetch → dedupe → append fresh rows to the MONDAY tab (or a dated REVIEW
+// tab, if assessKeys_ is unhappy with the dedupe). NEVER pushes to Monday.com
+// and NEVER touches `historical` — see pushToMondayAndArchive_() for that.
 
-/** The trigger entry point. Never throws — a failure has to reach an inbox. */
-function syncNow() {
+/** The shared core. Never throws — a failure has to reach an inbox/alert. */
+function checkForNewOrders_() {
   var started = new Date();
   var result = {
     started: started,
     fetched: 0, alreadyPresent: 0, written: 0,
-    pushed: 0, pushFailed: 0,
     targetTab: '', quarantined: false,
     rows: [], errors: [], warnings: [],
     headerReport: null, keyReport: null
@@ -286,28 +379,114 @@ function syncNow() {
       result.rows = fresh;
 
       if (target.quarantined) {
-        // Nothing goes to Monday from a held run. The point is that a person
-        // looks first.
         result.warnings.push(
-          'Rows were written to "' + target.name + '" and NOT pushed to Monday. ' +
-          'Nothing is lost and nothing is duplicated — but someone has to look at ' +
-          'that tab before these reach the board.');
+          'Rows were written to "' + target.name + '" instead of "' + MAIN_TAB + '". The ' +
+          '"Push to Monday & Archive" button only ever reads "' + MAIN_TAB + '", so these ' +
+          'rows will not reach Monday until a person reviews them and moves them onto "' +
+          MAIN_TAB + '" by hand.');
       } else {
-        var push = pushToMonday_(fresh);
-        result.pushed = push.ok;
-        result.pushFailed = push.failed;
-        push.errors.forEach(function (e) { result.errors.push(e); });
+        result.warnings.push(
+          result.written + ' new ' + (result.written === 1 ? 'row is' : 'rows are') +
+          ' waiting on "' + target.name + '" for review, then the "Push to Monday & Archive" ' +
+          'button.');
       }
     }
   } catch (e) {
     result.errors.push(String(e && e.message ? e.message : e));
-    Logger.log('syncNow failed: %s', e);
+    Logger.log('checkForNewOrders_ failed: %s', e);
   }
 
   result.finished = new Date();
-  recordRun_(result);
-  sendRunEmail_(result);
+  recordRun_(result, 'check');
   return result;
+}
+
+/** A same-shaped result for when the lock itself could not be obtained. */
+function lockFailureResult_(e) {
+  return {
+    started: new Date(), finished: new Date(),
+    fetched: 0, alreadyPresent: 0, written: 0,
+    targetTab: '', quarantined: false,
+    rows: [], errors: [String(e && e.message ? e.message : e)], warnings: [],
+    headerReport: null, keyReport: null
+  };
+}
+
+/**
+ * The SCHEDULED entry point (10:00 / 14:00, every day — see installTriggers).
+ * No UI to talk to from a time trigger, so this only ever emails.
+ */
+function checkForNewOrdersAuto() {
+  var result;
+  try {
+    result = withLock_('Check for new orders (scheduled)', checkForNewOrders_);
+  } catch (e) {
+    result = lockFailureResult_(e);
+  }
+  sendRunEmail_(result, 'auto');
+  return result;
+}
+
+/**
+ * The MENU/BUTTON entry point — "1) Check for new orders" in the sheet's
+ * "Label Design Sync" menu (see onOpen()). Same core as the scheduled run,
+ * plus an on-screen summary so whoever clicked it doesn't have to wait on an
+ * email to know what happened.
+ */
+function checkForNewOrdersManual() {
+  var ui = safeUi_();
+
+  var result;
+  try {
+    result = withLock_('Check for new orders', checkForNewOrders_);
+  } catch (e) {
+    result = lockFailureResult_(e);
+  }
+  sendRunEmail_(result, 'manual');
+
+  if (ui) {
+    var lines = [
+      'In the queue:    ' + result.fetched,
+      'Already known:   ' + result.alreadyPresent,
+      'Written as new:  ' + result.written + (result.targetTab ? '   -> ' + result.targetTab : '')
+    ];
+    if (result.quarantined) {
+      lines.push('', 'HELD FOR REVIEW — the dedupe looked wrong for this batch. See the email ' +
+                     'and the dated REVIEW tab before moving anything to ' + MAIN_TAB + '.');
+    }
+    if (result.errors.length) lines.push('', 'PROBLEMS:', result.errors.join('\n'));
+    ui.alert('Check for new orders', lines.join('\n'), ui.ButtonSet.OK);
+  }
+
+  return result;
+}
+
+/**
+ * SpreadsheetApp.getUi() throws when there is no user interface to attach to
+ * (a time-based trigger, or the script editor's Run button). Every menu
+ * function calls this rather than the raw API so a lock failure or a stray
+ * manual Run from the editor degrades to "email only" instead of throwing.
+ */
+function safeUi_() {
+  try { return SpreadsheetApp.getUi(); } catch (e) { return null; }
+}
+
+/**
+ * Builds the "Label Design Sync" menu — the two buttons the team asked for.
+ * A custom menu is the standard, reliable way to give a Sheet a "button" that
+ * runs Apps Script: it works for every viewer with no image/Drawing to keep
+ * in sync. (A Drawing assigned to `checkForNewOrdersManual` /
+ * `pushToMondayAndArchiveManual` works too, side by side with this menu, if a
+ * literal on-sheet button is wanted as well — see README.md.)
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Label Design Sync')
+    .addItem('1) Check for new orders', 'checkForNewOrdersManual')
+    .addItem('2) Push to Monday & Archive', 'pushToMondayAndArchiveManual')
+    .addSeparator()
+    .addItem('Dry run (read-only, logs only)', 'testReadOnly')
+    .addToUi();
 }
 
 /**
@@ -320,8 +499,13 @@ function fetchQueue_() {
     dataProject_() + '.' + dataset_() + '.label_design_report` ' +
     'ORDER BY order_date DESC, order_number';
 
+  // `location` is a field on the QueryRequest body itself, not a separate
+  // "optional args" parameter — BigQuery.Jobs.query(resource, projectId) only
+  // takes two arguments. Passing it any other way is what produced
+  // "Cannot parse  as CloudRegion." (the location silently arrived empty).
   var job = BigQuery.Jobs.query(
-    { query: sql, useLegacySql: false, timeoutMs: 60000 }, project_());
+    { query: sql, useLegacySql: false, timeoutMs: 60000, location: location_() },
+    project_());
 
   if (!job.jobComplete) {
     throw new Error('BigQuery did not finish within 60s — the queue was not read. ' +
@@ -600,16 +784,62 @@ function appendRows_(target, rows) {
               .setValues(values);
 }
 
-// ── Monday ─────────────────────────────────────────────────────────────────
+/**
+ * Like cellValue_(), but reads a plain `fields` object keyed by `col.field ||
+ * col.from` instead of a raw BigQuery row. Used only by appendToHistory_(),
+ * because a row being archived may carry values a PERSON typed into a 'team'
+ * column (Reason Code, Label, Bottle Material, Prop 65, LCR) that BigQuery
+ * never supplied and that cellValue_() would therefore always blank.
+ */
+function historyCellValue_(col, fields) {
+  var key = col.field || col.from;
+  if (!key) return '';
+  var v = fields[key];
+  if (v == null || v === '') return '';
+
+  if (col.format === 'salesOrder') {
+    var s = String(v).trim();
+    return /^sales\s*order/i.test(s) ? s : 'Sales Order #' + s;
+  }
+  return v;
+}
 
 /**
- * Pushes into a HOLDING board, never the live one. Notes and reason codes get
- * reviewed and edited there before anyone moves an item across.
+ * THE ONE SANCTIONED WRITE TO `historical`.
+ * ============================================================================
+ * Every other write path in this file is stopped from touching this tab by
+ * assertNotHistory_() — this function is the deliberate, sole exception, and
+ * it earns that by how it is called rather than by a comment promising to be
+ * careful:
  *
- * One item at a time on purpose: a batch that fails halfway is worse than a
- * few individual failures, because the sheet has already been written and
- * there is no way to tell which half landed.
+ *   - Called ONLY from pushToMondayAndArchive_(), ONLY with rows the
+ *     `_PUSH_STATE` ledger confirms already have a real Monday item id.
+ *   - APPEND ONLY. Nothing already on the tab is read back, edited or
+ *     reordered — a note typed in two years ago is never touched.
+ *   - The caller has ALREADY checked each row's key against what's on this
+ *     tab (readKeysFrom_) before calling this, so a row archived by an
+ *     earlier, interrupted run is never appended a second time.
  */
+function appendToHistory_(historyTab, historyInfo, rowsOfFields) {
+  var width = Math.max(historyInfo.width, historyTab.getLastColumn(), 1);
+  var index = historyInfo.index;
+
+  var values = rowsOfFields.map(function (fields) {
+    var line = [];
+    for (var i = 0; i < width; i++) line.push('');
+    SHEET_MAP.forEach(function (col) {
+      var at = index[col.header];
+      if (at == null || at < 0 || at >= width) return;
+      line[at] = historyCellValue_(col, fields);
+    });
+    return line;
+  });
+
+  historyTab.getRange(historyTab.getLastRow() + 1, 1, values.length, width).setValues(values);
+}
+
+// ── Monday ─────────────────────────────────────────────────────────────────
+
 /**
  * Builds one row's `column_values` from MONDAY_COLUMNS.
  *
@@ -645,65 +875,356 @@ function mondayIsMapped_() {
   return MONDAY_COLUMNS.some(function (c) { return !!c.id; });
 }
 
-function pushToMonday_(rows) {
-  var out = { ok: 0, failed: 0, errors: [] };
+/**
+ * One row, one Monday item. Returns {ok, itemId} or {ok: false, error}
+ * rather than throwing, and never touches the sheet — pushToMondayAndArchive_
+ * decides what to do with the result, including writing the ledger entry that
+ * makes this row's push permanent.
+ *
+ * `fields` is keyed by `col.from || col.field` (see SHEET_MAP), so it works
+ * identically whether it came straight from BigQuery (the old flow) or from
+ * the MONDAY tab's current, possibly team-edited values (the new flow) —
+ * mondayColumnValues_() cannot tell the difference and does not need to.
+ */
+function pushOneToMonday_(fields) {
   var boardId = optProp_('MONDAY_BOARD_ID');
   var apiKey = optProp_('MONDAY_API_KEY');
 
-  if (!boardId || !apiKey) {
-    out.errors.push('Monday is not configured (MONDAY_BOARD_ID / MONDAY_API_KEY) — ' +
-                    'rows are on the sheet but were not pushed to the board.');
-    out.failed = rows.length;
-    return out;
-  }
+  try {
+    var name = (fields.customer_name || 'Unknown customer') + ' — ' + (fields.customer_part_no || '?');
+    var vals = mondayColumnValues_(fields);
 
+    var query =
+      'mutation ($board: ID!, $name: String!, $vals: JSON!) {' +
+      '  create_item (board_id: $board, item_name: $name, column_values: $vals) { id }' +
+      '}';
+
+    var res = UrlFetchApp.fetch('https://api.monday.com/v2', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: apiKey, 'API-Version': '2023-10' },
+      payload: JSON.stringify({
+        query: query,
+        variables: { board: boardId, name: name, vals: JSON.stringify(vals) }
+      }),
+      muteHttpExceptions: true
+    });
+
+    var body = JSON.parse(res.getContentText());
+    // Monday answers 200 with an "errors" array rather than an HTTP error, so
+    // the status code alone would report success on a rejected mutation.
+    if (body.errors) throw new Error(JSON.stringify(body.errors));
+
+    var itemId = body.data && body.data.create_item && body.data.create_item.id;
+    if (!itemId) throw new Error('Monday returned no item id: ' + res.getContentText());
+
+    return { ok: true, itemId: itemId };
+  } catch (e) {
+    Logger.log('Monday push failed: %s', e);
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// ── Push ledger — the write-ahead log for the two-phase Monday push ────────
+//
+// A hidden tab the team never needs to look at. It exists for one reason: to
+// make it IMPOSSIBLE for the same row to create two Monday items, no matter
+// how many times the Push button is clicked, how many people click it, or
+// where a run gets interrupted.
+//
+// The rule: a row is pushed to Monday if and only if its dedupe key has no
+// entry here yet. The entry is written the INSTANT create_item succeeds —
+// before the row is touched again — so that write is the one true commit
+// point. Everything before it is safe to redo from scratch; everything after
+// it must never repeat the push, only finish archiving.
+//
+// The ledger should be EMPTY between Push runs. A non-empty ledger found at
+// the START of a run means a previous run got interrupted between pushing and
+// archiving — see pushToMondayAndArchive_(), which finishes that job rather
+// than re-pushing.
+
+var PUSH_STATE_TAB = '_PUSH_STATE';
+var PUSH_STATE_HEADERS = ['dedupe_key', 'order_number', 'customer_part_no', 'monday_item_id', 'pushed_at'];
+
+/** Gets or creates the ledger tab, hidden so it never shows up to the team. */
+function pushStateTab_() {
+  var ss = sheet_();
+  var tab = ss.getSheetByName(PUSH_STATE_TAB);
+  if (!tab) {
+    tab = ss.insertSheet(PUSH_STATE_TAB);
+    tab.getRange(1, 1, 1, PUSH_STATE_HEADERS.length).setValues([PUSH_STATE_HEADERS]);
+    try { tab.hideSheet(); } catch (e) { /* fine if this account can't hide sheets */ }
+  }
+  return tab;
+}
+
+/** dedupe_key -> {itemId, pushedAt, rowIndex}. rowIndex is this tab's own row, for cleanup. */
+function readPushState_(tab) {
+  var lastRow = tab.getLastRow();
+  var out = {};
+  if (lastRow < 2) return out;
+
+  tab.getRange(2, 1, lastRow - 1, PUSH_STATE_HEADERS.length).getValues().forEach(function (r, i) {
+    var key = r[0];
+    if (!key) return;
+    out[key] = { itemId: r[3], pushedAt: r[4], rowIndex: i + 2 };
+  });
+  return out;
+}
+
+/**
+ * THE COMMIT POINT. Called once, immediately, the moment pushOneToMonday_
+ * reports success — never before, never batched, never delayed until after
+ * other rows are processed. One appendRow() call is what makes "Monday has
+ * this item" durable and re-run-proof.
+ */
+function recordPushState_(tab, key, fields, itemId) {
+  tab.appendRow([key, fields.order_number || '', fields.customer_part_no || '',
+                itemId, new Date().toISOString()]);
+}
+
+/** Removes ledger entries for rows that have just been safely archived. */
+function clearPushState_(tab, keys) {
+  if (!keys.length) return;
+  var ledger = readPushState_(tab);
+  var rowIndexes = [];
+  keys.forEach(function (k) { if (ledger[k]) rowIndexes.push(ledger[k].rowIndex); });
+
+  // Highest row first — deleting a row shifts every row below it.
+  rowIndexes.sort(function (a, b) { return b - a; }).forEach(function (rowIndex) {
+    tab.deleteRow(rowIndex);
+  });
+}
+
+/**
+ * PUSH & ARCHIVE — the manual, two-phase operation behind the second button.
+ * ============================================================================
+ * Reads the MONDAY tab as it stands right now (including anything the team
+ * has hand-typed into the review columns), and for every row:
+ *
+ *   PHASE 1 — PUSH (idempotent)
+ *     If the ledger already has an item id for this row's key, skip pushing
+ *     (it was already done, possibly by an interrupted earlier run) and just
+ *     remember the id. Otherwise call Monday's create_item; on success,
+ *     record the id in the ledger IMMEDIATELY (see recordPushState_) before
+ *     moving to the next row. A failure here leaves the row exactly as it
+ *     was — still on the MONDAY tab, no ledger entry, eligible to be retried
+ *     next time the button is pressed.
+ *
+ *   PHASE 2 — ARCHIVE (idempotent)
+ *     Every row that now has a ledger item id is eligible. If its key is
+ *     already on `historical` (an earlier run got this far before being
+ *     interrupted), it is NOT appended again — only cleared. Otherwise all
+ *     eligible rows are appended to `historical` in one batch write; only
+ *     once that write returns without throwing are the corresponding rows
+ *     deleted from the MONDAY tab (bottom row first, so earlier row numbers
+ *     stay valid), and their ledger entries removed.
+ *
+ * If the archive write itself fails, nothing is deleted and nothing is lost:
+ * the rows stay on the MONDAY tab, their ledger entries stay put, and the
+ * next Push run picks up exactly where this one stopped.
+ *
+ * Always run inside withLock_() by its callers — see
+ * pushToMondayAndArchiveManual().
+ */
+function pushToMondayAndArchive_() {
+  var result = {
+    started: new Date(), finished: null,
+    candidates: 0, pushed: 0, alreadyPushed: 0, pushFailed: 0,
+    archived: 0, staleCleared: 0, remaining: 0,
+    errors: [], warnings: []
+  };
+
+  if (!optProp_('MONDAY_BOARD_ID') || !optProp_('MONDAY_API_KEY')) {
+    result.errors.push('Monday is not configured (MONDAY_BOARD_ID / MONDAY_API_KEY) — nothing ' +
+                       'was pushed. Rows are untouched on "' + MAIN_TAB + '".');
+    result.finished = new Date();
+    return result;
+  }
   if (!mondayIsMapped_()) {
-    // Reported as a problem rather than pushed. Items WOULD be created — with
-    // a name and not one populated column — and a board quietly filling up with
-    // empty rows is worse than a clear message saying what is missing.
-    out.errors.push('Monday board columns are not mapped yet: every id in ' +
-                    'MONDAY_COLUMNS is still null, so items would arrive with a ' +
-                    'name and nothing else. Run listMondayColumns() from the Apps ' +
-                    'Script editor, paste the map it prints, and re-run. Rows are ' +
-                    'safe on the sheet and will not be written again.');
-    out.failed = rows.length;
-    return out;
+    result.errors.push('Monday board columns are not mapped yet: every id in MONDAY_COLUMNS is ' +
+                       'still null. Run listMondayColumns() from the editor, paste the map it ' +
+                       'prints, and try again. Nothing was pushed; rows are untouched on "' +
+                       MAIN_TAB + '".');
+    result.finished = new Date();
+    return result;
   }
 
+  var ss = sheet_();
+  var mainTab = findTab_(ss, MAIN_TAB_ALIASES);
+  if (!mainTab) {
+    result.warnings.push('No "' + MAIN_TAB + '" tab found — nothing to push.');
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var lastRow = mainTab.getLastRow();
+  var lastCol = Math.max(mainTab.getLastColumn(), 1);
+  var headers = lastRow >= 1 ? mainTab.getRange(1, 1, 1, lastCol).getDisplayValues()[0] : [];
+  var info = resolveHeaders_(mainTab.getName(), headers);
+
+  if (!info.hasKeys) {
+    result.errors.push('The "' + mainTab.getName() + '" tab is missing its "' + KEY_HEADERS.order +
+                       '" / "' + KEY_HEADERS.sku + '" columns — refusing to push. Nothing was ' +
+                       'touched.');
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var dataRowCount = Math.max(lastRow - 1, 0);
+  if (dataRowCount === 0) {
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var values = mainTab.getRange(2, 1, dataRowCount, lastCol).getDisplayValues();
+
+  // One snapshot per row, keyed by its CURRENT sheet row number (2-based) —
+  // taken up front, before anything is deleted, so row numbers used for
+  // deletion later cannot be invalidated by an in-between write.
+  var rows = [];
+  values.forEach(function (v, i) {
+    var order = v[info.index[KEY_HEADERS.order]];
+    var sku = v[info.index[KEY_HEADERS.sku]];
+    if (normHeader_(order) === '' && normHeader_(sku) === '') return;   // blank row
+
+    var fields = {};
+    SHEET_MAP.forEach(function (col) {
+      var at = info.index[col.header];
+      var key = col.field || col.from;
+      if (key) fields[key] = at != null ? v[at] : '';
+    });
+
+    rows.push({ sheetRow: i + 2, key: dedupeKeyFromValues_(order, sku), fields: fields });
+  });
+  result.candidates = rows.length;
+  if (!rows.length) {
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var ledgerTab = pushStateTab_();
+  var ledger = readPushState_(ledgerTab);
+
+  // ── Phase 1: push ────────────────────────────────────────────────────────
   rows.forEach(function (r) {
-    try {
-      var name = (r.customer_name || 'Unknown customer') + ' — ' + (r.customer_part_no || '?');
-      var vals = mondayColumnValues_(r);
+    var entry = ledger[r.key];
+    if (entry) {
+      result.alreadyPushed++;
+      r.itemId = entry.itemId;
+      return;
+    }
 
-      var query =
-        'mutation ($board: ID!, $name: String!, $vals: JSON!) {' +
-        '  create_item (board_id: $board, item_name: $name, column_values: $vals) { id }' +
-        '}';
-
-      var res = UrlFetchApp.fetch('https://api.monday.com/v2', {
-        method: 'post',
-        contentType: 'application/json',
-        headers: { Authorization: apiKey, 'API-Version': '2023-10' },
-        payload: JSON.stringify({
-          query: query,
-          variables: { board: boardId, name: name, vals: JSON.stringify(vals) }
-        }),
-        muteHttpExceptions: true
-      });
-
-      var body = JSON.parse(res.getContentText());
-      // Monday answers 200 with an "errors" array rather than an HTTP error, so
-      // the status code alone would report success on a rejected mutation.
-      if (body.errors) throw new Error(JSON.stringify(body.errors));
-      out.ok++;
-    } catch (e) {
-      out.failed++;
-      out.errors.push('Monday push failed for order ' + r.order_number + ': ' + e);
-      Logger.log('Monday push failed: %s', e);
+    var push = pushOneToMonday_(r.fields);
+    if (push.ok) {
+      recordPushState_(ledgerTab, r.key, r.fields, push.itemId);   // commit point
+      ledger[r.key] = { itemId: push.itemId, pushedAt: new Date().toISOString() };
+      r.itemId = push.itemId;
+      result.pushed++;
+    } else {
+      result.pushFailed++;
+      result.errors.push('Monday push failed for ' + (r.fields.order_number || r.key) + ': ' +
+                         push.error);
     }
   });
 
-  return out;
+  // ── Phase 2: archive ─────────────────────────────────────────────────────
+  var historyTab = findTab_(ss, HISTORY_TAB_ALIASES);
+  if (!historyTab) {
+    result.errors.push('No "' + HISTORY_TAB + '" tab found — pushed rows are staying on "' +
+                       mainTab.getName() + '" rather than being archived blind. Nothing was ' +
+                       'lost; fix the tab and press the button again.');
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var historyKeys = {};
+  var historyInfo = readKeysFrom_(historyTab, historyKeys);
+  if (!historyInfo.hasKeys) {
+    result.errors.push('The "' + historyTab.getName() + '" tab is missing its "' +
+                       KEY_HEADERS.order + '" / "' + KEY_HEADERS.sku + '" columns — refusing to ' +
+                       'archive blind. Pushed rows are staying on "' + mainTab.getName() + '".');
+    result.finished = new Date();
+    recordRun_(result, 'push');
+    return result;
+  }
+
+  var eligible = rows.filter(function (r) { return !!r.itemId; });
+  var toAppend = eligible.filter(function (r) { return !historyKeys[r.key]; });
+  var stale = eligible.filter(function (r) { return historyKeys[r.key]; });
+
+  if (toAppend.length) {
+    try {
+      appendToHistory_(historyTab, historyInfo, toAppend.map(function (r) { return r.fields; }));
+      result.archived = toAppend.length;
+    } catch (e) {
+      result.errors.push('Writing to "' + historyTab.getName() + '" failed: ' + e + '. Pushed ' +
+                         'rows are staying on "' + mainTab.getName() + '" — nothing was deleted, ' +
+                         'nothing was lost. Press the button again once this is fixed.');
+      result.finished = new Date();
+      recordRun_(result, 'push');
+      return result;
+    }
+  }
+  result.staleCleared = stale.length;
+
+  // Only now — the archive write has already succeeded — is it safe to clear
+  // rows off the MONDAY tab. Bottom row first, so earlier row numbers in this
+  // same batch stay valid mid-delete.
+  var clearedKeys = [];
+  eligible.slice().sort(function (a, b) { return b.sheetRow - a.sheetRow; }).forEach(function (r) {
+    mainTab.deleteRow(r.sheetRow);
+    clearedKeys.push(r.key);
+  });
+  clearPushState_(ledgerTab, clearedKeys);
+
+  result.remaining = rows.length - eligible.length;
+  result.finished = new Date();
+  recordRun_(result, 'push');
+  return result;
+}
+
+/**
+ * The MENU/BUTTON entry point — "2) Push to Monday & Archive". No trigger
+ * calls this; it only ever runs from the sheet's menu or an assigned Drawing
+ * button (see onOpen(), README.md).
+ */
+function pushToMondayAndArchiveManual() {
+  var ui = safeUi_();
+
+  var result;
+  try {
+    result = withLock_('Push to Monday & Archive', pushToMondayAndArchive_);
+  } catch (e) {
+    result = {
+      started: new Date(), finished: new Date(),
+      candidates: 0, pushed: 0, alreadyPushed: 0, pushFailed: 0,
+      archived: 0, staleCleared: 0, remaining: 0,
+      errors: [String(e && e.message ? e.message : e)], warnings: []
+    };
+  }
+
+  sendPushEmail_(result);
+
+  if (ui) {
+    var lines = [
+      'On the MONDAY tab: ' + result.candidates,
+      'Pushed to Monday:  ' + result.pushed +
+        (result.alreadyPushed ? '  (+' + result.alreadyPushed + ' already pushed, resumed)' : ''),
+      'Archived:          ' + result.archived,
+      'Left on the sheet: ' + result.remaining
+    ];
+    if (result.pushFailed) lines.push(result.pushFailed + ' push(es) FAILED — left on the sheet, will retry next time.');
+    if (result.errors.length) lines.push('', 'PROBLEMS:', result.errors.join('\n'));
+    ui.alert('Push to Monday & Archive', lines.join('\n'), ui.ButtonSet.OK);
+  }
+
+  return result;
 }
 
 /**
@@ -748,21 +1269,30 @@ function listMondayColumns() {
   var board = body.data && body.data.boards && body.data.boards[0];
   if (!board) { Logger.log('No board with id %s is visible to this token.', boardId); return; }
 
-  Logger.log('Board: %s', board.name);
-  Logger.log('%-28s %-22s %s', 'TITLE', 'ID', 'TYPE');
+  Logger.log('Board: ' + board.name);
+  Logger.log('TITLE                        ID                     TYPE');
   board.columns.forEach(function (c) {
-    Logger.log('%-28s %-22s %s', c.title, c.id, c.type);
+    Logger.log(c.title + ' | ' + c.id + ' | ' + c.type);
   });
 
   // Best-effort title guess, purely to save typing.
   var guessFor = {
-    order_number:      ['sales order', 'order', 'order number', 'so'],
-    customer_part_no:  ['label sku', 'sku', 'customer part', 'part'],
-    customer_name:     ['customer', 'client', 'account'],
-    sales_rep_primary: ['sales rep', 'rep', 'bdm', 'salesperson'],
-    customer_email:    ['email', 'e-mail'],
-    job_note:          ['memo', 'note', 'job note', 'notes'],
-    order_date:        ['date', 'order date', 'created']
+    order_date:             ['date', 'order date', 'created'],
+    order_number:           ['sales order', 'order', 'order number', 'so'],
+    job_note:               ['memo', 'note', 'job note', 'notes'],
+    customer_name:          ['customer', 'client', 'account'],
+    customer_email:         ['email', 'e-mail'],
+    customer_phone:         ['phone', 'phone number'],
+    wo_number:              ['wo number', 'work order', 'work order number'],
+    item:                   ['item'],
+    sales_rep_primary:      ['sales rep', 'rep', 'bdm', 'salesperson'],
+    customer_part_no:       ['label sku', 'sku', 'customer part', 'part'],
+    customer_part_description: ['description', 'item description', 'label description'],
+    reason_code:            ['reason code'],
+    label:                  ['label'],
+    bottle_material:        ['bottle material'],
+    prop_65:                ['prop 65', 'prop65'],
+    lcr:                    ['lcr']
   };
 
   Logger.log('');
@@ -790,19 +1320,25 @@ function listMondayColumns() {
 // summary email, not business data, and it should not be something anyone has
 // to look at or can accidentally edit.
 
-function recordRun_(r) {
+function recordRun_(r, kind) {
   var props = PropertiesService.getScriptProperties();
   var log = [];
   try { log = JSON.parse(props.getProperty('RUN_LOG') || '[]'); } catch (e) { log = []; }
 
-  log.push({
+  var entry = {
     at: r.started.toISOString(),
-    fetched: r.fetched, written: r.written, dupes: r.alreadyPresent,
-    pushed: r.pushed, pushFailed: r.pushFailed,
-    quarantined: r.quarantined ? 1 : 0,
-    warnings: r.warnings.length,
-    errors: r.errors.length
-  });
+    kind: kind || 'check',
+    warnings: (r.warnings || []).length,
+    errors: (r.errors || []).length
+  };
+  if (entry.kind === 'push') {
+    entry.candidates = r.candidates; entry.pushed = r.pushed; entry.alreadyPushed = r.alreadyPushed;
+    entry.pushFailed = r.pushFailed; entry.archived = r.archived; entry.remaining = r.remaining;
+  } else {
+    entry.fetched = r.fetched; entry.written = r.written; entry.dupes = r.alreadyPresent;
+    entry.quarantined = r.quarantined ? 1 : 0;
+  }
+  log.push(entry);
 
   // Two runs a day, and Monday's summary has to reach back over a weekend — 40
   // entries is about a fortnight, comfortably inside the property size cap.
@@ -991,14 +1527,15 @@ function columnFlags_(headerReport) {
   };
 }
 
-/** Technical email — every run, pass or fail. */
-function sendRunEmail_(r) {
+/** Technical email — every Check run, pass or fail. Never covers Push. */
+function sendRunEmail_(r, mode) {
   var failed = r.errors.length > 0;
   var warned = r.warnings.length > 0;
 
   var subject = '[Label Design] ' +
     (failed ? 'FAILED — ' : r.quarantined ? 'HELD FOR REVIEW — ' : warned ? 'Check — ' : '') +
     r.written + ' new ' + (r.written === 1 ? 'row' : 'rows') +
+    (mode === 'manual' ? ' (manual)' : '') +
     ' — ' + fmtDateTime_(r.started);
 
   var kind = failed ? 'error' : (warned || r.quarantined) ? 'warn' : 'ok';
@@ -1010,13 +1547,16 @@ function sendRunEmail_(r) {
     [r.fetched, 'In queue'],
     [r.alreadyPresent, 'Already there'],
     [r.written, 'Written'],
-    [r.pushed + (r.pushFailed ? ' / ' + r.pushFailed + ' failed' : ''), 'To Monday']
+    [r.quarantined ? 'HELD' : r.written, 'Awaiting push']
   ]);
 
   html += section_('Where the rows went');
   html += para_(r.written
     ? 'Written to <b>' + esc_(r.targetTab) + '</b>.' +
-      (r.quarantined ? ' <b>Not</b> pushed to Monday — this run was held back.' : '')
+      (r.quarantined
+        ? ' <b>Held for review</b> — a person needs to look before these can be pushed.'
+        : ' Waiting there for someone to press <b>"Push to Monday &amp; Archive"</b> — this ' +
+          'step never pushes on its own.')
     : 'Nothing new this run. The historical tab was read and never written, as always.');
 
   if (r.rows.length) {
@@ -1063,16 +1603,16 @@ function sendRunEmail_(r) {
   html += para_('Dataset <b>' + esc_(dataProject_() + '.' + dataset_()) + '</b><br>' +
                 'Started ' + esc_(fmtDateTime_(r.started)) + ', took ' +
                 Math.round((r.finished - r.started) / 1000) + 's.<br>' +
-                'This email is sent on <b>every</b> run, successful or not.');
+                'This is a <b>check</b> — it never pushes to Monday. That only happens when ' +
+                'someone presses "Push to Monday &amp; Archive" in the sheet\'s menu.');
 
   var text = [
-    'Label Design sync — ' + fmtDateTime_(r.started),
+    'Label Design check — ' + fmtDateTime_(r.started) + (mode === 'manual' ? ' (manual)' : ''),
     'Status: ' + state,
     '',
     'In the Plex queue:    ' + r.fetched,
     'Already on the sheet: ' + r.alreadyPresent,
     'Written as new:       ' + r.written + (r.targetTab ? '   -> ' + r.targetTab : ''),
-    'Pushed to Monday:     ' + r.pushed + (r.pushFailed ? '   (' + r.pushFailed + ' FAILED)' : ''),
     ''
   ];
   r.rows.slice(0, 40).forEach(function (x) {
@@ -1090,7 +1630,81 @@ function sendRunEmail_(r) {
   text.push('', 'Dataset: ' + dataProject_() + '.' + dataset_());
 
   send_(TECHNICAL_TO_EMAILS, subject,
-        shell_('Sync ' + state.toLowerCase(), dataProject_() + '.' + dataset_(),
+        shell_('Check ' + state.toLowerCase(), dataProject_() + '.' + dataset_(),
+               badge_(state, kind), html),
+        text.join('\n'));
+}
+
+/**
+ * Technical email for a Push & Archive run — always manual, so always sent
+ * (there is no daily-summary equivalent that would otherwise cover it).
+ */
+function sendPushEmail_(r) {
+  var failed = r.errors.length > 0;
+  var kind = failed ? 'error' : (r.pushFailed ? 'warn' : 'ok');
+  var state = failed ? 'PROBLEM' : r.pushFailed ? 'COMPLETED WITH FAILURES' : 'OK';
+
+  var subject = '[Label Design] Push & Archive — ' +
+    (failed ? 'FAILED — ' : '') +
+    r.pushed + ' pushed, ' + r.archived + ' archived — ' + fmtDateTime_(r.started);
+
+  var html = stats_([
+    [r.candidates, 'On MONDAY tab'],
+    [r.pushed, 'Pushed'],
+    [r.alreadyPushed, 'Already pushed (resumed)'],
+    [r.archived, 'Archived']
+  ]);
+
+  html += section_('What happened');
+  html += para_(
+    r.pushed + ' item(s) created on Monday, ' + r.archived + ' row(s) moved to "' +
+    HISTORY_TAB + '" and removed from "' + MAIN_TAB + '".' +
+    (r.alreadyPushed ? ' ' + r.alreadyPushed + ' row(s) had already been pushed by an earlier, ' +
+      'interrupted run and were not pushed a second time.' : '') +
+    (r.staleCleared ? ' ' + r.staleCleared + ' row(s) were already on "' + HISTORY_TAB +
+      '" from an earlier interrupted run and were not duplicated there.' : '') +
+    (r.remaining ? ' ' + r.remaining + ' row(s) remain on "' + MAIN_TAB + '" — see Problems.' : '')
+  );
+
+  if (r.pushFailed) {
+    html += section_('Push failures — left on the sheet, safe to retry');
+    html += bullets_(r.errors.filter(function (e) { return /Monday push failed/.test(e); }), '#92400e');
+  }
+
+  var otherErrors = r.errors.filter(function (e) { return !/Monday push failed/.test(e); });
+  if (otherErrors.length) {
+    html += section_('Problems');
+    html += bullets_(otherErrors, '#991b1b');
+    html += para_('Nothing already pushed or archived was lost or duplicated — see README.md ' +
+                  'for exactly what is guaranteed at each step.');
+  }
+
+  html += section_('Run');
+  html += para_('Started ' + esc_(fmtDateTime_(r.started)) + ', took ' +
+                Math.round((r.finished - r.started) / 1000) + 's.<br>' +
+                'Triggered manually from the sheet\'s "Label Design Sync" menu. There is no ' +
+                'automatic trigger for this step.');
+
+  var text = [
+    'Label Design Push & Archive — ' + fmtDateTime_(r.started),
+    'Status: ' + state,
+    '',
+    'On MONDAY tab:            ' + r.candidates,
+    'Pushed to Monday:         ' + r.pushed,
+    'Already pushed (resumed): ' + r.alreadyPushed,
+    'Push failed:              ' + r.pushFailed,
+    'Archived:                 ' + r.archived,
+    'Already archived (stale): ' + r.staleCleared,
+    'Remaining on sheet:       ' + r.remaining,
+    ''
+  ];
+  if (r.errors.length) {
+    text.push('PROBLEMS:');
+    r.errors.forEach(function (e) { text.push('  - ' + e); });
+  }
+
+  send_(TECHNICAL_TO_EMAILS, subject,
+        shell_('Push & Archive ' + state.toLowerCase(), dataProject_() + '.' + dataset_(),
                badge_(state, kind), html),
         text.join('\n'));
 }
@@ -1113,59 +1727,68 @@ function sendDailySummary() {
   }
 
   var runs = runsSinceLastSummary_();
-  var written = 0, pushed = 0, problems = 0, fetched = 0, held = 0;
+  var written = 0, pushed = 0, archived = 0, problems = 0, fetched = 0, held = 0;
   runs.forEach(function (e) {
-    written += e.written;
-    pushed += e.pushed;
-    problems += (e.errors || 0) + (e.pushFailed || 0);
-    held += (e.quarantined || 0);
-    fetched = Math.max(fetched, e.fetched);
+    problems += (e.errors || 0);
+    if (e.kind === 'push') {
+      pushed += (e.pushed || 0);
+      archived += (e.archived || 0);
+      problems += (e.pushFailed || 0);
+    } else {
+      written += (e.written || 0);
+      held += (e.quarantined || 0);
+      fetched = Math.max(fetched, e.fetched || 0);
+    }
   });
+  var checkRuns = runs.filter(function (e) { return e.kind !== 'push'; });
 
   var today = fmtDate_(new Date());
   var covering = dow === 1 ? 'since Friday, including the weekend' : 'since yesterday';
-  var expected = dow === 1 ? 6 : 2;   // Monday covers Sat+Sun+Mon = 3 days x 2 runs
+  var expected = dow === 1 ? 6 : 2;   // Monday covers Sat+Sun+Mon = 3 days x 2 checks
 
   var kind, state;
-  if (!runs.length)  { kind = 'error'; state = 'NO SYNC RAN'; }
-  else if (problems) { kind = 'warn';  state = 'PROBLEMS'; }
-  else if (held)     { kind = 'warn';  state = 'HELD FOR REVIEW'; }
-  else if (!written) { kind = 'quiet'; state = 'NOTHING NEW'; }
-  else               { kind = 'ok';    state = written + ' NEW'; }
+  if (!checkRuns.length) { kind = 'error'; state = 'NO CHECK RAN'; }
+  else if (problems)     { kind = 'warn';  state = 'PROBLEMS'; }
+  else if (held)         { kind = 'warn';  state = 'HELD FOR REVIEW'; }
+  else if (!written)     { kind = 'quiet'; state = 'NOTHING NEW'; }
+  else                   { kind = 'ok';    state = written + ' NEW'; }
 
   var html = stats_([
     [written, 'New rows'],
-    [pushed, 'To Monday'],
-    [fetched, 'In queue'],
-    [runs.length + ' / ' + expected, 'Syncs run']
+    [pushed, 'Pushed'],
+    [archived, 'Archived'],
+    [checkRuns.length + ' / ' + expected, 'Checks run']
   ]);
 
   html += section_('Where things stand');
-  if (!runs.length) {
-    html += para_('<b>No sync ran ' + esc_(covering) + '.</b> Nothing new has reached the ' +
-                  'board, and anything sitting in Plex is still waiting. This is worth ' +
-                  'telling Emilio about — it is not a quiet day, it is a stopped job.');
+  if (!checkRuns.length) {
+    html += para_('<b>No check ran ' + esc_(covering) + '.</b> New Plex orders may be waiting ' +
+                  'and no one would know it yet. This is worth telling Emilio about — it is not ' +
+                  'a quiet day, it is a stopped job.');
   } else if (problems) {
     html += para_('<b>' + problems + ' problem' + (problems === 1 ? '' : 's') + ' occurred.</b> ' +
-                  'Some rows may be on the sheet but not on the Monday board. Emilio has the ' +
-                  'detail in the per-run emails.');
+                  'Some rows may be on the sheet but not on the Monday board, or a push may have ' +
+                  'failed. Emilio has the detail in the per-run emails.');
   } else if (held) {
-    html += para_('<b>One or more runs were held back for review.</b> Those rows are safe on a ' +
-                  'dated review tab in the sheet and were deliberately not pushed to Monday ' +
-                  'until someone has looked at them.');
+    html += para_('<b>One or more checks were held back for review.</b> Those rows are safe on a ' +
+                  'dated review tab in the sheet and were deliberately not written to "' +
+                  MAIN_TAB + '" until someone has looked at them.');
   } else if (!written) {
     html += para_('<b>Nothing new ' + esc_(covering) + '</b> — every order in Label Design was ' +
-                  'already on the board. That is a normal day, not a broken one.');
+                  'already known. That is a normal day, not a broken one.');
   } else {
     html += para_('<b>' + written + ' new ' + (written === 1 ? 'order' : 'orders') + '</b> reached ' +
-                  'the holding board ' + esc_(covering) + '. The queue currently holds ' + fetched +
-                  ' order lines in Label Design from the last 14 days.');
+                  'the "' + MAIN_TAB + '" tab ' + esc_(covering) + ', waiting for someone to press ' +
+                  '"Push to Monday &amp; Archive". The queue currently holds ' + fetched +
+                  ' order lines in Label Design from the last 14 days.' +
+                  (pushed ? ' ' + pushed + ' row(s) were also pushed to Monday and archived ' +
+                    esc_(covering) + '.' : ''));
   }
 
   if (dow === 1) {
-    html += para_('<i>Monday\'s summary covers Saturday and Sunday as well. The sync itself runs ' +
-                  'every day so the queue is current when you arrive; only this email pauses at ' +
-                  'the weekend.</i>');
+    html += para_('<i>Monday\'s summary covers Saturday and Sunday as well. The automatic check ' +
+                  'runs every day so the queue is current when you arrive; only this email ' +
+                  'pauses at the weekend. Pushing to Monday is always manual, on any day.</i>');
   }
 
   var text = [
@@ -1175,8 +1798,9 @@ function sendDailySummary() {
     '',
     'New rows added ' + covering + ': ' + written,
     'Pushed to Monday:       ' + pushed,
+    'Archived:               ' + archived,
     'Currently in the queue: ' + fetched + '   (Label Design, last 14 days)',
-    'Syncs run:              ' + runs.length + ' of an expected ' + expected
+    'Checks run:             ' + checkRuns.length + ' of an expected ' + expected
   ].join('\n');
 
   send_(SUMMARY_TO_EMAILS, '[Label Design] Summary — ' + today,
@@ -1227,19 +1851,27 @@ function fmtDateTime_(d) { return Utilities.formatDate(d, Session.getScriptTimeZ
 // ── Triggers ───────────────────────────────────────────────────────────────
 
 /**
- * Run once from the editor. Set the script's timezone to America/Denver in
- * Project Settings FIRST — Apps Script hour triggers follow it, so the wrong
- * timezone silently runs the sync at the wrong times.
+ * Run once from the editor, and again any time this file is redeployed with
+ * new/renamed trigger entry points (function names are captured as strings by
+ * ScriptApp — a rename does not follow itself automatically; the old trigger
+ * keeps pointing at a function that no longer exists and silently stops
+ * firing). Set the script's timezone to America/Denver in Project Settings
+ * FIRST — Apps Script hour triggers follow it, so the wrong timezone silently
+ * runs the check at the wrong times.
  *
  * Apps Script only guarantees the hour, not the minute, so "10:00" means
  * somewhere inside the 10:00 hour. That is exactly why the Cloud Run job is
  * scheduled at 09:30 and 13:30 — a full half-hour of headroom in front of each
  * window. Move one and you must move the other.
  *
- * THE SYNC RUNS EVERY DAY. THE SUMMARY RUNS MONDAY TO FRIDAY. Orders are
+ * THE CHECK RUNS EVERY DAY. THE SUMMARY RUNS MONDAY TO FRIDAY. Orders are
  * entered at the weekend and the queue has to be current on Monday morning,
  * but nobody wants a Sunday email — so Monday's summary covers the weekend
  * instead (runsSinceLastSummary_).
+ *
+ * PUSH TO MONDAY & ARCHIVE HAS NO TRIGGER, INTENTIONALLY. It only ever runs
+ * from the sheet's "Label Design Sync" menu (checkForNewOrdersManual /
+ * pushToMondayAndArchiveManual) — see README.md for why this stayed manual.
  *
  * NOTE this deletes every existing trigger in the project first. Don't run it
  * in a project that has other triggers you care about.
@@ -1247,9 +1879,9 @@ function fmtDateTime_(d) { return Utilities.formatDate(d, Session.getScriptTimeZ
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
 
-  // Every day, both runs.
+  // Every day, both runs. Check only — never pushes to Monday.
   [10, 14].forEach(function (h) {
-    ScriptApp.newTrigger('syncNow').timeBased().everyDays(1).atHour(h).create();
+    ScriptApp.newTrigger('checkForNewOrdersAuto').timeBased().everyDays(1).atHour(h).create();
   });
 
   // Weekdays only, 18:00.
@@ -1258,8 +1890,9 @@ function installTriggers() {
     ScriptApp.newTrigger('sendDailySummary').timeBased().onWeekDay(day).atHour(18).create();
   });
 
-  Logger.log('Triggers installed: syncNow at 10 and 14 every day; ' +
-             'sendDailySummary at 18 Monday to Friday.');
+  Logger.log('Triggers installed: checkForNewOrdersAuto at 10 and 14 every day; ' +
+             'sendDailySummary at 18 Monday to Friday. ' +
+             'Push to Monday & Archive has no trigger — menu/button only.');
 }
 
 // ── Dry run (writes nothing, pushes nothing, emails nobody) ────────────────

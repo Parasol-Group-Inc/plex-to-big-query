@@ -14,6 +14,65 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-13 — Label Design sync split into two manual/auto steps, with a lock + ledger to make the Push-and-archive step safe
+
+The team asked for two buttons on the sheet — one to check for new orders,
+one to push to Monday — but pushing also has to move rows into `historical`,
+and the previous single-step `syncNow()` pushed to Monday automatically from
+the raw BigQuery snapshot, before Reason Code/Label/Bottle Material/Prop
+65/LCR could ever be filled in by a reviewer. Splitting the step properly
+meant designing real concurrency and failure-recovery safety, not just adding
+a second function.
+
+**Changed** (`deploy/label_design_sync/Code.gs`)
+- `syncNow()` split into `checkForNewOrders_()` (core) + `checkForNewOrdersAuto()`
+  (still bound to the 10:00/14:00 daily trigger) + `checkForNewOrdersManual()`
+  (new menu item). **Check no longer pushes to Monday under any circumstance.**
+- New `pushToMondayAndArchive_()` / `pushToMondayAndArchiveManual()` — manual
+  only, no trigger. Reads the `MONDAY` tab's *current* values (so hand-typed
+  review columns finally reach Monday and `historical`, which they never did
+  under the old design), pushes each row to Monday one at a time, then
+  archives pushed rows into `historical` and deletes them from `MONDAY`.
+- Added a script-wide lock (`withLock_()`, `LockService.getScriptLock()`) around
+  every entry point, so Check, Push, and the scheduled trigger can never
+  interleave writes to the sheet.
+- Added a hidden `_PUSH_STATE` tab acting as a write-ahead ledger: a row is
+  recorded there the instant its Monday item is created — the single commit
+  point that makes the whole push+archive sequence resumable and idempotent
+  after any interruption, without ever re-pushing an already-created Monday
+  item or re-archiving an already-archived row. Worst-case failure mode is a
+  visible duplicate (row on both `MONDAY` and `historical` briefly), never a
+  silent loss.
+- `historical` tab write rule relaxed from "never written" to "append-only,
+  exactly once per row, only via `appendToHistory_()`, only for
+  ledger-confirmed pushed rows, only from `pushToMondayAndArchive_()`" — every
+  other write path is still blocked by the pre-existing `assertNotHistory_()`.
+- `SHEET_MAP`'s five 'team' columns (`Reason Code`, `Label`, `Bottle Material`,
+  `Prop 65`, `LCR`) gained a `field:` so both the Monday push and the archive
+  write can read a reviewer's hand-typed values by the same key.
+- Added `onOpen()` — builds a "Label Design Sync" menu (Check / Push & Archive
+  / Dry run) automatically every time the sheet is opened; no setup step.
+- Split run-log entries by `kind` ('check' vs 'push') and updated
+  `sendDailySummary()` to aggregate both; Check's technical email no longer
+  claims a "pushed to Monday" count (it never pushes); added a separate
+  `sendPushEmail_()` for Push & Archive runs.
+- `installTriggers()` now binds the daily trigger to `checkForNewOrdersAuto`
+  — **existing installed triggers referencing the old `syncNow` name will
+  silently stop firing**; `installTriggers()` must be re-run once after this
+  deploy.
+
+**Docs** (`deploy/label_design_sync/README.md`) — rewritten to document the
+two-button workflow, the lock/ledger safety design, the revised `historical`
+rule, and the accepted risk of a rare duplicate Monday item if our own HTTP
+call times out after Monday's side already succeeded (no idempotency-key
+support on Monday's `create_item`). Added four Mermaid diagrams: system
+overview, Check sequence, Push two-phase-commit sequence with a
+failure/resume table, and a per-row lifecycle state diagram.
+
+Verified: `node deploy/label_design_sync/test_logic.js` — all 25 pure-logic
+checks still pass (the `SHEET_MAP` addition is additive and doesn't change
+what's queried or how headers resolve); `node --check` on the full file.
+
 ## 2026-09-12 (later) — four latent bugs in `label_design_view.sql`, and the view finally exists
 
 `terraform apply` landed and `plex-etl-label-design-test` ran: all 10

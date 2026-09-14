@@ -46,9 +46,10 @@ function voxLogoBlob_(){return null;}
 `;
 const mod = new Function(sandbox + src + `
 return {SHEET_MAP, QUERY_COLUMNS, KEY_HEADERS, NEW_ROW_ALARM,
-        resolveHeaders_, orderToken_, skuToken_, dedupeKeyFromValues_, dedupeKey_,
-        cellValue_, normHeader_, assessKeys_, columnFlags_, esc_, rowsTable_,
-        stats_, badge_, shell_, section_, para_, bullets_};
+        resolveHeaders_, orderToken_, skuToken_, partKey_, normalizeReasonCode_,
+        applyPartAttributes_, generateLcr_, reviewAutoConfig_, applyAutoReviewFields_,
+        dedupeKeyFromValues_, dedupeKey_, cellValue_, normHeader_, assessKeys_,
+        columnFlags_, esc_, rowsTable_, stats_, badge_, shell_, section_, para_, bullets_};
 `)();
 
 function readCsv(p) {
@@ -212,6 +213,16 @@ ok(html.indexOf('<style') < 0, 'no <style> block (Gmail strips it) - all styles 
 ok(html.indexOf('display:flex') < 0, 'no flexbox (Outlook stacks it)');
 ok(mod.esc_('<script>&"') === '&lt;script&gt;&amp;&quot;', 'HTML escaping works');
 fs.writeFileSync(path.join(require('os').tmpdir(), 'label_design_preview.html'), html);
+
+console.log('\n=== 10. review-field enrichment helpers ===');
+const reasonMap = { HOLD: 'HOLD', 'HOLDING': 'HOLD', REWORK: 'REWORK', TRIM: 'TRIM' };
+ok(mod.normalizeReasonCode_('holding', reasonMap) === 'HOLD', 'job note normalizes to a standardized reason code');
+ok(mod.normalizeReasonCode_('  Rework  ', reasonMap) === 'REWORK', 'whitespace and case are normalized');
+ok(mod.applyPartAttributes_({ customer_part_no: 'abc123' }, { ABC123: { prop_65: 'YES', label: 'VITAMIN' } }).prop_65 === 'YES', 'part attribute map enriches the sheet row');
+ok(mod.applyPartAttributes_({ customer_part_no: 'abc123' }, { ABC123: { prop_65: 'YES', label: 'VITAMIN' } }).label === 'VITAMIN', 'part attribute map fills label text');
+const lcr = mod.generateLcr_('seed-one');
+ok(lcr.length === 14 && /^[A-Z0-9]+$/.test(lcr), 'LCR generation returns a 14-char alphanumeric code');
+ok(mod.applyAutoReviewFields_({ job_note: 'holding', customer_part_no: 'abc123', lcr: '' }, { reasonCodeMap: reasonMap, partAttributeMap: { ABC123: { prop_65: 'YES', label: 'VITAMIN' } }, autoGenerateLcr: true }).reason_code === 'HOLD', 'auto review enrichment fills the reason code');
 
 console.log('\n' + (fail ? 'FAILURES: ' + fail : 'ALL CHECKS PASSED'));
 process.exit(fail ? 1 : 0);

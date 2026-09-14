@@ -323,6 +323,106 @@ function skuToken_(v) {
   return norm_(v).replace(/[^A-Z0-9]/g, '');
 }
 
+function partKey_(v) {
+  return String(v == null ? '' : v).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeReasonCode_(raw, map) {
+  var source = String(raw == null ? '' : raw).trim();
+  if (!source) return '';
+
+  var direct = source.toUpperCase();
+  if (map && map[direct]) return String(map[direct]);
+
+  var lower = source.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (map) {
+    var keys = Object.keys(map);
+    for (var i = 0; i < keys.length; i++) {
+      var key = String(keys[i]).trim();
+      var keyUpper = key.toUpperCase();
+      var keySnake = keyUpper.replace(/[^A-Z0-9]+/g, ' ').trim();
+      if (lower === keySnake.toLowerCase()) return String(map[keys[i]]);
+      if (keySnake.toLowerCase().indexOf(lower) >= 0 || lower.indexOf(keySnake.toLowerCase()) >= 0) {
+        return String(map[keys[i]]);
+      }
+    }
+  }
+
+  return source.replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function applyPartAttributes_(row, attributeMap) {
+  var out = row ? Object.assign({}, row) : {};
+  var key = partKey_(out.customer_part_no || out.customer_part || out.label_sku || out.Label_SKU);
+  if (!key || !attributeMap || !attributeMap[key]) return out;
+
+  var attrs = attributeMap[key];
+  var fill = function (field, value) {
+    if (!field) return;
+    if (!out[field] || String(out[field]).trim() === '') out[field] = value;
+  };
+
+  fill('prop_65', attrs.prop_65);
+  fill('label', attrs.label);
+  fill('bottle_material', attrs.bottle_material);
+  fill('reason_code', attrs.reason_code);
+  fill('lcr', attrs.lcr);
+
+  return out;
+}
+
+function generateLcr_(seed) {
+  var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var prefix = String(seed == null ? '' : seed).replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase();
+  var chars = [];
+  for (var i = 0; i < 14; i++) {
+    chars.push(alphabet.charAt(Math.floor(Math.random() * alphabet.length)));
+  }
+  if (prefix) {
+    for (var j = 0; j < prefix.length && j < chars.length; j++) {
+      chars[j] = prefix.charAt(j);
+    }
+  }
+  return chars.join('');
+}
+
+function reviewAutoConfig_() {
+  var reasonMap = {};
+  var partMap = {};
+  try { reasonMap = JSON.parse(optProp_('REASON_CODE_MAP_JSON') || '{}'); } catch (e) {}
+  try { partMap = JSON.parse(optProp_('PART_ATTRIBUTE_MAP_JSON') || '{}'); } catch (e) {}
+  var enabled = String(optProp_('AUTO_GENERATE_LCR') || 'false').toLowerCase() === 'true';
+  return {
+    reasonCodeMap: reasonMap,
+    partAttributeMap: partMap,
+    autoGenerateLcr: enabled
+  };
+}
+
+function applyAutoReviewFields_(fields, config) {
+  var out = fields ? Object.assign({}, fields) : {};
+  var reasonMap = config && config.reasonCodeMap ? config.reasonCodeMap : {};
+  var partMap = config && config.partAttributeMap ? config.partAttributeMap : {};
+
+  if (out.job_note && !out.reason_code) {
+    out.reason_code = normalizeReasonCode_(out.job_note, reasonMap);
+  }
+
+  var partAttrs = partMap[partKey_(out.customer_part_no || out.customer_part || out.label_sku || out.Label_SKU)];
+  if (partAttrs) {
+    if (!out.prop_65 || String(out.prop_65).trim() === '') out.prop_65 = partAttrs.prop_65 || '';
+    if (!out.label || String(out.label).trim() === '') out.label = partAttrs.label || '';
+    if (!out.bottle_material || String(out.bottle_material).trim() === '') out.bottle_material = partAttrs.bottle_material || '';
+    if (!out.reason_code || String(out.reason_code).trim() === '') out.reason_code = normalizeReasonCode_(partAttrs.reason_code || '', reasonMap);
+  }
+
+  if ((config && config.autoGenerateLcr) && (!out.lcr || String(out.lcr).trim() === '')) {
+    out.lcr = generateLcr_(out.customer_part_no || out.order_number || out.customer_name || 'LCR');
+  }
+
+  return out;
+}
+
 function dedupeKeyFromValues_(order, sku) {
   return orderToken_(order) + '|' + skuToken_(sku);
 }
@@ -891,6 +991,8 @@ function pushOneToMonday_(fields) {
   var apiKey = optProp_('MONDAY_API_KEY');
 
   try {
+    var autoConfig = reviewAutoConfig_();
+    fields = applyAutoReviewFields_(fields, autoConfig);
     var name = (fields.customer_name || 'Unknown customer') + ' — ' + (fields.customer_part_no || '?');
     var vals = mondayColumnValues_(fields);
 

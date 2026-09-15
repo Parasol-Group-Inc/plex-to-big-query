@@ -88,6 +88,73 @@ Verified: `node deploy/label_design_sync/test_logic.js` — all 25 pure-logic
 checks still pass (the `SHEET_MAP` addition is additive and doesn't change
 what's queried or how headers resolve); `node --check` on the full file.
 
+## 2026-09-14 — a `/label-design` hub, and the Monday board's real columns
+
+### Added — `label-design/`
+A dedicated top-level folder for this mini-project, requested so it stops
+blending into the Vox scorecard reference material the rest of the repo is
+about. **A map, not a copy** — nothing was relocated here: `reports/*.yaml`
+and `reports/sql/*.sql` are wired into Terraform's GCS `source` paths, and
+`deploy/label_design_sync/` isn't referenced by any build tooling but already
+had its own working subfolder, so moving either would cost real risk for no
+benefit. `label-design/README.md` is the index; everything else links out to
+where the working files already live.
+
+### Added — `label-design/monday_board_catalog.md` and `monday_board_guide.md`
+The "Design & QA" Monday board (`18395121955`) was read via a read-only
+GraphQL call — nothing written, nothing created — and its full column list
+captured before anything gets wired up against it: **43 columns**, with every
+status/dropdown column's complete option list (`Reason Code` alone carries
+40+, several near-duplicates of each other from what reads as organic growth
+rather than a single design pass). The catalog doc has ids and types for
+`pushToMonday_()`; the guide doc is the plain-language companion, following
+this repo's `docs/reports/` convention of writing for the team, not engineers.
+
+**Three real decisions surfaced that block finishing the Monday push,** none
+of them guessed at:
+- **Two "Sales Rep" columns** — a fixed-name status dropdown and a genuine
+  Monday people-assignment column. `label_design_report`'s
+  `sales_rep_primary`/`sales_rep_secondary` are plain text from Plex, so they
+  map onto the status column's labels, not the people column (which needs a
+  Monday user id). Whoever owns the board should say which is current.
+- **Two phone columns** — `Phone` (numbers) and `Phone Number` (text).
+  `customer_phone` is a formatted string (`"864-616-8885"`), which only the
+  text column can hold without Monday trying to parse it as a number.
+- **`Label SKU` is the item's own name**, not a separate column — so a
+  created item's title should be the SKU, not `customer — part` as
+  `pushToMonday_()` currently builds it.
+
+### Fixed — `label_design_view.sql`: one row per order + customer part
+A 2026-09-14 test pull showed order 11 / part 93081-00CHAR2-1 twice, every
+column identical except `Due_Date` (9/24 vs 9/25). Traced by elimination
+rather than assumed: every other join in the view is a single-row lookup by
+key or is already pre-aggregated (`job_notes`), so `Sales_v_Release` is the
+only table that can fan a line out into more than one row — and it is
+*supposed to*, since it is one row per scheduled release (a split shipment),
+not one row per line.
+
+The design queue doesn't track shipment-level scheduling, so the view now
+collapses to one row per `order_number + customer_part_no`, keeping the
+**earliest** `due_date` across a part's releases (the soonest real deadline)
+and a new `release_count` column flagging when a part had more than one, so
+the team can go check Plex if the shipment detail ever matters for a specific
+row. Implemented as a window-function collapse (`MIN() OVER`, `COUNT() OVER`,
+`QUALIFY ROW_NUMBER() ... = 1`) rather than a `GROUP BY`, since every other
+column needs to survive the collapse unaggregated.
+
+**Not yet pushed to GCS or re-run** — `gcloud`/`bq` hit the documented reauth
+wall (`gcloud auth login` needed, interactively, by a human) when this was
+attempted.
+
+### Added — the same fix, in Plex-native SQL
+A T-SQL version of the same collapse, matching the dialect and full table
+aliasing of the hand-written draft used for direct test pulls against Plex —
+`QUALIFY` doesn't exist in T-SQL, so this uses the standard
+`ROW_NUMBER() ... WHERE rn = 1` CTE pattern instead. Verified `Terms`,
+`Inside_Sales` (`Sales_v_PO`), and `Common_v_Department`/`Department_No`
+(`Plexus_Control_v_Plexus_User`) all exist in the schema catalog before
+writing it, rather than assuming the draft's column references were correct.
+
 ## 2026-09-12 (later) — four latent bugs in `label_design_view.sql`, and the view finally exists
 
 `terraform apply` landed and `plex-etl-label-design-test` ran: all 10

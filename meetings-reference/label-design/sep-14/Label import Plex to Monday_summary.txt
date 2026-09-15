@@ -1,0 +1,68 @@
+Label import Plex to Monday
+September 14, 2026
+Attendees: Ashley Quintana, Emilio Dominguez, jennilyn.tockstein@parasolgroupinc.com
+
+Overview
+
+The team discussed automating the data transfer process from Plex to Monday.com while optimizing data mapping and reducing manual spreadsheet intervention.
+
+Data Integration
+Emilio explained that while automated syncs are scheduled, a manual "check new orders" button can be used at an additional cost in BigQuery. The current workflow uses a spreadsheet as an intermediary for review, but there is a proposal to move toward a direct injection into Monday.com, potentially using a siloed board for new orders before they move to live boards.
+
+Mapping and Logic
+*   To avoid errors in Monday.com, statuses must match exactly; Emilio suggested using API calls to pull exact statuses for mapping.
+*   A potential solution for reason codes involves using numerical mappings in the Plex job notes (e.g., "4" equals "pre-approved label"), which BigQuery would then parse and map to the correct status.
+*   Data updates: A major concern is whether updates made in Plex will reflect in Monday.com. While a full two-way sync may cause errors, Emilio will test if specific identifiers can trigger updates for existing orders rather than creating duplicates.
+
+Process Optimization
+Attribute Management
+The team discussed how to handle technical details like material types (HDPE/PET) and label sizes. Instead of typing these into notes, there is a consensus that these should be managed via part attributes in Plex.
+
+*   The goal is to have designers view part attributes directly in Plex or have those attributes pushed into Monday.com.
+*   Whether the print team can see part attributes during scheduling remains an open question for Amber.
+
+Workflow Questions
+*   How will service line items (standalone label designs not attached to products) be handled within this automated structure?
+*   Can the system effectively differentiate between a completely new order and an update to an existing one without causing duplicate entries?
+
+Action Items
+
+- Test whether Plex changes can be matched to an existing Monday order and update that order rather than creating a new one. (Emilio Dominguez)
+- Expand the query and processing to include the sales representative, using Plex's split fields to produce the required matching name or field. (Emilio Dominguez)
+- Define the shorter number-or-letter format to enter in Plex job notes and map it to the corresponding reason code. (Ashley Quintana)
+- Ask Amber whether the label design team can view part attributes while scheduling jobs in Plex. (Jennilyn Tockstein)
+- Investigate which service part numbers are needed for standalone label design and 3D rendering charges. (Jennilyn Tockstein)
+
+Outline
+
+Automation and Manual Processes
+
+- Emilio Dominguez explained the current automated process of extracting Plex data into BigQuery and a spreadsheet.
+- Jennilyn Tockstein noted that manual order checks are possible but will incur additional cloud billing fees.
+- The team discussed adding a manual "check new orders" button to allow for flexibility despite the potential cost.
+
+Integrating Plex with Monday
+
+- Emilio Dominguez suggested bypassing the spreadsheet "middleman" to push data directly from Plex to Monday boards.
+- Direct integration would require precise mapping of headers and statuses to avoid errors in Monday.com.
+- The team discussed using a siloed board in Monday for initial injections before moving items to live boards.
+
+Mapping Reason Codes via Job Notes
+
+- Jennilyn Tockstein proposed using short numerical codes or abbreviations in Plex job notes to map to full reason codes in Monday.
+- Emilio Dominguez confirmed that BigQuery can parse these characters to automatically populate specific columns like reason codes and descriptions.
+- Ashley agreed to define a standard set of numbers or short text strings for the team to use in job notes.
+
+Managing Part Attributes and Data Accuracy
+
+- Jennilyn Tockstein recommended pulling label size, material (e.g., HDPE or PET), and print finishes from Plex part attributes rather than typing them into notes.
+- The team discussed how designers should reference part attributes in Plex to ensure they have all necessary specifications before starting work.
+- Emilio Dominguez is working on expanding his query to include sales rep information, which requires handling split fields in Plex.
+
+Handling Updates and Service Items
+
+- Emilio Dominguez raised the question of whether updates made in Plex should sync back to existing orders in Monday via a unique identifier like an LCR number.
+- The group decided against a full two-way sync due to error risks, opting instead for manual updates when significant changes occur.
+- Ashley inquired about managing service line items for standalone design charges, prompting Jennilyn Tockstein to investigate existing part numbers for these services.
+
+Generated by https://otter.ai

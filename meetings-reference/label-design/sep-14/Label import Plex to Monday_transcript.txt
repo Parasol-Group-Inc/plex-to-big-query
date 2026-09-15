@@ -1,0 +1,317 @@
+Emilio Dominguez  00:00
+That you want to do manual manually in between those sync times that are automated, automated, and that they also cost money, right? It's not a crazy amount, but it's just sense. But they they do add if it's a manual process, like okay, check for new orders. That's going to trigger the Plex extraction data into BigQuery and into the sheet, right? That's the that's the process. That's the normal process, and the manual process will do the same. Okay, let's have a look if there is new data on Plex, and let's bring that data. Let's compare that data, and let's populate the spreadsheet, right? But yeah,
+
+Speaker 1  00:45
+do we have to click check new orders at 10 and two, or it'll just auto populate here already? Yeah, yeah, on
+
+Emilio Dominguez  00:52
+those times that's going to be automated, right?
+
+Jennilyn Tockstein  00:55
+It's if you want it to check an extra time, you can get the yeah, but it will it'll incur fees on the cloud billing account. Was what Emilio was saying. Not much, but probably like you don't want to just sit there and hit the button a bunch of times.
+
+Emilio Dominguez  01:14
+Okay. Yeah, so that's something like the team may want, or okay, let's have a manual order checking button there. For now, it is there, right? It wasn't there. It wasn't there, but I was just testing. But just to be aware that if it will be needed, it could cost some cents during the month, and and yeah, it's that that's totally possible. But so yeah, so when there is new data here, I think I'm not really sure, but I don't know if the spreadsheet, the current spreadsheet, could push something to Monday, right? I think it was just more like comparing and saying, okay, so we have this order already unhistorical, or we don't we don't have it, and let's just have it as a new one. But now, what I was speaking to Jennilyn, because we have full capabilities to push things and get things from Monday, was okay. Maybe we have some capabilities to automate and help the team to push these things to Monday, to the boards that they would like to have this info in, right? So the test board, this is mine because I didn't have full permissions Jennilyn on the other one that you added me, added me. So I created just an account for me, but it is just a regular board. This is this is not something that has automation or something. So my board right now is getting this data. For now, it's just the testing, but we can surely press the button and get the data from the current orders that are there, and this will also need some mapping to the to the headers, right? To the data that is here, and I was reading something about the statuses, and so they will need to match in order for Monday to just don don yell at us for that, right? Because it's kind of strict on that, but that's like the added part. That's like something added that is not currently there, but it could be helpful for you to have this push, push, and it will be also an athematic process. You wouldn't like the two times that we were talking about those will be like automatic, but that's also it could hinder the process. On okay, I I don't see anything new here, right? Because it was pushed at the time at the syncing time, so maybe that's another call that you would like, okay, we should be the ones to always click push the Monday, right? Not as an automated process, but just we we need that capability to not have that automator, right?
+
+Jennilyn Tockstein  04:18
+Yeah, and would it be easier for you, Emilio? Would it be easier to to just take from Plex and put it into a siloed board in Monday and have our team move it to their live board and not have it land on a sheet in between?
+
+Emilio Dominguez  04:38
+Yeah, it is not a problem. I just use the sheet for reference, like to for getting the data reviewed in some way by the team, and then okay. So let's push to to Monday, right? Because we already have this order, or we may need to have some update on this order because some information was wrong, right? But yeah, we could surely skip the the middle the middleman here that is the spreadsheet into just injecting Monday with all the information. It will be the same, right? The same kind of information, but just a direct, a direct push to the either the silo or even the the real board, right? But with some tag or something that. Well, I think the color changes when there is something new on the board, but I'm not particularly sure on Monday.
+
+Jennilyn Tockstein  05:39
+Yeah, I was wondering if it'd be easier to help the reason code match from the job note. I think that's the part that seems harder initially. Is we want to basically shorten the reason code in that job note and have it match in
+
+Emilio Dominguez  06:04
+here. Let me just. Well, you have that. Well, this is a set of statuses or drop downs there on Monday.
+
+Jennilyn Tockstein  06:13
+Yeah, it looks like there's a lot of these because they have been imported with typos or columns and if the
+
+Emilio Dominguez  06:22
+yeah if I get to be the owner I think from the API I can pull the exact statuses and get the drop down to be made well not to be made but to for BigQuery to know those statuses and yeah and match them exactly on that
+
+Jennilyn Tockstein  06:40
+yeah if we had like a table that said like 3d, it could map to one of the 3d ones or reorg match to reorg.
+
+Emilio Dominguez  06:51
+Right on. Yeah, it's not. Would
+
+Jennilyn Tockstein  06:53
+you be able to Ashley get a table of what you would want to type into the job note that's maybe shorter in what it should map to, like you wanted to number these or figure out a word or something.
+
+Emilio Dominguez  07:11
+And that would be complex, right, Jennilyn?
+
+Jennilyn Tockstein  07:14
+What's that?
+
+Emilio Dominguez  07:15
+Sorry, go on, Ashley.
+
+Speaker 1  07:18
+Oh, I just said I like that way better. The option to type in numbers or just like a couple letters or something. I will figure that out. Yeah,
+
+Emilio Dominguez  07:27
+but that will be on Plex, right, Jennilyn?
+
+Jennilyn Tockstein  07:30
+Yes. Okay. The job note would say it would have the number four say, and then when we parsed it through. BigQuery, or before we pushed it into Monday, we would say four equals pre-approved label, or whatever, and then it would go in and match that status.
+
+Emilio Dominguez  07:58
+Right on. And
+
+Jennilyn Tockstein  07:59
+if we gave you a table of each of these numbers equals these things.
+
+Emilio Dominguez  08:03
+Yeah, since we are like getting rid of the spreadsheet, what constitutes? Because I'm doing this visual, right? But just visual recognition of this is new. This is a new order that wasn't injected into the historical, so it will be just a matter of syncing what is on Plex, right? To be queried to to sync the orders from Monday, check if that matches. That if that's not a match, is it is a new order, and just inject it, right? That will be the process. Yeah, it is a new order, right?
+
+Jennilyn Tockstein  08:45
+Unless Ashley, unless you want to keep the spreadsheet.
+
+Speaker 1  08:50
+No, I don't see any reason to. We probably do want to check it at first, but if we could do that Monday with the board, like you were saying, I think that's great. So for for the job note, really quick. So, would we be able to type in more than just a number, like if, and then the number would still pull for the reason code because we'd still have to write the the label type as well. And there's not really another place for us to write a note for that per line item. It must be put in the packaging note, but that wouldn't make sense unless we could, I guess. But do you know what I mean? Like, would it have to be a standalone number, or could we write different lines of different things? And if it had a four, it would pull that reason code still, or no? Am I asking it wrong?
+
+Emilio Dominguez  09:45
+No, no.
+
+Jennilyn Tockstein  09:45
+Just a little bit. Okay,
+
+Speaker 2  09:49
+so
+
+Emilio Dominguez  09:50
+I was sorry to interrupt. As for BigQuery, you could scan. You could scan characters and just explore them, right? Like, so if it's even just a catalog that you will define like status three, right? And status three and the other kind of nodes that you will get there, Plex wouldn't wouldn't have that processing, right? Because it's it wouldn't know what what is there. You just will type that, but then BigQuery could say, okay, so let's check this node, and it has a status three. So that constitutes a reason code, and that's going to be mapped into the reason code column, and then the other characters or description or nodes will be mapped into other into the node into the job node, right? So you will split that, but for Plex, it will be just kind of like easy, not not really easy to understand what is there because it will be this numerical mapping and then the the other description notes. But yeah, I don't know Jennily if that makes sense.
+
+Speaker 1  11:01
+I think it sounds good.
+
+Jennilyn Tockstein  11:02
+Yeah, yeah. And Ashley, you're just wanting to have like a note and the number, right? Like if we had yeah,
+
+Speaker 1  11:13
+like the the number for the reason code, but then we have to also. I mean, there's nothing that would be pulling, and also at this time, there's nothing that pulls for the different label type, like metallic bop or whatever. So we have to write that out for Alex as well, unless we're doing something else for that. But I just figured we would not.
+
+Jennilyn Tockstein  11:35
+I think it would be best to put like metallic bop and stuff like that as part of the part attributes, and so the new part of prayer. When they're now the label files are just attached to the parts. If that's where they're getting them, then they should start checking the attributes on the part instead of us trying to inject all of the information about something into a note, but have them when they go get the file from the part number, they should also look at the part attributes and say, okay, it's this size, it goes on this bottle, it has this type of print finish, right? I don't know. I I feel like that they should look at that
+
+Speaker 3  12:23
+instead
+
+Jennilyn Tockstein  12:24
+of having it all like typed as part of the description.
+
+Speaker 1  12:28
+Yeah, and then they'd have they'd be able to request some kind of report that would say like these are the parts you're going to be printing today. Here's the part attributes with the types of labels. Right, they'd be able to get that information. They wouldn't have to click into it one by one, only because they they they set up their like to do list for the day based on the different types of label material, so they can group them all together. So they'd have to be able to kind of have like a a list of stuff, you know. Oh,
+
+Jennilyn Tockstein  12:58
+for the print team, they're gonna schedule. Well, they can schedule their jobs now. As far as seeing part attributes while scheduling, I will ask Amber.
+
+Speaker 1  13:14
+Okay.
+
+Emilio Dominguez  13:24
+And about the code, the random code. That's for Monday, right, Jennilyn? That's to inject it to.
+
+Speaker 1  13:36
+Which I don't feel like we've ever used that. I mean, I don't know. I know it's important, so you say. I don't know anything about. If we
+
+Jennilyn Tockstein  13:44
+don't need it, but we should just go away with
+
+Speaker 1  13:47
+it. Yeah, I've I've never used ever, but the
+
+Jennilyn Tockstein  13:51
+reason
+
+Speaker 1  13:51
+no the the LCR number
+
+Emilio Dominguez  13:55
+LCR.
+
+Jennilyn Tockstein  13:55
+Oh, quality used to use it as a an engineering change number.
+
+Speaker 1  14:04
+Oh,
+
+Jennilyn Tockstein  14:05
+just so that there's a unique revision history number attached to each update that they did.
+
+Emilio Dominguez  14:15
+Right on. Yeah, it could be added. It could be added. Just yes, for tracking of the impact.
+
+Speaker 1  14:21
+Yeah, we use the reason codes every minute of the day, so okay. Yeah, this
+
+Jennilyn Tockstein  14:24
+is
+
+Emilio Dominguez  14:26
+also related to that. Would you need to update items on Monday regarding if something changed on the order, and you are changing something, and then it needs to sync that not as a new order, but but check that LCR, like check the identifier and and update something, or if the order is in on say on Monday, it's just gone. It can can't be updated from Plex. That's what I'm trying to say. Not from Monday because you can just have the full capability to update everything there. But from Plex, would you like, you know, would you need to update something regarding that order.
+
+Speaker 1  15:23
+Yeah, so I mean, we have that stuff happen all the time right now, and kind of what happens is it it shows up on that Google sheet, and then we have that duplicate sales order, so that we're just aware, like, okay, this is because we made that change, and then we usually just manually update it in Monday and just delete that line and don't import it again. Is usually what we do. So I don't know how we work with that. If it we could do the same, have some kind of duplicate checker that would call it out if there was that if it was already in Monday.
+
+Emilio Dominguez  15:58
+Yeah, regarding the same thought about LCR because that will be injected from BigQuery, Jennilyn. It wouldn't be possible. Just the identifier will need to be something else, like a join of three or four items, in order to know that if you are updating that on Plex, go fetch that same amount of fields to match that order and update that order on Monday, right?
+
+Jennilyn Tockstein  16:26
+Yeah, I think if we're going to update something in Plex and we know it's in label design, then we should update it in Monday too. I think trying to do a two-way sync back and forth is going to end up with errors.
+
+Emilio Dominguez  16:40
+Right
+
+Speaker 1  16:41
+on. We would just manually do it if on Monday if we know we're updating K. That would be fine.
+
+Jennilyn Tockstein  16:47
+Yeah, if we're going in and making a manual change in Plex and it's with a part that's in label design, we should probably go ahead and make it there as well.
+
+Emilio Dominguez  16:56
+Yeah, I could some run some tests on regard if if it fetches that because it wouldn't be like like a new order, right? It wouldn't be a new order. It would be just sitting there already. And okay, let's search for that and let's update that. What? But yeah, I can surely go and test that right on. So I guess that leaves us to the mapping, right? For you to give me the the statuses, or if I just pull them from the recent codes that are there on that board, and the part attributes. Just go fetch them and have a list, so I can show you also to what is there, and have some other testing. But yeah, the. I think that's that's about it. It
+
+Jennilyn Tockstein  18:12
+looks like in the emails I got from you, we didn't get the sales rep yet.
+
+Emilio Dominguez  18:19
+Okay, let me check that. It'll
+
+Jennilyn Tockstein  18:22
+be we talked about. I think it. It's either gonna be outside sales or BDM field. Um, it wasn't part of the query I sent you, but yeah, yeah,
+
+Emilio Dominguez  18:37
+I was doing some tests on that and was expanding the query to include them. So yeah, it has some some some treatment for for those because Plex doesn't have like the the matching also the matching like the name it has split split fields for that. But yeah, I will work on that. So aside from that, on the spreadsheet, the item and the work order number. We won't
+
+Speaker 1  19:18
+have a work order at all.
+
+Emilio Dominguez  19:20
+Okay.
+
+Speaker 1  19:21
+So I guess that'll be that column will have to be deleted, right, Jennilyn? Because we're not going to have a work order.
+
+Jennilyn Tockstein  19:26
+No, there's job numbers, but we won't have a job number until after the label design
+
+Speaker 4  19:32
+is done. Yeah.
+
+Jennilyn Tockstein  19:32
+So you'll have a sales order number, but we we can just leave the work order number blank until everything in Monday no longer uses that field, which which will be like a a few weeks after go live, right? We won't need to rely on that field anymore, and then we can delete it. But
+
+Speaker 1  19:53
+okay, and then regarding the HTPE PAT situation, so the designers need that in order to know what size of label. So if we keep it on the part attribute, is there just a way to pull that from Plex and push it into this that we're pushing into Monday? Because if not, the designers would have to go look up each part and see that label size or the label type, right?
+
+Jennilyn Tockstein  20:23
+How are they getting the files moving forward?
+
+Speaker 1  20:28
+What files? The
+
+Jennilyn Tockstein  20:30
+files, the label files,
+
+Speaker 1  20:35
+like from the customers.
+
+Jennilyn Tockstein  20:37
+Just in general, because every time like these parts exist. Are they going to go to the part number and get the file from the part number?
+
+Speaker 1  20:47
+Yeah. Sorry. Do you mean the customer label file?
+
+Jennilyn Tockstein  20:50
+Yeah.
+
+Speaker 1  20:53
+Okay. So I mean, as of right now, and this is not like label design and Plex 2.0 or whatever. This is like right now. What we're gonna do is we ask the customers to send them over and put them in Monday. It's not they're not on any part number as of right now. And if they would be, they would be the approved ones. So it would be there would be no label because they would it wouldn't be updated, I guess, and that's why it's being designed.
+
+Jennilyn Tockstein  21:24
+Okay, I would say that would be something we'd want to get from the the part attributes, and some of these part attributes, Emilio, we're going to want to pull from the seven part number, maybe actually, maybe we'll just make the nine take them too. I'll think about that. Okay, I think if you wanted it, I, I mean, we could try to extract the text out somewhere, but, um,
+
+Speaker 1  22:00
+yeah. So it's. I don't think that
+
+Jennilyn Tockstein  22:01
+that's very clean. I think it would be better to pull it from a part attribute. If they're not going to be looking at the part attributes in Plex, then they we could try to pull the part attributes and push them into Monday.
+
+Speaker 1  22:19
+Okay, because us not providing them that information, and of course it's gonna, it'll change. But us not providing them HDPE or PET on Plex, wow, on Monday has been a huge thing. Like if it's blank, oh, that can't happen. You know what I mean? Like, yeah. So,
+
+Jennilyn Tockstein  22:45
+I think they should just have the size as
+
+Speaker 1  22:48
+I agree part of the
+
+Jennilyn Tockstein  22:49
+part attributes because I think that's kind of silly. But
+
+Speaker 1  22:58
+yeah, I mean, and they also do have a list, so I don't know. But I mean, it's it's been like a QA thing. Like, well, it doesn't say it in Monday, so we didn't know.
+
+Jennilyn Tockstein  23:15
+Yeah. Well, now we'll say it in Plex for sure. Let's see. Um, I think that's a good thing to ask. Um, ask who? the The team, the label design team. I think that they should have to go to Monday for every part, or sorry, not Monday. They should have to open every part in Plex. Every label has a part number, and I think that they should reference the part in Plex.
+
+Speaker 1  23:57
+So, like before they go start working on something, they would open it in Plex to kind of see the information on the bottle, all that information. See if
+
+Jennilyn Tockstein  24:04
+it has an existing file. See what part attributes it has. See the customer's name, right? Like I don't know. I feel like if we have all of that information somewhere, they really should just look at it. But I could be wrong, and maybe they don't want to. But it seems to make sense to me. Well,
+
+Speaker 1  24:22
+for fun, I guess Taylor and I are kind of over label design. So if we want them to do it, they'll do it. Okay, I'm gonna write it down.
+
+Jennilyn Tockstein  24:34
+So Emilio, the part attributes change per. Per part, so we assign part attributes, and we haven't made any to apply to labels yet.
+
+Emilio Dominguez  24:51
+Okay,
+
+Jennilyn Tockstein  24:52
+but like when we add part attributes, they'll look like this. They'll be in the area of the part, there'll be a type. We might each each table of a part attribute can only you can only assign one item from each table of a part attribute to the part. So that's why I think label size would be a good one because, I mean, technically you can use the same label file on multiple parts, right? You just need the size of the label. But we might have one for regulatory, like Prop 65, something like that in here. We'll see, but I think the other one is part specs, but I don't think we're going to use part specs. But I think part attributes, if they're going to have, um, if they're going to have the label files, all label files in here, I think it would be a good best practice to pull up the label part number and check its part attributes and see if it has any attachments and notes in here because that's where Ashley they're going to add notes is in the properties of these files, right? So they're going to have a lot of information here. It seems like you should check that information before doing anything to me. Okay. Yes. Yeah. That makes sense. But
+
+Speaker 1  26:42
+I do have one more question about this. So right now, in in Netsuite, we have like a regular part number that has a customer product with the label design, and then we have like a service line item that's a standalone label design that's not connected to anything else. Have we thought about that, and how are we just going to have service part numbers as well, to where we can just add it on the sales order, and that's general. Would that have to be for every customer still, just like blank bottles, yeah.
+
+Jennilyn Tockstein  27:27
+You're saying to charge them for the design,
+
+Speaker 1  27:32
+yeah. And sometimes they don't want a product; they're just wanting the label design done, or it's a 3d rendering, and at that point, it's just to charge and doesn't have a product attached to it yet.
+
+Jennilyn Tockstein  27:49
+Okay, I added a note. I am not sure if we made a part number for that or not yet, so I'll look into that.
+
+Speaker 1  27:57
+Okay, and there's a bunch of different ones, unfortunately, just like label at it, label blah blah blah. Yeah.
+
+Jennilyn Tockstein  28:04
+Okay. Yeah, I will. I will look at that.
+
+Emilio Dominguez  28:10
+Okay.
+
+Jennilyn Tockstein  28:13
+Hey, I have to hop off. Um, but you guys can keep talking if needed. Hi guys.
+
+Speaker 1  28:21
+I think we're good for now.
+
+Emilio Dominguez  28:23
+Yeah, definitely. Yeah.
+
+Speaker 1  28:24
+Okay. All right. Well, I'll talk to you both later then.
+
+Emilio Dominguez  28:27
+Okay. Have a good one. Have a good day. Thanks. Bye. Bye. by
+
+
+Transcribed by https://otter.ai

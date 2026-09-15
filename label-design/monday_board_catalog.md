@@ -7,6 +7,12 @@ columns) the complete option list, pulled directly from the board via a
 read-only GraphQL call on 2026-09-14. For the plain-language version of what
 this board is *for*, see [`monday_board_guide.md`](monday_board_guide.md).
 
+> **Re-verified 2026-09-15** against a fresh pull, column-by-column and
+> option-by-option (not just titles). The content below was already correct;
+> the only error was the "43 columns" figure in this file's own summary text
+> — the board has always had 61, the same as when this was first written.
+> "43" was a mix-up with Reason Code's ~40 options, not a stale board.
+
 **Why this exists:** Monday's column ids are per-board and are **not** the
 column titles — a column titled "Sales Order" might be `text_mkzkhws2` on this
 board and something else entirely on a different one. `pushToMonday_()` in
@@ -29,7 +35,7 @@ or run `listMondayColumns()` from the Apps Script editor (see
 [`deploy/label_design_sync/README.md`](../deploy/label_design_sync/README.md)),
 which prints the same thing plus a ready-to-paste `MONDAY_COLUMNS` map.
 
-## All 43 columns
+## All 61 columns
 
 | Title | id | Type |
 |---|---|---|

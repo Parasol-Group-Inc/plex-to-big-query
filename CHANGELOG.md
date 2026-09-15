@@ -14,6 +14,60 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-15 — dropping the Sheet, a Job-Note parser, and a catalog correction
+
+### Decided — Label Design's next phase: no more Google Sheet middleman
+The team wants the Sheet gone entirely from the Plex → Monday flow. Settled
+so far, nothing built yet beyond the two pieces below:
+- **A new standalone service** (Cloud Run Job + Cloud Scheduler, matching
+  every other pipeline component here), not an extension of the existing
+  Apps Script.
+- **A new BigQuery audit table** replaces the Sheet's role as the visible
+  record of what happened, once nobody can just open a tab and look.
+- **Dedupe moves to a hash-based LCR.** Going forward, the Monday `LCR`
+  column itself holds a SHA-256 hash (first 12 lowercase hex chars) of
+  `order_number + customer_part_no` — reusing the existing column rather
+  than adding a new one. A run recognizes "already on Monday" by finding a
+  matching hash there. Verified safe against all 4,500 real historical LCR
+  values first: none are lowercase hex, so a hash can never collide with an
+  old hand-assigned code (`LCR A00980`, date-suffixed codes, etc.). Cutover
+  date **10/19** (Jennilyn) — items already on the board before then are
+  left alone, never reconciled. Open edge case, not yet resolved: the
+  view's 14-day rolling window means an order dated just before 10/19 could
+  still appear in BigQuery's output well after the cutover, added to Monday
+  the old way (no hash) — the new hash-only check wouldn't recognize it and
+  could create a duplicate.
+
+### Added — `label_design_service/reason_code.py`
+Job Note → (Reason Code, Memo) split, confirmed against a real example
+(Emilio): a Job Note's **first character** is the reason code (1-6, mapped
+to real Monday option indices — several near-duplicates on the Reason Code
+dropdown made hand-confirming each one necessary rather than text-matching);
+everything after it, separator stripped, is the Memo. An unrecognized first
+character (not 1-6, or no leading digit at all) consumes nothing — the whole
+note goes to Memo untouched and no Reason Code is set. That last part matters
+in practice: checked all 164 real non-blank Memo values from a live board
+pull and **none** currently start with a digit, confirming this is a
+going-forward convention, not something already in the data.
+21 checks in `test_reason_code.py`, including the real confirmed example
+(`"3 Update to current V code. Standard Label."` → New label design (Vox
+design) + memo `"Update to current V code. Standard Label."`).
+
+### Added — `scripts/pull_monday_board_snapshot.py`
+Pages through every item on the Design & QA board (206 total, 113 in the
+last 14 days by the `Date` column), writes a CSV for review. Read-only,
+one paginated GraphQL query. Output is gitignored, same PII treatment as
+the historical Label Design export — real customer names/emails/phones.
+
+### Fixed — `label-design/monday_board_catalog.md` said "43 columns"; it's 61
+Found while re-verifying for accuracy: a fresh pull structurally diffed
+against the committed catalog — every title, id, type, and status/dropdown
+option value — came back identical. The board was never stale; "43" was a
+wrong count in the prose, most likely confused with Reason Code's own ~40
+options. Content was correct the whole time; only the summary number was
+wrong. Corrected in place with a dated note rather than silently rewritten,
+per this file's own convention of not editing history quietly.
+
 ## 2026-09-14 — non-technical team guide, and a written working agreement on patch size
 
 Added [deploy/label_design_sync/TEAM_GUIDE.md](deploy/label_design_sync/TEAM_GUIDE.md)

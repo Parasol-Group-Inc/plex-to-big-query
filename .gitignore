@@ -53,3 +53,9 @@ meetings-reference/**/_otter_extract/
 # The MONDAY tab export IS committed — it is the 15-column header row with no
 # data rows, and it is the contract SHEET_MAP encodes.
 assets/Copy of Design in Monday- NEW - historical.csv
+
+# Monday board snapshots (scripts/pull_monday_board_snapshot.py) always carry
+# real customer names/emails/phone numbers. The script's default output is
+# the OS temp dir, never the repo -- this pattern is only a safety net for
+# the rare case --out-dir is pointed inside the repo by mistake.
+monday_board_snapshot_*.csv

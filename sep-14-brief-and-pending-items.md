@@ -11,27 +11,26 @@
 
 ## UPDATE — 2026-09-16 (start here)
 
-### The one thing to check first, before anything else
+### Terraform drift — RESOLVED same day, verified in prod
 
-**`terraform plan` shows drift right now**: `label_design_config_prod` needs
-updating in place (today's new Part Attribute extractions were added to
-`reports/label_design.yaml` but never pushed to prod's GCS object), plus two
-harmless metadata-only replacements (`label_design_config_test`,
-`label_design_view_sql` — their content-type drifted to
-`application/octet-stream` from manual `gcloud storage cp` pushes instead of
-`terraform apply`; a replace just re-uploads the same content with the right
-metadata, nothing is lost).
+`terraform apply` ran (2 added, 1 changed, 2 destroyed — the destroys were
+just content-type metadata fixes on two objects from earlier manual
+`gcloud storage cp` pushes, re-uploading the same content). `terraform plan`
+immediately after: **"No changes. Your infrastructure matches the
+configuration"** across the whole project, not just label_design.
 
-**Why this matters more than the usual "prod is stale" note**: the SQL file
-at `gs://voxdatalake-report-configs/sql/label_design_view.sql` (shared by
-prod and test) was pushed today and now joins against
-`raw_Part_v_Attribute` / `raw_Part_v_Part_Attribute`. Test's extraction list
-was updated to match — prod's was not. **If the prod job runs before
-`terraform apply`, view creation could fail** (the exact "PARTIAL, exit 0,
-no view" failure mode this repo has hit before, from a mismatched
-config/SQL pair). Run `terraform plan` again on resume; if it still shows
-`label_design_config_prod` changing, run `terraform apply` before the next
-scheduled prod run (9:30 AM / 1:30 PM Mountain).
+**Then actually verified, not just trusted**: ran `plex-etl-label-design`
+(prod, for the first time with the new config) and checked the logs —
+`Created/replaced BigQuery view voxdatalake.PlexProd.label_design_report`,
+exit 0 for real this time. `label_design_report` in `PlexProd` exists and is
+queryable (0 rows — benign, no current order matches the filter, same as
+test).
+
+**Bonus finding while checking**: prod's `Part_v_Attribute` has the **same
+Attribute_Keys** as test's (`2383` Size, `6537` Allergen, `6538` Hazardous,
+`6770` Certifications) — these four are real production Plex configuration,
+not test-tenant fabrications. Only `Printing Material` (`7427`) exists in
+test so far, not yet promoted to prod.
 
 ### The architecture pivot
 
@@ -164,21 +163,19 @@ confirmed fixed against live BigQuery. Lesson for next session: **a
 "looks right on rereading" is not verification** — either run it live, or at
 minimum run a mechanical check (paren balance, etc.) before trusting it.
 
-### Deployment state as of 2026-09-16
+### Deployment state as of 2026-09-16 (end of day)
 
-- `reports/test/label_design.yaml` + `reports/sql/label_design_view.sql`:
-  pushed to GCS manually (`gcloud storage cp`), test job run twice today,
-  both successful, view recreated both times, verified with real queries.
-- `reports/label_design.yaml` (**prod**): edited and committed to git,
-  **not yet pushed to GCS** — see the terraform warning at the very top of
-  this doc.
+- **Both prod and test fully in sync and verified.** `terraform apply` ran;
+  `terraform plan` confirms zero drift project-wide. Both
+  `plex-etl-label-design` and `plex-etl-label-design-test` have been run
+  since, and `label_design_report` exists and is queryable in **both**
+  `PlexProd` and `PlexTest`.
 - No code exists yet for the standalone service, the audit table, or the
   hash-based LCR — those are documented decisions only.
 
 ### Concrete next steps, in order
 
-1. **Resolve the terraform drift** (see top of this doc) before the next
-   scheduled prod run.
+1. ~~Resolve the terraform drift~~ — **done, verified in prod, 2026-09-16.**
 2. **Get an answer from Ashley/Jennilyn** on the Part Attributes → Monday
    column mapping (see table above) — this is the one thing blocking
    further Part Attributes work.

@@ -1,11 +1,20 @@
 # Label Design — project hub
 
 A self-contained mini-project riding along inside `plex-to-big-query`: a
-Plex → BigQuery → Google Sheet → Monday.com queue that replaced a twice-daily
-manual loop (download a NetSuite report, paste into a sheet, check for
-duplicates by hand, upload to Monday). **Not related to the Vox Nutrition
-scorecard work** this repo otherwise tracks — this folder exists so the two
-don't blend together.
+Plex → BigQuery → Monday.com queue that replaced a twice-daily manual loop
+(download a NetSuite report, paste into a sheet, check for duplicates by
+hand, upload to Monday). **Not related to the Vox Nutrition scorecard work**
+this repo otherwise tracks — this folder exists so the two don't blend
+together.
+
+> **Mid-pivot as of 2026-09-16**: the Google Sheet is being dropped from this
+> flow entirely, replaced by a standalone service comparing BigQuery directly
+> against the Monday board. **For the actual current status — what's built,
+> what's verified, what's still blocked — see
+> [`../sep-14-brief-and-pending-items.md`](../sep-14-brief-and-pending-items.md)
+> first, before anything else on this page.** Most of this README still
+> describes the Sheet-based flow and hasn't been rewritten for the new
+> architecture yet.
 
 This page is a map, not a copy. The working files live where the rest of the
 pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
@@ -15,7 +24,8 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 
 | If you want... | Go to |
 |---|---|
-| The plain-English "how do I use it" guide | [`deploy/label_design_sync/TEAM_GUIDE.md`](../deploy/label_design_sync/TEAM_GUIDE.md) |
+| **Current status, what's pending, what's blocked** | [`sep-14-brief-and-pending-items.md`](../sep-14-brief-and-pending-items.md) |
+| The plain-English "how do I use it" guide (Sheet-based flow, being retired) | [`deploy/label_design_sync/TEAM_GUIDE.md`](../deploy/label_design_sync/TEAM_GUIDE.md) |
 | What the Monday board's columns mean | [`monday_board_guide.md`](monday_board_guide.md) |
 | The board's real column ids + full option lists | [`monday_board_catalog.md`](monday_board_catalog.md) |
 | The business-facing report doc | [`docs/reports/label_design_report.md`](../docs/reports/label_design_report.md) |

@@ -14,6 +14,48 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-16 (later) — Monday test board built for the standalone push service; two API bugs found
+
+### Added — `scripts/replicate_board_columns.py`
+Copies column title+type+status-labels from one Monday board to another via
+the API, so a test board can structurally mirror prod ("Design & QA",
+`18395121955`) without touching prod itself. Built to prep "Tablero nuevo"
+(`18430931138`, Emilio's personal dev-sandbox board) as a realistic target
+for testing the new standalone Label Design push service, since permissions
+on the originally-intended "Plex Import Board" (`18430735110`, in the real
+Voxnutrition workspace) turned out to be write-restricted for the token
+available today. Full writeup, including the fix for a "Reason Code" /
+"Bottle Material" title-collision-with-wrong-type gap, in
+`label-design/monday_board_catalog_tablero_nuevo.md`.
+
+### Fixed — two real Monday API bugs, neither documented anywhere obvious
+1. `create_column`'s `defaults` for a `status` column needs `{"labels":
+   {"0": "A", ...}}` (dict), not `{"labels": ["A", ...]}` (array) — the
+   array form is silently accepted (returns a valid column id, no error)
+   but produces a column with a single **null**-labeled option. 39 columns
+   were created looking successful before this was caught by reading
+   `settings_str` back and finding every label null.
+2. `create_column` cannot set more than ~20 labels in one call (confirmed
+   by bisection; individually every label text was valid). No API path
+   exists to add more afterward — `change_column_metadata`'s
+   `ColumnProperty` enum is only `title`/`description`, and
+   `change_column_value` with a not-yet-existing label errors
+   `missingLabel` rather than auto-creating it. Prod's real 33-option
+   "Reason Code" column can't be mirrored byte-for-byte via the API; the
+   test board's version deliberately holds only the 6 options
+   `label_design_service/reason_code.py` actually needs.
+
+### Changed — `.env`
+Removed a duplicate `MONDAY_API_KEY` line (two different tokens under the
+same name — the env loader was silently using whichever came last). Split
+into named vars: `MONDAY_API_KEY` (Voxnutrition company workspace — but
+Jennette Boone's *personal* token, not a service account; flagged as a
+follow-up risk for anything scheduled) and `MONDAY_API_KEY_PERSONAL_DEV`
+(Emilio's own dev sandbox, used for the Tablero nuevo work above). Also
+corrected/renamed the three `MONDAY_BOARD_ID_*` vars after discovering the
+catalog doc's board id and an earlier `.env` version disagreed — verified
+against the live API which board is actually which.
+
 ## 2026-09-16 — Part Attributes, and a syntax bug the last dry run never actually caught
 
 ### Fixed — `label_design_view.sql` had an orphaned `),` since the 2026-09-15 release-collapse edit

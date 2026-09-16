@@ -148,9 +148,16 @@ A message was drafted for **Ashley** (Monday board owner) and **Jennilyn**
 (Plex side), asking specifically: does Printing Material feed Bottle
 Material or is it a different concept; does Size feed the barely-used Label
 field; do Hazardous/Certifications feed Regulatory Status or Prop 65 or
-neither; is Allergen brand new. **Not yet confirmed sent or answered** —
-pick this up first next session, since it's the one thing genuinely blocking
-further Part Attributes work.
+neither; is Allergen brand new.
+
+**Partial answer from Ashley, 2026-09-16 (later)**: Bottle Material (Monday)
+holds HDPE/PET/Glass — the bottle's own container material. Printing
+Material (Plex) is label stock type — white BOPP, metallic, laminated, etc.
+**These are confirmed different concepts** — Printing Material does not feed
+Bottle Material, and has no confirmed Monday destination yet. Ashley was
+unsure on Size/Allergen/Hazardous/Certifications and tagged Jennilyn for
+those — **still awaiting Jennilyn's answer on 4 of the 5 attributes.** Pick
+this up first next session if still unanswered.
 
 ### A real bug found and fixed this session, worth remembering
 
@@ -176,14 +183,43 @@ minimum run a mechanical check (paren balance, etc.) before trusting it.
 ### Concrete next steps, in order
 
 1. ~~Resolve the terraform drift~~ — **done, verified in prod, 2026-09-16.**
-2. **Get an answer from Ashley/Jennilyn** on the Part Attributes → Monday
-   column mapping (see table above) — this is the one thing blocking
-   further Part Attributes work.
+   Re-confirmed 2026-09-16 (later): `terraform plan` still shows zero
+   project-wide drift.
+2. ~~Get an answer from Ashley/Jennilyn~~ — **partially done.** Ashley
+   confirmed Printing Material ≠ Bottle Material (different concepts, no
+   confirmed Monday destination for Printing Material yet). Still waiting
+   on Jennilyn for Size/Allergen/Hazardous/Certifications.
 3. Confirm the 14-day-window/cutover edge case fix (fall back to text
    comparison for pre-10/19 rows).
 4. Start building the standalone service (Cloud Run Job + Scheduler) — the
    Reason Code parser and Part Attribute columns are ready to be consumed by
-   it the moment it exists.
+   it the moment it exists. **In progress, 2026-09-16 (later):** a test
+   board ("Tablero nuevo," `18430931138`, Emilio's personal Monday dev
+   sandbox) was built out to structurally mirror prod, specifically so the
+   service's Monday-write logic can be tested end-to-end before ever
+   touching prod. Full detail in
+   `label-design/monday_board_catalog_tablero_nuevo.md`. Real blockers hit
+   and resolved along the way:
+   - The originally-intended target, "Plex Import Board" (`18430735110`,
+     the real Voxnutrition workspace), turned out to be write-restricted
+     for the only working API token today (Jennette Boone's personal
+     token could read it but not create columns — 403 on every attempt).
+     Pivoted to the dev sandbox board instead; **the real target board
+     still needs a token with actual write access before the service can
+     be tested against it directly**, let alone deployed at it.
+   - `.env` had real problems worth knowing about: a duplicate
+     `MONDAY_API_KEY` line silently shadowed by env-loader last-value-wins
+     behavior, and board-id variables that didn't match
+     `monday_board_catalog.md` — both fixed and reconciled against the
+     live API, not guessed.
+   - Two Monday API bugs found while building the replication script (see
+     `CHANGELOG.md` 2026-09-16 (later) and the script's own docstring) —
+     worth reading before writing any other Monday column-creation code.
+   - The service's Monday write, whenever it's built, should look up
+     status-column option indices by label text per-board at runtime, not
+     hardcode index numbers — confirmed necessary since even the *option
+     set* differs between prod's Reason Code (33 options) and the test
+     board's (deliberately only 6).
 5. Build the BigQuery audit table.
 
 ---

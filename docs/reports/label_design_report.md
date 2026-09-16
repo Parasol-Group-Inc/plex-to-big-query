@@ -57,6 +57,11 @@ list would miss exactly the new orders it exists to surface.
   `'Regulatory'`) are a best guess pending that real data — see the SQL's own
   comments for the exact CASE WHEN matches to update.
 
+  **Confirmed 2026-09-16:** `part_regulatory` feeds Monday's plain-text
+  **Prop 65** column, not the fixed-option "Regulatory Status" dropdown,
+  which can't hold a compound string like "Prop 65 + Organic". Not yet wired
+  up — the push-side mapping code doesn't exist for this field yet.
+
 - **Two sales reps ship, not one.** Plex holds a primary and a secondary rep
   and nobody has ever stated which one Vox calls the BDM, so both are exposed
   and the consumer picks. Nothing here silently decides.

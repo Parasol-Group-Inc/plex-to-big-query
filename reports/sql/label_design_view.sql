@@ -100,6 +100,57 @@ job_notes AS (
   GROUP BY PO_Line_Key
 ),
 
+-- ── Part Attributes ──────────────────────────────────────────────────────────
+-- Added 2026-09-16, per Jennilyn: a part-level "spec sheet" of dropdown
+-- answers (Bottle Material — today typed into Monday by hand; a new
+-- Regulatory attribute she is setting up for Prop 65/Organic/GMO-Free) meant
+-- to be read from Plex instead of retyped. Confirmed with her (2026-09-14
+-- meeting, and again 2026-09-16): only ONE value per attribute per part — a
+-- need for more than one regulatory flag at once is handled by Plex's own
+-- dropdown having pre-defined COMBINED entries ("Prop 65 + Organic"), not by
+-- multiple rows here. That combined string is passed through exactly
+-- as-is below — deliberately NOT parsed/split on " + ", since a new
+-- combination she adds tomorrow is a new string we've never seen, not a new
+-- format to parse.
+--
+-- `Part_Key` (not `Customer_Part_Key`/`Customer_Part_No`) is the join key —
+-- Plex's own internal part identifier, present directly on `Sales_v_PO_Line`,
+-- independent of which customer-facing part-number format is in play (the
+-- "seven part number vs. nine" distinction Jennilyn herself was unsure about
+-- in the meeting doesn't apply here — this is Plex's stable internal key
+-- either way).
+--
+-- NOT YET POPULATED as of 2026-09-16 — Jennilyn has not created any part
+-- attributes for labeling yet ("we haven't made any to apply to labels
+-- yet"), so every column below reads NULL until she uploads test data.
+-- 'Bottle Material' / 'Regulatory' are OUR BEST GUESS at what she will name
+-- these attributes in Plex — CONFIRM AND UPDATE the two CASE WHEN matches
+-- below the moment real data exists. Until then this is deliberately inert,
+-- not wrong.
+part_attribute_types AS (
+  SELECT
+    SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
+    a.Attribute_Name                     AS Attribute_Name
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Attribute` AS a
+),
+
+-- One row per (Part_Key, Attribute_Key) is expected — confirmed with
+-- Jennilyn, not just assumed (Plex only allows one value per attribute per
+-- part). If that ever stops holding, MAX() below silently picks one value
+-- rather than erroring — worth a one-off check once real data lands:
+--   SELECT Part_Key, Attribute_Key, COUNT(*)
+--   FROM raw_Part_v_Part_Attribute GROUP BY 1, 2 HAVING COUNT(*) > 1
+part_attributes_pivoted AS (
+  SELECT
+    SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
+    MAX(CASE WHEN pt.Attribute_Name = 'Bottle Material' THEN pa.Value END) AS part_bottle_material,
+    MAX(CASE WHEN pt.Attribute_Name = 'Regulatory'       THEN pa.Value END) AS part_regulatory
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Part_Attribute` AS pa
+  JOIN part_attribute_types AS pt
+    ON pt.Attribute_Key = SAFE_CAST(pa.Attribute_Key AS INT64)
+  GROUP BY SAFE_CAST(pa.Part_Key AS INT64)
+),
+
 -- ── Dates ──────────────────────────────────────────────────────────────────
 -- `PO_Date` and `Due_Date` land in BigQuery as **INT64 nanoseconds** since the
 -- epoch (1750118400000000000 = 2025-06-17), not as a TIMESTAMP: pandas holds
@@ -130,8 +181,6 @@ dates AS (
       NULLIF(DATE(SAFE_CAST(CAST(po.PO_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
     ) AS order_date_resolved
   FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` AS po
-)
-
 ),
 
 -- ── One row per PO Line + Release ───────────────────────────────────────────
@@ -191,6 +240,12 @@ release_lines AS (
     -- what the Apps Script reads.
     ps.PO_Status                                  AS order_status,
 
+    -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
+    -- the PART, not the release, so it is identical across every row this
+    -- collapses together; no aggregation needed beyond the plain passthrough.
+    pap.part_bottle_material                      AS part_bottle_material,
+    pap.part_regulatory                           AS part_regulatory,
+
     -- Tie-breaker only — never surfaced. Keeps the QUALIFY below deterministic
     -- on the rare case where two releases for the same part share a Due_Date.
     rel.PO_Line_Key                               AS _tiebreak_line_key
@@ -227,6 +282,9 @@ release_lines AS (
   LEFT JOIN users         AS up ON up.Plexus_User_No = rp.Plexus_User_No
   LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
 
+  LEFT JOIN part_attributes_pivoted AS pap
+    ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+
   WHERE rs.Release_Status = 'Label Design'
     AND ps.PO_Status = 'Pending Fulfillment'
     -- Addition 3: a rolling window. 14 days per "keep this like within the last
@@ -261,6 +319,8 @@ SELECT
   customer_phone,
   customer_part_description,
   order_status,
+  part_bottle_material,
+  part_regulatory,
   COUNT(*) OVER (PARTITION BY order_number, customer_part_no)               AS release_count,
   CONCAT(CAST(order_number AS STRING), '|', IFNULL(customer_part_no, ''))   AS dedupe_key
 

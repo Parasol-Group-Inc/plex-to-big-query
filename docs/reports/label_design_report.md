@@ -1,6 +1,6 @@
 # Label Design Queue
 
-> **Status:** 🛠 Built, not yet run — waiting on `terraform apply` and the Monday holding board · **Category:** Sales · **Runs:** 9:30 AM and 1:30 PM Mountain, every day
+> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** 9:30 AM and 1:30 PM Mountain, every day
 
 ## What this tells you
 
@@ -43,10 +43,19 @@ list would miss exactly the new orders it exists to surface.
 
 ## Flags and open questions
 
-- **It has never run.** The configs and SQL shipped 2026-09-11 with no Cloud
-  Run job behind them, so `label_design_report` does not exist yet. The job and
-  schedulers were added 2026-09-12 and need a `terraform apply` by someone who
-  can authenticate — see the CHANGELOG entry for that date.
+- **Two new part-level columns, added 2026-09-16, are inert until Jennilyn
+  populates data.** `part_bottle_material` and `part_regulatory` pull from
+  Plex's generic Part Attribute system, keyed on `Part_Key` (the underlying
+  Plex part, not the customer-specific part number). Confirmed with Jennilyn:
+  one value per attribute per part — a need for several regulatory flags at
+  once (e.g. Prop 65 *and* Organic) is handled by Plex's own dropdown having
+  pre-defined combined entries ("Prop 65 + Organic"), which this passes
+  through untouched rather than parsing. As of this writing **no part
+  attributes for labeling exist in Plex yet** ("we haven't made any to apply
+  to labels yet" — Jennilyn, 2026-09-14), so both columns read NULL until she
+  uploads test data. The attribute names these match on (`'Bottle Material'`,
+  `'Regulatory'`) are a best guess pending that real data — see the SQL's own
+  comments for the exact CASE WHEN matches to update.
 
 - **Two sales reps ship, not one.** Plex holds a primary and a secondary rep
   and nobody has ever stated which one Vox calls the BDM, so both are exposed

@@ -59,6 +59,18 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Part Attributes — see reports/label_design.yaml for the full note. Not
+  # yet populated in Plex; added ahead of Jennilyn uploading test data.
+  - plex_view: Part_v_Attribute
+    bq_table: raw_Part_v_Attribute
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part_Attribute
+    bq_table: raw_Part_v_Part_Attribute
+    filter: ""
+    date_col: ""
+
 bq_view:
   - name: label_design_report
     display_name: "Label Design Queue"

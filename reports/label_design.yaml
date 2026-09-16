@@ -75,6 +75,28 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Part Attributes — added 2026-09-16, per Jennilyn. A part-level "spec
+  # sheet" of dropdown answers (Bottle Material, and a new Regulatory
+  # attribute she is setting up for Prop 65/Organic/GMO-Free) that today gets
+  # typed into Monday by hand instead of read from Plex. Confirmed with her
+  # (2026-09-14 meeting): only ONE value per attribute per part — needing more
+  # than one regulatory flag at once is handled by Plex's own dropdown having
+  # pre-defined COMBINED entries ("Prop 65 + Organic"), not by multiple rows
+  # here. See reports/sql/label_design_view.sql for how these two are joined.
+  #
+  # NOT YET POPULATED as of 2026-09-16 — Jennilyn: "we haven't made any [part
+  # attributes] to apply to labels yet." These extractions are added ahead of
+  # her uploading real test data, so the pull is ready the moment she does.
+  - plex_view: Part_v_Attribute
+    bq_table: raw_Part_v_Attribute
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part_Attribute
+    bq_table: raw_Part_v_Part_Attribute
+    filter: ""
+    date_col: ""
+
 bq_view:
   - name: label_design_report
     display_name: "Label Design Queue"

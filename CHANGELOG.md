@@ -14,6 +14,56 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-16 — Part Attributes, and a syntax bug the last dry run never actually caught
+
+### Fixed — `label_design_view.sql` had an orphaned `),` since the 2026-09-15 release-collapse edit
+Found while adding new CTEs, before building on top of it: an extra closing
+paren + comma sat right after the `dates` CTE, with nothing open left to
+close. That edit's own dry run never actually completed (blocked by the
+`gcloud auth login` wall) — it was only read through by eye afterward, which
+missed it. Confirmed as a real defect (not a misreading) with a local
+paren-balance check, then fixed. Live BigQuery verification is still blocked
+on the same auth wall as of this writing; every new column name below was
+cross-checked against `catalog/full_schema_catalog.csv` by hand instead.
+
+### Added — `part_bottle_material` and `part_regulatory` to `label_design_view.sql`
+Per Jennilyn: read from Plex's generic Part Attribute system
+(`Part_v_Attribute` + `Part_v_Part_Attribute`, both extracted here for the
+first time — added to both `reports/label_design.yaml` and its test twin)
+instead of a human typing Bottle Material into Monday by hand every single
+order, which is what happens today (checked a live 2-week board pull: **113
+of 113 orders** had it manually filled in).
+
+Joined on `Part_Key` — Plex's own internal part identifier, present directly
+on `Sales_v_PO_Line` — not `Customer_Part_Key`/`Customer_Part_No`. This
+sidesteps the "seven part number vs. nine" ambiguity Jennilyn herself
+raised in the 2026-09-14 meeting; `Part_Key` is Plex's stable internal key
+regardless of which customer-facing numbering format is in play.
+
+**Confirmed with Jennilyn, both in the meeting and again explicitly this
+session: one value per attribute per part.** A part needing more than one
+regulatory flag at once (Prop 65 *and* Organic) is handled by Plex's own
+dropdown carrying pre-defined COMBINED entries ("Prop 65 + Organic", "Prop
+65 + Organic + GMO-Free") as their own single selectable value — not by
+multiple attribute rows. That combined string is passed through completely
+untouched, deliberately not parsed or split on `" + "`: a new combination she
+adds tomorrow is a new string this has never seen, not a new format to
+handle.
+
+**Not yet real data.** Jennilyn: *"we haven't made any [part attributes] to
+apply to labels yet."* Both new columns read NULL until she uploads test
+values — the extraction and join are built ahead of that on purpose, so
+there's nothing left to do the moment she does. The attribute names matched
+on (`'Bottle Material'`, `'Regulatory'`) are our best guess, flagged
+in-line in the SQL for confirmation against her real setup.
+
+**Deliberately deferred, not decided:** which Monday column
+`part_regulatory` eventually feeds. Monday's own "Regulatory Status" is a
+fixed-option dropdown with no compound entries — a string like "Prop 65 +
+Organic" won't fit it. The plain-text "Prop 65" column (currently blank on
+every order) is the likely home instead, but that's a push-side decision for
+later, not something the extraction needed settled today.
+
 ## 2026-09-15 — dropping the Sheet, a Job-Note parser, and a catalog correction
 
 ### Decided — Label Design's next phase: no more Google Sheet middleman

@@ -64,6 +64,34 @@ Organic" won't fit it. The plain-text "Prop 65" column (currently blank on
 every order) is the likely home instead, but that's a push-side decision for
 later, not something the extraction needed settled today.
 
+### Fixed (same day) — the two guessed attribute names were both wrong; corrected against real data
+`gcloud auth login` unblocked verification a few hours after the above was
+written. Running the (fixed) view against real BigQuery — not just a local
+paren check — turned up something the guess couldn't have caught: Jennilyn
+had **already uploaded real test data** (`Part_v_Attribute`: 5 rows,
+`Part_v_Part_Attribute`: 28 rows) linked to real test order Part_Keys. The
+view created successfully, but `'Bottle Material'` and `'Regulatory'` — the
+two names guessed at, in the entry above, before any real data existed —
+**matched nothing**, because neither attribute exists. The real five:
+**Size, Allergen, Hazardous, Certifications, Printing Material.**
+
+Rather than re-guess a mapping onto two buckets, all five real names are now
+exposed as their own columns — `part_size`, `part_allergen`,
+`part_hazardous`, `part_certifications`, `part_printing_material` — since
+naming them is just reading a fact from Plex, not a business decision. Which
+of the five (if any) feeds which *Monday* column stays open, same as the
+Prop 65 question above; most of her 28 rows still carry a blank `Value`, so
+there isn't enough populated data yet to infer that mapping from content.
+
+**Verified with a standalone proof query, not just "the view compiled"**:
+`part_allergen = "Yes"` on `Part_Key 11003458` — the one value she's
+actually populated so far — comes through the pivot correctly.
+
+### Fixed — the orphaned `),` from the entry above, confirmed against live BigQuery
+The local paren-balance check said it was fixed; today's re-run against real
+BigQuery is what actually proves it — the view now creates without error,
+twice, across both the wrong-name and corrected-name versions of this SQL.
+
 ## 2026-09-15 — dropping the Sheet, a Job-Note parser, and a catalog correction
 
 ### Decided — Label Design's next phase: no more Google Sheet middleman

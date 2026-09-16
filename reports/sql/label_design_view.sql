@@ -102,16 +102,15 @@ job_notes AS (
 
 -- ── Part Attributes ──────────────────────────────────────────────────────────
 -- Added 2026-09-16, per Jennilyn: a part-level "spec sheet" of dropdown
--- answers (Bottle Material — today typed into Monday by hand; a new
--- Regulatory attribute she is setting up for Prop 65/Organic/GMO-Free) meant
--- to be read from Plex instead of retyped. Confirmed with her (2026-09-14
--- meeting, and again 2026-09-16): only ONE value per attribute per part — a
--- need for more than one regulatory flag at once is handled by Plex's own
--- dropdown having pre-defined COMBINED entries ("Prop 65 + Organic"), not by
--- multiple rows here. That combined string is passed through exactly
--- as-is below — deliberately NOT parsed/split on " + ", since a new
--- combination she adds tomorrow is a new string we've never seen, not a new
--- format to parse.
+-- answers, meant to be read from Plex instead of a person typing them into
+-- Monday by hand. Confirmed with her (2026-09-14 meeting, and again
+-- 2026-09-16): only ONE value per attribute per part — a need for more than
+-- one flag at once (e.g. several regulatory concerns together) is handled by
+-- Plex's own dropdown having pre-defined COMBINED entries as a single value
+-- ("Prop 65 + Organic"), not by multiple rows here. Every value below is
+-- passed through exactly as-is — deliberately NOT parsed/split on " + ",
+-- since a new combination she adds tomorrow is a new string we've never
+-- seen, not a new format to parse.
 --
 -- `Part_Key` (not `Customer_Part_Key`/`Customer_Part_No`) is the join key —
 -- Plex's own internal part identifier, present directly on `Sales_v_PO_Line`,
@@ -120,13 +119,20 @@ job_notes AS (
 -- in the meeting doesn't apply here — this is Plex's stable internal key
 -- either way).
 --
--- NOT YET POPULATED as of 2026-09-16 — Jennilyn has not created any part
--- attributes for labeling yet ("we haven't made any to apply to labels
--- yet"), so every column below reads NULL until she uploads test data.
--- 'Bottle Material' / 'Regulatory' are OUR BEST GUESS at what she will name
--- these attributes in Plex — CONFIRM AND UPDATE the two CASE WHEN matches
--- below the moment real data exists. Until then this is deliberately inert,
--- not wrong.
+-- REAL ATTRIBUTE NAMES, confirmed 2026-09-16 by querying Jennilyn's own test
+-- upload (`raw_Part_v_Attribute`) rather than guessed: Size, Allergen,
+-- Hazardous, Certifications, Printing Material. The original build here
+-- guessed 'Bottle Material' and 'Regulatory' — NEITHER exists — so all five
+-- real ones are exposed below instead of re-guessing which two matter.
+-- Which of these (if any) maps to which *Monday* column (e.g. does
+-- "Printing Material" feed the existing Bottle Material dropdown? does
+-- Prop 65 information live under "Hazardous" or "Certifications"?) is a
+-- separate, later decision — not yet answered, and not needed to expose the
+-- data itself.
+--
+-- Most of her 28 test assignments still carry a blank Value (structure
+-- created, values mostly not yet filled in) — the one populated example as
+-- of this writing is Allergen = "Yes" on Part_Key 11003458.
 part_attribute_types AS (
   SELECT
     SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
@@ -143,8 +149,11 @@ part_attribute_types AS (
 part_attributes_pivoted AS (
   SELECT
     SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
-    MAX(CASE WHEN pt.Attribute_Name = 'Bottle Material' THEN pa.Value END) AS part_bottle_material,
-    MAX(CASE WHEN pt.Attribute_Name = 'Regulatory'       THEN pa.Value END) AS part_regulatory
+    MAX(CASE WHEN pt.Attribute_Name = 'Size'               THEN pa.Value END) AS part_size,
+    MAX(CASE WHEN pt.Attribute_Name = 'Allergen'           THEN pa.Value END) AS part_allergen,
+    MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'          THEN pa.Value END) AS part_hazardous,
+    MAX(CASE WHEN pt.Attribute_Name = 'Certifications'     THEN pa.Value END) AS part_certifications,
+    MAX(CASE WHEN pt.Attribute_Name = 'Printing Material'  THEN pa.Value END) AS part_printing_material
   FROM `{gcp_project}.{dataset}.raw_Part_v_Part_Attribute` AS pa
   JOIN part_attribute_types AS pt
     ON pt.Attribute_Key = SAFE_CAST(pa.Attribute_Key AS INT64)
@@ -243,8 +252,11 @@ release_lines AS (
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
     -- collapses together; no aggregation needed beyond the plain passthrough.
-    pap.part_bottle_material                      AS part_bottle_material,
-    pap.part_regulatory                           AS part_regulatory,
+    pap.part_size                                  AS part_size,
+    pap.part_allergen                              AS part_allergen,
+    pap.part_hazardous                             AS part_hazardous,
+    pap.part_certifications                        AS part_certifications,
+    pap.part_printing_material                     AS part_printing_material,
 
     -- Tie-breaker only — never surfaced. Keeps the QUALIFY below deterministic
     -- on the rare case where two releases for the same part share a Due_Date.
@@ -319,8 +331,11 @@ SELECT
   customer_phone,
   customer_part_description,
   order_status,
-  part_bottle_material,
-  part_regulatory,
+  part_size,
+  part_allergen,
+  part_hazardous,
+  part_certifications,
+  part_printing_material,
   COUNT(*) OVER (PARTITION BY order_number, customer_part_no)               AS release_count,
   CONCAT(CAST(order_number AS STRING), '|', IFNULL(customer_part_no, ''))   AS dedupe_key
 

@@ -252,6 +252,20 @@ resource "google_cloud_scheduler_job" "etl_purchasing" {
 
 ### Step 5 — Apply Terraform and deploy the image
 
+> **Run this first, every time — neither command below checks it for you.**
+> `terraform apply` and `gcloud builds submit` both deploy exactly whatever
+> is on local disk right now, regardless of git branch or uncommitted
+> changes. Since work happens on `dev`/`dev-label-design`/`dev-scorecard`
+> and only `main` is meant to reach prod (see `CONTRIBUTING.md`), that gap
+> is real — running either command from a feature branch deploys the
+> feature branch, silently.
+>
+> ```bash
+> ./scripts/deploy_preflight.sh
+> ```
+>
+> Refuses (exit 1) unless you're on `main` with a clean working tree.
+
 ```bash
 # If you changed Python code (main.py, email_utils.py):
 gcloud builds submit \

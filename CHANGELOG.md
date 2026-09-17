@@ -14,6 +14,27 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-17 (later) — dev/dev-label-design/dev-scorecard branches, deploy preflight check
+
+### Added — `scripts/deploy_preflight.sh`
+Neither `terraform apply` nor `gcloud builds submit` (`docs/OPERATIONS.md`
+Step 5) checks git branch or working-tree cleanliness before deploying —
+each one deploys exactly whatever's on local disk. With work now split
+across `dev`/`dev-label-design`/`dev-scorecard` branches (see below), that
+gap became a real risk: running either deploy command from a feature
+branch would silently ship the feature branch to prod. This script exits
+1 with an explanation unless the current branch is `main` and the working
+tree is clean; `docs/OPERATIONS.md` and `CONTRIBUTING.md` both now say to
+run it first, every time.
+
+### Added — `dev`, `dev-label-design`, `dev-scorecard` branches
+Per Emilio: separate branches per project for clearer, filterable commit
+history (Label Design and Vox Scorecard work had been landing
+interleaved on `main`, same root problem as the status-doc tangle fixed
+earlier today). `main` stays the only branch anything deploys from — see
+`CONTRIBUTING.md` for the full breakdown of what lives on each branch and
+why they're long-running rather than short-lived topic branches.
+
 ## 2026-09-17 — Label Design status file moved out of repo root; two VS Code workspace files added
 
 ### Changed — `sep-14-brief-and-pending-items.md` → `label-design/STATUS.md`

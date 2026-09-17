@@ -194,11 +194,15 @@ the two environments thread together; PRODUCTION/TEST shows as a body badge.
 
 ## Known friction
 
-- **GitHub push access**: resolved 2026-08-24 — repo access was fixed on
-  the GitHub side and 22 queued commits pushed cleanly. (As of 2026-08-22,
-  `git push origin main` had been failing with `403 Permission ... denied
-  to emiliodom` even though `gh auth status` showed a valid token with
-  `repo` scope — an org/repo permission issue, not local git/token.)
+- **GitHub push access**: resolved once (2026-08-24, repo access fixed on
+  the GitHub side, 22 queued commits pushed cleanly) — **recurred
+  2026-09-17**, same exact signature: `git push origin main` fails `403
+  Permission ... denied to emiliodom` while `gh auth status` shows a valid
+  token with `repo` scope. Confirms this is an org/repo permission setting
+  on GitHub's side that can silently revert, not something local
+  git/token config ever actually fixes for good. Needs a human with GitHub
+  org admin access to check repo access for `emiliodom` again — don't
+  spend time debugging git/gh config locally when this shows up.
 - **gcloud reauth**: `gcloud storage`/`gcloud run` calls can fail with
   "Reauthentication failed. cannot prompt during non-interactive
   execution" even though `gcloud auth list` shows an active account — an

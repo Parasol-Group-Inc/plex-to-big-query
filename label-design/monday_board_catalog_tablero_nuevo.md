@@ -9,7 +9,7 @@ This board's column *structure* was built to mirror the real prod board
 [`monday_board_catalog.md`](monday_board_catalog.md)) closely enough to test
 the new standalone Label Design push service against something realistic,
 without touching prod or the shared "Plex Import Board" test board while
-permissions there are unresolved (see `sep-14-brief-and-pending-items.md`).
+permissions there are unresolved (see `label-design/STATUS.md`).
 
 **Regenerating this:**
 

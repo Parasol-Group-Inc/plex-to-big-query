@@ -1,0 +1,389 @@
+Please rate the new Quick notes tab by taking a short survey.
+
+Emilio / Jennilyn
+
+Sep 16, 2026
+Emilio Dominguez Jennilyn Tockstein
+
+Plex migration discussions established reporting workflows through NetSuite integration and finalized data standardization for improved quality tracking.
+
+Part attributes and system integration
+A group will meet on Monday to finalize required part attributes for the system.
+Jennilyn recommended updating label design files directly within Plex rather than syncing everything to Monday.
+Plex provides unlimited user accounts to support direct system interaction and version tracking.
+Ashley will help translate standardization practices to the team to improve order placement accuracy.
+
+Financial reporting and scorecard integration
+The web app includes goal types for revenue, sales, and production mapped to specific users.
+Inventory valuation requires unit costs across roughly 2,000 parts, functioning as a daily moving target.
+Decided to pull revenue and inventory values directly from NetSuite for reporting on the scorecard initially.
+Periodic validation will ensure consistency between NetSuite and Plex since their costing methods differ slightly.
+Daily revenue data is generated as a CSV report utilizing automated scripts.
+
+Quality metrics and meeting schedule
+FPY relies on a quality formula comparing produced units to nonconformance records.
+Quality tracking currently utilizes Google Sheets before completing a full system transition.
+Jennilyn is out of office on Thursday afternoon and Friday.
+
+Next steps
+[Jennilyn Tockstein] Rename Column: Rename the Prop 65 column to Regulatory and configure it as a text field.
+[Jennilyn Tockstein, Emilio Dominguez] Clarify First Pass Yield: Clarify with the quality team whether Plex tracks First Pass Yield metrics.
+[Jennilyn Tockstein] Share Revenue Report: Share the report link for daily revenue data with Emilio.
+[Emilio Dominguez] Send Import Board: Send the Plex import board to Jennilyn and Ashley for review.
+[Jennilyn Tockstein] Schedule Meetings: Schedule meetings for next week to discuss progress.
+
+
+
+Want to see more? View the full notes
+Tip: You can always access your full notes from the left sidebar.
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+
+
+Sep 16, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+Summary
+Plex migration discussions established reporting workflows through NetSuite integration and finalized data standardization for improved quality tracking.
+
+Plex Board Migration Updates
+The transition to the new Plex import board included updates to column naming conventions and material tracking requirements. Workspace ownership was officially transferred to resolve system access restrictions.
+
+System Integration and Standardization
+NetSuite integrated via Celigo serves as the source for financial reporting and inventory valuation replacing manual spreadsheet entries. Standardized part URLs via BigQuery replace manual lookup processes.
+
+Quality Metric Strategy
+The strategy involves defining First Pass Yield metrics within the Plex environment to replace manual spreadsheet inputs for non-conformances and claims.
+
+
+Decisions
+Needs Further Discussion
+First pass yield metric implementation Implementation and placement of the first pass yield metric in Plex is deferred pending consultation with the quality team.
+
+Aligned
+Transition of Prop 65 to regulatory text column The Prop 65 column will be renamed to regulatory and maintained as a text field.
+NetSuite usage for revenue reporting Revenue and inventory values for reporting will be pulled from NetSuite rather than Plex for go-live.
+
+
+Next steps
+[Jennilyn Tockstein] Rename Column: Rename the Prop 65 column to Regulatory and configure it as a text field.
+[Jennilyn Tockstein, Emilio Dominguez] Clarify First Pass Yield: Clarify with the quality team whether Plex tracks First Pass Yield metrics.
+[Jennilyn Tockstein] Share Revenue Report: Share the report link for daily revenue data with Emilio.
+[Emilio Dominguez] Send Import Board: Send the Plex import board to Jennilyn and Ashley for review.
+[Jennilyn Tockstein] Schedule Meetings: Schedule meetings for next week to discuss progress.
+
+
+Details
+Plex Import Board and Column Updates: Emilio Dominguez and Jennilyn Tockstein discussed transferring a production board to a new Plex import board (00:00:02). Jennilyn Tockstein stated that the Prop 65 column will be retitled to regulatory and converted to a text field to allow users to add notes (00:02:08). Emilio Dominguez noted that printing material will require a new column (00:03:22). To resolve access restrictions, Emilio Dominguez requested workspace ownership for the Plex import board, which Jennilyn Tockstein granted (00:02:08).
+
+Part Attributes Finalization: Emilio Dominguez and Jennilyn Tockstein discussed various part attributes including allergens, printing material, bottle material, label size, and bottle size. Jennilyn Tockstein stated that a group will meet on Monday to finalize the required attributes and will inform Emilio Dominguez afterward about which attributes will be pushed into Monday (00:05:09).
+
+Management of Label Design Files and System Access: Emilio Dominguez and Jennilyn Tockstein debated whether to push label files and attributes into Monday or require users to access Plex directly (00:06:54). Jennilyn Tockstein argued that users should log into Plex to retrieve and update label design files and view part attributes, emphasizing that Plex offers unlimited user accounts and allows tracking of old versions and notes (00:08:24). Jennilyn Tockstein expressed an intent to push back against the team to encourage more direct interaction with Plex (00:09:36).
+
+Spreadsheet Standardization and Part URLs: Emilio Dominguez highlighted issues with manual spreadsheet entries and duplicate reason codes, noting approximately 47 variations caused by upper and lower case differences. To improve standardization, Emilio Dominguez proposed using BigQuery to generate pre-configured part URLs so users can access parts without extensive manual searching (00:10:53).
+Web Application Scorecard Goals and Part Costs: Emilio Dominguez and Jennilyn Tockstein discussed web application features, including turnaround standards, safety incidents written via app script, and goal types such as revenue, sales, and production (00:12:36). Emilio Dominguez noted that goal creation will have restricted access and will connect sales representatives using Plex control user data. Regarding part costs, Emilio Dominguez reported that Plex's inventory valuation summary report returned zero rows because no items have been costed on the tenant yet (00:14:55).
+
+Inventory Valuation and Part Counts: Jennilyn Tockstein explained that inventory valuation requires multiplying unit costs by inventory balances across several thousand parts. Jennilyn Tockstein specified that there are approximately 5,500 customer goods, a few hundred products, and under 2,000 purchased parts that hold a dollar value in inventory (00:17:18). Because inventory is a constantly moving target with frequent cost changes, accounting requires daily figures (00:20:21).
+
+NetSuite Integration for Financial Reporting: Jennilyn Tockstein and Emilio Dominguez discussed financial reporting options, noting that NetSuite will be integrated with Plex using the Celigo API connector. Jennilyn Tockstein suggested pulling revenue and inventory values directly from NetSuite for the scorecard report temporarily or long-term, as accounting operations will be handled in NetSuite (00:22:50). Jennilyn Tockstein added that NetSuite's costing method will periodically write over to Plex values, allowing both reports to be compared weekly to validate consistency (00:24:27).
+NetSuite Revenue Report Data Source: Emilio Dominguez inquired whether NetSuite revenue reports were included in the shared team spreadsheet (00:25:47). Jennilyn Tockstein clarified that the revenue report is received daily as a CSV via email and posted on Google Sheets using an app script, and Jennilyn Tockstein provided the report link to Emilio Dominguez (00:28:01).
+First Pass Yield Formula and Quality Tracking: Jennilyn Tockstein and Emilio Dominguez discussed the First Pass Yield (FPY) metric, which is a quality formula based on units produced versus units with non-conformances recorded in the Plex problem control area. Jennilyn Tockstein noted that they currently use a Google sheet for non-conformances and claims but need to confirm with the quality team how FPY functions within Plex (00:30:06).
+Project Status and Next Steps: Emilio Dominguez and Jennilyn Tockstein reviewed project timelines, noting that Emilio Dominguez will share the Plex-injected Monday board with Jennilyn Tockstein and Ashley. Jennilyn Tockstein stated that they will meet with the quality representative the following day and noted that they will be out of the office on Thursday afternoon and Friday (00:32:30).
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+
+
+Sep 16, 2026
+Emilio / Jennilyn - Transcript
+00:00:02
+
+Emilio Dominguez: Let me just accept this. So we do have bottle m bottle material printed material new column. Then we have a couple of those that you were talking about from the part attributes as label size. But is that going to be a new one too? There is one for regulatory regul regulatory status. So that's that.
+Jennilyn Tockstein: Um,
+Emilio Dominguez: We can we can add some some columns there, but I don't know if if Ashley would like maybe uh well, I don't know if that's an automated board because she may want to keep that. But we could just use another one like a new one like the one that you you created to dump like kind of dump everything there with the columns and things
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: like that. But it's strange
+Jennilyn Tockstein: I think we can make some updates.
+Emilio Dominguez: like Yeah.
+Jennilyn Tockstein: So,
+Emilio Dominguez: My idea was to just get the this like a production board and then copy that over to this new Plex import board and get all the additional things there so they can just have a look.
+
+
+00:02:08
+
+Emilio Dominguez: Okay, so this is good or this broke down and when everything is kind of uh looking good. Okay, so let's either switch either transfer everything from that one to the one that they have or use that all the way. Right. But that could be
+Jennilyn Tockstein: Yeah, it's this I would put the regulator in as a text column and currently it would map
+Emilio Dominguez: Mhm. Okay.
+Jennilyn Tockstein: to um I think it just says Prop 65.
+Emilio Dominguez: Yeah. R 65.
+Jennilyn Tockstein: Um I think we would retitle that column to just say regulatory. So any regulatory stuff can be in there, but I would just push it in as a text. And that way they can add notes or do whatever they want with it. But
+Emilio Dominguez: Right on. Yeah. Can you make me an owner of the Plex import port? Uh, well, Jennilyn in its account. Um, so I can just create a lot of things there.
+Jennilyn Tockstein: I I did
+Emilio Dominguez: Yeah, it's strange.
+
+
+00:03:22
+
+Jennilyn Tockstein: cuz
+Emilio Dominguez: I was hitting hitting some blocks, but I think it's okay. Nice. Right on.
+Jennilyn Tockstein: Um,
+Emilio Dominguez: Thank you. Thank you. Maybe I was using my account.
+Jennilyn Tockstein: it might be from like this workspace. So maybe let's get you onto the workspace because if you're not in the workspace, but there you go.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: If you're not a owner editor in the workspace, just on the board, maybe that's why you'd have some blocks. But now you're on the workspace and the board. So,
+Emilio Dominguez: Thank you. Okay. So the idea will be just to have re regulatory um as the new name for prop 65, right? And then have
+Jennilyn Tockstein: What was that about Prop 65?
+Emilio Dominguez: Yeah. Yeah. Pro 65 will go away and then just name the column regulatory,
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: right?
+Jennilyn Tockstein: we'll rename that column regulatory and it'll just be a text field.
+Emilio Dominguez: So printing material has also a new column because there is only a bottle material column.
+
+
+00:05:09
+
+Emilio Dominguez: Um, allergens allergens. I think that's pretty much the the part attributes or Do you have more attributes in mind for that? Um
+Jennilyn Tockstein: So on Monday, there's a group getting together to kind of finalize What?
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: attributes we'll have.
+Emilio Dominguez: H right now.
+Jennilyn Tockstein: I don't know how many of these we'll need to push into Monday or not. So, I'll get back to you then and let you know for sure. I would guess some of them like printing material if we do push it into Monday, it will be new field.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: bottle material won't I don't think we need label size and bottle size.
+Emilio Dominguez: But that comes from the part or is that Yeah.
+Jennilyn Tockstein: We're going to add these to the part. So, they're not on there yet,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: but
+Emilio Dominguez: Okay. And you were talking about the files, right? Um I actually didn't quite understand the what files, but I was checking the the Monday board and they do have some files there.
+
+
+00:06:54
+
+Emilio Dominguez: And I I didn't open one of them, but they seem to be like the label designs or things like that. Um, do they like write those or they populate those when the order comes in into Monday or those files are kind of like automated? I I wouldn't think so, right? They
+Jennilyn Tockstein: No, I mean if you can like do some wizarding magic and get haven't been there. Let me
+Emilio Dominguez: But do they change? But yeah, the thing will be if they have they do have a catalog, it wouldn't be a problem even to just inject that to BigQuery and BigQuery could process that because that's the customer and that's but yeah, I don't know if they have everything organized in regards of their their files.
+Jennilyn Tockstein: So the files we are adding to the system, let me just show you where they'll be. So, in any part, any label part, the problem you'll hit is you're going to get the finished good part number off the sales order, and this is the label part number, and it'll be here.
+
+
+00:08:24
+
+Jennilyn Tockstein: So, see how here there's three attachments.
+Emilio Dominguez: Okay,
+Jennilyn Tockstein: It's these three.
+Emilio Dominguez: nice.
+Jennilyn Tockstein: And I I personally am of the opinion that most of these things that they kind of want to push into Monday, we shouldn't push into Monday because they have to come in here and update
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: these files. That's the whole point of point of this label design thing is that they are updating these files.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And so if they have to update these files, They should come in here and get the files and they should also go into the um attributes area wherever that is.
+Emilio Dominguez: It's a check.
+Jennilyn Tockstein: Um and read and read everything about the part, right? rather than us trying to like take all of these attributes on the seven and push them into the nine and then push that into Monday just because they kind of want to be lazy and not have to come in here when they have to come in here anyways to update the
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: files.
+
+
+00:09:36
+
+Jennilyn Tockstein: Like they really should just come in here. Like it's just kind of silly.
+Emilio Dominguez: But yeah, do all of them have user accounts for that for Plex and
+Jennilyn Tockstein: Yeah. Well,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: and and has unlimited user accounts and so
+Emilio Dominguez: Hm.
+Jennilyn Tockstein: it's yeah,
+Emilio Dominguez: All right.
+Jennilyn Tockstein: I mean some of it makes sense like to push into Monday, but I don't know. So, I wouldn't stress about like the specific attributes yet because they haven't decided what attributes we're going to add to the label. And I'm going to push back on the team a fair bit and tell them that they need to um maybe be willing to interact with the system a little bit more, especially since they have to anyways. And it's nice because they can come in here and they'll see um any old versions of the label and they can
+Emilio Dominguez: Um
+Jennilyn Tockstein: see any notes that are added. I mean, right now there's not any, but if there are notes or attributes to the file specifically,
+
+
+00:10:53
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: not just on the part, there's a whole bunch of info here that again
+Emilio Dominguez: Yeah. Now, what I'm like watching from the spreadsheet is that they do have a lot of manual entry into the into the order on the spreadsheet and like they change they don't have pretty much like a standardized way to for some of the columns, right? So even for the recent codes they are like 47 of them
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: and they are kind of duplicated on lower case or upper case.
+Jennilyn Tockstein: And
+Emilio Dominguez: But yeah I think uh the more standardization using Plex is better. But yeah, Ashley said she could also like help translate that into the team so they can use this a little bit more related on that. Maybe we just getting some URLs from the part something like part URL so they don't have to go and search the part maybe right so that can be just a URL a prepared URL by BigQuery um but yeah that makes sense so that clears out a lot of uh these things that are pending so like new orders will be having these sort of criteria and onto the the big project.
+
+
+00:12:36
+
+Emilio Dominguez: So just have a look at this. So as for the the web app, so there are some some sections prepared for that like turnaround standards. Regarding um regarding this, it's just a matter also which date is going to be the one to be effective from. And this is on the on the artifact. So that's like the first um no the third the third the third one. But this is the way right you know like the normal the normal app script that will be injecting data uh the safety incidents um to also write to that table regarding part code costs. So
+Jennilyn Tockstein: What is this one?
+Emilio Dominguez: this is um well just as a fall a fallback but the cost will still be handled by Plex right the the part dollar amount so so that's just like an interface but um just uh as It's a fallback. But um the the important thing about this like the main thing is the goals the goals to be written by by the team. You also said, okay, so maybe not everyone could have access to to write goals,
+
+
+00:14:55
+
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: Right. So,
+Jennilyn Tockstein: Well, we'll only share this with a few people.
+Emilio Dominguez: Mhm. Right on. So, it has these goal types like the revenue, sales, and production. And yeah, I'm working on connecting like the sales rep, right, for getting the names here from the Plexus control user and kind of like get this. This has also the month like what month should be placed there. So this is the the way right for them to be putting this data into the into the system into bequery and so the the scorecard can get that data from from that part. So as for as for the pending depending items here. So as for co costs that's going to be related to to the part So it has uh Plex has its own part costing in part snapshot and inventory valuation summary report but it returns zero rows because nothing has been costed on this tenant. Maybe if you have some time you can show me I think you have showed show me a report before about the cost for the for the parts but do you happen to remember that like where to where Find
+
+
+00:17:18
+
+Jennilyn Tockstein: Where to find it?
+Emilio Dominguez: it.
+Jennilyn Tockstein: Hello
+Emilio Dominguez: So it says uh customer part part prices excuse for finish it finished goods. What is missing is a cost on everything else.
+Jennilyn Tockstein: Mhm. Hat.
+Emilio Dominguez: But yeah, maybe you can have a look at that afterwards. Um, as for the number two, where does the dollar value of all inventory come from? Inventory balance. Dollar value of everything inventory.
+Jennilyn Tockstein: Yeah, it's so that one's got to the inventory valuation. So, we need to have our unit cost here.
+Emilio Dominguez: Okay, that's for every part.
+Jennilyn Tockstein: And it' be this times that. Yeah.
+Emilio Dominguez: So, how many how many parts are just like the unique parts? Are they in the thousands too or but that's
+Jennilyn Tockstein: Many thousands. Yeah.
+Emilio Dominguez: assigned to the to the customers or that's also like the original parts like that box
+Jennilyn Tockstein: Yeah. So,
+Emilio Dominguez: That's
+Jennilyn Tockstein: we've probably got like 5,500 um customer goods. Um the products are a few hundred.
+
+
+00:20:21
+
+Jennilyn Tockstein: The purchased parts, let me see how big the purchased parts is real quick because you're mostly thinking about purchased parts. That's cuz it'll probably be this plus I don't know 500 or so. Yeah, it'll I would say maybe under 2,000 parts will have a dollar value in inventory on
+Emilio Dominguez: Okay. And those those don't change that much or they do get frequent frequent changes on dollar amount.
+Jennilyn Tockstein: the the value of them will probably change all the time.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: Every time we receive something depending on how much it cost and the shipping cost and how much we have on hand. So inventories a moving target and since accounting considers that like a a risk debit or I don't really understand the accounting terms but they want to know what that number is every day.
+Emilio Dominguez: Mhm. Right on. Okay.
+Jennilyn Tockstein: Yeah, I I was going to talk to accounting about uploading in inventory valuation. Um, we have we have a couple options, right? So I could I could take our value from Netswuite and upload that into Plex so that there's a number.
+
+
+00:22:50
+
+Jennilyn Tockstein: I could also leave it and we could use our Netswuite integration after go live to push of value over.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: And I don't know which would be better. So,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: I kind of want to ask them
+Emilio Dominguez: And do you have a a time to sunset Netswuite or a schedule?
+Jennilyn Tockstein: No. So, it's going to be integrated using um Celigo the API connector to to connect the two.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: I think we're going to implement Netswuite and or Plex at other companies in the next year or two.
+Emilio Dominguez: So they will be like a combo a combination of but most most of
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: the things are going to be placed into plex right from operations.
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: S.
+Jennilyn Tockstein: And then I talked to Justin about revenue value and inventory value on the scorecard this report.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And if we're not sure where to pull it in Plex, we can just pull it from Netswuite right now for reporting
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: um and kind of just focus on other things since we can get the number out of Netswuite.
+
+
+00:24:27
+
+Jennilyn Tockstein: And that way we can move it to Plex later if we want. just those two big finance numbers. We already like revenue. Um he likes his revenue report out of Netswuite.
+Emilio Dominguez: Ha.
+Jennilyn Tockstein: We're going to do all of our accounting out of Netswuite. It makes sense to just keep that. Um inventory value could go either way. I think maybe at go live since we're familiar with Netswuite, maybe we leave it there for a minute until we feel good about Plexus.
+Emilio Dominguez: Yeah, the the Netswuite report can be also um comparison, right? in order to maybe like keep the keep both but maybe not expose the the Plex
+Jennilyn Tockstein: Thank you.
+Emilio Dominguez: one to executives but just internally and say okay how much it drifts from the the netswuite one and where things may be lagging some either connection or maybe the data is not even there
+Jennilyn Tockstein: Yeah, and it would actually be really good to have them both if we can. So,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: we're going to do Netswuite's costing method, which is slightly different than Plex's costing method.
+
+
+00:25:47
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: and at intervals um potentially every week. I think we talked about the netswuite costing method is going to write over into Plex the value of things. So it's going to happen at intervals that the cost value will get written over from Netswuite into Plex. Um, and so having the two reports can can help make sure that those two numbers are the same every week or whatever that happens to like validate like,
+Emilio Dominguez: Correct.
+Jennilyn Tockstein: yay, they match now.
+Emilio Dominguez: Correct. Yeah. Um the reports may be in the reports list that you share, right? the spreadsheet for for Netswuite on revenue ones or do you have um a hint on where So I can start getting some data from from that regard.
+Jennilyn Tockstein: What was that?
+Emilio Dominguez: uh yeah uh for I'm cutting for Netswuite on the revenue reports are they included on the spreadsheet on reports list uh that you shared from the team that was matching like all the reports that they have they currently work on and then maybe it Is there like for the reports for for that revenue are uh yeah
+
+
+00:28:01
+
+Jennilyn Tockstein: This one I'm not sure that the revenue one is on here. It is something that we get daily.
+Emilio Dominguez: from like an email like
+Jennilyn Tockstein: Yeah. And it's posted on those Google Sheets.
+Emilio Dominguez: Okay. The one that we have worked on code appcript code. No.
+Jennilyn Tockstein: Yeah. So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: there's an app code that pulls it out every day.
+Emilio Dominguez: Yeah. Maybe you share that. But
+Jennilyn Tockstein: Um, I can send you. Here's the report. So that's the link to it.
+Emilio Dominguez: Thank you.
+Jennilyn Tockstein: You're probably getting it as well. So this is a CSV every day.
+Emilio Dominguez: Yeah. Okay.
+Jennilyn Tockstein: Then I think when I look at it, I'm taking a couple things out. Let me double check.
+Emilio Dominguez: like like the accounts filtering
+Jennilyn Tockstein: It might not be. It might be just taking total. I really don't remember. I know we talked about excluding stuff, but I don't remember what they had me
+
+
+00:30:06
+
+Emilio Dominguez: No worries.
+Jennilyn Tockstein: do. You know how it goes. So many edits. I remember. Um, nope. It's just the total.
+Emilio Dominguez: Right on. Okay.
+Jennilyn Tockstein: So
+Emilio Dominguez: Thank you. That's that's great. Okay. So I think that's uh pretty much from the artifact questions on what can we discuss about right now like manual entry turn around uh since data is not totally there
+Jennilyn Tockstein: TP the first pass yield thing.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: So that one's a formula equality formula based on the number of units produced and the number of units that have a a nonconformance or basically a um problem recorded. So it would be in the problem control area. I don't know if Plex has basically the FPY type stuff in it. That is a great question for me to ask our quality team.
+Emilio Dominguez: and and we are meeting uh the quality representative tomorrow, right? So,
+Jennilyn Tockstein: Yeah, we can ask him about some of that and see if he can if you
+
+
+00:32:30
+
+Emilio Dominguez: okay.
+Jennilyn Tockstein: know
+Emilio Dominguez: Okay. Because are they using right now like Netswuite for nonconformance and claims or problems or
+Jennilyn Tockstein: Um, right now they use just a Google sheet and they're going to mute use
+Emilio Dominguez: All right.
+Jennilyn Tockstein: the system. So,
+Emilio Dominguez: Okay,
+Jennilyn Tockstein: I think we're all still trying to figure out where it is going to be in Plex.
+Emilio Dominguez: sure thing. All right, makes sense. So that also is related to deviation that we can speak about and this is for the past uh work of label design but I'm separating those two. Um so I think we're settled on the two projects. I believe the label design is way more straightforward, right? So, in the meantime, just let me know if you need anything else uh worked on or that maybe since the scorecard may have become very complicated right now like to get the data right and maybe some of the things are not there.
+Jennilyn Tockstein: Honey.
+Emilio Dominguez: Maybe you just want okay I want to do a report based on these three reports that I do have uh define on Plex and maybe those reports can enrich some scorecard for the moment you can also like if that's another approach that you would like to take just let me know right um since we can get like anything from from Plex X right now, but the the missing pieces on the scorecard are the the
+
+
+00:34:37
+
+Emilio Dominguez: ones that are a little bit hard to navigate, right? But yeah,
+Jennilyn Tockstein: Hey,
+Emilio Dominguez: so I will keep you updated. Uh so tomorrow we meet with quality and maybe on Friday, but I I really don't know how you are on your schedule for Friday morning. to kind of like um do something about the label design and or maybe I can just get together with Ashley if she has some time,
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: right?
+Jennilyn Tockstein: I'm I'm out of office Thursday afternoon and Friday. So,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: if we don't have stuff scheduled for next week, it looks like we don't. I'll schedule uh a couple times for next week and and I'll see you
+Emilio Dominguez: Mhm. Right.
+Jennilyn Tockstein: tomorrow morning, but then I'll be I'll be out. So
+Emilio Dominguez: Okay. What I can do maybe with the label design is just uh send them the the board because that's where I'm heading to like injecting data from Plex to the board. Just send it to you and to Ashley. Okay. So this is the board that is holding this amount of data and yeah she may want more things as just we were discussing But they could start use using the system a little bit more as as we were talking, right? And maybe just get more accuracy on how the orders are being placed and uh how they are scanned to not be duplicated and etc. Right?
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: Yeah. Okay.
+Jennilyn Tockstein: Yeah. And Ashley, she's going to be the best resource about the Monday boards
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: because she's actually in them every day.
+Emilio Dominguez: Yeah. Okay. Okay. So, anything that you may want to discuss, just let me know and let's meet again tomorrow.
+Jennilyn Tockstein: Okay,
+Emilio Dominguez: Have a good one.
+Jennilyn Tockstein: sounds scary.
+Emilio Dominguez: Thank you.
+Jennilyn Tockstein: Thanks.
+Emilio Dominguez: Goodbye. Take care.
+Jennilyn Tockstein: Bye.
+
+
+Transcription ended after 00:36:53
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

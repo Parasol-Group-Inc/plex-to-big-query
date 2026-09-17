@@ -222,6 +222,64 @@ minimum run a mechanical check (paren balance, etc.) before trusting it.
      board's (deliberately only 6).
 5. Build the BigQuery audit table.
 
+### 2026-09-16 evening meeting (Emilio/Jennilyn) — decisions and a real blocker root-caused
+
+Full transcript/summary in `meetings-reference/sep-16/`. Directly relevant to
+this project:
+
+- **Workspace access granted, but doesn't fix the API blocker.** Jennilyn
+  added Emilio to the Voxnutrition workspace and made him a board owner on
+  "Plex Import Board," believing that was the cause of earlier access
+  issues. Retried `scripts/replicate_board_columns.py` against the real
+  board (`18430735110`) on 2026-09-17 — **still 403**, even for Jennette
+  Boone's token despite her being `is_admin: true` and a board owner.
+  **Root-caused precisely this time**: the API's error payload names the
+  actual cause — `role: ms-authorization.basic_roles.account_product.non_member`.
+  This is a **Monday seat/license type** (Viewer-tier seat, not a full
+  Member seat), a completely different axis from board permissions or
+  workspace membership — no amount of board-owner or workspace-member
+  changes fixes it. Needs whoever manages Monday billing/seats (not
+  necessarily Jennilyn) to upgrade the seat. **Decision: parked, not
+  escalated yet** — continuing to build/test against "Tablero nuevo"
+  (Emilio's personal dev sandbox, `18430931138`, already fully mirrored)
+  instead of blocking further work on this.
+- **Prop 65 → renamed "Regulatory," stays a plain TEXT column** (Jennilyn's
+  action item, not yet confirmed done). Note: this is a *different* column
+  from the existing status-type "Regulatory Status" dropdown already in
+  `monday_board_catalog.md` — don't conflate the two.
+- **Printing Material**: probably a new column if pushed to Monday at all —
+  not finalized, pending an internal team meeting to decide which
+  attributes actually get pushed.
+- **Bottle size / Label size**: Jennilyn's own read is these probably
+  **don't** need a Monday column — a signal against spending more effort
+  mapping `part_size` there.
+- **Allergens**: still open, same internal-meeting dependency. The
+  attributes aren't even fully added to the Part in Plex yet on her side.
+- **Strategic pushback, worth weighing before building more attribute
+  plumbing**: Jennilyn wants her team to interact with Plex directly
+  (unlimited seats, full version history) for label files/attributes
+  rather than have everything synced to Monday "because they want to be
+  lazy." She's pushing this internally. Could shrink how much
+  attribute-to-Monday mapping is actually worth building.
+- **New feature idea, well-scoped**: a BigQuery-generated **Part URL**
+  column (direct link into the Plex part record) to cut down on manual
+  searching — raised in the context of the same Reason Code
+  near-duplicate mess already documented (Emilio independently noted ~47
+  variants from memory; the real count is 33, see
+  `monday_board_catalog.md`). Well received by Jennilyn/Ashley; not
+  started.
+- **Confirmed next concrete step from the meeting**: once real Plex data is
+  flowing into a Plex-mirror board, send it to Jennilyn + Ashley for
+  review before deciding on cutover — this is the actual reason the
+  board-copy work exists.
+
+**Separate workstream, same meeting** — this call also covered Vox
+Scorecard topics (NetSuite/Celigo for revenue+inventory reporting, a
+manual-data-app fix, First Pass Yield). That status does **not** live here;
+see the Migration Board artifact and `vox_scorecard_sep16_meeting.md` /
+`vox_scorecard_manual_data_app.md` in memory instead, per
+[[project_two_workstreams]] — not duplicated in this file.
+
 ---
 
 ## Original brief — 2026-09-14 (superseded, kept for history)

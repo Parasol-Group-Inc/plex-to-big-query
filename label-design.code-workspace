@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"name": "plex-to-big-query (Label Design)",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"score-card-reference": true,
+			"deploy/manual_data_app": true,
+			"deploy/goals_sheet_to_bigquery.gs": true
+		},
+		"search.exclude": {
+			"score-card-reference": true,
+			"deploy/manual_data_app": true,
+			"deploy/goals_sheet_to_bigquery.gs": true
+		}
+	}
+}

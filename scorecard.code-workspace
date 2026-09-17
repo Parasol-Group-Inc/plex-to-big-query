@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"name": "plex-to-big-query (Vox Scorecard)",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"label-design": true,
+			"label_design_service": true,
+			"deploy/label_design_sync": true
+		},
+		"search.exclude": {
+			"label-design": true,
+			"label_design_service": true,
+			"deploy/label_design_sync": true
+		}
+	}
+}

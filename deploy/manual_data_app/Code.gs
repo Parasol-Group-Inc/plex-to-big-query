@@ -3,11 +3,17 @@
  * ============================================
  *
  * One form for every number that has to be typed by a human rather than
- * extracted from Plex: goals, safety incidents, turnaround standards, part
- * costs. Anything else that turns up later is a registry entry, not a new app.
+ * extracted from Plex: goals, safety incidents, turnaround standards.
+ * Anything else that turns up later is a registry entry, not a new app.
+ *
+ * A fourth dataset, part costs, was removed 2026-09-16 — it was never a
+ * real requirement, just a fallback in case Plex's own costing stayed
+ * empty, and the real costing path (Plex, fed by a NetSuite/Celigo sync)
+ * doesn't want a human typing numbers that would drift from both systems.
+ * See CHANGELOG.md 2026-09-16.
  *
  * This replaces the earlier goals-only app (`deploy/goals_web_app/`), which
- * covered one of the four and was never deployed.
+ * covered one of these and was never deployed.
  *
  * ── HOW IT FLOWS ───────────────────────────────────────────────────────────
  *
@@ -143,23 +149,15 @@ var DATASETS = {
         required: true, min: 0 },
       { name: 'note', label: 'Note', type: 'longtext', required: false, max: 500 }
     ]
-  },
-
-  part_costs: {
-    label: 'Part costs',
-    blurb: 'A cost per part, keyed on the FULL Plex part number. A FALLBACK only — Plex costs parts itself via Part_v_Snapshot, which is simply unpopulated on this tenant. Use this if that stays empty.',
-    tab: 'part_costs',
-    table: 'part_cost_manual',
-    key: ['part_no', 'effective_month'],
-    fields: [
-      { name: 'part_no', label: 'Part number', type: 'select', required: true,
-        optionsFrom: 'partNumbers',
-        help: 'Read from Plex, so it cannot be a near-miss like 12335 against 12335-01VOXNU-1.' },
-      { name: 'effective_month', label: 'Effective from', type: 'month', required: true },
-      { name: 'cost_ea', label: 'Cost each', type: 'money', required: true, min: 0 },
-      { name: 'note', label: 'Note', type: 'longtext', required: false, max: 500 }
-    ]
   }
+
+  // part_costs (removed 2026-09-16): was a manual per-part cost fallback,
+  // never a real requirement — Emilio's own framing in the 2026-09-16
+  // meeting was "just a fallback, the cost will still be handled by Plex."
+  // The real costing path is Plex's own Part_v_Snapshot / inventory
+  // valuation, expected to populate via a NetSuite-Celigo sync (mechanism
+  // still undecided, pending Accounting) — not a human retyping numbers
+  // that would drift from both systems. See CHANGELOG.md 2026-09-16.
 
 };
 
@@ -315,10 +313,6 @@ function buildOptionSets_() {
     'SELECT DISTINCT workcenter_group FROM ' +
     fqn_('production_monthly_by_workcenter_group_report') +
     ' WHERE workcenter_group IS NOT NULL ORDER BY workcenter_group');
-
-  load('partNumbers',
-    'SELECT DISTINCT Part_Number FROM ' + fqn_('part_v_part') +
-    ' WHERE Part_Number IS NOT NULL ORDER BY Part_Number LIMIT 10000');
 
   // A company-wide target lives in the same table as the per-rep and
   // per-work-centre ones, so it is offered at the top of both lists rather
@@ -712,7 +706,6 @@ function testReadsOnly() {
   });
   Logger.log('sales reps: %s', (d.options.salesReps || []).length);
   Logger.log('work centre groups: %s', (d.options.workcenterGroups || []).length);
-  Logger.log('part numbers: %s', (d.options.partNumbers || []).length);
   Object.keys(d.optionErrors || {}).forEach(function (k) {
     Logger.log('OPTION ERROR %s: %s', k, d.optionErrors[k]);
   });

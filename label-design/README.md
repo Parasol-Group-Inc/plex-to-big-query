@@ -11,7 +11,7 @@ together.
 > flow entirely, replaced by a standalone service comparing BigQuery directly
 > against the Monday board. **For the actual current status — what's built,
 > what's verified, what's still blocked — see
-> [`../sep-14-brief-and-pending-items.md`](../sep-14-brief-and-pending-items.md)
+> [`STATUS.md`](STATUS.md)
 > first, before anything else on this page.** Most of this README still
 > describes the Sheet-based flow and hasn't been rewritten for the new
 > architecture yet.
@@ -24,7 +24,7 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 
 | If you want... | Go to |
 |---|---|
-| **Current status, what's pending, what's blocked** | [`sep-14-brief-and-pending-items.md`](../sep-14-brief-and-pending-items.md) |
+| **Current status, what's pending, what's blocked** | [`STATUS.md`](STATUS.md) |
 | The plain-English "how do I use it" guide (Sheet-based flow, being retired) | [`deploy/label_design_sync/TEAM_GUIDE.md`](../deploy/label_design_sync/TEAM_GUIDE.md) |
 | What the Monday board's columns mean | [`monday_board_guide.md`](monday_board_guide.md) |
 | The board's real column ids + full option lists | [`monday_board_catalog.md`](monday_board_catalog.md) |

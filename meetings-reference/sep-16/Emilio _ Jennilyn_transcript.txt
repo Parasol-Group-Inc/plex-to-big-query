@@ -1,0 +1,242 @@
+Emilio Dominguez  00:00
+The material new column. Then we have a couple of those that you were talking about from the part attributes as label size, but is that going to be a new one too? There is one for regulatory status. So that's that. Because we can we can add some some columns there, but I don't know if if Ashley would like maybe. Well, I don't know if that's an automated board because she may want to keep that. But we could just use another one, like a new one, like the one that you you created to dump, like kind of dump everything there with the columns and things like that. But
+
+Jennilyn Tockstein  01:31
+I think we like some updates. So yeah, my
+
+Emilio Dominguez  01:42
+idea was to just get the this like a production board and then copy that over to this new Plex import board and get all the additional things there, so they can just have a look. Okay, so this is good or this broke down, and when everything is kind of looking good. Okay, so let's either switch, either transfer everything from that one to the one that they have, or use that all the way, right? But
+
+Jennilyn Tockstein  02:14
+yeah, it's this. I would put the regulatory in as a Text column, and currently it would map to. I think it just says Prop 65. Yeah, I think we would retitle that column to just say regulatory. So any regulatory stuff can be in there, but I would just push it in as a text, and that way they can add notes or do whatever they want with it. But
+
+Emilio Dominguez  02:49
+right on, yeah. Can you make me an owner of the Plex import board? Well, Jeanette Jeanette's account, so I can just create a lot of things there.
+
+Jennilyn Tockstein  03:03
+I did.
+
+Emilio Dominguez  03:06
+Yeah, it's strange because I was hitting hitting some blocks, but I think it's okay. Nice. Right on.
+
+Speaker 1  03:17
+Um. Thank you.
+
+Emilio Dominguez  03:19
+Thank you. Maybe I was using my account.
+
+Jennilyn Tockstein  03:21
+This workspace, so maybe let's get you onto the workspace. If you're not in the workspace, but there you go. If you're not a owner editor in the workspace, just on the board. Maybe that's why you'd have some blocks. But now you're in the workspace and the board. So
+
+Emilio Dominguez  03:50
+big thank you. Okay, so the idea will be just to have regulatory as the new name for Prop 65, right, and then have.
+
+Jennilyn Tockstein  04:31
+What was that about Prop 65?
+
+Emilio Dominguez  04:33
+Yeah, yeah, Prop 65 will go away, and then just name the column regulatory. Right,
+
+Jennilyn Tockstein  04:40
+we'll rename that column regulatory, and it'll just be a text field.
+
+Emilio Dominguez  04:47
+So printing material has also a new column because there is only a bottle material column. Allergens. Allergens. I think that's pretty much the the part attributes, or do you have more attributes in mind for that?
+
+Jennilyn Tockstein  05:37
+So on Monday, there's a group getting together to kind of finalize what attributes we'll have. I don't know how many of these we'll need to push into Monday or not. So I'll get back to you then and let you know for sure. I would guess some of them, like printing material. If we do push it into Monday, it will be new field.
+
+Emilio Dominguez  06:08
+Okay.
+
+Jennilyn Tockstein  06:08
+Bottle material won't. I don't think we need label size and bottle size.
+
+Emilio Dominguez  06:18
+But that comes from the part, or is that
+
+Jennilyn Tockstein  06:21
+we're going to add these to the part, so they're not all there yet. But
+
+Emilio Dominguez  06:27
+okay, and you were talking about the files, right? Ashley didn't quite understand the what files, but I was checking the Monday board, and they do have some files there, and I didn't open one of them, but they seem to be like the label designs or things like that. Do they like write those, or they populate those when the order comes in into Monday, or those files are kind of like automated? I wouldn't think so, right? They
+
+Jennilyn Tockstein  07:05
+no, I mean, if you can like do some wizarding magic and get them in there, let me.
+
+Emilio Dominguez  07:15
+But do they change? But yeah, the thing will be if they have they do have a catalog, it wouldn't be a problem even to just inject that to BigQuery, and BigQuery could process that because that's the customer and that's. But yeah, I don't know if they have everything organized in regards of their their files.
+
+Jennilyn Tockstein  07:44
+So the files we are adding to the system. Let me just show you where they'll be. So in any part, any label part, the problem you'll hit is you're gonna get the finished good part number off the sales order, and this is the label part number, and it'll be here. So see how here there's three attachments.
+
+Emilio Dominguez  08:13
+Oh, okay.
+
+Jennilyn Tockstein  08:15
+It's these three.
+
+Emilio Dominguez  08:17
+Nice.
+
+Jennilyn Tockstein  08:19
+And I I personally am of the opinion that most of these things that they kind of want to push into Monday, we shouldn't push into Monday because they have to come in here and update these files. That's the whole point of the point of this label design thing is that they are updating these files, and so if they have to update these files, they should come in here and get the files, and they should also go into the attributes area, wherever that is, and read everything about the part, right? Rather than us trying to like take all of these attributes on the seven and push them into the nine, and then push that into Monday, just because they kind of want to be lazy and not have to come in here when they have to come in here anyways to update the files, like they really should just come in here, like it's just kind of silly.
+
+Emilio Dominguez  09:27
+Yeah. Do all of them have user accounts for that for Plex? Well, okay.
+
+Jennilyn Tockstein  09:33
+And and Plex has unlimited user accounts, and so it's yeah.
+
+Emilio Dominguez  09:41
+All right.
+
+Jennilyn Tockstein  09:42
+I mean, some of it makes sense, like to push into Monday, but I don't know. So I wouldn't stress about like the specific attributes yet because they haven't cited what attributes we're going to add to the label, and I'm going to push back on the team a fair bit and tell them that they need to maybe be willing to interact with the system a little bit more, especially since they have to anyways. And it's nice because they can come in here, and they'll see any old versions of the label, and they can see any notes that are added. I mean, right now there's not any, but if there are notes, we're adding to the file specifically, not just on the part. There's a whole bunch of info here that, again, yeah.
+
+Emilio Dominguez  10:48
+What I'm like watching from the spreadsheet is that they do have a lot of manual entry into the into the order on the spreadsheet, and like they change. They don't have pretty much like a standardized way to for some of the columns, right? So even for the recent codes, they are like 47 of them, and they are kind of duplicated on lowercase or uppercase, but yeah, I think the more standardization using Plex is better. But yeah, Ashley said she could also like help translate that into the team so they can use this a little bit more related on that. Maybe just getting some URLs from the part, something like part URL, so they don't have to go and search the part. Maybe right. So that can be just a URL, a prepared URL by BigQuery. But yeah, that makes sense. So that clears out a lot of these things that are pending. So like new orders will be having these sort of criteria, and onto the the big project. So just have a look at this. So as for the the web app, so there are some some sections prepare for that, like turnaround standards regarding. Regarding this, it's just a matter also which date is going to be they want to be effective from, and this is on the on the artifact, so that's like the first, no, the third, the third, the third one. But this is the way, right? You know, like the normal, normal apps script that will be injecting data, the safety incidents to also write that table regarding particle costs. So,
+
+Jennilyn Tockstein  13:54
+what is this one?
+
+Emilio Dominguez  13:56
+This is well, just as a fallback, a fallback, but the cost will still be handled by Plex, right? The the part dollar amount, so so that's just like an interface, but just as a fallback, But the the important thing about this, like the main thing, is the goals. The goals to be written by by the team. But you also said, okay, so maybe not everyone could have access to to write goals, right? So
+
+Jennilyn Tockstein  14:46
+we'll only share this with a few people.
+
+Emilio Dominguez  14:48
+Right on. So it has these goal types, like the revenue, sales, and production, and yeah, I'm working on connecting like the sales rep, right? For getting the names here from the Plexus control user, and kind of like get this. This has also the month, like what month should be placed there? So this is the the way, right, for them to be putting this data into the into the system into BigQuery, and so the the scorecard can get that data from from that part. So as for as for depending depending items here. So as for costs, that's going to be related to to the part. So it has Plex has its own part costing in part snapshot and inventory evaluation summary report, but it returns zero rows as nothing has been costed on this tenant. But maybe if you have some time, you can show me. I think you have showed show me a report before about the cost for the for the parts. But do you happen to remember that? Where to,
+
+Jennilyn Tockstein  17:05
+where to find it,
+
+Emilio Dominguez  17:07
+where to find it,
+
+Jennilyn Tockstein  17:09
+Helen.
+
+Emilio Dominguez  17:28
+So it says customer part part prices exist for finished finished goods. What is missing is a cost on everything else. But yeah, maybe you can have a look at that afterwards. As for number two, where does the dollar value of all inventory come from? Inventory balance, dollar value of everything, inventory.
+
+Jennilyn Tockstein  18:23
+Yeah, and so that one's gotta be. The inventory valuation. So. We need to have our unit cost here.
+
+Emilio Dominguez  19:24
+Okay, that's for every part.
+
+Jennilyn Tockstein  19:28
+This times that, yeah.
+
+Emilio Dominguez  19:36
+So how many how many parts are just like the unique Parts are they in the 1000s too, or
+
+Jennilyn Tockstein  19:45
+many 1000s? Yeah,
+
+Emilio Dominguez  19:48
+but that's assigned to the to the customers, or that's also like the original parts, like Jackbox has.
+
+Jennilyn Tockstein  19:55
+So we've probably got like 5500 customer goods. The products are a few 100. The purchased parts. Let me see how big the purchased parts is, real quick, because you're mostly thinking about purchased parts. Because it'll probably be this plus I don't know 500 or so. Yeah, it'll. I would say maybe under 2000 hearts will have $1 value in inventory on.
+
+Emilio Dominguez  21:10
+Okay, and those those don't change that much, or they do get frequent frequent changes on dollar amount. the The
+
+Jennilyn Tockstein  21:22
+value of them will probably change all the time. Every time we receive something, depending on how much it costs and the shipping cost and how much we have on hand, so inventories a moving target, and since accounting considers that like a a risk debitter, I don't really understand the accounting terms, but they want to know what that number is every day.
+
+Emilio Dominguez  21:56
+Right on. Okay. Yeah,
+
+Jennilyn Tockstein  22:04
+I I was gonna talk to accounting about uploading in inventory valuation. Um. We have we have a couple options, right? So I could I could take our value from NetSuite and upload that into Plex, so that there's a number. I could also leave it, and we could use our NetSuite integration after go live to push a value over.
+
+Emilio Dominguez  22:50
+Right on.
+
+Jennilyn Tockstein  22:50
+And I don't know which would be better, so I kind of want to ask them. And
+
+Emilio Dominguez  23:00
+do you have a a time to sunset NetSuite or a schedule?
+
+Jennilyn Tockstein  23:09
+No, so it's going to be integrated using Saligo, the API connector to to connect The two. I think we're going to implement NetSuite and or Plex at other companies in the next year or two.
+
+Emilio Dominguez  23:32
+So they will be like a combo, a combination of. But yeah, most most of the things are going to be placed into Plex, right? And
+
+Jennilyn Tockstein  23:44
+I talked to Justin about revenue value and inventory value on the scorecard. This report, and if we're not sure where to pull it in Plex? We can just pull it from Netsuite right now for reporting.
+
+Emilio Dominguez  24:07
+Okay,
+
+Jennilyn Tockstein  24:08
+and and kind of just focus on other things since we can get the number out of Netsuite, and that way we can move it to Plex later if we want. Just those two big finance numbers. We are ready, like revenue. He likes his revenue report out of Netsuite. We're getting through all of our accounting out of Netsuite. It makes sense that. Inventory value could go either way. I think maybe at go live since we're familiar with Netsuite, maybe we leave it there for a minute until we feel good about Plexus.
+
+Emilio Dominguez  24:50
+Yeah, the the Netsuite report can be also a comparison, right? In order to maybe like keep the keep both, but maybe not expose the the Plex one to executives, but just internally and say, okay, how much it drifts from the Netsuite one, and where things may be lagging some either connection or maybe the data is not even there, right?
+
+Jennilyn Tockstein  25:22
+Yeah, and it would actually be really good to have them both if we can. So we're gonna do NetSuite's costing method, which is slightly different than Plex's costing method, and at intervals, potentially every week. I think we talked about the NetSuite costing method is going to write over into Plex the value of things, so it's going to happen at intervals that the cost value will get written over from NetSuite into Plex, and so having the two reports can can help make sure that those two numbers are the same every week or whenever that happens to like validate like yay they match now.
+
+Emilio Dominguez  26:12
+Correct. Yeah, the reports may be in the reports list that you share, right? The spreadsheet for for NetSuite on revenue ones, or do you have a hint on where? So I can start getting some data from from NetSuite in that regard.
+
+Jennilyn Tockstein  27:16
+What was that?
+
+Emilio Dominguez  27:17
+Yeah, for I'm cutting for NetSuite on the revenue reports, are they included on the spreadsheet on reports list that you shared from the team that was matching, like all the reports that they have, they currently work on, and then maybe it is there, like for the reports for for that revenue, are
+
+Jennilyn Tockstein  27:48
+this
+
+Emilio Dominguez  27:49
+one? Yeah, yeah.
+
+Jennilyn Tockstein  27:52
+I'm not sure that the revenue one is on here. It is something that we get daily
+
+Emilio Dominguez  28:00
+from, like in an email, like
+
+Jennilyn Tockstein  28:04
+yeah, and it's posted on those Google Sheets.
+
+Emilio Dominguez  28:08
+The one that we have work on code App Script code no
+
+Jennilyn Tockstein  28:13
+yeah. So there's an code that pulls it out every day.
+
+Emilio Dominguez  28:22
+Yeah, maybe you share that, but
+
+Jennilyn Tockstein  28:26
+I can send you. Here's the the report. So that's the link to it.
+
+Emilio Dominguez  29:00
+Thank you.
+
+Jennilyn Tockstein  29:04
+You're probably getting it as well. So this is then is the CS reading.
+
+Emilio Dominguez  29:13
+Okay.
+
+Jennilyn Tockstein  29:14
+Then I think when I look at it, I'm taking a couple things out. Let me double check.
+
+Emilio Dominguez  29:33
+Like the accounts filtering, maybe it
+
+Jennilyn Tockstein  29:41
+might not be. I might be just taking total. I really don't remember. I know we talked about excluding stuff, but I don't remember what they actually do. You know how it goes. So many edits. I remember. Um. Nope, it's just the total.
+
+
+Transcribed by https://otter.ai

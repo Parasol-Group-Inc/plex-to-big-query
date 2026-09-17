@@ -14,6 +14,65 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-17 — Label Design status file moved out of repo root; two VS Code workspace files added
+
+### Changed — `sep-14-brief-and-pending-items.md` → `label-design/STATUS.md`
+Moved with `git mv` (history preserved). The old repo-root location didn't
+self-label as Label Design-specific, unlike the Scorecard side's
+`score-card-reference/` — this is exactly how a Claude session nearly wrote
+Scorecard content into it mid-session before catching itself. All
+cross-references updated (`label-design/README.md`,
+`label-design/monday_board_catalog_tablero_nuevo.md`, this repo's `README.md`).
+Explicitly **not** fixed with a new repo or a new git branch: the code was
+never actually tangled (every pipeline, Label Design included, shares one
+`main.py` ETL engine, one Terraform config, one Docker setup — splitting
+would mean forking that shared engine for no benefit), and a branch just
+relocates the same confusion from "which file do I update" to "which
+branch am I on," which is worse for two efforts meant to coexist
+indefinitely rather than merge back together.
+
+### Added — `label-design.code-workspace`, `scorecard.code-workspace`
+Two VS Code multi-root workspace files, both pointing at this same single
+repo (no code or git split — it's a display/search filter only), each
+hiding the other project's exclusive folders (`label-design/`,
+`label_design_service/`, `deploy/label_design_sync/` vs.
+`score-card-reference/`, `deploy/manual_data_app/`,
+`deploy/goals_sheet_to_bigquery.gs`) via `files.exclude`/`search.exclude`.
+Shared infra (`main.py`, `terraform/`, `reports/`, `docs/`) stays visible in
+both, since both genuinely depend on it. Lets the two projects be worked on
+in separate VS Code windows without one cluttering the other's
+explorer/search.
+
+## 2026-09-16 (evening) — Manual Data app: part costs removed, two dropdown bugs
+
+### Fixed — `Code.gs`'s `partNumbers` option loader queried a table that never existed
+`part_v_part.Part_Number` was never a real table/column — the extracted
+part master is `raw_Part_v_Part.Part_No` (confirmed against both PlexTest
+and PlexProd). This was the cause of the Part Costs tab's "Could not read
+the list for this field" error. Moot now — see Removed, below — but the
+same wrong-name bug pattern is worth remembering if another dropdown reads
+Part_v_Part again.
+
+### Removed — the `part_costs` manual dataset
+Never a real requirement — Emilio's own words in the 2026-09-16 Emilio/
+Jennilyn meeting (`meetings-reference/sep-16/`) framed it as "just a
+fallback, the cost will still be handled by Plex." Jennilyn's actual plan,
+from that same meeting: inventory valuation is unit cost × on-hand
+quantity across roughly 5,500 customer finished goods + a few hundred
+products + under ~2,000 purchased parts holding a $ value; Plex's own
+costing (`Part_v_Snapshot` / inventory valuation) is expected to populate
+via a NetSuite-Celigo integration, on some schedule — mechanism (one-time
+upload vs. periodic sync) still undecided, pending Accounting. For
+scorecard reporting specifically, Revenue and Inventory Value are pulled
+from NetSuite **for now, as an interim measure** while Plex costing stays
+empty — not framed as a permanent replacement for Plex, and NOT a decision
+that resolves Deviation $/Rework $ costing (a separate, still-open
+question — those come from a `Cost` field on Quality's nonconformance
+records, untouched by this meeting). A human retyping cost numbers into a
+fourth manual-entry table would only drift from both of those real
+sources. Removed from `Code.gs`'s `DATASETS` registry, along with the
+now-unused `partNumbers` option loader.
+
 ## 2026-09-16 (later) — Monday test board built for the standalone push service; two API bugs found
 
 ### Added — `scripts/replicate_board_columns.py`

@@ -8,7 +8,9 @@ Pulls operational data from **Plex ERP** via ODBC and loads it into **Google Big
 
 > **One table here isn't from Plex.** `scorecard_goals` holds the negotiated targets behind every "% to Goal" tile. It's fed from a Google Sheet by an Apps Script (`deploy/goals_sheet_to_bigquery.gs`), is not managed by Terraform, and is not created by the ETL — but three views read it. See [docs/reports/scorecard_goals.md](docs/reports/scorecard_goals.md).
 
-> **One pipeline here isn't a scorecard report.** `label_design` is a Plex → BigQuery → Google Sheet → Monday.com operational queue (replacing a twice-daily manual NetSuite loop), unrelated to the Vox Nutrition scorecard work the rest of this repo tracks. It has its own hub: [label-design/README.md](label-design/README.md).
+> **One pipeline here isn't a scorecard report.** `label_design` is a Plex → BigQuery → Google Sheet → Monday.com operational queue (replacing a twice-daily manual NetSuite loop), unrelated to the Vox Nutrition scorecard work the rest of this repo tracks. It has its own hub: [label-design/README.md](label-design/README.md), and its own status file at [label-design/STATUS.md](label-design/STATUS.md) (not the Scorecard's [Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9) — keep these two separate, that's the whole point of this split).
+>
+> **Working on one project at a time?** Open `scorecard.code-workspace` or `label-design.code-workspace` instead of the repo folder directly — same single repo, same git history, just VS Code's explorer/search filtered to hide the other project's exclusive folders so the two don't bleed into each other while you work.
 
 ---
 

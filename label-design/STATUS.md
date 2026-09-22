@@ -9,6 +9,23 @@
 
 ---
 
+## UPDATE — 2026-09-22 — read the Sep-21 fast follow first
+
+Two decisions from the 2026-09-21 Emilio/Jennilyn call change what gets built,
+and one of them partly undoes the attribute work that shipped the same day:
+**part attributes stay in Plex and are not going into Monday**, and
+**attributes will only be placed on "sevens" (label parts) while our queue
+carries "nines" (finished goods)** — so the attribute pivot can never match
+unless it hops through the BOM (`93… → 73…`, proven in `PlexProd`). The Monday
+write blocker also has a named cause at last: the account holds a **CRM**
+licence, not **Work Management**, which is why no permission change ever fixed
+it.
+
+Full write-up, with every figure checked against live data:
+[`SEP21_FAST_FOLLOW.md`](SEP21_FAST_FOLLOW.md).
+
+---
+
 ## UPDATE — 2026-09-21 (start here)
 
 ### The Plex attribute catalog doubled — Jennilyn added five more

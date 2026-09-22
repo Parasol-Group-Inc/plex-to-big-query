@@ -1,0 +1,306 @@
+Please rate the new Quick notes tab by taking a short survey.
+
+Emilio / Jennilyn
+
+Sep 21, 2026
+Emilio Dominguez Jennilyn Tockstein
+
+Integration review covering Plex attributes and Monday permissions via web widget updates
+
+Plex and Monday integration for part attributes
+Decided to keep part attributes in Plex instead of importing them into Monday.
+Label part numbers begin with 7 and finished good part numbers begin with 9.
+Part attributes will be applied exclusively to 7-series part numbers rather than 9-series parts.
+Sales representatives are successfully fetched through ETL extraction into test boards.
+
+Web app widget enhancements
+Safety incidents utilize the same data type format as the previous spreadsheet.
+Recommended removing the turnaround standards tab because standards change infrequently.
+Proposed displaying current safety incident details and selected goal comparisons at the top of the widget.
+
+Test environment data management
+Test data in Plex environments resets automatically daily at midnight UTC.
+Ashley and her team can generate custom test data upon request.
+
+Next steps
+[Jennilyn Tockstein] Update Monday License: Change the user license for Emilio to ensure he has full work management capabilities.
+[Emilio Dominguez] Update Widget: Update the web app widget to pull data from BigQuery for safety incidents and goals and separate production and sales goals into two tabs.
+[Jennilyn Tockstein] Transition Dashboard: Update the dashboard to use data pulled directly from BigQuery.
+[Ashley] Create Test Data: Generate necessary test data for the project when requested.
+[Emilio Dominguez, Jennilyn Tockstein] Schedule Follow Up: Meet tomorrow morning to discuss progress on the web app widget and testing.
+
+
+
+Want to see more? View the full notes
+Tip: You can always access your full notes from the left sidebar.
+
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+
+
+Sep 21, 2026
+Emilio / Jennilyn
+Invited Emilio Dominguez Jennilyn Tockstein
+Attachments Emilio / Jennilyn
+Meeting records Transcript 
+
+
+Summary
+Integration review covering Plex attributes and Monday permissions via web widget updates
+
+Plex Attributes Integration
+Part attributes remain in Plex instead of Monday. Label part numbers start with 7 and finished goods start with 9.
+
+Workspace Permissions
+Workspace permission issues resolved through license updates. Test data wiped daily at midnight.
+
+Web App Widget Progress
+Web app widget development integrates BigQuery data. Production goals and sales goals separated into distinct tabs.
+
+
+Decisions
+Aligned
+Keeping part attributes in Plex The team decided to keep most part attributes in Plex rather than bringing them into Monday.
+Removing turnaround standards and splitting goals The team decided to remove the tab for turnaround standards and split production goals and sales goals into two separate tabs.
+
+
+Next steps
+[Jennilyn Tockstein] Update Monday License: Change the user license for Emilio to ensure he has full work management capabilities.
+[Emilio Dominguez] Update Widget: Update the web app widget to pull data from BigQuery for safety incidents and goals and separate production and sales goals into two tabs.
+[Jennilyn Tockstein] Transition Dashboard: Update the dashboard to use data pulled directly from BigQuery.
+[Ashley] Create Test Data: Generate necessary test data for the project when requested.
+[Emilio Dominguez, Jennilyn Tockstein] Schedule Follow Up: Meet tomorrow morning to discuss progress on the web app widget and testing.
+
+
+Details
+Plex Attributes and Monday Integration: Emilio Dominguez discusses newly extracted part attributes from Plex in a row table format containing 28 rows. Jennilyn Tockstein confirms that a decision was made to keep most of these attributes within Plex rather than importing them into Monday (00:00:02). Jennilyn Tockstein verifies that part attributes will be excluded from Monday boards, anticipating that unused attribute columns will eventually be deleted (00:03:39) (00:15:17).
+
+Part Number Levels and Sales Representative Data: Jennilyn Tockstein clarifies that label part numbers begin with sevens and finished good part numbers begin with nines (00:13:26). Emilio Dominguez explains that sales representatives, including John Case and approximately nine to 12 others, are now successfully fetched through ETL extraction into a test board (00:15:17). Jennilyn Tockstein notes that part attributes will only be applied to the sevens and not the nines, meaning incoming part numbers will not require those attributes (00:17:29).
+Monday Board Permissions and Licensing Evaluation: Emilio Dominguez reports issues with a deleted Plex import board and a lack of write capabilities, leading to the creation of a new "blank landing page" workspace (00:20:05). Jennilyn Tockstein accesses the new workspace and investigates user permissions, discovering that the current login possesses a CRM license instead of a work management license. Jennilyn Tockstein agrees to update the license type for Emilio Dominguez and instructs them to reach out to Ashley if additional test data is required (00:24:26).
+
+Web App Widget Development for Safety Incidents and Goals: Emilio Dominguez details progress on the web app widget, noting that safety incidents and companywide goals are being integrated from BigQuery while part codes are removed (00:29:46). Jennilyn Tockstein agrees to connect the current goals in writing and transition the dashboard to pull directly from BigQuery once ready (00:31:36). Jennilyn Tockstein suggests adding comparative views—such as displaying the last incident date or existing monthly sales goals—to assist users when editing records. Additionally, Jennilyn Tockstein recommends removing the turnaround standards tab and separating production goals and sales goals into two distinct tabs (00:33:14).
+Upcoming Schedule and Plex Test Environment Data Handling: Jennilyn Tockstein announces a meeting scheduled for tomorrow morning with Sheldon to review test items, after which Jennilyn Tockstein and Emilio Dominguez will meet to review progress. Emilio Dominguez asks about data persistence in Plex, and Jennilyn Tockstein confirms that test data is wiped at midnight in the test environment (00:34:47). Jennilyn Tockstein encourages Emilio Dominguez to inject necessary test orders or data for scorecard testing as long as it avoids confusing other users (00:36:15).
+
+
+You should review Gemini's notes to make sure they're accurate. Get tips and learn how Gemini takes notes
+How is the quality of these specific notes? Take a short survey to let us know your feedback, including how helpful the notes were for your needs.
+
+
+Sep 21, 2026
+Emilio / Jennilyn - Transcript
+00:00:02
+
+Emilio Dominguez: I saw that you put some attributes on Plex, right? So they are being now extracted or were they just already there? because yeah part attributes now I have this new extraction um or part part attributes yeah and I'm seeing let me just uh show you So the the row table it's part against part attribute, right? And there are 28 rows there. Um, just gathering the information. They resemble this, right? So I don't know if it was your you're doing but they are there right and they will be uh
+Jennilyn Tockstein: Oh, those are all in Monday or in Plex.
+Emilio Dominguez: plex. Yeah. Flex.
+Jennilyn Tockstein: Okay. Okay. And I think I think I'll double check that they decided today that um look that we want most of those to just stay in Plex.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: We won't need to bring them in.
+Emilio Dominguez: Right on.
+Jennilyn Tockstein: Wow. I'm trying to find the attributes because I want to see them.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: Would have started on that already then.
+
+
+00:03:39
+
+Jennilyn Tockstein: Oh, I think maybe just the types have been created because
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I'm not seeing any part attributes yet.
+Emilio Dominguez: Oh yeah. Is that on test?
+Jennilyn Tockstein: Is this in test?
+Emilio Dominguez: Yeah, test because Yeah,
+Jennilyn Tockstein: Pulling from text.
+Emilio Dominguez: pulling from test. And let me just show you the row raw part attribute that is coming with the attribute name attribute type. This is row part attribute. These are the ones there. The keys also the customer.
+Jennilyn Tockstein: Yeah, I can see that the attributes exist. Best.
+Emilio Dominguez: Mhm. Yeah. Then for the part attributes being joined part Okay. And the the thing that follows is also getting the part attribute value. Give me a second. Okay. So, this is the email that you wrote about
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: just how many of those or what will the structure be for parsing that into Monday, right?
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: And I think what we're going to do is um we're going to keep the part attributes out of Monday
+
+
+00:13:26
+
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: and
+Emilio Dominguez: Um like the same yeah sorry to interrupt the same regard of the same thought but they going to plex and checking checking the order.
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: Right.
+Jennilyn Tockstein: right.
+Emilio Dominguez: Right on. Okay. Uh I have a question on this on the seven level. What's seven level level against nine level?
+Jennilyn Tockstein: uh the part numbers what they start at. So the label part numbers are sevens and the finished good part numbers are nines.
+Emilio Dominguez: Okay, nice. You enter something here that was kind of like a a glossaryy or or some No, it was documentation that you had but that's just available to you, right? Um complex because you had quite quite a a few things there structure and things like that but like clicking on the gear button and I I think it was documents or something like here. But those are something. Yeah, I will assume those are things that you have built as catalogs or reference points to the how you are getting data into right into Plex.
+
+
+00:15:17
+
+Jennilyn Tockstein: the right now we're just uploading it daily and we've added
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: some keywords to our glossery but yeah
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: not not everything
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: but I guess for the Monday thing it's uh good news in the sense that we don't need to worry about the attributes And I'm going to guess that they're going to delete a bunch of these columns like in the future.
+Emilio Dominguez: Okay. Yeah, these are tests on my own board.
+Jennilyn Tockstein: Are you able to get the rep in there?
+Emilio Dominguez: Yeah, it was uh a matter of getting the plexus and the category correct correctly. So yeah, this is John Case and there are like nine or 12 sales
+Jennilyn Tockstein: There we go.
+Emilio Dominguez: uh representatives but yeah they are they are being fetched now. This is a test coming from the ETL extraction and dumping everything into my this like this board trying to match what the most things uh match like this Taylor watch uh the label the description right So things like very manual things like design status are from them.
+
+
+00:17:29
+
+Emilio Dominguez: But yeah this was extracted. This is the query on what things we are getting. But it has this the attributes now. But I think that will be a matter of not having this struure. structure and just trying to get the attribute value because not not every of these is going to be filled with each order, right? That's a matter of the attribute.
+Jennilyn Tockstein: Yeah, we don't we won't need to get in all the attributes from that query.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And the hard thing is too is the part numbers you're going to be bringing over are won't have these part attributes. We're only going to put them on the sevens, not the nines. So
+Emilio Dominguez: Yeah, they must they must fetch that. Okay.
+Jennilyn Tockstein: yeah. So there we're just going to leave it and they'll they'll have to come in.
+Emilio Dominguez: Okay. Right on. So this is test Yeah, right now they are not placing orders right on on Plex.
+Jennilyn Tockstein: Yeah.
+
+
+00:20:05
+
+Jennilyn Tockstein: And we're going to have it just push to that landing test board,
+Emilio Dominguez: Okay,
+Jennilyn Tockstein: right? Okay.
+Emilio Dominguez: this one I had problems with this. Oh, where is the lex import? that you had this blank landing page. That's the one you gave me permissions to this. Do you because I I I don't recognize this work workspace because I was here on label design and there was a a board here that was called Like Lex import.
+Jennilyn Tockstein: Yeah. I think I think somebody deleted it.
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: I don't see it there anymore.
+Emilio Dominguez: Yeah. But I didn't have the the capabilities to even write on it. Even when you you did the the workspace addition I couldn't I couldn't uh what is happening maybe is about the seat the license uh seat that it may not have the capabilities for the API to write to the to that one because it was quite
+Jennilyn Tockstein: Mom.
+Emilio Dominguez: strange but for this blank blank landing page page. Is that my workspace or do you do you see that also that on because I don't know if I can do a board here and create a board.
+
+
+00:22:00
+
+Emilio Dominguez: Yeah. Seems like I'm able to to do that, but I don't know if they could see this one. This this blank blank landing page thing. And let me give you the board to check if you have permissions or
+Jennilyn Tockstein: Are you going to give me permissions to that one?
+Emilio Dominguez: Yeah, because I it seems like yeah what I want to just be sure is that could be one for them and that you are able to see it correctly right because I don't have the same restrictions at the other ones as the other ones that show you're not the owner or things like that so just let me know if you can access that
+Jennilyn Tockstein: Yeah, let's see.
+Emilio Dominguez: The workspace is called blank landing page. Um
+Jennilyn Tockstein: Okay. Yeah, I'm in there.
+Emilio Dominguez: yeah, I think Janette maybe created that one. Yeah, this is the board And yeah, I can just dump data there that resembles the majority of things that are on the other one except for the things that we have discussed and drop downs and things that they will need to fetch, right?
+
+
+00:24:26
+
+Jennilyn Tockstein: Yeah. I mean, you could also you could make a board in here if you wanted.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: And I could just make sure that they know not to delete it.
+Emilio Dominguez: I Yeah,
+Jennilyn Tockstein: Oh,
+Emilio Dominguez: but that's the tricky part because Yeah.
+Jennilyn Tockstein: it's you're not it's the product is. So, this is the you have a work management license, not a Sierra license. Is that Let me go back.
+Emilio Dominguez: Yeah, I really don't know what because this is this is Janette's login. He um she has shared that with me,
+Jennilyn Tockstein: Yeah,
+Emilio Dominguez: but I don't know if it has the full license.
+Jennilyn Tockstein: let me look real quick. Trying to get it to load the list of everybody here. All right. Yes. Is it Janets or is it marketing?
+Emilio Dominguez: No, this is genetics. But let me just confirm confirm that.
+Jennilyn Tockstein: He has CRM but not work management. Okay,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: we're gonna have to get you the other one.
+
+
+00:26:29
+
+Emilio Dominguez: And that's paid, right? It's uh is that
+Jennilyn Tockstein: Yeah. So, they're just different products. Um,
+Emilio Dominguez: Yeah, because I couldn't write to that one to this one like well I didn't want to but I wanted to write to the Plex import one but couldn't because this
+Jennilyn Tockstein: heat.
+Emilio Dominguez: this is like the production one. So peace.
+Jennilyn Tockstein: Okay, we'll get that changed for you.
+Emilio Dominguez: Right on. Thank you. All right. So I guess we only have to wait for some orders there. There right be place.
+Jennilyn Tockstein: Yeah, there should be some Let me make There should be test data in there to pull later. Um, if we if you ever need test data, please feel free to just go ahead and message Ashley, too,
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: and she'll make some or have her team make some.
+Emilio Dominguez: All right. Yeah, that will be good.
+Jennilyn Tockstein: Um, because she's Yeah, she's going to be the one working through that.
+Emilio Dominguez: Right.
+
+
+00:29:46
+
+Jennilyn Tockstein: Is the widget ready for the little web app? Widget ready.
+Emilio Dominguez: Most of it. Um, getting into the safety incidents, I was working on the goals to bring the the sales representatives. So, that's pending, right? On which one is going to be applied to. So this one it says companywide for now but it needs to ring from BigQuery the ones that are already there. And safety incident is the same um the same form or the same type of data that was on the on the spreadsheet.
+Jennilyn Tockstein: Mhm.
+Emilio Dominguez: saving into that. It has this stuff for turn around standards that is um static value there on on the spreadsheet. And the question for this is also like effective from what type of date should this uh be placed. But that's a matter of maybe you or the one that the person that is going to get this data and we talked about the part code. So these part codes this needs to go away and just leave turn around safety incidents and goals.
+
+
+00:31:36
+
+Jennilyn Tockstein: And then the goal. Yeah,
+Emilio Dominguez: Yeah.
+Jennilyn Tockstein: if we can get it connected in writing, we can put in our um current goals and then just go ahead and start using this.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: I can transition the dashboard to use pull from here in BigQuery instead.
+Emilio Dominguez: All right then. Okay.
+Jennilyn Tockstein: And um we can make that transition as soon as that's ready.
+Emilio Dominguez: Okay. uh we'll work on that um to fix that and only the I think only the quality tests orders will be the the quality problems are the ones that are pending right I didn't I didn't talk about this for the form so I might just pointing this out because there are some things that could not be in place could be different from this, right? But yeah, so
+Jennilyn Tockstein: Well, yeah. The All of this we we could use because it's not using anything from Plex.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: It's just these are the comparison numbers. Um yeah,
+Emilio Dominguez: Yeah. You could get like
+
+
+00:33:14
+
+Jennilyn Tockstein: it would be nice too if they're on here. Um, you can display what the current is like for
+Emilio Dominguez: Mhm. Okay.
+Jennilyn Tockstein: safety incidents like at the top it could show the last date of the incident and any information on it. Um, or for goals if they select sales and a rep and a month it will show what's
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: currently there and then they can compare that to what they're editing. Um, that way they can that way they can see what it is because if they're editing say a December goal,
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: I mean, they're not really going to have visibility into like seeing what December's goal is in Big Query to know that it's right or wrong without asking me.
+Emilio Dominguez: Mhm.
+Jennilyn Tockstein: So, this would give them that chance to interface with the data that's already in there.
+Emilio Dominguez: Yeah, that's a good call. Uh should we keep the the tab for turnaround standards?
+Jennilyn Tockstein: Um, I don't think we need it.
+Emilio Dominguez: Okay.
+Jennilyn Tockstein: um they don't they don't change those standards very much and and maybe instead split out the production goals and the sales goals um into two separate tabs
+
+
+00:34:47
+
+Emilio Dominguez: Okay. know it is right on.
+Jennilyn Tockstein: and then I'll let Do you know when your user account is updated in Monday
+Emilio Dominguez: Okay. Yeah, I can move to with the with this internal board for now. But yeah, that will be good to just place that and I will work on that. I think we have another meeting on Thursday and
+Jennilyn Tockstein: tomorrow morning with Sheldon and hopefully He's hoping
+Emilio Dominguez: tomorrow morning. Yeah.
+Jennilyn Tockstein: to have a bunch of stuff to test and so I'm hoping he can just show you what he put in there and then you can see about pulling pulling data.
+Emilio Dominguez: Right on. So let's meet again tomorrow then I can give you an update of the pending
+Jennilyn Tockstein: Yep.
+Emilio Dominguez: things uh the web app and also um just getting some you know getting back getting back the values when you inject data into Plex it wipes out at midnight right or
+Jennilyn Tockstein: Just because we're doing in test right now. Yes. But soon
+
+
+00:36:15
+
+Emilio Dominguez: But even if I just want some data like to feed some tiles from the scorecard. So can I get data in? It wouldn't be a problem for for the company just to inject a bunch of orders or a bunch of goals things like that.
+Jennilyn Tockstein: Right.
+Emilio Dominguez: It it will still wipe be wiped at midnight or I think it's UTC schedule right
+Jennilyn Tockstein: Right. And we we add stuff every day like sales orders and stuff, but you're always welcome to add stuff, too.
+Emilio Dominguez: and that like the thing that I will inject wouldn't hurt your report or well
+Jennilyn Tockstein: We're not doing any reporting. Um, if you added in like different part numbers or something, it probably confused a lot of people, but um
+Emilio Dominguez: But just getting the this the part numbers are already defined, right? They are like uploaded every day. So they can be just reused or Yeah,
+Jennilyn Tockstein: Yep. Mhm.
+Emilio Dominguez: I'm speaking more about like things that feed the the scorecard on orders. Um this label design also orders like getting some there, but I wouldn't like them to be surprised. Oh, there's that 200 orders here that I don't recognize. So but since it is the test environment, right?
+Jennilyn Tockstein: Yeah.
+Emilio Dominguez: Okay, right answer. I will um get on it and let you know tomorrow.
+Jennilyn Tockstein: Okay.
+Emilio Dominguez: Thank you, Janine.
+Jennilyn Tockstein: Okay. Sounds good.
+Emilio Dominguez: Have a good one.
+Jennilyn Tockstein: I will see you tomorrow.
+Emilio Dominguez: See you tomorrow. Goodbye. Take care.
+Jennilyn Tockstein: Bye.
+
+
+Transcription ended after 00:38:15
+
+This editable transcript was computer generated and might contain errors. People can also change the text after it was created.

@@ -3,14 +3,22 @@
  * ============================================
  *
  * One form for every number that has to be typed by a human rather than
- * extracted from Plex: goals, safety incidents, turnaround standards.
- * Anything else that turns up later is a registry entry, not a new app.
+ * extracted from Plex: goals and safety incidents. Anything else that turns
+ * up later is a registry entry, not a new app.
  *
- * A fourth dataset, part costs, was removed 2026-09-16 — it was never a
- * real requirement, just a fallback in case Plex's own costing stayed
- * empty, and the real costing path (Plex, fed by a NetSuite/Celigo sync)
- * doesn't want a human typing numbers that would drift from both systems.
- * See CHANGELOG.md 2026-09-16.
+ * TWO datasets are left, from four. Both removals were decisions, not
+ * attrition, and both are worth knowing before adding anything back:
+ *   - part costs (2026-09-16) — never a real requirement, just a fallback in
+ *     case Plex's own costing stayed empty. The real costing path is Plex,
+ *     fed by a NetSuite/Celigo sync, and it does not want a human typing
+ *     numbers that would drift from both systems.
+ *   - turnaround standards (2026-09-22) — Jennilyn: "I don't think we need
+ *     it... they don't change those standards very much." A form earns its
+ *     keep on numbers that change often; these change about never.
+ * See CHANGELOG.md for both.
+ *
+ * Goals are entered on THREE TABS — Sales, Production, Revenue — that all
+ * write one dataset. The split is presentation only; see uiTabs below.
  *
  * This replaces the earlier goals-only app (`deploy/goals_web_app/`), which
  * covered one of these and was never deployed.
@@ -84,6 +92,31 @@ var DATASETS = {
     blurb: 'Monthly targets — revenue, sales by rep, production by work centre group, and the company-wide figure for each. One entry can fill a run of months, so a year can be frontloaded in one go.',
     tab: 'goals',
     table: 'scorecard_goals_app',
+
+    // ── UI TABS (added 2026-09-22, Jennilyn's ask on the 2026-09-21 call:
+    // "maybe instead split out the production goals and the sales goals into
+    // two separate tabs").
+    //
+    // A PRESENTATION SPLIT ONLY — all three still write one sheet tab and one
+    // table. That is deliberate rather than lazy: a dataset here is 1:1 with a
+    // sheet tab and a BigQuery table, and pushes are WRITE_TRUNCATE, so three
+    // real datasets would mean either three tables (breaking every view that
+    // reads scorecard_goals_app) or three tabs racing to truncate one table.
+    // Splitting at the UI keeps her split and leaves storage alone.
+    //
+    // Each tab pins `metric`, so the goal-type dropdown disappears — the tab
+    // IS the choice. Revenue gets its own tab because it is company-wide by
+    // definition and deliberately a different number from Sales; folding it
+    // into the Sales tab would imply they are the same thing.
+    uiTabs: [
+      { key: 'sales',      label: 'Sales goals',
+        blurb: 'Monthly sales targets by rep, plus the company-wide figure. One entry can fill a run of months, so a year can be frontloaded in one go.' },
+      { key: 'production', label: 'Production goals',
+        blurb: 'Monthly production targets by work centre group, plus the company-wide figure. Group names are read from the production report — Plex says "Encapsulating" where the scorecard tile says "Encapsulation", and a mismatch reads as 0% forever rather than as an error.' },
+      { key: 'revenue',    label: 'Revenue goal',
+        blurb: 'The monthly company-wide revenue target. Revenue counts what SHIPPED, so it is deliberately a different number from Sales.' }
+    ],
+    pinnedBy: 'metric',
     // Newest row per this combination wins; a tombstone retracts the key.
     key: ['metric', 'period_month', 'scope'],
     fields: [
@@ -106,6 +139,13 @@ var DATASETS = {
     transient: ['repeat_months'],
     repeatField: 'repeat_months',
     repeatOver: 'period_month',
+    // Shows what is ALREADY in BigQuery for the metric/scope/month being
+    // edited, above the form. Jennilyn's reasoning, 2026-09-21, and it is
+    // the whole point: "if they're editing say a December goal, they're not
+    // really going to have visibility into seeing what December's goal is in
+    // BigQuery to know that it's right or wrong without asking me."
+    currentView: 'currentGoal',
+
     // Shown live as someone types a rep goal: the running total against the
     // company-wide target. The two are allowed to differ — the team figure
     // sums actuals, not goals — so this reports the gap rather than blocking.
@@ -114,6 +154,10 @@ var DATASETS = {
 
   incidents: {
     label: 'Safety incidents',
+    // Shows the most recent incident above the form — Jennilyn, 2026-09-21:
+    // "at the top it could show the last date of the incident and any
+    // information on it."
+    currentView: 'lastIncident',
     blurb: 'One row per incident. "Days without an incident" is counted from these, so an empty log reads as a clean record — which is only true if it is being kept.',
     tab: 'incidents',
     table: 'safety_incidents',
@@ -133,23 +177,24 @@ var DATASETS = {
     ]
   },
 
-  turnaround_standards: {
-    label: 'Turnaround standards',
-    blurb: 'The Performance and Bonus day counts per stock type. Nothing resembling these exists in Plex — today they live in the Weekly/Monthly TAT Analysis sheets, and this is where they move to.',
-    tab: 'turnaround_standards',
-    table: 'turnaround_standards',
-    key: ['stock_type', 'effective_month'],
-    fields: [
-      { name: 'stock_type', label: 'Stock type', type: 'select', required: true,
-        optionsFrom: 'stockTypes', allowOther: true },
-      { name: 'effective_month', label: 'Effective from', type: 'month', required: true },
-      { name: 'performance_days', label: 'Performance standard (days)', type: 'number',
-        required: true, min: 0 },
-      { name: 'bonus_days', label: 'Bonus standard (days)', type: 'number',
-        required: true, min: 0 },
-      { name: 'note', label: 'Note', type: 'longtext', required: false, max: 500 }
-    ]
-  }
+  // turnaround_standards (removed 2026-09-22): the Performance and Bonus day
+  // counts per stock type. Jennilyn, on the 2026-09-21 call, asked directly:
+  // "should we keep the tab for turnaround standards?" — "I don't think we
+  // need it... they don't change those standards very much."
+  //
+  // This REVERSES the 2026-09-11 decision that they move into this app with
+  // restricted edit access, so the reasoning is worth keeping rather than
+  // just the outcome. A form is for numbers that change often enough that
+  // chasing someone to edit a table is worse than giving them a form. These
+  // change about never, and the edit-access worry that came with them (they
+  // are bonus-bearing) is a cost, not a benefit.
+  //
+  // ⚠ CONSEQUENCE, stated because it is easy to miss: the standards now have
+  // no home in BigQuery at all. They stay in the Monthly TAT Analysis sheet,
+  // and `quality_turnaround_time_report` therefore publishes turnaround
+  // ACTUALS with nothing to measure them against. The comparison has to
+  // happen wherever that sheet lives, or the standards need a one-off loaded
+  // table later. Not a gap this app closes any more.
 
   // part_costs (removed 2026-09-16): was a manual per-part cost fallback,
   // never a real requirement — Emilio's own framing in the 2026-09-16
@@ -162,10 +207,25 @@ var DATASETS = {
 };
 
 // Columns appended to every dataset, so who-changed-what is never optional.
+//
+// ⚠ NAMED `updated_by` / `updated_at`, NOT `submitted_*` — CORRECTED
+// 2026-09-22, and the rename is load-bearing rather than cosmetic. The live
+// `scorecard_goals_app` table carries updated_by/updated_at, and
+// `v2_scorecard_goals_resolved` both SELECTs them and dedupes on
+// `ORDER BY updated_at DESC` ("newest edit wins"). Pushes here are
+// WRITE_TRUNCATE with an explicit schema, so the first real push from this
+// app under the old names would have replaced that table with columns the
+// resolver does not have — breaking the revenue, sales and production
+// vs-goal views, and the newest-wins rule with them, at the exact moment
+// Jennilyn starts entering live goals. Verified against PlexTest 2026-09-22.
+//
+// If the sheet tabs were already created with the old headers, re-run
+// setupSheets() or rename those two header cells — appendToSheet_ maps values
+// onto header names, so a stale header silently writes blanks.
 var COMMON_FIELDS = [
-  { name: 'submitted_by', type: 'text' },
-  { name: 'submitted_at', type: 'timestamp' },
-  { name: 'is_deleted',   type: 'bool' }
+  { name: 'updated_by', type: 'text' },
+  { name: 'updated_at', type: 'timestamp' },
+  { name: 'is_deleted', type: 'bool' }
 ];
 
 var METRIC_UNITS = { revenue: 'USD', sales: 'USD', production: 'units' };
@@ -293,8 +353,7 @@ function buildOptionSets_() {
   ];
   sets.incidentTypes = ['Injury', 'Near miss', 'Property damage', 'Spill / release', 'Other']
     .map(function (v) { return { value: v, label: v }; });
-  sets.stockTypes = ['Capsules', 'Powder', 'Tablets', 'Softgels', 'Liquid', 'Gummies']
-    .map(function (v) { return { value: v, label: v }; });
+  // stockTypes removed 2026-09-22 with the turnaround_standards dataset.
 
   function load(name, sql) {
     try {
@@ -351,6 +410,9 @@ function getFormData() {
       label: ds.label,
       blurb: ds.blurb,
       liveCheck: ds.liveCheck || null,
+      currentView: ds.currentView || null,
+      uiTabs: ds.uiTabs || null,
+      pinnedBy: ds.pinnedBy || null,
       fields: ds.fields.filter(function (f) { return f.type !== 'derived'; })
     };
   });
@@ -430,6 +492,88 @@ function getRepGoalSum(periodMonth) {
   }
 }
 
+/**
+ * What is ALREADY in BigQuery for the thing being edited, shown above the
+ * form. Added 2026-09-22 — Jennilyn, on the 2026-09-21 call: "if they're
+ * editing say a December goal, they're not really going to have visibility
+ * into seeing what December's goal is in BigQuery to know that it's right or
+ * wrong without asking me. So this would give them that chance to interface
+ * with the data that's already in there."
+ *
+ * READ-ONLY, and every path returns a renderable object rather than throwing:
+ * this is a convenience panel, and a failure to show the current value must
+ * never be able to stop someone entering a new one. A missing view, an empty
+ * table and a genuine zero are reported as three different states, because on
+ * a form they mean three different things.
+ */
+function getCurrentValue(which, args) {
+  args = args || {};
+  try {
+    if (which === 'currentGoal')  return currentGoal_(args);
+    if (which === 'lastIncident') return lastIncident_();
+    return { state: 'none' };
+  } catch (e) {
+    return { state: 'error', message: String(e) };
+  }
+}
+
+function currentGoal_(args) {
+  var metric = String(args.metric || '').toLowerCase();
+  var month  = args.period_month ? normalizeMonth_(args.period_month) : '';
+  if (!metric || !month) return { state: 'incomplete' };
+
+  // The form's "(company-wide)" is stored as a blank scope — see
+  // applyDatasetRules_ — so the lookup has to match on blank, not on the
+  // label, or a company-wide goal would always read as "nothing set".
+  var scope = String(args.scope || '');
+  if (scope === COMPANY_WIDE || metric === 'revenue') scope = '';
+  if (metric !== 'revenue' && !scope) return { state: 'incomplete' };
+
+  var sql =
+    'SELECT goal_value, note, updated_by, updated_at ' +
+    'FROM ' + fqn_('v2_scorecard_goals_resolved') + ' ' +
+    'WHERE LOWER(metric) = "' + metric.replace(/"/g, '') + '" ' +
+    '  AND period_month = DATE("' + month + '") ' +
+    '  AND IFNULL(scope, "") = "' + scope.replace(/"/g, '') + '" ' +
+    'LIMIT 1';
+
+  var rows = query_(sql);
+  if (!rows.length) return { state: 'empty', metric: metric, scope: scope, month: month };
+  return {
+    state: 'found',
+    metric: metric,
+    scope: scope,
+    month: month,
+    value: Number(rows[0][0] || 0),
+    unit: METRIC_UNITS[metric] || '',
+    note: rows[0][1] || '',
+    by: rows[0][2] || '',
+    at: rows[0][3] || ''
+  };
+}
+
+function lastIncident_() {
+  var sql =
+    'SELECT incident_date, area, incident_type, recordable, days_lost, description ' +
+    'FROM ' + fqn_('safety_incidents') + ' ' +
+    'WHERE NOT IFNULL(is_deleted, FALSE) ' +
+    'ORDER BY incident_date DESC LIMIT 1';
+
+  var rows = query_(sql);
+  // An empty log reads as a clean record, which is only true if it is being
+  // kept — so say which of the two this is rather than showing a blank.
+  if (!rows.length) return { state: 'empty' };
+  return {
+    state: 'found',
+    date: rows[0][0] || '',
+    area: rows[0][1] || '',
+    type: rows[0][2] || '',
+    recordable: String(rows[0][3]) === 'true',
+    daysLost: rows[0][4],
+    description: rows[0][5] || ''
+  };
+}
+
 // ── Validation ─────────────────────────────────────────────────────────────
 
 function normalizeDate_(s) {
@@ -501,8 +645,8 @@ function saveRow(datasetKey, form) {
 
   applyDatasetRules_(datasetKey, values);
 
-  values.submitted_by = activeUser_();
-  values.submitted_at = nowIso_();
+  values.updated_by = activeUser_();
+  values.updated_at = nowIso_();
   values.is_deleted = false;
 
   // Frontloading: one entry can fill a run of consecutive months. Goals are
@@ -587,8 +731,8 @@ function retractRow(datasetKey, keyValues) {
   applyDatasetRules_(datasetKey, values);
 
   values.note = 'retracted via web app';
-  values.submitted_by = activeUser_();
-  values.submitted_at = nowIso_();
+  values.updated_by = activeUser_();
+  values.updated_at = nowIso_();
   values.is_deleted = true;
 
   appendToSheet_(ds, values);

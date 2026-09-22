@@ -6,12 +6,33 @@ only and was never deployed.
 
 ## What it covers
 
-| Dataset | BigQuery table | Why it can't come from Plex |
+| Dataset | Entered on | BigQuery table | Why it can't come from Plex |
+|---|---|---|---|
+| **Goals** | three tabs — Sales, Production, Revenue | `scorecard_goals_app` | Targets are negotiated, not recorded |
+| **Safety incidents** | one tab | `safety_incidents` | Not in Plex at all; "days without an incident" counts from these |
+
+The three goal tabs are a **presentation split only** (asked for by Jennilyn,
+2026-09-21) — they all write the one `goals` dataset, one sheet tab and one
+table. A dataset here is 1:1 with a sheet tab and a BigQuery table and pushes
+are `WRITE_TRUNCATE`, so three real datasets would mean either three tables
+(breaking every view that reads `scorecard_goals_app`) or three tabs racing to
+truncate one table. Each tab pins `metric`, so the goal-type dropdown is gone —
+the tab is the choice.
+
+**Each form shows what is already saved, above the entry fields.** Pick a goal
+type, month and scope and the current value appears; the incidents tab shows
+the most recent incident. Jennilyn's reason, and it is the point: *"if they're
+editing say a December goal, they're not really going to have visibility into
+seeing what December's goal is in BigQuery to know that it's right or wrong
+without asking me."* The lookup never blocks a save — if it fails, the panel
+hides and the form still works.
+
+### Removed, and why — read before adding either back
+
+| Dataset | Removed | Why |
 |---|---|---|
-| **Goals** | `scorecard_goals_app` | Targets are negotiated, not recorded |
-| **Safety incidents** | `safety_incidents` | Not in Plex at all; "days without an incident" counts from these |
-| **Turnaround standards** | `turnaround_standards` | No per-stock-type benchmark in Plex; today they live in the Weekly/Monthly TAT Analysis sheets |
-| **Part costs** | `part_cost_manual` | **Fallback only** — Plex costs parts itself through `Part_v_Snapshot`, which is unpopulated on this tenant rather than absent |
+| **Turnaround standards** | 2026-09-22 | Jennilyn: *"I don't think we need it… they don't change those standards very much."* This reversed the 2026-09-11 plan to move them here with restricted edit access. ⚠ **They now have no home in BigQuery**, so `quality_turnaround_time_report` publishes actuals with nothing to measure them against — the comparison stays in the Monthly TAT Analysis sheet |
+| **Part costs** | 2026-09-16 | Never a real requirement, just a fallback in case Plex's costing stayed empty. The real path is Plex fed by a NetSuite/Celigo sync — not a human typing numbers that would drift from both systems |
 
 Adding another is a **registry entry in `Code.gs` plus `setupSheets()`** — no
 new form code. If adding one requires editing `Index.html`, the registry is

@@ -14,6 +14,83 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 (later) — Manual Data app reworked from the Sep-21 call
+
+### Fixed — the app would have broken the goal views on its first real push
+`COMMON_FIELDS` stamped every row with `submitted_by` / `submitted_at`. The
+live `scorecard_goals_app` table carries **`updated_by` / `updated_at`**, and
+`v2_scorecard_goals_resolved` both selects them and dedupes on
+`ORDER BY updated_at DESC` — the "newest edit wins" rule the whole
+append-only design rests on. Pushes are `WRITE_TRUNCATE` with an explicit
+schema, so the first real save from this app would have replaced that table
+with columns the resolver does not have, taking out `revenue_vs_goal`,
+`sales_vs_goal` and `production_vs_goal` together.
+
+Nothing had hit it yet only because nobody has entered a goal through the app.
+Jennilyn's plan on the 2026-09-21 call was to start doing exactly that —
+*"if we can get it connected in writing, we can put in our current goals and
+then just go ahead and start using this"* — so this was about a week from
+being discovered as three broken tiles. Renamed to match the table. Verified
+against PlexTest 2026-09-22.
+
+**If the sheet tabs already carry the old headers, re-run `setupSheets()` or
+rename those two cells** — `appendToSheet_` maps values onto header names, so
+a stale header writes blanks rather than failing.
+
+### Removed — the Turnaround standards tab
+Asked directly on the call: *"should we keep the tab for turnaround
+standards?"* — *"I don't think we need it… they don't change those standards
+very much."* This **reverses the 2026-09-11 decision** to move them into the
+app with restricted edit access, so the reasoning is recorded rather than just
+the outcome: a form earns its keep on numbers that change often enough that
+chasing someone to edit a table is worse than giving them a form. These change
+about never, and the edit-access worry that came with them — they are
+bonus-bearing — is a cost rather than a benefit.
+
+⚠ **Consequence, stated because it is easy to miss:** the standards now have
+no home in BigQuery at all. `quality_turnaround_time_report` publishes
+turnaround actuals with nothing to measure them against; the comparison stays
+wherever the Monthly TAT Analysis sheet lives. The open "who may edit the
+form" decision narrows to goals.
+
+### Changed — goals split into three tabs, storage untouched
+*"Maybe instead split out the production goals and the sales goals into two
+separate tabs."* Done as **Sales goals / Production goals / Revenue goal**,
+each pinning `metric` so the goal-type dropdown disappears — the tab is the
+choice. Revenue keeps its own tab because it is company-wide by definition and
+deliberately a different number from Sales; folding it into Sales would imply
+they are the same thing.
+
+**A presentation split only.** A dataset here is 1:1 with a sheet tab and a
+BigQuery table, and pushes are `WRITE_TRUNCATE`, so three real datasets would
+mean either three tables — breaking every view that reads
+`scorecard_goals_app` — or three tabs racing to truncate one. "Recently
+entered" filters to the pinned metric so each tab lists only its own rows.
+
+### Added — each form shows what is already saved, above the fields
+Pick a goal type, month and scope and the current value appears with who last
+changed it; the incidents tab shows the most recent incident. Jennilyn's
+reasoning is the design: *"if they're editing say a December goal, they're not
+really going to have visibility into seeing what December's goal is in
+BigQuery to know that it's right or wrong without asking me."*
+
+Read-only, and it **never blocks a save** — a failed lookup hides the panel and
+the form still works. "Nothing saved yet" is its own message rather than a
+blank, because on a safety log an empty answer means something specific.
+
+### Still open from the same call
+- **Which roster defines "sales rep"** for the goals dropdown. It reads
+  `DISTINCT sales_rep` from `sales_mtd_summary_report`, so a rep with no
+  qualifying sale this month never appears. Plex's `Inside Sales` role
+  (Role_Key 55369) holds all 7 reps who currently carry a goal plus several who
+  don't — still waiting on Jennilyn before wiring it.
+- **Deploying it.** Apps Script has no version control and saving the code does
+  not update the live app: Deploy > Manage deployments > New version. The part
+  costs removal from 2026-09-16 is still not live either.
+
+**Not a code change to the pipeline** — nothing here ships via Terraform or
+Cloud Build.
+
 ## 2026-09-22 — the Quality reports were reading the wrong Plex table
 
 ### Fixed — `Quality_v_Problem` is the classic table; Vox writes `Quality_v_Problem_2`

@@ -36,8 +36,40 @@ description: "VOX | Quality non-conformance (NC) records — prod (PlexProd data
 # ─────────────────────────────────────────────────────────────────────────────
 
 extractions:
+  # ── THE CLASSIC PROBLEM TABLE. Kept, but it is NOT what the reports read.
+  # Verified live 2026-09-22: 0 rows, while the Problem Control UI showed 19
+  # records and Quality_v_Problem_2 held 22. Vox records on Plex's UX screen,
+  # which writes Problem_2 (below). Left extracted so that anything ever
+  # recorded on the classic screen still lands somewhere — and so the
+  # contrast between the two raw tables stays visible instead of becoming
+  # folklore.
   - plex_view: Quality_v_Problem
     bq_table: raw_Quality_v_Problem
+    filter: ""
+    date_col: ""
+
+  # ── Added 2026-09-22 — THE TABLE VOX ACTUALLY WRITES TO.
+  #
+  # quality_nonconformance_report, quality_turnaround_time_report,
+  # quality_cost_by_category_report and quality_disposition_cost_report all
+  # read this now. Every one of them had been returning 0 rows since the day
+  # it was built, while the jobs exited 0 — the zero-row guard preserves the
+  # empty table and the run reports success, so nothing ever said "wrong
+  # table". 161 columns; the ones that change the design are Problem_Form_Key
+  # (how Quality classifies: Material Destruction, 8D, Risk Assessment...),
+  # Job_Key/Job_Op_Key ON the record, Recorded_Date beside Problem_Date, and
+  # Champion / Department_No / Building_Key / Problem_Due_Date / Recurrence /
+  # Quantity_Scrapped.
+  - plex_view: Quality_v_Problem_2
+    bq_table: raw_Quality_v_Problem_2
+    filter: ""
+    date_col: ""
+
+  # The form lookup for Problem_Form_Key — 26 rows, and the reason "Material
+  # Destruction" is findable at all. Note it carries both the new forms and
+  # their "(Classic)" twins; the Name column is what the UI shows.
+  - plex_view: Quality_v_Problem_Form
+    bq_table: raw_Quality_v_Problem_Form
     filter: ""
     date_col: ""
 

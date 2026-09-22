@@ -1,0 +1,332 @@
+Speaker 1  00:03
+Sweet.
+
+Sheldon McNiven  00:05
+So, are you a Vox employee or are you actual Vox employee?
+
+Emilio Dominguez  00:10
+No, I'm a contractor under Parasol. Under Parasol, so Parasol is the main point of contact for me. But you know, I span like all the all the companies regarding what the projects are, and I have been involved more in this Plex migration because of Yenilin asking me to get data from Plex into something that is called BigQuery from Google to to create dashboards. The ultimate goal for her, one of the projects that she has is to create dashboards. But she spans also over a lot of that data scientist projects and financial things. Hello, Janelin.
+
+Speaker 1  00:58
+Yeah.
+
+Sheldon McNiven  01:00
+Good morning.
+
+Emilio Dominguez  01:00
+Good morning.
+
+Speaker 2  01:02
+Morning.
+
+Sheldon McNiven  01:05
+Yeah, that's cool. Sorry. So, are you more like a IT or a computer web developer? Web
+
+Emilio Dominguez  01:12
+web developer pushing hard into understanding some of the business operation jargon, and so you you can help me a lot with that because I really don't know much about. I I didn't even know about you know deviation versus rework versus problems versus claim, right? And Plex uses a lot of different things, so yeah, no words on on on that explaining things from the ground. Yeah,
+
+Sheldon McNiven  01:40
+yeah, it's a lot of jargon for sure.
+
+Emilio Dominguez  01:42
+Definitely.
+
+Sheldon McNiven  01:48
+So, well, sweet. Um, I'll. I guess I can start out with uh, with the 20. Well, actually, made 22 items. Actually, probably 23 or 24. Nice. I'll explain why. But so yeah, when I was working on these the past week, would you like me to share my screen, gentlemen? Sure. Yep. And just get to it. Cool. Share real quick.
+
+Speaker 2  02:19
+Is that a Hello, kitty mug.
+
+Emilio Dominguez  02:21
+Yeah, that's amazing. That's great.
+
+Sheldon McNiven  02:29
+That's awesome.
+
+Emilio Dominguez  02:30
+Yeah, we're seeing that. Yeah,
+
+Sheldon McNiven  02:35
+awesome. So with what I've been testing, just testing all the problem forms, problem control forms, all that stuff, and I just labeled under the brief just the brief description testing, just make sure like someone came across it like okay yeah this is just for test, and I found out like one of these I think it was the AD form or the non-conformance form. I actually put in like an actual NC that we have into that form just to test code work, and it did. So that was really good. But I do have some notes that I was able to find some failures for these. Luckily, gentlemen, I was able to get a meeting, set up a meeting with Justina with a prompt control form on like Thursday. So I'll be working with her on figuring out this side, and that's gonna be super helpful because we schedule like an hour and a half of being able to just work through these and and fix them. So so yeah, that'll be super helpful. So a lot of these, like, a lot of these do work. There's just three. So there's there's two of them that don't work, and then there's two of them that like are kind of still buggy. So the ones that don't work at all is the kappa and the deviation forms. So I don't have them on here, obviously because they just won't submit. But it's just like it's a it just says unexpected error. And when I was working with the material destruction form, that's one of the forms that like works sometimes and doesn't work. So if I don't put a lot of information in the material destruction form, it'll pass. But if I put like a lot of material in, like for example, actually let's just open this one for 17. So I was able to put in like just a lot of Kind of, I put the back of the instruction block out and just copy and paste that information into here. And so, yeah. So I don't, but I didn't put in a whole lot of information as you can see, because if I do, then an error will come up, and it just like doesn't save it. So, for example, let's do this real quick. Watch me put in more info, and then it'll actually work.
+
+Speaker 1  05:11
+Yeah, let's see. Put in some random. So you assign those
+
+Emilio Dominguez  05:21
+to to parts, right? Not to jobs, not to never to to jobs. Yeah, just to parts.
+
+Sheldon McNiven  05:34
+Yeah, it'll be to parts. I'm not sure if we'll be able to. I think we will ultimately assign them to jobs once we have jobs set up, and so yeah. But right now these are yeah just parts.
+
+Speaker 1  05:48
+Okay, so let's see. Okay, yeah. So I select
+
+Sheldon McNiven  05:50
+okay after all of this info, and this comes up, and so. But if I put in a little less information, then it's fine, and I'm not sure why that's happening. I think it has something to do with the these fields, with how they're, you know, configured, and I'll be talking with Justina about that and try figuring out that. But but so, and then the risk assessment form was the other one. Once I submitted the risk assessment form, it totally disappeared, so and that's why like on here it says there's like a gap between 13 and and 11. So I made a risk assessment and that one just totally disappeared and couldn't figure out why. So I made another one and it's kind of similar thing with the material destruction form. With the risk assessment form, I don't have a lot of info on that one, and then it was fine. But when I put a ton of info in it, then it just it just disappears. So so that this system, the problem control form is pretty buggy right now, and and I've been trying to figure it out. And I was able to like I was able to upload and fix a lot of things like with the kappas and other deviations, but it still says unexpected error. So yeah, well, I'll have to wait till I talk with Justina on fixing that. But here's all the yeah, here's all the data that I was able to put in so far.
+
+Emilio Dominguez  07:18
+So Jennilyn, sorry to ask, are those custom forms on Plex, like created from scratch, or do they already are they exist already?
+
+Sheldon McNiven  07:32
+Yeah, no, great question. So the ones there's some of them that are already in Plex, are already built in Plex, but then there's some that we built. So the ones that we built, I'll show you here. So the five p7 step 8d initial problem report, and the system audit card. Those are all built into Plex, and they all work. So those forms work pretty well, but the ones that like that we built was the QA complaint deviation, material destruction nonconformance, and the supplier audit. Those are the ones that we built, and some of those don't work. So the the ones that we built that do work is the supplier audit kind of the risk assessment, and then no conformance form, and the complaint form. Those ones work, but we have like three, three forms that we built that that still won't work.
+
+Emilio Dominguez  08:37
+And they do work if there is less data in, right? Like if you just put some minor details, or maybe just not the entire thing, and they, I I will say like maybe it's a parsing problem that Plex has different types of columns, so maybe it's expecting something, and the form is injecting something else, and that's where it fails. But if it's a custom form, I could surely give it a go with, you know, the those those tests like where
+
+Speaker 1  09:15
+the
+
+Emilio Dominguez  09:16
+problem is, and it should be like on a on a column, right, on a specific column, because I wouldn't think like the whole, the whole thing fails, as you stated that just some of them. Like if I don't populate this field, it works. But yeah, that's great. So so when you have already the data in, you go to problem control on the the other screen that, or the other section that you are showing behind that model, that's the that's the report where you see most of that data in. Like, it is enough for you to see that report problem control that you have there, Like the that's the main the main point of reference for all the problems, right? And
+
+Speaker 1  10:08
+oh yes, rewards
+
+Emilio Dominguez  10:09
+deviation.
+
+Sheldon McNiven  10:13
+Yeah. So here, yeah, this page right here, the problem control, is where we where we would go to for any problems at all that happen, and I want to kind of talk with Gerald about this too on how we want to do the problem control. Gerald, my my boss, but one thing I oh yeah one thing I want to mention too is that like I could even write a list for you if you want to test these as well. I can write a list for you the the forms that do work, the forms don't work at all, and the forms that kind of work. I could I could make that list for you and send it to you too. Yeah. So the the forms that don't work at all is the capa and the deviation. Those ones just yeah, those ones are are broken. So
+
+Emilio Dominguez  11:00
+okay.
+
+Sheldon McNiven  11:01
+But yeah, everything else either works or kind of works. So, so as for
+
+Emilio Dominguez  11:08
+the sorry to interrupt, the tests that you have or the test data, they don't include those that broke down the from the form. They don't have test data, right? Like the kappa report and the ones that are fully broken, so it was impossible just to inject data there, right?
+
+Sheldon McNiven  11:30
+Yeah, yeah. The ones that are fully broken is is the kappa and the deviation. Those ones, those ones we don't have it all in here, just because
+
+Emilio Dominguez  11:37
+they. So deviation is kind of a of a big Thing right, it's a
+
+Sheldon McNiven  11:42
+yeah. That one's important. So, however, with the AD form, this is what I want to talk to my boss about because we don't necessarily have to have a deviation form if we have it on the AD. So I'll scroll down. Yeah, right here. So deviations. I don't know. Here, let me back out on this. Might be answering my own question here. But so if I go to the to the AD form that's that I already made, and then scroll down to deviations, I don't know if that means that it'll link to a deviation, or if we can just fill a deviation in there. So yeah, let me edit this. Okay, then let's go to deviations. Add deviation number. Oh yeah, it looks like we do need a deviation form to little to link
+
+Emilio Dominguez  12:42
+to play. first the deviation,
+
+Speaker 1  12:45
+yeah,
+
+Emilio Dominguez  12:46
+and be able to to link this,
+
+Sheldon McNiven  12:51
+yeah, because it needs a a number to link that.
+
+Emilio Dominguez  12:53
+Yeah, otherwise. So, and how do deviations work on that? Do you feel them like a bunch of them, and they are already established, or like a parameter, or do they vary a lot? And do you feel deviations like constantly?
+
+Sheldon McNiven  13:16
+Yeah, we do have quite a bit of deviations that we fill out. I could look into see like how many to date that we have, but basically what we'll do is we'll you know I'll click on the deviation form and here's the form that we have and then we you know fill it out whatever. It's actually pretty short, so we fill it out and then once it's ready, then we we'd send it over. Or sorry, once we have it filled out, then it'll populate in
+
+Emilio Dominguez  13:43
+here, and
+
+Sheldon McNiven  13:43
+then for like an 8d form, we could link it if we needed. But yeah, so I need to, yeah, I need to tell Gerald about that. So
+
+Emilio Dominguez  13:53
+right on.
+
+Sheldon McNiven  13:55
+Yeah, so that's how that's how they work.
+
+Emilio Dominguez  13:59
+Nice, thank you. And let me just go here. So when you go to the let me just have deviation, like the main, or not the main, but the how do I say that? Like the existing deviation module is that also throwing an error if you add a deviation there? Let me just give you the link to that area because all of those have the the already built sections or the modules where you can either add, edit, or like like orders, or so maybe you can click on that on that link, and so that's the original or the stock module from From deviations, because the form feeds, because it joins and just gathers a lot of other details for the for the problem, but every aspect of Plex has its own built-in, already built section or module. So it's really nice.
+
+Sheldon McNiven  15:27
+Yeah, because if we, yeah, I didn't know about this. This is awesome. You know, Plex already has a built-in deviation. I thought we had to create a form for it. Let me, yeah, let me just play with this real fast. Yeah, no worries.
+
+Emilio Dominguez  15:40
+Yeah, the farm does a lot of of the heavy lift to link other things and get that into a sort of combination of tables or combination of records for for that. But yeah, go on.
+
+Sheldon McNiven  15:55
+Yeah, yeah, this is awesome.
+
+Speaker 1  16:00
+Let's see here.
+
+Sheldon McNiven  16:04
+I'm just filling this out real quick just to kind of test if it works.
+
+Emilio Dominguez  16:07
+And if it brings that also on the AD, that that would be also good, right?
+
+Speaker 1  16:14
+Oh yeah,
+
+Emilio Dominguez  16:15
+brings it up.
+
+Sheldon McNiven  16:20
+Okay, so yeah, let me share my screen real fast. We're just switching to a different screen now.
+
+Emilio Dominguez  16:32
+Okay.
+
+Sheldon McNiven  16:33
+Okay, so yeah, I was it. Yeah, so I just filled it out pretty fast. It was pretty easy. Click on this, and then you just write in the description form, note all this, and
+
+Emilio Dominguez  16:47
+then
+
+Sheldon McNiven  16:49
+once I clicked OK, then it made so it made two deviations. I guess it duplicated itself, but but yeah, that's awesome. And so if I go, so then if I go to the 8d form. Let's see if it'll reference it.
+
+Speaker 1  17:08
+Home control and search 8D. Let's say we want to we want to update this, add a deviation to it,
+
+Sheldon McNiven  17:24
+and the deviations are there. Wow! Yeah, this is great.
+
+Emilio Dominguez  17:27
+Nice. Yeah, that's good.
+
+Sheldon McNiven  17:28
+Thanks for finding that, Emilio.
+
+Emilio Dominguez  17:30
+No, no worries. The way that works is, yeah, as I was saying, like forms help a lot because they gather a lot of other things, but usually systems will have this built in.
+
+Sheldon McNiven  17:47
+Yeah. So did you just type in deviation? Is that correct? The
+
+Emilio Dominguez  17:51
+module. The module because I have already like scanned a lot of the modules versus what we have or what you were using from either spreadsheets or NetSuite, so yeah, the modules are also like if you want something like in more detail on the hamburger button on the on Plex on on the on the left side like far yeah, and that's going to have all the modules like the the built-in stock modules. Some of those may not fulfill everything, so that's where forms come, or even just we are building some of the like occurrences, problems on a separate web app, like a generic web app where you could feel problems, situations that happen, right, and days. But that's that's the thing. So if you hit a blocker on the other ones that you mentioned, like four of them, it could be a chance just to explore those modules and see. Okay, so I can put this right now. The form will still need to be adjusted or or fixed, but I could just go like the longer way into adding this bit by bit. But then, yeah, the the built-in modules are there for you to just explore them, and then have a way for also with the reports on on right.
+
+Speaker 1  19:28
+Yeah.
+
+Sheldon McNiven  19:29
+Oh yeah, that's that's gonna be awesome. The other thing too that I was thinking of, because the only two forms that don't work is the deviations and then the capa form, and so with the deviation form, I could talk to my boss and just be like, "Hey, we don't even need this form because it's already built into Plex, you know. So why do something that's redundant, you know? And then with the with the CAPA form, we actually have it's similar with the 8D form as well, where I'm pretty sure we could probably just use the AD form for the Kappa. So, for example, click on this again.
+
+Emilio Dominguez  20:11
+And that AD is a custom one, also like
+
+Sheldon McNiven  20:16
+no. This one's built into Plex.
+
+Emilio Dominguez  20:17
+All right, nice.
+
+Sheldon McNiven  20:20
+And so, if I go to see root cause, because it already has the five why root cause. Basically, with basically with the kappa form is it's a it's a more in depth form of the the nonconformance report. And so, if we if we did the 8d, we can do, you know, the permanent corrective action, the controlled prevention, you know, and cost recovery and recurrences. That's that's what triggers a kappa in our process here at Vox. Is it like, if it's a problem that keeps reoccurring, then we trigger a kappa, and so for recurrences we select that and be like, okay, yeah, I want to add a recurrence, and then the acronym for kappa is corrective action and preventative action, which is right here. You know,
+
+Emilio Dominguez  21:14
+the
+
+Sheldon McNiven  21:15
+permanent action and control prevention. We could probably even just name these different if we wanted, but but it's basically right here. So that takes place takes in place of the capital form, so we don't really need the capital form either, you know. And so it's yeah, I might talk to my boss about that. Right. Hey, we we don't need these two forms. They don't work anyways.
+
+Emilio Dominguez  21:38
+Yeah, sure. the The thing is just to get some test data in, like if if all is being held correctly, right, handled correctly by Plex on those built-in, as you said. Okay, we don't need them, and we could just use these other ones that are working and do help us with tracking everything. So yeah, that's where I will like like the next steps for you be like okay, let's have some more data on deviations that kaa that you were explaining. Okay, let's get everything and let's get the report and let's see if everything is being tracked. Yeah, that's that's great. That's great. I think from the scorecard definitions, I will just go over those tests that you have And yeah, maybe I just could ask ask some questions to you on on the chat, like when I hit some blockers. But yeah, right now just understanding the test data, getting the test data, grabbing it because it will be wiped tomorrow or at midnight,
+
+Sheldon McNiven  23:10
+right?
+
+Emilio Dominguez  23:10
+But yeah, we store that on BigQuery, so it's not a problem. You wouldn't need to like go and inject the data like every day and every day because.
+
+Speaker 1  23:24
+Oh, that's nice. Yeah,
+
+Emilio Dominguez  23:24
+the the next thing will be just the the ones that you have not entered, like deviation things like that. But they do feed a lot of of the scorecards and they feed a lot of your process operations right On deviation, because it is a big part of of the scorecard. But yeah, I think that's that's progress for me.
+
+Sheldon McNiven  23:57
+Sweet, perfect. So you're saying for me, you so you want me to use the the deviation module on Plex and start using that a little bit more and playing? Yeah,
+
+Emilio Dominguez  24:11
+to see if that's fulfilling what you need on the the custom form was created because of something, right? Because maybe all the fields weren't there right off the bat. So the next thing will be just okay, getting the deviation into the system, getting the test data, see if all connects well, and yeah, that would be just a matter of telling me. Okay, so I put this information right now, like four or five problems that they do contain this deviation, and we are tracking also these by part by job, right? But because that's also the tricky part on how do you link? How do you link those? I think the process right now is not very like tight tightening to a job, right? Or or another could be not be so tracked down into the problems that it have, it had, but yeah, that's just what what the test could say. Okay, just to try to link everything, but yeah, I think that's the those are the following steps for me and getting into the data, trying to map that data to the things that we have on the spreadsheets or either the the form, right?
+
+Sheldon McNiven  26:01
+Right. Okay. Sweet. Yeah. So I'll play with the deviation module, and then instead of just with parts, because that's what I've done with all the the tests that are currently. But instead with parts, then I'll be working with jobs. So I need to create a job and then start linking it to a job and seeing if if it still works that way.
+
+Emilio Dominguez  26:22
+Correct. And
+
+Sheldon McNiven  26:23
+then I'll I'll talk with my boss too about the kappas and have and try linking that to the 8d form and and whatnot.
+
+Emilio Dominguez  26:33
+Right on. And just the last thing, Jennilyn, does Sheldon work with the these safety incidents, or will work with the safety incidents? I don't know.
+
+Speaker 2  26:49
+No.
+
+Emilio Dominguez  26:51
+Right on.
+
+Speaker 2  26:52
+No, it'll probably just be that'll be like an HR. Ah,
+
+Emilio Dominguez  26:57
+okay, right on.
+
+Speaker 2  26:58
+People will have interact with that.
+
+Emilio Dominguez  27:02
+Nice. Okay. Do
+
+Speaker 2  27:03
+you have a a question on it, or
+
+Emilio Dominguez  27:06
+more on the on the types, right? Bringing the types because I do have like injury, near miss, property damage, spill or release, just from the ones that already had, but if there were like other other ones to be created, or if they fulfilled also
+
+Speaker 2  27:30
+the type, yeah, right on.
+
+Emilio Dominguez  27:33
+Nice. Okay, so that's that.
+
+Speaker 3  27:42
+Okay. I think
+
+Emilio Dominguez  27:46
+we don't pretty much need another meeting until I have things mapped out. But I could just point that to Jennilyn and said, "Okay, we need to meet, or let's just continue on on chat, right? On a conversation, checking data and checking how everything is being populated on on Plex, right? But yeah,
+
+Speaker 1  28:17
+sounds good.
+
+Emilio Dominguez  28:18
+Thank you, Sheldon. Thanks for your time.
+
+Speaker 4  28:20
+Sounds good.
+
+Sheldon McNiven  28:22
+Hey, thank you, gentlemen. I have a few questions for you, real quick. That's okay.
+
+Speaker 2  28:27
+Okay, we've got. Are you on the 9o'clock? That was scheduled this morning. Okay.
+
+Sheldon McNiven  28:38
+Is that the part thing?
+
+Speaker 4  28:40
+Yeah.
+
+Sheldon McNiven  28:42
+Okay. Okay. I'll just I'll just text you or message you with the questions I have.
+
+Speaker 2  28:48
+Okay. I'll I'll do what I can.
+
+Sheldon McNiven  28:51
+Sounds good. No, you're good. Thank
+
+Speaker 2  28:53
+you. Bye. See you soon. Good.
+
+Unknown Speaker  28:55
+Bye
+
+
+Transcribed by https://otter.ai

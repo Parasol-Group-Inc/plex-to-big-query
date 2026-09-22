@@ -14,6 +14,139 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 — the Quality reports were reading the wrong Plex table
+
+### Fixed — `Quality_v_Problem` is the classic table; Vox writes `Quality_v_Problem_2`
+Jason and Sheldon's Problem Control session produced 22 real records. None of
+them reached BigQuery, and the reason was not the tenant: **Plex has two
+problem tables and Vox records on the UX screen, which writes
+`Quality_v_Problem_2`.** Every Quality report here had been built on the
+classic `Quality_v_Problem`.
+
+Verified live 2026-09-22 against `vox.test.odbc.plex.com`: **19 records in the
+Problem Control UI, 22 rows in `Quality_v_Problem_2`, 0 rows in
+`Quality_v_Problem`.**
+
+**Nothing ever said so.** The extraction genuinely succeeded — it asked the
+right question of the wrong table — so the job exited 0, the run email said
+success, and the zero-row guard logged `0 rows for raw_Quality_v_Problem →
+existing table left untouched`. Four reports had therefore returned 0 rows
+since the day each was built, which read exactly like "the tenant has no
+quality data yet", and was written down as that more than once.
+
+Repointed `quality_nonconformance_view.sql` and
+`quality_turnaround_time_view.sql` at the UX table; `quality_cost_by_category`
+and `quality_disposition_cost` follow automatically, being thin views over the
+nonconformance report. Row counts in `PlexTest` after the fix: **nc 22, tat 22,
+cost-by-category 9, disposition-cost 1, deviations 2** — verified by querying
+each view, not by trusting the exit code.
+
+The classic table stays extracted on purpose, so anything ever recorded on the
+classic screen still lands somewhere and the contrast between the two raw
+tables stays visible.
+
+### Added — `Quality_v_Problem_2` + `Quality_v_Problem_Form` extractions
+Both configs (`reports/quality_nonconformance.yaml` and its `reports/test/`
+twin, 13 extractions each). The form lookup is what makes **Problem Form**
+readable — and Problem Form turns out to be the dimension Quality actually
+classifies by: Material Destruction (3), Non-Conformance Form (3), Risk
+Assessment (4), System Audit CAR (4), 8D (3), Complaint Form (2), Initial
+Problem Report (2), 5P (1).
+
+New columns on `quality_nonconformance_report`: `problem_form`,
+`problem_form_key`, `recorded_date`, `due_date`, `quantity_scrapped`,
+`champion_key`, `department_no`, `building_key`, `workcenter_key`, `job_key`,
+`job_op_key`, `recurrence`, `root_cause_response`, `response_action`, and
+`brief_description_html` beside a tag-stripped `brief_description` (the UX form
+is rich text — records arrive as `<p>**TEST**&nbsp;…</p>`).
+
+**`corrective_action` is gone**, and that is a real difference rather than an
+omission: Problem_2 has no such column. Corrective and preventive actions are
+their own records in the Problem Action family, one row per action, which is
+what lets an 8D carry several. Not extracted yet — add when action-level
+reporting is actually wanted.
+
+### Changed — turnaround time ships BOTH clocks instead of choosing one
+The Problem-Date-vs-Entered-Date decision has been open since 2026-09-11 and
+stayed theoretical while the table was empty. `Problem_2` carries both, both
+populated, genuinely different (Problem_Date is usually date-only,
+Recorded_Date a precise timestamp). `turnaround_days` keeps its existing
+meaning so nothing downstream shifts, and `turnaround_days_from_recorded`,
+`reporting_lag_days` and `closed_on_time` (against Plex's own due date, a
+column the classic table did not have) sit beside it. **The decision is still
+needed** — it picks which column the scorecard reads — but the report is
+usable either way in the meantime.
+
+### Found — three things that block the Quality $ tiles, none of them ours
+- **`Cost` is 0.0 on all 22 records.** The value is being typed into the
+  description instead: records 6, 11 and 17 read `1.5`, `600` and `$2305.57`
+  and nothing else. Destruction $ / Rework $ / Deviation $ read $0 until that
+  changes. Not papered over — a fabricated cost is worse than a visible zero.
+- **`Final_Disposition` is blank on all 22**, including the one Closed record.
+  Destruction is recorded by choosing the Material Destruction *form*, not by
+  dispositioning material as Scrap. `quality_disposition_cost_report` is
+  deliberately **not** repointed at the form: which of the two Vox means is
+  Quality's to answer, and switching it quietly is how the accounting-approval
+  tile went silently dead in the first place.
+- **Deviations are linked to nothing.** Sheldon created 2 in Plex's built-in
+  deviation module (both "machine damaged", 585 pieces) and all four junction
+  tables — Job, Part, Problem, Workcenter — are still empty. Linking them to a
+  job is his next test, from the 2026-09-22 meeting.
+
+Also worth recording from that meeting (`meetings-reference/sep-22/`): the
+custom **CAPA Report** and **Deviation Form** both fail to submit, and Material
+Destruction / Risk Assessment lose data when heavily filled in. Sheldon meets
+Justina Thursday about the forms and will ask his manager whether the custom
+deviation form can be retired in favour of Plex's built-in module.
+
+### Deployed
+SQL and the test config pushed to GCS and the test job run twice (the first
+run caught `Corrective_Action` not existing on Problem_2 — the view-retry
+safety net reported it cleanly instead of failing the run silently).
+**`terraform apply` still needed for prod** — `reports/quality_nonconformance.yaml`
+and both SQL objects are Terraform-managed.
+
+## 2026-09-21 — Label Design part attributes: NULLIF fix, five new attributes
+
+### Fixed — empty-string attribute values leaking as `''` instead of `NULL`
+`reports/sql/label_design_view.sql` pivoted `pa.Value` raw. Verified against
+live BigQuery: all 28 rows in `raw_Part_v_Part_Attribute` (14 parts ×
+Allergen + Hazardous) carry an **empty string**, not NULL — so every
+`part_*` column emitted `''`. Downstream that reads as "filled in, but
+blank", and would have let the not-yet-built Monday push service overwrite a
+hand-entered value with an empty one. Every branch is now
+`NULLIF(TRIM(pa.Value), '')`; re-verified against live BigQuery to return
+`NULL`.
+
+### Added — five more part-attribute columns
+Jennilyn added five attributes in Plex since 2026-09-16, present in **both**
+PlexProd and PlexTest with identical catalogs (so: real production config,
+not test-tenant scratch): `California PDP`, `Prop 65 Requirement`,
+`Trademark`, `Bottle Material`, `Material Classification`. All ten are now
+pivoted — new columns `part_bottle_material`, `part_california_pdp`,
+`part_prop_65_requirement`, `part_trademark`,
+`part_material_classification`. All values are blank today, so all ten read
+NULL; they are exposed rather than pre-selected because this build has
+already been burned once guessing attribute names.
+
+`Bottle Material` existing Plex-side resolves the one mapping there was a
+confident answer for — Ashley confirmed 2026-09-16 that Monday's Bottle
+Material (container: HDPE/PET/Glass) and Plex's Printing Material (label
+stock) are different concepts, and Plex now carries both separately.
+
+### Changed — attribute keys are not stable; the doc said otherwise
+`Printing Material` moved from `Attribute_Key 7427` to `7432`, and `7427` is
+now `California PDP`. The pivot was unaffected **only** because it joins on
+`Attribute_Name` — a key-based pivot would have silently reported California
+PDP as the printing material. Noted in the SQL comments as a rule, not an
+observation. `label-design/STATUS.md` and
+`docs/reports/label_design_report.md` updated; the previously documented
+proof example (`part_allergen = "Yes"` on `Part_Key 11003458`) is gone, that
+part is no longer in the table at all.
+
+SQL-only change — ships via `terraform apply`, not Cloud Build. Dry-run
+validated; **not yet applied.**
+
 ## 2026-09-17 (later) — dev/dev-label-design/dev-scorecard branches, deploy preflight check
 
 ### Added — `scripts/deploy_preflight.sh`

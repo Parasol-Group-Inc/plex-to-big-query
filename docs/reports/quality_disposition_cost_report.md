@@ -1,6 +1,8 @@
 # Vox Scorecard | NC Cost by Disposition (Destruction/Rework)
 
-> **Status:** ✅ Built and deployed 2026-09-09 — 0 rows because the quality tables are empty; the **disposition value lists behind it are real and confirmed** · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
+> **Status:** ⚠ Built 2026-09-09 · **now returning rows (2026-09-22) but every one of them reads "(not yet dispositioned)" at $0** — see the warning below · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
+
+> **What changed 2026-09-22, and why this tile still can't go live.** The report it reads was pointing at the wrong Plex table and has been repointed — 22 real nonconformance records now flow through. Two things about those records stop this tile working as designed: **Final Disposition is blank on all of them**, and **cost is 0 on all of them**. Vox records a destruction by choosing the **Material Destruction form** when the record is created, not by dispositioning material as Scrap afterwards, and the dollar value is being typed into the description ("$2305.57") rather than into Plex's Cost field. So this report is correct and its inputs aren't there yet. Deliberately **not** repointed at the form in the meantime: which of the two Vox means is a question for Quality, and quietly switching it is how a tile ends up confidently wrong. The form name is available on [Quality Nonconformance](quality_nonconformance_report.md) the moment that answer arrives.
 
 ## What this tells you
 

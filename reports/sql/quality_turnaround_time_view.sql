@@ -42,19 +42,52 @@
 -- closed_month to one calendar month for "Last Month", or filter closed_date
 -- within a trailing N-day window for "Rolling", at the consuming layer.
 --
+-- THE STANDARDS ARE NOW JOINED IN — from a hand-maintained table
+-- ─────────────────────────────────────────────────────────────────────────
+-- `{dataset}.turnaround_standards` holds the Performance and Bonus day counts
+-- per stock type. It is **hand-maintained by Jennilyn directly in BigQuery**:
+-- not written by the ETL, not managed by Terraform, and deliberately not fed
+-- by the manual-data web app — that tab was dropped on 2026-09-21 because
+-- these change about never, and a form is for numbers that change often.
+-- Rebuild DDL and how to edit it: docs/reports/turnaround_standards.md.
+--
+-- ⚠ THE TABLE MUST EXIST OR THIS VIEW FAILS TO CREATE, exactly like
+-- scorecard_goals does for the three vs-goal views — and it fails looking
+-- like a broken report rather than a missing dependency. An EMPTY table is
+-- fine: every standard column reads NULL and `standard_source` says
+-- 'none set'.
+--
+-- MATCHING IS AN EXACT STRING MATCH on Plex's `Part_Type` (Components, Raw
+-- Materials, Semi-Finished Goods, Finished Goods, WIP, Supply, Inspection),
+-- with the same failure mode as the scorecard's goal `scope`: a typo yields a
+-- NULL standard, not an error. Two deliberate safety valves, because 12 of 22
+-- live NC records have no part at all and therefore no stock type:
+--   1. a row with a BLANK (or 'ALL') stock_type is the catch-all, used when
+--      the part type has no row of its own or there is no part;
+--   2. `standard_source` says which of the two was used, so a catch-all
+--      number is never mistaken for a type-specific one.
+--
+-- ⚠ "Item Stock Type" on the Monthly TAT Analysis sheet is ASSUMED to mean
+-- Plex's Part_Type. That is the closest thing on the part master — there is
+-- no column called Stock_Type — but nobody has confirmed it against the
+-- sheet. If it turns out to mean something else, only the join column here
+-- and the values in the table change; the shape does not.
+--
 -- Not re-extracted — bq_view entry in reports/quality_nonconformance.yaml,
 -- same raw_Quality_v_Problem_2 table as quality_nonconformance_report.
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per Quality_v_Problem_2 record.
 
-WITH base AS (
+WITH dated AS (
   SELECT
     q.Problem_No                                        AS problem_no,
     f.Name                                              AS problem_form,
     q.Problem_Type                                      AS problem_type,
     q.Problem_Category                                  AS problem_category,
     q.Problem_Status                                    AS problem_status,
+    pt.Part_No                                          AS part_no,
+    pt.Part_Type                                        AS stock_type,
 
     -- DATE CONVERSION PATTERN: see reports/sql/work_orders_view.sql header.
     COALESCE(
@@ -84,39 +117,125 @@ WITH base AS (
   FROM `{gcp_project}.{dataset}.raw_Quality_v_Problem_2` q
   LEFT JOIN `{gcp_project}.{dataset}.raw_Quality_v_Problem_Form` f
     ON SAFE_CAST(q.Problem_Form_Key AS INT64) = SAFE_CAST(f.Problem_Form_Key AS INT64)
+  -- Part_Key is -1 on a record with no part; the join simply finds nothing.
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` pt
+    ON SAFE_CAST(q.Part_Key AS INT64) = SAFE_CAST(pt.Part_Key AS INT64)
+),
+
+-- The day counts live one layer up from the dates they are built on: a SELECT
+-- alias cannot be referenced by a sibling item in the same SELECT, and
+-- repeating the date-conversion COALESCE four more times would be worse.
+base AS (
+  SELECT
+    *,
+    -- The clock as originally built: when the problem happened → closed.
+    DATE_DIFF(closed_date, opened_date, DAY)            AS turnaround_days,
+    -- The same clock started when the problem was written up. The gap
+    -- between the two is reporting lag.
+    DATE_DIFF(closed_date, recorded_date, DAY)          AS turnaround_days_from_recorded,
+    DATE_DIFF(recorded_date, opened_date, DAY)          AS reporting_lag_days
+  FROM dated
+),
+
+-- A change to a standard is made by ADDING a row, so history stays intact.
+-- Which row applies therefore depends on WHEN the problem happened, not on
+-- which row is newest overall: a standard that takes effect in December must
+-- not be applied to a September problem. Both lookups below pick the newest
+-- row effective on or before each record's own month.
+standards AS (
+  SELECT
+    UPPER(TRIM(IFNULL(stock_type, '')))                 AS stock_type_key,
+    effective_month,
+    performance_days,
+    bonus_days
+  FROM `{gcp_project}.{dataset}.turnaround_standards`
+  WHERE effective_month IS NOT NULL
+),
+
+-- The standard for each record's own stock type, as at its month.
+by_type AS (
+  SELECT
+    b.problem_no,
+    ARRAY_AGG(STRUCT(s.performance_days, s.bonus_days)
+              ORDER BY s.effective_month DESC LIMIT 1)[OFFSET(0)] AS std
+  FROM base b
+  JOIN standards s
+    ON s.stock_type_key = UPPER(TRIM(IFNULL(b.stock_type, '')))
+   AND s.stock_type_key NOT IN ('', 'ALL')
+   AND s.effective_month <= DATE_TRUNC(b.opened_date, MONTH)
+  GROUP BY b.problem_no
+),
+
+-- The catch-all, for a record with no part or a stock type nobody listed.
+-- 12 of 22 live NC records have no part at all, so this is the common path
+-- rather than an edge case.
+catch_all AS (
+  SELECT
+    b.problem_no,
+    ARRAY_AGG(STRUCT(s.performance_days, s.bonus_days)
+              ORDER BY s.effective_month DESC LIMIT 1)[OFFSET(0)] AS std
+  FROM base b
+  JOIN standards s
+    ON s.stock_type_key IN ('', 'ALL')
+   AND s.effective_month <= DATE_TRUNC(b.opened_date, MONTH)
+  GROUP BY b.problem_no
 )
 
 SELECT
-  problem_no,
-  problem_form,
-  problem_type,
-  problem_category,
-  problem_status,
+  b.problem_no,
+  b.problem_form,
+  b.problem_type,
+  b.problem_category,
+  b.problem_status,
 
-  opened_date,
-  recorded_date,
-  closed_date,
-  due_date,
+  b.opened_date,
+  b.recorded_date,
+  b.closed_date,
+  b.due_date,
 
-  -- The clock as originally built: when the problem happened → closed.
-  DATE_DIFF(closed_date, opened_date, DAY)              AS turnaround_days,
-
-  -- The same clock started when the problem was written up. The gap between
-  -- the two is reporting lag.
-  DATE_DIFF(closed_date, recorded_date, DAY)            AS turnaround_days_from_recorded,
-
-  DATE_DIFF(recorded_date, opened_date, DAY)            AS reporting_lag_days,
+  b.turnaround_days,
+  b.turnaround_days_from_recorded,
+  b.reporting_lag_days,
 
   -- On-time closure against Quality's own due date — a metric the classic
   -- table could not support, because it had no due date.
   CASE
-    WHEN closed_date IS NULL OR due_date IS NULL THEN NULL
-    ELSE closed_date <= due_date
+    WHEN b.closed_date IS NULL OR b.due_date IS NULL THEN NULL
+    ELSE b.closed_date <= b.due_date
   END                                                   AS closed_on_time,
 
-  closed_date > CURRENT_DATE()                          AS closed_date_in_future,
+  b.closed_date > CURRENT_DATE()                          AS closed_date_in_future,
 
-  DATE_TRUNC(closed_date, MONTH)                        AS closed_month
+  DATE_TRUNC(b.closed_date, MONTH)                        AS closed_month,
 
-FROM base
-ORDER BY closed_date DESC NULLS LAST, problem_no DESC
+  -- ── The standards, and whether this record met them ──────────────────
+  b.stock_type,
+  COALESCE(t.std.performance_days, c.std.performance_days) AS performance_standard_days,
+  COALESCE(t.std.bonus_days,       c.std.bonus_days)       AS bonus_standard_days,
+
+  -- Which standard was used. A catch-all figure must never be mistaken for a
+  -- type-specific one, and 'none set' must never be mistaken for a zero.
+  CASE
+    WHEN t.std.performance_days IS NOT NULL THEN 'stock type'
+    WHEN c.std.performance_days IS NOT NULL THEN 'catch-all'
+    ELSE 'none set'
+  END                                                   AS standard_source,
+
+  -- NULL rather than FALSE when the record is open or no standard exists —
+  -- "we do not know yet" and "missed it" are different answers.
+  CASE
+    WHEN b.turnaround_days IS NULL THEN NULL
+    WHEN COALESCE(t.std.performance_days, c.std.performance_days) IS NULL THEN NULL
+    ELSE b.turnaround_days <= COALESCE(t.std.performance_days, c.std.performance_days)
+  END                                                   AS met_performance_standard,
+  CASE
+    WHEN b.turnaround_days IS NULL THEN NULL
+    WHEN COALESCE(t.std.bonus_days, c.std.bonus_days) IS NULL THEN NULL
+    ELSE b.turnaround_days <= COALESCE(t.std.bonus_days, c.std.bonus_days)
+  END                                                   AS met_bonus_standard
+
+FROM base b
+LEFT JOIN by_type   t ON t.problem_no = b.problem_no
+LEFT JOIN catch_all c ON c.problem_no = b.problem_no
+
+ORDER BY b.closed_date DESC NULLS LAST, problem_no DESC

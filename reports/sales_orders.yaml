@@ -172,6 +172,27 @@ extractions:
     filter: ""
     date_col: ""
 
+  # ── Added 2026-09-22 — WHO COUNTS AS A SALES REP, for sales_reps_report.
+  #
+  # The manual-data app's goals dropdown read DISTINCT sales_rep from
+  # sales_mtd_summary_report, which lists only reps with a qualifying sale
+  # THIS MONTH — so a new or quiet rep could never be given a goal, which is
+  # exactly where a goal matters most. Plex's `Inside Sales` role roster is
+  # the real answer (confirmed live: it holds all 7 reps who already carry a
+  # goal, plus the ones that were missing).
+  #
+  # Two tables because the membership is a junction: Role holds the name,
+  # User_Role holds who is in it.
+  - plex_view: Plexus_Control_v_Role
+    bq_table: raw_Plexus_Control_v_Role
+    filter: ""
+    date_col: ""
+
+  - plex_view: Plexus_Control_v_User_Role
+    bq_table: raw_Plexus_Control_v_User_Role
+    filter: ""
+    date_col: ""
+
   # ── Added 2026-09-09 — BOM, for BOM-EXPLODED component demand.
   #
   # Plex's own "Sales Order Line Inventory Check" screen splits Demand into
@@ -360,3 +381,10 @@ bq_view:
   - name: v2_sales_vs_goal_report
     display_name: "Vox Scorecard | Sales vs Goal by Rep (v2 goals)"
     sql_file: gs://voxdatalake-report-configs/sql/v2_sales_vs_goal_view.sql
+  # ── Added 2026-09-22 — the roster behind the manual-data app's sales-goal
+  # dropdown. Reads the Plex `Inside Sales` role rather than "reps who sold
+  # something this month", so a rep can be given a goal before their first
+  # sale. Matched on the role NAME, not its key.
+  - name: sales_reps_report
+    display_name: "Sales Reps (Inside Sales roster)"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_reps_view.sql

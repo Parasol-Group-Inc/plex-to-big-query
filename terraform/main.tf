@@ -2591,6 +2591,17 @@ resource "google_storage_bucket_object" "sales_customers_by_rep_view_sql" {
   content_type = "text/plain"
 }
 
+# Added 2026-09-22 — the Inside Sales roster behind the manual-data app's
+# sales-goal dropdown. Rides the sales_orders pipeline; see
+# reports/sql/sales_reps_view.sql for why the old "reps who sold something
+# this month" list was the wrong source.
+resource "google_storage_bucket_object" "sales_reps_view_sql" {
+  name         = "sql/sales_reps_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_reps_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "sales_revenue_by_rep_view_sql" {
   name         = "sql/sales_revenue_by_rep_view.sql"
   bucket       = google_storage_bucket.report_configs.name

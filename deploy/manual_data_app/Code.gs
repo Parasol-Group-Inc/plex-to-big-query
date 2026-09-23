@@ -364,9 +364,26 @@ function buildOptionSets_() {
     }
   }
 
+  // WHO COUNTS AS A SALES REP — repointed 2026-09-22.
+  //
+  // This used to read DISTINCT sales_rep from sales_mtd_summary_report, i.e.
+  // "reps who already sold something this month". A new or quiet rep never
+  // appeared, so they could not be given a goal — which is exactly where a
+  // goal matters most. It now reads Plex's own `Inside Sales` role roster
+  // (sales_reps_report), which holds every rep who currently carries a goal
+  // plus the ones that were missing.
+  //
+  // Falls back to the old source if the new view is not in this dataset yet,
+  // because an empty dropdown is worse than a short one — and the two agree
+  // on everyone who has sold anything.
   load('salesReps',
-    'SELECT DISTINCT sales_rep FROM ' + fqn_('sales_mtd_summary_report') +
+    'SELECT DISTINCT sales_rep FROM ' + fqn_('sales_reps_report') +
     ' WHERE sales_rep IS NOT NULL ORDER BY sales_rep');
+  if (!sets.salesReps || !sets.salesReps.length) {
+    load('salesReps',
+      'SELECT DISTINCT sales_rep FROM ' + fqn_('sales_mtd_summary_report') +
+      ' WHERE sales_rep IS NOT NULL ORDER BY sales_rep');
+  }
 
   load('workcenterGroups',
     'SELECT DISTINCT workcenter_group FROM ' +

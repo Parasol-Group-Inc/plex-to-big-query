@@ -14,6 +14,80 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 (last) — turnaround standards get a table, sales reps get a roster
+
+### Added — `turnaround_standards`, in both datasets
+Created by hand in `PlexTest` and `PlexProd`; **not** Terraform-managed and
+**not** written by the ETL, the same arrangement as `scorecard_goals` and for
+the same reason. Jennilyn edits it directly in BigQuery.
+
+This is the other half of dropping the web-app tab earlier today: the
+standards needed a home, and a form was the wrong one for numbers that change
+about never. A table she can edit is the right shape.
+
+⚠ **It must exist or `quality_turnaround_time_report` fails to create**, which
+looks like a broken report rather than a missing dependency — the exact trap
+`scorecard_goals` sets for the three vs-goal views. An EMPTY table is fine and
+reads as `none set`. Rebuild DDL, how to add a standard, and the two things to
+get right: `docs/reports/turnaround_standards.md`.
+
+### Changed — turnaround time measures each record against its standard
+`quality_turnaround_time_report` gains `stock_type`,
+`performance_standard_days`, `bonus_standard_days`, `standard_source`,
+`met_performance_standard` and `met_bonus_standard`.
+
+Three decisions worth keeping:
+- **A standard is chosen by WHEN the problem happened**, not by which row is
+  newest. A change is made by adding a row, and the newest row effective on or
+  before that record's month wins — so a standard starting in December is
+  correctly not applied to a September problem.
+- **There is a catch-all.** 12 of 22 live NC records have no part, and
+  therefore no stock type; without a blank-stock_type row they would get no
+  standard at all. `standard_source` says `stock type` or `catch-all`, so a
+  fallback number is never mistaken for a type-specific one.
+- **Met/missed is NULL, not false**, while a record is open or no standard is
+  set. "We don't know yet" and "missed it" are different answers.
+
+Proven end to end in `PlexTest` with three PLACEHOLDER rows (clearly labelled,
+to be deleted when the real figures arrive): record 9 takes the catch-all
+30/15 and meets both; record 2 takes the `Raw Materials` 7/3, meets
+performance at 5 days and **misses bonus** — so the flags discriminate rather
+than always agreeing. `PlexProd` left empty on purpose.
+
+⚠ **`stock_type` assumes the sheet's "Item Stock Type" means Plex's
+`Part_Type`** (Components, Raw Materials, Semi-Finished Goods, Finished Goods,
+WIP, Supply, Inspection). Closest thing on the part master — there is no
+`Stock_Type` column — but unconfirmed against the sheet.
+
+### Added — `sales_reps_report`, and the goals dropdown now reads it
+The manual-data app built its sales-rep list from `DISTINCT sales_rep FROM
+sales_mtd_summary_report` — reps who already sold something **this month**. A
+new or quiet rep never appeared, so they could not be given a goal, which is
+exactly where a goal matters most.
+
+Now reads Plex's `Inside Sales` role roster (`Plexus_Control_v_Role` +
+`Plexus_Control_v_User_Role`, added to both `sales_orders` configs — 26
+extractions, 29 views each). Matched on the role **name**, not its key.
+
+**Verified after deploying:** 13 reps, and **all 7 who carry a real goal today
+are among them** — nobody is lost, six become reachable. Two findings fell out
+of it: `Inside Sales` has `Commissionable = FALSE`, so that flag is NOT how Vox
+marks a sales role and filtering on it would have returned nobody (it is
+published rather than used); and one existing goal is scoped to the literal
+string **"Sales Representative"**, which is not a person and matches nothing —
+invisible while the dropdown only listed reps with sales, and somebody's to
+clean up.
+
+The loader falls back to the old source if the new view is not in the dataset
+yet: an empty dropdown is worse than a short one.
+
+### Deployed
+`terraform apply` — 3 added, 3 changed, 2 destroyed; `plan` after it reports no
+changes. Test jobs for both pipelines run and **every view verified by
+querying it**, not by exit code. Prod views pick the new SQL up on tonight's
+scheduled runs. The web app still needs Deploy > Manage deployments > New
+version — nothing in Apps Script has shipped yet.
+
 ## 2026-09-22 (later) — Manual Data app reworked from the Sep-21 call
 
 ### Fixed — the app would have broken the goal views on its first real push

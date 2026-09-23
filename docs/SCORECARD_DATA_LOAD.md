@@ -124,7 +124,7 @@ opportunities figure — all on the sign-off board.
 Sales, revenue, shipping, WIP, pipeline, on-hand inventory, and all three goal
 tiles — `scorecard_goals` carries 68 rows from the spreadsheet and
 `scorecard_goals_app` carries the 12 loaded revenue goals, resolved by
-`v2_scorecard_goals_resolved`.
+`scorecard_goals_resolved`.
 
 ---
 

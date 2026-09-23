@@ -52,21 +52,18 @@ $Views = [ordered]@{
     'shipping_revenue_report',
     'shipping_daily_report',
     'shipping_pending_revenue_report',
-    'revenue_vs_goal_report',
-    'v2_revenue_vs_goal_report'
+    'revenue_vs_goal_report'
   )
   'Sales'       = @(
     'sales_mtd_summary_report',
     'sales_mtd_by_status_change_report',
     'sales_order_value_by_status_report',
     'pipeline_plex_value_report',
-    'sales_vs_goal_report',
-    'v2_sales_vs_goal_report'
+    'sales_vs_goal_report'
   )
   'Production'  = @(
     'production_monthly_by_workcenter_group_report',
     'production_vs_goal_report',
-    'v2_production_vs_goal_report',
     'mfg_job_open_caps_report',
     'bottling_job_open_report'
   )
@@ -90,7 +87,7 @@ $Views = [ordered]@{
   'Goal source' = @(
     'scorecard_goals',
     'scorecard_goals_app',
-    'v2_scorecard_goals_resolved'
+    'scorecard_goals_resolved'
   )
   'Operational' = @(
     'label_design_report'

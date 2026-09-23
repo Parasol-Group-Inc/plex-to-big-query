@@ -237,6 +237,18 @@ bq_view:
   # Plex data. That table is fed from a Google Sheet by an Apps Script and is
   # NOT created by this ETL — if it's missing, these two views fail to create.
   # Both must stay after sales_revenue_summary_report / sales_mtd_summary_report.
+  # ── The ONE goals source, renamed from v2_scorecard_goals_resolved
+  # 2026-09-22 when the duplicate "v2_" report views were retired. App-first
+  # with the legacy `scorecard_goals` table as a fallback until
+  # importLegacyGoals() has run — see the SQL header for how to finish that.
+  #
+  # ORDER MATTERS: it must be created BEFORE the *_vs_goal_report views that
+  # read it. Listed in both sales_orders and work_orders because goal views
+  # live in both pipelines; the SQL is identical, so whichever runs second
+  # replaces an identical view.
+  - name: scorecard_goals_resolved
+    display_name: "Goals | Resolved (one goal per metric/month/scope)"
+    sql_file: gs://voxdatalake-report-configs/sql/scorecard_goals_resolved_view.sql
   - name: revenue_vs_goal_report
     display_name: "Vox Scorecard | Revenue vs Goal"
     sql_file: gs://voxdatalake-report-configs/sql/revenue_vs_goal_view.sql
@@ -244,30 +256,6 @@ bq_view:
     display_name: "Vox Scorecard | Sales vs Goal by Rep"
     sql_file: gs://voxdatalake-report-configs/sql/sales_vs_goal_view.sql
 
-  # ── Added 2026-09-09 — the goals migration seam. Two goal sources now run
-  # side by side: the Apps Script WEB APP writes scorecard_goals_app, and the
-  # SPREADSHEET ETL still writes scorecard_goals. v2_scorecard_goals_resolved
-  # prefers the app and falls back to the sheet, so nothing goes blank while
-  # both are live, and the v2_* report views are generated copies of the
-  # originals above that read the resolver instead of the sheet table.
-  #
-  # The originals stay deployed and unchanged so Looker Studio can migrate one
-  # tile at a time. When the spreadsheet ETL is sunset: delete the originals,
-  # drop the v2_ prefix, delete the resolver's sheet branch.
-  #
-  # ORDER MATTERS — the resolver must be created before any view that reads
-  # it. Both v2 views also depend on the same actuals views as their originals.
-  # v2_*_vs_goal_view.sql files are GENERATED — edit the original and re-run
-  # scripts/gen_v2_goal_views.py, never hand-edit them.
-  - name: v2_scorecard_goals_resolved
-    display_name: "Goals | Resolved (app first, sheet fallback)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_scorecard_goals_resolved_view.sql
-  - name: v2_revenue_vs_goal_report
-    display_name: "Vox Scorecard | Revenue vs Goal (v2 goals)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_revenue_vs_goal_view.sql
-  - name: v2_sales_vs_goal_report
-    display_name: "Vox Scorecard | Sales vs Goal by Rep (v2 goals)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_sales_vs_goal_view.sql
   # ── Added 2026-09-22 — the roster behind the manual-data app's sales-goal
   # dropdown. Reads the Plex `Inside Sales` role rather than "reps who sold
   # something this month", so a rep can be given a goal before their first

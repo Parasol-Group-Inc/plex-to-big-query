@@ -14,6 +14,56 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 (goals) — one goals pipeline, not two
+
+### Changed — the three vs-goal reports read the resolver; the `v2_` copies are gone
+There were two of everything: `revenue_vs_goal_report` read the legacy
+`scorecard_goals` table, and a generated `v2_revenue_vs_goal_report` read the
+resolver — same for sales and production. Six views, two goal sources, one
+resolver, and an Apps Script feeding each table. That shape was right while
+Looker Studio migrated one tile at a time, and stopped being right once there
+was nothing left to migrate.
+
+Now: the three original reports read `scorecard_goals_resolved` (renamed from
+`v2_scorecard_goals_resolved`), the three `v2_` copies are deleted from every
+config, and **nothing reads a goal table directly** — the "newest edit wins"
+dedupe lives in exactly one place.
+
+**This is a fix as well as a simplification.** `sales_vs_goal_report` and
+`revenue_vs_goal_report` had been reading the legacy table only, so a goal
+entered in the web app did not reach them at all — you had to know to look at
+the `v2_` copy instead. Verified after the change in PlexTest: the resolver
+returns **80 goals — 12 from the app, 68 from the legacy table**, and
+`revenue_vs_goal_report` now shows the app's revenue goal where it previously
+showed none.
+
+### Removed — `deploy/goals_sheet_to_bigquery.gs` and `scripts/gen_v2_goal_views.py`
+The legacy sheet-to-BigQuery writer and the generator that produced the `v2_`
+copies. Neither has a job any more.
+
+⚠ **Deleting the file does not stop the deployed Apps Script.** The old
+project still has to be disabled by hand, or it will keep truncating
+`scorecard_goals` on its schedule.
+
+### Added — `importLegacyGoals()` in the manual-data app
+The one manual step that finishes this. `scorecard_goals` still holds **68 real
+sales rep-month goals — the only copy** — and they cannot be moved by writing
+to BigQuery, because `scorecard_goals_app` is rebuilt from its sheet on every
+push. So the import goes through the sheet: it reads the legacy table, appends
+every row to the app's goals tab marked with its origin, **skips keys the app
+already has** so a since-edited goal is never overwritten, and pushes once at
+the end rather than per row.
+
+Afterwards: confirm `goal_source = 'sheet'` returns 0 rows, then the legacy
+branch can be deleted from the resolver and `scorecard_goals` dropped. Until
+then that table stays.
+
+### Still to do by hand
+- **Drop the four orphaned `v2_*` views** in both datasets — they are out of
+  every config so nothing refreshes them, but they still exist. The local
+  permission classifier blocked the DROP.
+- Run `importLegacyGoals()`, then disable the old Apps Script project.
+
 ## 2026-09-22 (last) — turnaround standards get a table, sales reps get a roster
 
 ### Added — `turnaround_standards`, in both datasets

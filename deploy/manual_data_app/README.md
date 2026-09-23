@@ -141,7 +141,7 @@ version**, and the URL can change when you do.
 - **Every column is NULLABLE.** Required-ness is enforced at entry; a REQUIRED
   column would turn one bad historical row into a failed load for the whole
   table.
-- **Goals: retracting restores the spreadsheet value.** `v2_scorecard_goals_resolved`
+- **Goals: retracting restores the spreadsheet value.** `scorecard_goals_resolved`
   reads a tombstone as "the app has nothing to say about this key", which
   falls back to `scorecard_goals` rather than blanking the tile — the only
   sensible reading while both goal sources are live.

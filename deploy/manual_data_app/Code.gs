@@ -211,7 +211,7 @@ var DATASETS = {
 // ⚠ NAMED `updated_by` / `updated_at`, NOT `submitted_*` — CORRECTED
 // 2026-09-22, and the rename is load-bearing rather than cosmetic. The live
 // `scorecard_goals_app` table carries updated_by/updated_at, and
-// `v2_scorecard_goals_resolved` both SELECTs them and dedupes on
+// `scorecard_goals_resolved` both SELECTs them and dedupes on
 // `ORDER BY updated_at DESC` ("newest edit wins"). Pushes here are
 // WRITE_TRUNCATE with an explicit schema, so the first real push from this
 // app under the old names would have replaced that table with columns the
@@ -493,7 +493,7 @@ function getRepGoalSum(periodMonth) {
     '  SUM(IF(scope IS NOT NULL AND scope != "", goal_value, 0)) AS rep_total, ' +
     '  SUM(IF(scope IS NULL OR scope = "", goal_value, 0)) AS company_total, ' +
     '  COUNTIF(scope IS NOT NULL AND scope != "") AS rep_count ' +
-    'FROM ' + fqn_('v2_scorecard_goals_resolved') + ' ' +
+    'FROM ' + fqn_('scorecard_goals_resolved') + ' ' +
     'WHERE LOWER(metric) = "sales" AND period_month = DATE("' + month + '")';
   try {
     var rows = query_(sql);
@@ -548,7 +548,7 @@ function currentGoal_(args) {
 
   var sql =
     'SELECT goal_value, note, updated_by, updated_at ' +
-    'FROM ' + fqn_('v2_scorecard_goals_resolved') + ' ' +
+    'FROM ' + fqn_('scorecard_goals_resolved') + ' ' +
     'WHERE LOWER(metric) = "' + metric.replace(/"/g, '') + '" ' +
     '  AND period_month = DATE("' + month + '") ' +
     '  AND IFNULL(scope, "") = "' + scope.replace(/"/g, '') + '" ' +
@@ -589,6 +589,84 @@ function lastIncident_() {
     daysLost: rows[0][4],
     description: rows[0][5] || ''
   };
+}
+
+/**
+ * ONE-TIME MIGRATION: copy the legacy goals into this app's sheet.
+ * ───────────────────────────────────────────────────────────────────────────
+ * Run this once from the Apps Script editor, then never again.
+ *
+ * WHY IT HAS TO GO THROUGH THE SHEET. `scorecard_goals_app` is rebuilt from
+ * the sheet tab on every push (WRITE_TRUNCATE), so writing the legacy rows
+ * straight into BigQuery would work until the next save and then vanish. The
+ * sheet is the record; the table is its mirror.
+ *
+ * WHAT IT DOES. Reads `scorecard_goals` — the table the old, separate Apps
+ * Script used to fill from a different Google Sheet — and appends every row
+ * to this app's goals tab, marked so its origin stays visible. Keys this app
+ * already has are SKIPPED, so a goal somebody has since edited here is never
+ * overwritten by the older figure, and re-running it is harmless.
+ *
+ * AFTERWARDS: check `SELECT COUNT(*) FROM scorecard_goals_resolved WHERE
+ * goal_source = 'sheet'` reads 0, then the legacy branch can be deleted from
+ * scorecard_goals_resolved_view.sql and `scorecard_goals` dropped. Until this
+ * has run, that table is the ONLY copy of 68 real sales goals.
+ *
+ * Also: disable the old Apps Script project itself. Deleting
+ * deploy/goals_sheet_to_bigquery.gs from the repo does not stop a deployed
+ * trigger from still truncating `scorecard_goals` on a schedule.
+ */
+function importLegacyGoals() {
+  var ds = DATASETS.goals;
+  var rows = query_(
+    'SELECT metric, period_month, scope, goal_value, unit, note, updated_by, updated_at ' +
+    'FROM ' + fqn_('scorecard_goals') + ' ORDER BY metric, period_month, scope');
+
+  if (!rows.length) {
+    Logger.log('Nothing to import: scorecard_goals is empty.');
+    return { imported: 0, skipped: 0 };
+  }
+
+  // What this app already knows, so an existing entry always wins.
+  var have = {};
+  (recentRows_(100000).goals || []).forEach(function (r) {
+    have[keyOf_(ds, r)] = true;
+  });
+
+  var imported = 0, skipped = 0;
+  rows.forEach(function (r) {
+    var values = {
+      metric:       String(r[0] || '').toLowerCase(),
+      period_month: normalizeMonth_(r[1]),
+      scope:        r[2] == null ? '' : String(r[2]),
+      goal_value:   Number(r[3] || 0),
+      unit:         r[4] || METRIC_UNITS[String(r[0] || '').toLowerCase()] || '',
+      note:         'Imported from the legacy goals sheet on ' + nowIso_().slice(0, 10) +
+                    (r[5] ? ' — ' + r[5] : ''),
+      updated_by:   'legacy-import (was: ' + (r[6] || 'unknown') + ')',
+      updated_at:   nowIso_(),
+      is_deleted:   false
+    };
+    if (have[keyOf_(ds, values)]) { skipped++; return; }
+    appendToSheet_(ds, values);
+    imported++;
+  });
+
+  // One push at the end rather than one per row — a load job per goal would
+  // be slow and pointlessly rate-limited.
+  if (imported) pushDataset('goals');
+
+  Logger.log('Imported %s legacy goals, skipped %s already present.', imported, skipped);
+  return { imported: imported, skipped: skipped };
+}
+
+/** The dedupe key for a dataset row, as a single comparable string. */
+function keyOf_(ds, values) {
+  return ds.key.map(function (k) {
+    var v = values[k];
+    if (v instanceof Date) v = Utilities.formatDate(v, 'UTC', 'yyyy-MM-dd');
+    return String(v == null ? '' : v).trim().toLowerCase();
+  }).join('|');
 }
 
 // ── Validation ─────────────────────────────────────────────────────────────

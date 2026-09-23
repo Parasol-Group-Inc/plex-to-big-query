@@ -1,6 +1,6 @@
-# Goals | Resolved (app first, sheet fallback)
+# Goals | Resolved — the one goal per metric, month and scope
 
-> **Status:** ✅ Built and verified 2026-09-09 — both precedence and fallback tested against real rows · **Category:** Reference data · **Runs:** created by the Sales Orders and Work Orders pipelines
+> **Status:** ✅ Deployed · **renamed from `scorecard_goals_resolved` 2026-09-22** when the duplicate "v2_" report views were retired — the three vs-goal reports now read this directly · **Category:** Reference data · **Runs:** rides the Sales Orders and Work Orders pipelines
 
 ## What this is
 
@@ -21,9 +21,9 @@ This view picks between them, one goal at a time:
 scorecard_goals_app   ← the web app (deploy/goals_web_app/)
 scorecard_goals       ← the spreadsheet ETL (deploy/goals_sheet_to_bigquery.gs)
         ↓
-v2_scorecard_goals_resolved      ← app first, sheet as fallback
+scorecard_goals_resolved      ← app first, sheet as fallback
         ↓
-v2_revenue_vs_goal_report · v2_sales_vs_goal_report · v2_production_vs_goal_report
+revenue_vs_goal_report · sales_vs_goal_report · production_vs_goal_report
 ```
 
 **A goal entered in the app wins. A goal not entered there falls through to
@@ -59,8 +59,8 @@ sources are live. Retracting an override should restore the spreadsheet value,
 not erase the tile.
 
 - **Pipeline:** `reports/sales_orders.yaml` **and** `reports/work_orders.yaml`
-  → `v2_scorecard_goals_resolved`
-- **SQL:** `reports/sql/v2_scorecard_goals_resolved_view.sql`
+  → `scorecard_goals_resolved`
+- **SQL:** `reports/sql/scorecard_goals_resolved_view.sql`
 
 It is listed in **both** pipelines on purpose: goal views live in both, and
 each must be able to create its own dependency without waiting on the other's
@@ -108,3 +108,32 @@ the form.
 Apps Script deployment trap (saving code does not update a live web app).
 [`scorecard_goals`](scorecard_goals.md) documents the columns, which both
 tables share.
+
+
+## What changed on 2026-09-22
+
+Until now there were **two of everything**: `revenue_vs_goal_report` read the
+legacy goals table, and a generated `v2_revenue_vs_goal_report` read this
+resolver — same for sales and production. That duality was the right call
+while Looker Studio migrated one tile at a time, and it stopped being right
+once nothing was left to migrate.
+
+So: the three original reports now read this view, the three `v2_` copies are
+gone, and this view lost its `v2_` prefix. **Nothing reads the goal tables
+directly any more**, which means the "newest edit wins" rule lives in exactly
+one place.
+
+### The legacy leg is still here, on purpose
+
+`scorecard_goals` still holds **68 real sales rep-month goals** — the only
+copy. Its branch below stays until they are imported into the app's sheet by
+running `importLegacyGoals()` from the manual-data Apps Script, which is a
+one-click job somebody has to do. Then:
+
+1. check `SELECT COUNT(*) FROM scorecard_goals_resolved WHERE goal_source = 'sheet'` reads **0**;
+2. delete the `sheet` CTE and its UNION branch from the SQL;
+3. drop `scorecard_goals`.
+
+Also **disable the old Apps Script project**. Deleting
+`deploy/goals_sheet_to_bigquery.gs` from the repo does not stop a deployed
+trigger from still truncating that table on a schedule.

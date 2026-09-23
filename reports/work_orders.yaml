@@ -269,21 +269,19 @@ bq_view:
   # Added 2026-09-04 — goal vs actual per work centre group. Reads the
   # maintained `scorecard_goals` table (Google Sheet -> Apps Script -> BigQuery),
   # not Plex. Must stay after production_monthly_by_workcenter_group_report.
+  # ── The ONE goals source, renamed from v2_scorecard_goals_resolved
+  # 2026-09-22 when the duplicate "v2_" report views were retired. App-first
+  # with the legacy `scorecard_goals` table as a fallback until
+  # importLegacyGoals() has run — see the SQL header for how to finish that.
+  #
+  # Listed in BOTH pipelines on purpose: goal views live in both, and each
+  # must be able to create its own dependency without waiting on the other's
+  # run. The SQL is identical, so whichever runs second replaces an identical
+  # view. ORDER MATTERS — it must precede the view that reads it.
+  - name: scorecard_goals_resolved
+    display_name: "Goals | Resolved (one goal per metric/month/scope)"
+    sql_file: gs://voxdatalake-report-configs/sql/scorecard_goals_resolved_view.sql
   - name: production_vs_goal_report
     display_name: "Vox Scorecard | Production vs Goal"
     sql_file: gs://voxdatalake-report-configs/sql/production_vs_goal_view.sql
 
-  # ── Added 2026-09-09 — the goals migration seam. See reports/sales_orders.yaml
-  # for the full rationale. v2_scorecard_goals_resolved is listed in BOTH
-  # pipelines on purpose: goal views live in both, and each must be able to
-  # create its own dependency without waiting on the other pipeline's run. The
-  # SQL is identical, so whichever runs second replaces an identical view.
-  # ORDER MATTERS — the resolver must precede the view that reads it.
-  # v2_production_vs_goal_view.sql is GENERATED — edit the original and re-run
-  # scripts/gen_v2_goal_views.py.
-  - name: v2_scorecard_goals_resolved
-    display_name: "Goals | Resolved (app first, sheet fallback)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_scorecard_goals_resolved_view.sql
-  - name: v2_production_vs_goal_report
-    display_name: "Vox Scorecard | Production vs Goal (v2 goals)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_production_vs_goal_view.sql

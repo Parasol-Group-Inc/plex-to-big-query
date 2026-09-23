@@ -14,6 +14,53 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 (test data) - prove the tiles, and one view that was never empty
+
+### Added - `scripts/scorecard_test_data.py`, inject and delete on demand
+A blank tile has two causes that look identical from a dashboard: the view is
+wrong, or the tenant has nothing of that kind. This puts rows underneath so the
+two can be told apart. `--inject`, `--delete`, `--status`, `--recipes`,
+`--days`; five recipes (production, shipping, cycle_count, activity, safety).
+
+**The rows are deliberately not realistic** - shaped to satisfy the views, not
+to resemble the business - and the script says so in its own output.
+
+**Removal is guaranteed twice over**, because a cleanup that depends on a
+record of what was written fails exactly when it matters: every row carries a
+marker (integer keys from 990000000, text keys prefixed `ZZTEST`) and
+`--delete` runs those predicates rather than reading the manifest, so it works
+from a machine that has never injected anything. The manifest backs `--status`
+only. The nightly tenant wipe is a third net. **It refuses to run against
+PlexProd** - not a flag, not an override.
+
+Two bugs in its own first run, both fixed and both worth the note: the manifest
+INSERT was built by f-string and broke on a predicate containing `LIKE '99%'`
+(quotes now escaped like any other literal), and the production recipe took
+*every* work centre in the tenant - 836 rows to prove what 171 proves.
+
+### Fixed - `part_cycle_count_report` was UNQUERYABLE, not empty
+It cast `Cycle_Inventory_Date` - INT64 nanoseconds - straight to TIMESTAMP.
+BigQuery rejects that cast pair outright, and SAFE_CAST does not rescue an
+illegal cast, only a failed parse, so **the view failed to parse and every
+query against it errored**. It was written while the raw table was still
+all-STRING (autodetected at 0 rows) and broke silently the moment real typed
+rows landed - the same 2026-08-23 typing change that fixed other things.
+
+It had been recorded as "0 rows - nothing counted yet on the tenant". A status
+check that reports row counts cannot tell those apart, which is exactly why the
+injector earns its keep. Now returns real figures: **9 locations, 56 items,
+82.1% accuracy** on injected counts.
+
+### Verified after injection
+`shipping_daily` 1 to 14 - `shipping_revenue` 5 to 19 -
+`shipping_pending_revenue` **0 to 4** - `production_monthly_by_workcenter_group`
+1 to 9 - `production_vs_goal` 1 to 9 - `quality_fpy_by_area_month` 1 to 9 -
+`inventory_avg_daily_usage` **0 to 1** - `part_cycle_count` **ERROR to 1**.
+
+Left uncovered on purpose: `inventory_valuation_total_report` (needs three
+joined cost tables, and a fabricated cost is the one number here that would
+mislead rather than prove) and Quality (22 real records already).
+
 ## 2026-09-22 (goals) — one goals pipeline, not two
 
 ### Changed — the three vs-goal reports read the resolver; the `v2_` copies are gone

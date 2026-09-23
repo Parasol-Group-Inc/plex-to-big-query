@@ -147,3 +147,66 @@ Everything above is the `-test` jobs writing to `PlexTest`. The prod jobs email
 the team on every run, so don't fire them to fix a demo — let the scheduled run
 carry the change, then check with
 `./scripts/scorecard_status.ps1 -Dataset PlexProd`.
+
+## Proving a tile works: `scripts/scorecard_test_data.py`
+
+A blank tile has two possible causes and they look identical from the
+dashboard: **the view is wrong**, or **the Plex test tenant has nothing of
+that kind**. This script settles it by putting rows underneath, so a tile that
+stays blank with data present is one we have to fix.
+
+```bash
+python scripts/scorecard_test_data.py --status     # what is injected right now
+python scripts/scorecard_test_data.py --inject     # all recipes, 14 days
+python scripts/scorecard_test_data.py --inject --recipes production,shipping
+python scripts/scorecard_test_data.py --delete     # remove every injected row
+```
+
+**The rows are not realistic and are not meant to be.** They are shaped to
+satisfy the views (right columns, right types, right keys), so the figures will
+not resemble Vox's business and must never be read as if they did. The question
+being answered is "does anything arrive at all".
+
+### How removal is guaranteed
+
+Two independent mechanisms, because a cleanup that depends on a record of what
+was written fails exactly when you need it:
+
+1. **Every row is marked** - synthetic integer keys start at `990000000`,
+   synthetic text keys start with `ZZTEST`. Nothing Plex generates comes near
+   either, so `--delete` runs exact predicates and works even from a machine
+   that has never run `--inject`.
+2. A manifest table `_scorecard_test_data` records each batch, for `--status`.
+
+`--delete` uses the predicates, not the manifest, so losing the manifest never
+strands data. The tenant is also **wiped nightly at midnight UTC**, a third net.
+
+**It refuses to run against `PlexProd`** - not a flag, not an override.
+
+### What it proved on 2026-09-22
+
+| Tile / view | Before | After |
+|---|---|---|
+| `shipping_daily_report` | 1 | **14** |
+| `shipping_revenue_report` | 5 | **19** |
+| `shipping_pending_revenue_report` | **0** | **4** |
+| `production_monthly_by_workcenter_group_report` | 1 | **9** |
+| `production_vs_goal_report` | 1 | **9** |
+| `quality_fpy_by_area_month_report` | 1 | **9** |
+| `inventory_avg_daily_usage_report` | **0** | **1** |
+| `part_cycle_count_report` | **ERROR** | **1** (9 locations, 82.1% accuracy) |
+
+That last row is the point of the exercise: `part_cycle_count_report` was not
+empty, it was **unqueryable**. It cast an INT64 nanosecond date straight to
+TIMESTAMP, which BigQuery rejects outright, so the view failed to parse. It had
+been recorded as "0 rows, nothing counted yet" - and a status check that
+reports row counts can never tell those two apart.
+
+### Deliberately not covered
+
+- **`inventory_valuation_total_report`** - needs `Part_v_Snapshot` plus two
+  cost-breakdown tables including a history table, and a fabricated cost is the
+  one number on this scorecard that would actively mislead rather than prove
+  anything.
+- **Quality** - already holds 22 real nonconformance records entered by Quality
+  themselves. Nothing to prove.

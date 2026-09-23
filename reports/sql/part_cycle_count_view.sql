@@ -34,12 +34,31 @@
 -- is normal and must not read as 0% accurate. `locations_counted = 0` is what
 -- a consumer should check before showing a percentage at all.
 
+-- ⚠ FIXED 2026-09-22 — THIS VIEW WAS UNQUERYABLE, not empty.
+-- It read `DATE(SAFE_CAST(Cycle_Inventory_Date AS TIMESTAMP))`. That column
+-- arrives as INT64 nanoseconds, and BigQuery rejects an INT64→TIMESTAMP cast
+-- outright — SAFE_CAST does not rescue an illegal cast, it only rescues a
+-- failed parse — so the view failed to PARSE and every query against it
+-- errored. It was written when the raw table was still all-STRING (0 rows
+-- autodetected), and broke silently the moment real typed rows landed.
+--
+-- Now uses the repo's standard date-conversion COALESCE, which handles all
+-- three shapes a raw date column takes here. See reports/sql/work_orders_view.sql.
+
 WITH counts AS (
   SELECT
     ci.Location                                           AS location,
-    DATE(SAFE_CAST(ci.Cycle_Inventory_Date AS TIMESTAMP)) AS count_date,
-    DATE_TRUNC(DATE(SAFE_CAST(ci.Cycle_Inventory_Date AS TIMESTAMP)), MONTH)
-                                                          AS count_month,
+    COALESCE(
+      DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS INT64), 0), 1000))),
+      NULLIF(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS DATE), DATE '1970-01-01'),
+      NULLIF(DATE(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+    )  AS count_date,
+    DATE_TRUNC(
+    COALESCE(
+      DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS INT64), 0), 1000))),
+      NULLIF(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS DATE), DATE '1970-01-01'),
+      NULLIF(DATE(SAFE_CAST(CAST(ci.Cycle_Inventory_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+    ), MONTH)  AS count_month,
     ci.Cycle_Inventory_By                                 AS counted_by,
     SAFE_CAST(ci.Accuracy AS FLOAT64)                     AS plex_accuracy,
     SAFE_CAST(ci.Accounted_For AS FLOAT64)                AS accounted_for,

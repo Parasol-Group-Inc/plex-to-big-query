@@ -14,6 +14,42 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-22 (board) - the Migration Board rebuilt for someone who has never opened BigQuery
+
+### Changed - the board is generated from `scripts/board/`, not hand-edited
+`board_data.py` holds the content, `build_board.py` the layout. The split is
+the point: the content changes weekly, the design does not, and every previous
+update was a patch script in a scratchpad that nobody else could re-run.
+
+Published to the **same URL** as always (v25). Jennilyn and others hold that
+link.
+
+### Changed - written in plain English, front to back
+Emilio's ask, and a fair one: the jargon had become a barrier to reading our
+own status page. Every tile now leads with **the question it answers** rather
+than the view that answers it, and each card shows the whole migration in one
+line - **the source feeding it today, then the Plex view replacing it**.
+
+Three things are new:
+
+- **A 30-term glossary with search**, each entry saying what a term means and
+  then *why it matters here* - which is where the traps actually live.
+  `Encapsulating` vs "Encapsulation", Scrap vs Destroy, Sales vs Revenue, why
+  no goal can come out of an ERP.
+- **Today's source, with the audit's own verdict on it.** Taken from
+  `score-card-reference/Vox_Scorecard_Data_Catalog.md`: of 26 sources, five are
+  **broken** and ten **flagged** today. `Production_Daily` feeds 21 charts;
+  `vw_shipping_daily_snapshot` feeds 7 and is broken. Knowing what we are
+  replacing is half the argument for replacing it.
+- **Real vs test data, marked per tile.** After the injector ran, several tiles
+  carry rows that are ours, not Vox's. A test figure presented as a business
+  figure is worse than a blank tile, so each card says which it is.
+
+### Removed - the progress bar and the andon board
+Both counted views rather than readiness, and both encouraged reading a number
+instead of the question under it. What replaced them: three "start here" cards
+that say what is happening, how to read a tile, and what real-vs-test means.
+
 ## 2026-09-22 (test data) - prove the tiles, and one view that was never empty
 
 ### Added - `scripts/scorecard_test_data.py`, inject and delete on demand

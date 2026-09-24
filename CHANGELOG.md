@@ -14,6 +14,51 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - Scorecard sandbox: a full simulated year to design Looker Studio against
+
+### Added - `scripts/scorecard_sandbox/` and dataset `voxdatalake.ScorecardSandbox`
+PlexProd is empty until cutover, and PlexTest had one thin month and is
+overwritten nightly, so no scorecard tile could be designed against real
+shapes. `python scripts/scorecard_sandbox/build.py` (about 7.5 min) builds a
+dataset the ETL never writes:
+- all 35 tile views, created from the same `reports/sql/` files;
+- the 53 base tables under them;
+- a coherent history from 1 Jan 2026 to the build day.
+
+All 35 views plus `safety_incidents` return data, most spanning 9–11 months.
+**Not real business data:** document numbers are `SBX`-prefixed.
+
+The rule it keeps (Emilio's): no random rows.
+- Every synthetic Plex row is a clone of a real PlexTest row, going into the
+  same `raw_*` table the ETL writes.
+- Manual tiles read the manual-data app's own tables.
+- Scale comes from the live scorecard (`scale.py`, cited):
+  - sales $3.7–5.3M a month against real rep goals;
+  - WIP $5.6M; In Shipping $0.95M;
+  - production against the live goals (Encap 100M, Bottling 1.5M,
+    Labeling 700K);
+  - FPY 90.6% / 99.88% / 99.2%;
+  - open caps 219.7M; out of stock 6; cycle count accuracy 98.7%.
+- Costs exist only in the sandbox, derived from real prices and cost ratios.
+
+Built from PlexTest **as of 2026-09-23 12:00 UTC via time travel**
+(`build.SNAPSHOT`). Live PlexTest joined nothing: 0 of 2,119 customer part
+prices matched a customer part after the tenant was cut back from 182
+customers to 24. `snapshot_check.py` scores any instant by the joins the
+views depend on.
+
+Five generators, each owning disjoint tables:
+- `manual`: goals, safety;
+- `sales`: orders through invoices;
+- `production`: jobs, ops, production log;
+- `quality`: NCs, deviations;
+- `inventory`: containers, movements, cycle counts, standard costs.
+
+Full design in `scripts/scorecard_sandbox/README.md`, including the few
+tables with no real row to clone and how each was handled. Supersedes
+`scripts/scorecard_test_data.py` for design work (the build strips that
+injector's rows).
+
 ## 2026-09-22 (board) - the Migration Board rebuilt for someone who has never opened BigQuery
 
 ### Changed - the board is generated from `scripts/board/`, not hand-edited

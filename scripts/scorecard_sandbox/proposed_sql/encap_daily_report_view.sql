@@ -1,0 +1,128 @@
+-- ⚠ PROPOSED, NOT DEPLOYED — scorecard sandbox override (2026-09-24).
+-- Differs from reports/sql/encap_daily_report_view.sql only in the scrap test: `!= 0` instead of `= -1`.
+-- The one real rejected record in PlexTest (Bottling Line 1, 500 units,
+-- 2026-09-24) has Rejected = 1, so `= -1` counts no scrap at all.
+
+-- encap_daily_report — Plex-native "Actual" half of the Encap Daily Report
+-- Google Sheet (reports-list/production.md, spreadsheets/encap_daily_report.md)
+--
+-- SCOPE DECISION 2026-08-21: this and its 3 sibling Daily Reports
+-- (blending/labeling/packaging) were "no Plex analog" against Production
+-- Yield (weight-centric, no attendance concept) until a screenshot of
+-- Plex's own "Daily Shifts" UI report showed the real analog: a per-date,
+-- per-workcenter rollup of Parts Produced/Scrapped, Hours, Efficiency, OEE.
+--
+-- CORRECTED SAME DAY: first built on `Part_v_Cell_Production`
+-- (Quantity/Production_Date/Job_Op_Key only). A live screenshot of Plex's
+-- own "Job Production" report — confirmed columns Job No/Part No/Rev/Op
+-- No/Tracking No/Last Operation Completed/Workcenter/**Employee**/Record
+-- Date/**Shift**/Quantity — matches `Part_v_Production` field-for-field
+-- instead (`Record_By`, `Report_Shift`, `Record_Date`, `Workcenter_Key`,
+-- `Job_Op_Key`, `Quantity`, `Rejected`). `Cell_Production` has no Employee/
+-- Shift/Rejected columns at all — wrong table. Rebuilt on `Part_v_Production`.
+--
+-- This resolves 2 of the 3 "no Plex analog" gaps flagged this morning:
+-- `employees`/`employee_count` (Record_By -> Personnel_v_Employee, same
+-- INFERRED-join pattern already used and flagged in mfg_job_schedule_view.sql
+-- for Started_By/Completed_By) gives a real attendance-adjacent signal, and
+-- `scrap_qty` (the `Rejected` flag) gives a real, non-guessed scrap number.
+-- Still NOT built: Planned Production Hours, Start-Up/Stop times, and a
+-- true Call-Outs/OFF roster (a scheduled-vs-actually-showed-up comparison,
+-- which `employees`/`employee_count` alone can't answer) — no Plex source
+-- identified for any of those three specifically.
+--
+-- Grain kept at production date + workcenter (one row per line per day,
+-- matching the sheet's own template) rather than splitting by `Report_Shift`
+-- — shift is exposed as a distinct-list column instead of fragmenting grain,
+-- since the sheet template doesn't ask for shift-level rows.
+--
+-- WORKCENTER MAPPING: filters `Part_v_Workcenter.Workcenter_Group =
+-- 'Encapsulating'` (confirmed live value, catalog/plex_catalog_index.md),
+-- which resolves to the confirmed `Encapsulation 1`-`Encapsulation 10`
+-- roster. The sheet's own stations (1,2,4,5,7,8,9,10 — skipping 3 and 6)
+-- are not filtered out here; if 3/6 are decommissioned/renamed in Plex,
+-- real data will show 0 rows for them rather than a hardcoded guess.
+--
+-- UNCONFIRMED AGAINST REAL DATA: on the 2026-08-21 test tenant, all 16 real
+-- jobs were freshly created that morning with 0 actual production logged
+-- against any of them (Status=Scheduled, 0 hours) — so this table was
+-- empty for a benign reason (nothing had run yet), not proof the table/
+-- join is wrong.
+--
+-- FIXED 2026-09-01 — a real bug, not benign: once real Part_v_Production
+-- rows finally landed on this tenant, this view still returned 0. Root
+-- cause: raw_Part_v_Job_Op's Job_Op_Key values only cover current/open
+-- operations on this tenant — a production log entry against an operation
+-- that's since closed/archived has a Job_Op_Key Part_v_Job_Op no longer
+-- carries, so the (INNER) `jo` join silently dropped every such row. The
+-- `wc` join never needed `jo` at all (it already keys off
+-- `prod.Workcenter_Key` directly, confirmed above) — only `job_count`/
+-- `parts_run` depend on reaching Job/Part through `jo`. Changed to
+-- LEFT JOIN so a production row is never dropped just because its
+-- operation has aged out of Job_Op; job_count/parts_run simply go
+-- NULL-safe (COUNT DISTINCT / STRING_AGG already ignore NULLs) for those
+-- rows instead of losing the row's actual/scrap quantity entirely.
+--
+-- Not re-extracted — bq_view entry in reports/work_orders.yaml.
+-- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
+-- GRAIN: one row per workcenter per production date.
+
+WITH prod AS (
+  SELECT
+    p.Quantity,
+    p.Rejected,
+    p.Job_Op_Key,
+    p.Workcenter_Key,
+    p.Record_By,
+    p.Report_Shift,
+    COALESCE(
+      DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS INT64), 0), 1000))),
+      NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS DATE), DATE '1970-01-01'),
+      NULLIF(DATE(SAFE_CAST(CAST(p.Record_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+    ) AS production_date
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Production` p
+)
+
+SELECT
+
+  prod.production_date,
+  wc.Name                                               AS workcenter,
+  wc.Workcenter_Group                                   AS workcenter_group,
+
+  STRING_AGG(DISTINCT part.Part_No, ', ' ORDER BY part.Part_No) AS parts_run,
+  COUNT(DISTINCT j.Job_Key)                             AS job_count,
+
+  COUNT(DISTINCT emp.Plexus_User_No)                    AS employee_count,
+  STRING_AGG(DISTINCT emp.Common_Name, ', ' ORDER BY emp.Common_Name) AS employees,
+  STRING_AGG(DISTINCT prod.Report_Shift, ', ' ORDER BY prod.Report_Shift) AS shifts,
+
+  -- Plex represents boolean true as -1, not 1 (confirmed live 2026-08-11,
+  -- see part_on_hand_inventory_view.sql/inventory_risk_analysis_view.sql's
+  -- Active/OK_Status columns) — Rejected follows the same convention.
+  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS actual_qty,
+  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0 /* PROPOSED: real Plex writes 1, not -1 */, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS scrap_qty
+
+FROM prod
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
+  ON SAFE_CAST(prod.Job_Op_Key AS INT64) = SAFE_CAST(jo.Job_Op_Key AS INT64)
+
+JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
+  ON SAFE_CAST(prod.Workcenter_Key AS INT64) = wc.Workcenter_Key
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job` j
+  ON SAFE_CAST(jo.Job_Key AS INT64) = SAFE_CAST(j.Job_Key AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
+  ON SAFE_CAST(j.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
+
+-- INFERRED join, not NetSuite/Plex-confirmed: Record_By is assumed to be a
+-- Plexus_User_No, by analogy with the same assumption already made for
+-- Job_Op.Started_By/Completed_By in mfg_job_schedule_view.sql.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Personnel_v_Employee` emp
+  ON SAFE_CAST(prod.Record_By AS INT64) = emp.Plexus_User_No
+
+WHERE wc.Workcenter_Group = 'Encapsulating'
+
+GROUP BY prod.production_date, workcenter, workcenter_group
+ORDER BY prod.production_date DESC, workcenter

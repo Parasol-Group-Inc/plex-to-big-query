@@ -14,6 +14,46 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - What the sandbox found: six view bugs and a stale-data trap
+
+### Found - `docs/SCORECARD_SANDBOX_FINDINGS.md`
+The sandbox built above found these problems. Each one was checked against
+the real Plex record before it was written down. Tile-by-tile status and the
+manual-input list for Jennilyn are in the doc.
+
+1. **Every sale reads "(no rep assigned)".** The sales, pipeline and
+   deposit-review views take the rep from `Sales_v_Order_Salesperson`: one
+   row in all of test, none in prod. Vox records it on the order
+   (`Inside_Sales`) and the customer (`Assigned_To`), as the Label Design view
+   found today.
+2. **Scrap, rejected qty and DPMO are always 0.** The views count
+   `Rejected = -1` (an assumed convention, 2026-08-23); the only real rejected
+   record has `Rejected = 1`. FPY is unaffected.
+3. **Orders pending accounting approval is empty.** It matches
+   `= 'DEPOSIT REVIEW'`, and Plex now has two "Deposit Review (…)" statuses.
+4. **Inventory value reads about $77.** The valuation view sums per-unit
+   standard costs with no quantity.
+5. **Deviations never show their linked NC.** The view joins the classic
+   Problem table, which is always empty.
+6. **Revenue by part group is a single "(no group)" bar.** The group lookup
+   table is empty in test and prod, though parts carry a group key.
+
+Also:
+- TAT counts calendar days against work-day standards.
+- Average daily usage understates the current month.
+- The ETL keeps yesterday's rows whenever Plex returns 0, so a tile whose
+  data genuinely empties shows stale figures silently.
+
+### Added - `scripts/scorecard_sandbox/proposed_sql/` (sandbox only, NOT deployed)
+Fixes for 1–3, used by the sandbox build only, which prints a ⚠ line for
+each so nobody mistakes them for production behaviour:
+- rep resolution: order, then customer, then salesperson;
+- `LIKE 'DEPOSIT REVIEW%'`;
+- scrap counted as `Rejected != 0`.
+
+Editing `reports/sql/` was deliberately left for Emilio's decision, since it
+deploys to prod on the next `terraform apply`. 4–6 have no fix written yet.
+
 ## 2026-09-24 (scorecard) - Scorecard sandbox: a full simulated year to design Looker Studio against
 
 ### Added - `scripts/scorecard_sandbox/` and dataset `voxdatalake.ScorecardSandbox`

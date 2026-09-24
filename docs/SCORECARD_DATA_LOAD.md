@@ -150,6 +150,11 @@ carry the change, then check with
 
 ## Proving a tile works: `scripts/scorecard_test_data.py`
 
+> **Designing tiles rather than spot-checking one?** Use the scorecard sandbox
+> instead: `voxdatalake.ScorecardSandbox`, a full year of realistic data that
+> nothing overwrites (`scripts/scorecard_sandbox/README.md`). This injector's
+> rows vanish with the next ETL run or the nightly wipe.
+
 A blank tile has two possible causes and they look identical from the
 dashboard: **the view is wrong**, or **the Plex test tenant has nothing of
 that kind**. This script settles it by putting rows underneath, so a tile that

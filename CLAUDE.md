@@ -163,6 +163,26 @@ tile says "Encapsulation". A mismatch yields a NULL goal, not an error, so it
 reads as 0% forever. All three views expose `goal_without_sales` /
 `goal_without_production` flags precisely so an unmatched row surfaces.
 
+## Scorecard sandbox (`voxdatalake.ScorecardSandbox`)
+
+A full simulated year under every scorecard tile, for designing Looker Studio
+against: `python scripts/scorecard_sandbox/build.py` (about 7.5 min). The ETL
+never writes it. Design and rules are in `scripts/scorecard_sandbox/README.md`;
+what it found is in `docs/SCORECARD_SANDBOX_FINDINGS.md`. Three things to know
+before touching it:
+
+- **No random rows.** Every synthetic Plex row clones a real PlexTest row into
+  the same `raw_*` table, and manual tiles read the app's tables. A shortcut
+  that writes into a view's output, or invents a row from nothing, breaks the
+  point of the thing.
+- **It is built from a time-travel snapshot** (`build.SNAPSHOT`), because live
+  PlexTest's tables stopped joining each other on 2026-09-24. BigQuery time
+  travel reaches back only 7 days, so after 2026-09-30 the copy step fails
+  until a new instant is picked with `snapshot_check.py`.
+- **`proposed_sql/` overrides are NOT deployed.** The sandbox uses them for
+  fixes found there (rep resolution, Deposit Review, scrap flag). Production
+  still runs `reports/sql/`. When a fix lands there, delete its override.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers

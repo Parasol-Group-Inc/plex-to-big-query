@@ -1,5 +1,7 @@
 # Code Review — 2026-07-14
 
+> **Archived 2026-09-25 — historical record; every finding was fixed or closed (the last open item, the driver license, on 2026-08-24). The guards it added are described, current, in [`docs/OPERATIONS.md`](../OPERATIONS.md) § "Data Safety Guards".**
+
 Full-codebase review of the ETL pipeline (`main.py`, `email_utils.py`, both
 view SQL files, `deploy/cloudbuild.yaml`). 14 findings; all critical/high and
 actionable medium/low findings were fixed the same day.

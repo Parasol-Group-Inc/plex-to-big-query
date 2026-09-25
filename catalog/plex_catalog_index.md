@@ -204,7 +204,7 @@ Job Balance, Inv Balance, Total Required, grouped by Part Group) is
 structural evidence of a buildable component-explosion-vs-inventory
 rollup: scheduled Job quantities exploded through BOM, compared against
 `Part_v_Container` on-hand. See `reports-list/supply-chain.md` and
-`docs/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption" row — this
+`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption" row — this
 may be the real lead that was missing there, and/or the manual process
 behind "Approaching MSL" (`reports-list/REPORTS_LIST_CATALOG.md`).
 

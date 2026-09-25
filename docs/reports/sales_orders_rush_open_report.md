@@ -8,7 +8,7 @@ One row per open sales order line — every sales order that is still open (not 
 
 ## Where it fits
 
-Fulfills a NetSuite parity item tracked in [`reports-list/sales.md`](../../reports-list/sales.md) (and cross-referenced from [`reports-list/production.md`](../../reports-list/production.md)). The resolution history is also logged in [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) and [`CHANGELOG.md`](../../CHANGELOG.md) (2026-08-21 entries).
+Fulfills a NetSuite parity item tracked in [`reports-list/sales.md`](../../reports-list/sales.md) (and cross-referenced from [`reports-list/production.md`](../../reports-list/production.md)). The resolution history is also logged in [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) and [`CHANGELOG.md`](../../CHANGELOG.md) (2026-08-21 entries).
 
 ## How it's built (high level)
 
@@ -27,4 +27,4 @@ From there it reuses the same order → line → release → part join already u
 
 ## More detail
 
-See [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) for the full resolution history, including the earlier dead-end lead and the screenshots that unblocked this report.
+See [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) for the full resolution history, including the earlier dead-end lead and the screenshots that unblocked this report.

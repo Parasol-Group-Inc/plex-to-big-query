@@ -1,6 +1,6 @@
 # Vox Scorecard | Inventory Value Total
 
-> **Status:** ✅ Deployed 2026-09-01 · 🔧 **Rewritten 2026-09-24 on `dev-sandbox`, not deployed**: the deployed version sums per-unit costs (see Flags) · **Category:** Inventory · **Runs:** rides the Inventory Snapshot pipeline
+> **Status:** ✅ Deployed 2026-09-01 · 🔧 **Rewritten 2026-09-24, deployed 2026-09-25**: the earlier version summed per-unit costs (see Flags) · **Category:** Inventory · **Runs:** rides the Inventory Snapshot pipeline
 
 ## What this tells you
 
@@ -19,7 +19,7 @@ A sum of `inventory_valuation_summary_report`'s `inventory_value` (on-hand × un
 
 ## Flags and open questions
 
-- **Fixed 2026-09-24 (on branch `dev-sandbox`, not yet deployed).** The deployed view adds up per-unit standard costs with no quantity, so "total inventory value" read **about $77 for the whole building** in the scorecard sandbox. It also added every routing operation's cost for a part. It now sums on-hand quantity × the part's per-unit cost. Sandbox, 1 Sep 2026: **$76.65 → $2,760,901.76**, which matches an independent on-hand × latest-cost sum to the cent. PlexTest: 5 parts have a real cost and none of them is on hand, so the value is $0.00 with `uncosted_on_hand_part_count` = 57. See [`docs/SCORECARD_SANDBOX_FINDINGS.md`](../SCORECARD_SANDBOX_FINDINGS.md) finding 4.
+- **Fixed 2026-09-24, deployed 2026-09-25.** The earlier view added up per-unit standard costs with no quantity, so "total inventory value" read **about $77 for the whole building** in the scorecard sandbox. It also added every routing operation's cost for a part. It now sums on-hand quantity × the part's per-unit cost. Sandbox, 1 Sep 2026: **$76.65 → $2,760,901.76**, which matches an independent on-hand × latest-cost sum to the cent. PlexTest: 5 parts have a real cost and none of them is on hand, so the value is $0.00 with `uncosted_on_hand_part_count` = 57. See [`docs/SCORECARD_SANDBOX_FINDINGS.md`](../SCORECARD_SANDBOX_FINDINGS.md) finding 4.
 - **No month-end trend yet, and this is a data gap, not a query choice.** Plex's `Part_v_Snapshot` records cost only; it has no quantity column. The only on-hand quantity extracted is today's (`Part_v_Container`). Earlier snapshot dates therefore show a blank value. Giving them a number would mean pricing today's stock at old costs, which would chart the cost roll, not the inventory. A trend needs month-end on-hand captured somewhere, either by storing a daily copy of on-hand in BigQuery or by extracting a Plex inventory-history source. Not decided.
 - **The earlier "0 rows, genuinely empty" note was only partly right.** PlexTest now has one real snapshot (1 Sep 2026). The deployed view still returned 0 rows because Plex's snapshot-to-cost link table is empty, and the view joined through it. The rewrite falls back to the cost history in force on the snapshot date.
 - **One total only — not split by WIP/Finished Goods/Raw Material.** `Cost_Sub_Type_Key` (the column that would distinguish those categories) has no confirmed label lookup anywhere in this repo. Fine if the Flow funnel's "Inventory Val" phase just needs one grand total; not fine if it needs to be broken into categories — that's a separate, currently-blocked question.

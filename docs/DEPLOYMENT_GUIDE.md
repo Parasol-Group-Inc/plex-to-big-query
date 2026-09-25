@@ -1,10 +1,16 @@
 # GCP Deployment Guide — Phase 2
 
+Last reviewed: 2026-09-25
+
 > **Scope check:** this walks through bootstrapping the pipeline **from
-> zero** — the original single-view job (`plex-etl-sales-orders` / `Part_v_Part`), one
-> Cloud Run job, one schedule. It's the right doc for a first-time setup
-> (a new GCP project, disaster recovery) or for understanding how the
-> pieces fit together. If you're adding a **new report to an
+> zero** in a **new GCP project**. One deploy creates the whole stack — 13
+> pipelines, 26 Cloud Run jobs, 52 schedulers — though the walkthrough follows
+> one job (`plex-etl-sales-orders`) as its example. It's the right doc for a
+> first-time setup (a new GCP project, disaster recovery) or for understanding
+> how the pieces fit together. **Don't run it against the existing
+> `voxdatalake` project:** the stack exists, Terraform state is shared, and
+> every change there goes dev branch → `main` → `./scripts/deploy.sh` from the
+> primary folder (`CONTRIBUTING.md`). If you're adding a **new report to an
 > already-running deployment**, this isn't that doc — see
 > [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" instead
 > (referenced again at the bottom of this guide).
@@ -49,11 +55,11 @@ If you're coming from frontend, here's a mental model for each service this pipe
 |---|---|---|
 | **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
 | **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
-| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run job daily — this deployment's actual schedule cascades all 8 report categories through a 7:00 PM-9:45 PM America/Denver (Mountain) window, see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for the full per-category breakdown |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — this deployment's evening cascade runs 12 pipelines between 7:00 PM and 10:50 PM America/Denver (Mountain), plus Label Design at 9:30 AM / 1:30 PM and a 9:45 PM retry for every job; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
 | **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
 | **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
 | **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |
-| **Terraform** | `npm install` for cloud infra | Provisions all of the above with a single `terraform apply` |
+| **Terraform** | `npm install` for cloud infra | Provisions all of the above — applied only through `./scripts/deploy.sh` |
 
 > **Two kinds of tokens:** There are two separate authentication systems at play. The **Plex IAM token** (`plex-access-token`) is how the ETL script authenticates to the Plex ERP ODBC endpoint — you store this in Secret Manager. The **GCP service account** is how Cloud Run authenticates to GCP services (BigQuery, Secret Manager) — Terraform creates this automatically. You never see the service account token directly.
 
@@ -104,34 +110,44 @@ plex_odbc_user = "edominguez.parasol"
 image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
 ```
 
+> **Fix the Sales Orders job names.** `terraform.tfvars.example` still sets `cloud_run_job`, `cloud_run_job_test`, `scheduler_job` and `scheduler_job_test` to the names retired on 2026-09-04 (`plex-etl`, `plex-etl-test`, `plex-daily-sync`, `plex-daily-sync-test`). Delete those four lines so the `variables.tf` defaults apply (`plex-etl-sales-orders`, `plex-etl-sales-orders-test`, `plex-sales-orders-sync`, `plex-sales-orders-sync-test`) — every command in this guide uses those.
+
 > **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 2. The job will show an error if triggered before then, which is expected.
 
-### 1.2 Initialize and apply
+### 1.2 Initialize and deploy
 
 ```bash
 terraform init
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
+cd ..
+./scripts/deploy.sh     # plan → review → type the change count → apply exactly that plan
 ```
 
-Type `yes` when prompted. Takes 2–5 minutes — API enablement is the slowest part.
+Run it from **Git Bash**. `deploy.sh` is the only way this project applies
+Terraform — including the first time. Terraform itself runs a **deploy guard**
+(`data "external" "deploy_guard"` in `terraform/main.tf` → `scripts/tf_guard.py`)
+on every plan and apply, and refuses unless this is the primary clone (not a
+`git worktree`), on `main`, clean, and equal to `origin/main` — so what is
+deployed is always what GitHub's `main` shows. A fresh clone of `main` passes;
+`python` must be on your `PATH`. Takes 2–5 minutes — API enablement is the
+slowest part.
 
-**What Terraform creates:**
+**What Terraform creates** (about 200 resources):
 - A service account (`plex-etl-sa`) with permissions to read secrets, write to BigQuery, and pull from Artifact Registry
-- A BigQuery dataset and `sync_metadata` table
+- `PlexProd` and `PlexTest` datasets, each with a `sync_metadata` table (`job_run_log` is created by the job on its first run)
 - An Artifact Registry repo to store your Docker image
-- Four Secret Manager secret containers (empty for now — you'll fill them in 1.3)
-- A Cloud Run job definition pointing at your image
-- A Cloud Scheduler job on a daily cron
+- Five Secret Manager secret containers (empty for now — you'll fill them in 1.3)
+- The report-configs bucket and every `reports/` YAML and SQL file in it
+- 26 Cloud Run job definitions (13 pipelines × prod/test) pointing at your image
+- 52 Cloud Scheduler jobs (a daily trigger and a 9:45 PM Mountain retry per job)
 
-> **If apply fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `terraform apply`.
+> **If the deploy fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `./scripts/deploy.sh`.
 
-> **If apply fails "image not found":** Expected on first run. Push the image (Step 2) and re-run `terraform apply`.
+> **If it fails "image not found":** Expected on first run — the Cloud Run jobs can't be created yet. Push the image (Step 2) and re-run `./scripts/deploy.sh`.
 
 **Verify in GCP Console:**
 - Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@voxdatalake.iam.gserviceaccount.com`
 - Console → **BigQuery** → `voxdatalake` → `PlexTest` dataset
-- Console → **Secret Manager** → four secrets: `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — empty containers)
+- Console → **Secret Manager** → five secrets: `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — empty containers)
 
 ### 1.3 Store the IAM token in Secret Manager
 
@@ -161,7 +177,7 @@ gcloud secrets versions list plex-access-token --project=voxdatalake
 
 ### 1.4 If resources already exist (state recovery)
 
-If `terraform apply` fails with `Error 409: Already Exists` for secrets or the BigQuery dataset, Terraform's state is out of sync with reality. Import the existing resources before re-running apply:
+If the deploy fails with `Error 409: Already Exists` for secrets or the BigQuery dataset, Terraform's state is out of sync with reality. Import the existing resources (from `terraform/`, in the primary folder on a clean, pushed `main` — the deploy guard applies to these too) before deploying again:
 
 ```bash
 # Import secrets
@@ -170,11 +186,12 @@ terraform import google_secret_manager_secret.odbc_user projects/voxdatalake/sec
 terraform import google_secret_manager_secret.odbc_password projects/voxdatalake/secrets/plex-odbc-password
 terraform import google_secret_manager_secret.company_code projects/voxdatalake/secrets/plex-company-code
 
-# Import BigQuery dataset (replace PlexTest with your dataset name if different)
-terraform import google_bigquery_dataset.plex voxdatalake/PlexTest
+# Import BigQuery datasets — .plex is PROD (PlexProd), .plex_test is TEST (PlexTest)
+terraform import google_bigquery_dataset.plex voxdatalake/PlexProd
+terraform import google_bigquery_dataset.plex_test voxdatalake/PlexTest
 ```
 
-Then re-run `terraform apply`. If the state is badly corrupted (references the wrong project entirely):
+Then re-run `./scripts/deploy.sh`. If the state is badly corrupted (references the wrong project entirely):
 
 **State lives in a shared GCS backend** (`gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate`), not a local file — there is no `terraform.tfstate` to delete locally anymore. The bucket has **object versioning enabled**, so the safer first move is rolling back to a previous version rather than wiping it:
 
@@ -216,7 +233,7 @@ The ODBC driver is **not in git** — it must be present in `driver/` on your ma
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 16 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 26 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
 
 You only need to rebuild when **code or files inside the image change**:
 - `main.py`, `email_utils.py`, `templates/report.html` — Python logic or email design
@@ -224,7 +241,7 @@ You only need to rebuild when **code or files inside the image change**:
 - `driver/` — a new Plex ODBC driver version
 - `config/odbcinst.ini` or `config/odbc.ini` — ODBC config changes
 
-For everything else (Plex host, table name, email addresses, company name), edit `terraform.tfvars` and run `terraform apply`. No rebuild needed.
+For everything else (Plex host, table name, email addresses, company name), edit `terraform.tfvars` and run `./scripts/deploy.sh`. No rebuild needed.
 
 ### Build and push commands
 
@@ -248,11 +265,10 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 
 > First push takes 3–8 minutes because of the ODBC driver files (~40 MB). Subsequent pushes are faster — Docker reuses cached layers for anything that didn't change.
 
-Set `image_url` in `terraform.tfvars` to that same `:$SHA` tag, then apply — this is what creates the Cloud Run job on this first pass. On every later rebuild, this `terraform apply` step does **not** redeploy anything by itself (each job's `lifecycle { ignore_changes }` on `image` sees to that) — you'd explicitly `gcloud run jobs update JOB_NAME --image=...` instead, or let `deploy/cloudbuild.yaml`'s `deploy-all` step do it for all jobs at once:
+Set `image_url` in `terraform.tfvars` to that same `:$SHA` tag, then deploy again — this is what creates the Cloud Run jobs on this first pass. On every later rebuild, a Terraform deploy does **not** move any image (each job's `lifecycle { ignore_changes }` on `image` sees to that) — run `./scripts/deploy_preflight.sh` and `deploy/cloudbuild.yaml` instead (Step 6), whose `deploy-all` step does it for all jobs at once:
 
 ```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh
 ```
 
 **Verify in GCP Console:** Console → **Artifact Registry** → `plex-pipeline` repo → you should see an `etl` image with a recent timestamp.
@@ -308,7 +324,7 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 
 ## Step 5 — Verify Cloud Scheduler
 
-Terraform creates a scheduler job at `0 2 * * *` (2 AM UTC daily) — that's `variables.tf`'s generic default for a from-scratch deploy. This live project's `terraform.tfvars` overrides `scheduler_cron`/`scheduler_time_zone` to a 7:00 PM-9:45 PM `America/Denver` (Mountain) cascade across all 8 report categories, so `gcloud scheduler jobs list` against `voxdatalake` today won't show 2 AM UTC — see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for the actual per-category times:
+With the `variables.tf` defaults, the Sales Orders scheduler runs at `0 2 * * *` UTC (test `0 3 * * *`), and every other pipeline's time is a literal in `main.tf` interpreted in `scheduler_time_zone` (default `UTC`). This live project's `terraform.tfvars` sets `scheduler_time_zone = "America/Denver"` and Sales Orders to 7:00/7:10 PM, so `gcloud scheduler jobs list` against `voxdatalake` shows the Mountain-time cascade — see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time:
 
 ```bash
 gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
@@ -325,9 +341,15 @@ gcloud scheduler jobs run plex-sales-orders-sync --location=us-central1 --projec
 
 ## Step 6 — CI/CD with Cloud Build (optional)
 
-Cloud Build automates build → push → deploy every time you push to `main`. Without it, you re-run the `docker build/push` commands manually after each code change.
+`deploy/cloudbuild.yaml` builds the image, pushes it, moves all 26 jobs onto it (`deploy-all`), and smoke-tests `plex-etl-sales-orders-test`. This project runs it **by hand**, from the primary folder on an up-to-date `main`, after the preflight:
 
-`deploy/cloudbuild.yaml` is already written. You just need to:
+```bash
+./scripts/deploy_preflight.sh
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
+```
+
+`SHORT_SHA` must be passed explicitly on a manual submit. To set it up in a new project, or to add an optional push-to-`main` trigger (which fills `SHORT_SHA` itself):
 
 **1. Store the driver in GCS** (avoids committing the binary files to git):
 ```bash
@@ -345,7 +367,7 @@ gcloud storage cp -r driver/* gs://voxdatalake-build-assets/plex-odbc-driver/
 - Configuration: **Cloud Build configuration file** → `deploy/cloudbuild.yaml`
 - Click **Create**
 
-After this, every `git push origin main` automatically rebuilds and redeploys the container.
+With a trigger, every `git push origin main` rebuilds and redeploys the image to all 26 jobs — which is only safe because nothing reaches `main` except reviewed merges (`CONTRIBUTING.md`).
 
 ---
 
@@ -402,7 +424,7 @@ Make sure you've run `gcloud auth application-default login` (not just `gcloud a
 
 ### Terraform: `Error acquiring the state lock`
 
-Terraform state is stored remotely in `gs://voxdatalake-terraform-state/plex-to-big-query/` (migrated 2026-07-20 — any team member with access to that bucket can safely run `plan`/`apply` from their own machine). If a previous `apply` was interrupted, GCS may still hold the lock. Check who/what holds it:
+Terraform state is stored remotely in `gs://voxdatalake-terraform-state/plex-to-big-query/` (migrated 2026-07-20), so state isn't tied to one machine — but deploys still run only from the primary folder on `main`, through `./scripts/deploy.sh` (the deploy guard enforces it). If a previous apply was interrupted, GCS may still hold the lock. Check who/what holds it:
 
 ```bash
 gcloud storage objects describe gs://voxdatalake-terraform-state/plex-to-big-query/default.tflock --project=voxdatalake
@@ -423,10 +445,9 @@ echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=
 ```
 
 **Change the sync schedule** (e.g. run at a different Mountain-time hour instead of the current 7:00 PM cascade):
-Update `scheduler_cron` and `scheduler_time_zone` in `terraform.tfvars`, then:
+Update `scheduler_cron` and `scheduler_time_zone` in `terraform.tfvars` (Sales Orders only — every other pipeline's cron is a literal in `terraform/main.tf`, changed by a commit to `main`; `scheduler_time_zone` applies to all of them), back the file up (command in its header), then from the primary folder:
 ```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh
 ```
 
 **Pause the pipeline:**
@@ -451,12 +472,12 @@ gcloud run jobs update plex-etl-sales-orders \
   --project=voxdatalake \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com,PLEX_SERVER_DATASOURCE=<production-service-name>
 ```
-Then update `terraform.tfvars` to match so the next `terraform apply` doesn't revert the change.
+Then update `terraform.tfvars` to match so the next `./scripts/deploy.sh` doesn't revert the change.
 
 **Tear down all infrastructure** (move to a different GCP project):
-See [docs/TEARDOWN.md](docs/TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
+See [TEARDOWN.md](TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the *original* single-view pipeline (`plex-etl-sales-orders` / `Part_v_Part`) from zero — it's not the process for adding to an already-running deployment. The project has since grown to 8 report families (16 Cloud Run jobs, prod+test) driven by YAML configs in GCS rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 13 pipelines (26 Cloud Run jobs, prod+test, 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
 - **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
 - **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
 - **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

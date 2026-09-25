@@ -37,6 +37,40 @@ and `test/*.yaml` GCS objects as `source`-linked resources, so apply is
 the reliable deploy mechanism, not just the manual `gcloud storage cp`
 shown in `docs/OPERATIONS.md` for quick iteration).
 
+## Folders, branches and the deploy locks (read before any git or terraform)
+
+- **Each project has its own git worktree, bound to its branch:**
+
+  | Folder | Branch | Use |
+  |---|---|---|
+  | `C:\F\Parasol\plex-to-big-query` | `main` | merge and deploy only |
+  | `ptbq-scorecard` | `dev-scorecard` | Vox Scorecard |
+  | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
+  | `ptbq-label-design` | `dev-label-design` | Label Design |
+  | `ptbq-dev` | `dev` | shared tooling |
+
+  Work in the folder of the project you were asked about. Never
+  `git switch` a project folder onto another branch; the pre-commit hook
+  blocks commits if you do.
+- **The hooks** (`.githooks/`, installed by `scripts/install_hooks.sh`) block:
+  - non-merge commits on `main`;
+  - cross-project files;
+  - deployable changes without a CHANGELOG entry;
+  - prod/test YAML count mismatches;
+  - pushing a dev branch into `main`.
+
+  Every block names an override env var. Use it only when the user
+  explicitly wants that exception, and say so. Never `--no-verify`.
+- **Deploy = `./scripts/deploy.sh` from the primary folder.**
+  `terraform/main.tf` runs `scripts/tf_guard.py` as a data source on every
+  plan and apply. It fails unless the folder is the primary one, on a clean
+  `main` equal to `origin/main`. `TF_GUARD_OVERRIDE="why"` is for read-only
+  plans, e.g. checking drift from a dev folder.
+- **Check for parallel sessions.** Before editing, check that no other
+  session works in the same folder/branch: a Claude Code hook reports it on
+  every prompt, and `ListAgents` shows peers. Stage by explicit path, never
+  `git add -A`.
+
 ## Quick health check after any repo move / long gap
 
 ```bash
@@ -230,7 +264,7 @@ the two environments thread together; PRODUCTION/TEST shows as a body badge.
   human to run `gcloud auth login` in their own terminal; can't be
   scripted around.
 - **A `terraform apply` from a `dev*` branch rolls back the other
-  workstream — it happened.** `80c6431` shipped the Label Design pivot fix
+  workstream — it happened** (the deploy guard above now refuses it). `80c6431` shipped the Label Design pivot fix
   to prod on 2026-09-22 from `dev-label-design`; that evening an apply from
   `dev-scorecard`, which never had the commit, rewrote
   `sql/label_design_view.sql` in GCS (2026-09-23 00:18 UTC) with the old

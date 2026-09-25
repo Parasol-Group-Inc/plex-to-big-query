@@ -1,20 +1,36 @@
+// Label Design: Plex -> Monday queue, push service, trigger app.
+// Opens ../ptbq-label-design, the git worktree bound to `dev-label-design`. Each project has its own
+// folder so two sessions can never share a working tree (CONTRIBUTING.md).
 {
 	"folders": [
 		{
-			"name": "plex-to-big-query (Label Design)",
-			"path": "."
+			"name": "Label Design  [dev-label-design]",
+			"path": "../ptbq-label-design"
 		}
 	],
 	"settings": {
 		"files.exclude": {
 			"score-card-reference": true,
 			"deploy/manual_data_app": true,
-			"deploy/goals_sheet_to_bigquery.gs": true
+			"scripts/board": true,
+			"scripts/scorecard_sandbox": true,
+			"docs/SCORECARD_SANDBOX_FINDINGS.md": true
 		},
 		"search.exclude": {
 			"score-card-reference": true,
 			"deploy/manual_data_app": true,
-			"deploy/goals_sheet_to_bigquery.gs": true
-		}
+			"scripts/board": true,
+			"scripts/scorecard_sandbox": true,
+			"docs/SCORECARD_SANDBOX_FINDINGS.md": true
+		},
+		"window.title": "Label Design [dev-label-design] \u2014 ${activeEditorShort}",
+		"workbench.colorCustomizations": {
+			"titleBar.activeBackground": "#5b2a86",
+			"titleBar.activeForeground": "#ffffff"
+		},
+		"git.branchProtection": [
+			"main"
+		],
+		"git.branchProtectionPrompt": "alwaysPrompt"
 	}
 }

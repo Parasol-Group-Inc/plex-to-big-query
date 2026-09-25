@@ -1,0 +1,24 @@
+// The primary folder, on main. Merge and deploy from here; do not edit here (the pre-commit hook blocks it).
+// Opens ../plex-to-big-query, the git worktree bound to `main`. Each project has its own
+// folder so two sessions can never share a working tree (CONTRIBUTING.md).
+{
+	"folders": [
+		{
+			"name": "MAIN \u2014 deploy only  [main]",
+			"path": "../plex-to-big-query"
+		}
+	],
+	"settings": {
+		"files.exclude": {},
+		"search.exclude": {},
+		"window.title": "MAIN \u2014 deploy only [main] \u2014 ${activeEditorShort}",
+		"workbench.colorCustomizations": {
+			"titleBar.activeBackground": "#9b1c1c",
+			"titleBar.activeForeground": "#ffffff"
+		},
+		"git.branchProtection": [
+			"main"
+		],
+		"git.branchProtectionPrompt": "alwaysPrompt"
+	}
+}

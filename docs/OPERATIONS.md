@@ -252,19 +252,16 @@ resource "google_cloud_scheduler_job" "etl_purchasing" {
 
 ### Step 5 — Apply Terraform and deploy the image
 
-> **Run this first, every time — neither command below checks it for you.**
-> `terraform apply` and `gcloud builds submit` both deploy exactly whatever
-> is on local disk right now, regardless of git branch or uncommitted
-> changes. Since work happens on `dev`/`dev-label-design`/`dev-scorecard`
-> and only `main` is meant to reach prod (see `CONTRIBUTING.md`), that gap
-> is real — running either command from a feature branch deploys the
-> feature branch, silently.
+> **Deploy Terraform-managed changes with `./scripts/deploy.sh`, from the
+> primary folder on `main`.** It runs the preflight, plans to a file (the
+> **deploy guard** inside Terraform refuses any branch but a clean, pushed
+> `main` in the primary folder), separates real content changes from
+> line-ending noise, flags destroys, asks you to confirm the change count,
+> applies exactly that plan, and tags the commit `deploy/<UTC time>`.
+> Background and every lock: `CONTRIBUTING.md`.
 >
-> ```bash
-> ./scripts/deploy_preflight.sh
-> ```
->
-> Refuses (exit 1) unless you're on `main` with a clean working tree.
+> An image deploy (`gcloud builds submit`) has no guard inside it — run
+> `./scripts/deploy_preflight.sh` first, every time.
 
 ```bash
 # If you changed Python code (main.py, email_utils.py):
@@ -274,7 +271,7 @@ gcloud builds submit \
   --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
 
 # Infrastructure only (YAML/SQL + new Cloud Run jobs):
-cd terraform && terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh      # never a bare terraform apply; see the note above
 ```
 
 > **Cloud Build safety:** the build's smoke test runs **`plex-etl-sales-orders-test`

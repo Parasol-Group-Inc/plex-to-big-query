@@ -14,6 +14,70 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev) - Locks: a folder per project, commit/push hooks, a deploy guard inside Terraform
+
+Three things went wrong on 2026-09-24:
+- two sessions shared one working tree;
+- a whole day of Label Design work sat uncommitted on `dev-scorecard`;
+- an apply from `dev-scorecard` had already rolled back a Label Design fix
+  in prod (2026-09-22) without anyone noticing for two days.
+
+The 2026-09-17 setup relied on people remembering a preflight script. These
+locks don't.
+
+### Added
+- **A git worktree per project.**
+  - The folders are `ptbq-scorecard`, `ptbq-sandbox`, `ptbq-label-design`
+    and `ptbq-dev`, next to the primary `plex-to-big-query` folder, which
+    stays on `main`.
+  - Git refuses to check one branch out twice.
+  - Five `*.code-workspace` files open these folders, one per project plus
+    main (deploy) and dev (shared), each with a coloured title bar.
+  - Replaces the two workspace files that both opened `"."`, which is how
+    two sessions ended up in one tree.
+- **`.githooks/`** (pre-commit, pre-push, logic in `hooks.py`), installed by
+  `scripts/install_hooks.sh` via `core.hooksPath` (covers every worktree).
+  Each block has a named, printed, one-command override. They block:
+  - a commit in a folder whose branch was switched;
+  - non-merge commits on `main`;
+  - another project's files on a project branch, or one commit mixing
+    projects;
+  - `reports/` or `terraform/` changes without `CHANGELOG.md`;
+  - prod/test YAML `plex_view:` counts that differ (the 2026-09-09
+    incident);
+  - pushing a dev branch into `main`, or a non-fast-forward push to it.
+
+  Which file belongs to which project is defined once, in `hooks.py`.
+  All blocks and the pass case were exercised against staged dummy changes
+  in each folder before commit.
+- **Deploy guard inside Terraform:** `data "external" "deploy_guard"` runs
+  `scripts/tf_guard.py` on every plan and apply.
+  - **It refuses** unless the run is in the primary folder, on `main`, with a
+    clean tree, and `HEAD == origin/main`. It cannot be forgotten.
+  - `TF_GUARD_OVERRIDE="why"` allows a read-only plan elsewhere.
+  - Needs the `hashicorp/external` provider (`terraform init -upgrade` once).
+  - Tested: it refuses from `ptbq-dev` on all three counts, passes from
+    `main`, and passes with the override.
+- **`scripts/deploy.sh`**, the one way to apply:
+  1. preflight, then fetch, and require equality with `origin/main`;
+  2. `plan -out`;
+  3. `scripts/plan_review.py`, which downloads every changed GCS object and
+     separates real content changes from line-ending re-uploads, listed by
+     project, and flags destroys;
+  4. type the change count to confirm;
+  5. apply exactly that plan;
+  6. tag `deploy/<UTC time>` and push the tag.
+- **`.gitattributes`:** LF for `reports/**`, `deploy/**`, `terraform/*.tf`
+  and scripts. Checkouts become byte-identical to commits, so plans stop
+  listing phantom changes (2026-09-24: 8 of 30). GCS objects uploaded as
+  CRLF re-upload once, then settle.
+
+### Changed
+- `CONTRIBUTING.md`: the branch section is rewritten as folders, locks and
+  the change → main → deploy → re-sync flow.
+- `README.md` and `docs/OPERATIONS.md` Step 5 point at `deploy.sh`.
+- `CLAUDE.md` gains a folders/locks section for sessions.
+
 ## 2026-09-25 (label design) - Restored the part-attribute pivot fix that a scorecard apply rolled back
 
 ### Fixed - `label_design_view.sql` in prod is the shipped version again

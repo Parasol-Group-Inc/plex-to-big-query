@@ -1,0 +1,14 @@
+# Line endings for everything Terraform uploads to GCS, and for scripts.
+#
+# core.autocrlf=true (the Windows default here) rewrites files as CRLF on
+# checkout. Terraform compares file hashes, and GCS held a mix of LF and CRLF
+# uploads — so a branch switch made unchanged objects show up as "changed"
+# (2026-09-24: 8 of 30 planned changes were line endings only), which is
+# exactly the noise a real, unwanted change hides in. Pinning LF makes every
+# checkout byte-identical to what is committed, so a plan only lists real edits.
+reports/**      text eol=lf
+deploy/**       text eol=lf
+terraform/*.tf  text eol=lf
+*.sh            text eol=lf
+*.py            text eol=lf
+.githooks/*     text eol=lf

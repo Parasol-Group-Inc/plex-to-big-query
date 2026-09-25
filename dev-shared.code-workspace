@@ -1,0 +1,24 @@
+// Shared tooling (hooks, deploy scripts, main.py, terraform structure) — CONTRIBUTING's `dev` branch.
+// Opens ../ptbq-dev, the git worktree bound to `dev`. Each project has its own
+// folder so two sessions can never share a working tree (CONTRIBUTING.md).
+{
+	"folders": [
+		{
+			"name": "Shared / dev  [dev]",
+			"path": "../ptbq-dev"
+		}
+	],
+	"settings": {
+		"files.exclude": {},
+		"search.exclude": {},
+		"window.title": "Shared / dev [dev] \u2014 ${activeEditorShort}",
+		"workbench.colorCustomizations": {
+			"titleBar.activeBackground": "#34495e",
+			"titleBar.activeForeground": "#ffffff"
+		},
+		"git.branchProtection": [
+			"main"
+		],
+		"git.branchProtectionPrompt": "alwaysPrompt"
+	}
+}

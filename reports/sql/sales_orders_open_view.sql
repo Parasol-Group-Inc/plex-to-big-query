@@ -105,7 +105,7 @@ SELECT
   po.Master_Price                                       AS order_total,
 
   ptype.Product_Type                                    AS product_type,
-  pgrp.Part_Product_Group                               AS product_group
+  pgrp.Part_Group                                       AS product_group
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
 
@@ -142,8 +142,10 @@ LEFT JOIN base_price bp
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` ptype
   ON p.Product_Type_Key = ptype.Product_Type_Key
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON p.Part_Group_Key = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)
+-- product_group = Plex Part GROUP (Part_v_Part_Group). Was the empty
+-- Part_v_Part_Product_Group until 2026-09-24, so it was always NULL.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 -- "Open" = not Closed (2074) and not Cancelled (2076), confirmed with the
 -- report requester as the intended definition (2026-08-10).

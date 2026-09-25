@@ -14,6 +14,621 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - Fixed: inventory value, part groups, daily usage, cycle count, open caps
+
+### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)
+- **Inventory value read about $77 for the whole building.**
+  - **Before:** `inventory_valuation_summary_view.sql` summed per-unit
+    standard costs with no quantity, added every operation's cost for a part,
+    and took the cost model from the snapshot (NULL on real rows).
+  - **Now:** value = on-hand quantity (`part_on_hand_inventory_report`) ×
+    unit cost. The unit cost is the part's latest cost rows at its
+    highest-costed operation (costs are cumulative through the routing),
+    summed across the cost sub-types. The cost model comes from the history
+    rows. Plex's snapshot pointer table is used when populated, otherwise the
+    cost history on or before the snapshot date.
+  - **In the sandbox:** $76.65 → $2,760,901.76, matching an independent
+    on-hand × latest-cost query to the cent.
+  - **Limitation:** `Part_v_Snapshot` has no quantity, so only the current
+    snapshot is valued. There is no month-end trend yet.
+- **Revenue by part group was always one "(no group)" bar.**
+  - **Before:** four views joined `Part_Group_Key` to
+    `Part_v_Part_Product_Group`, which is empty in test and prod.
+  - **Now:** the real lookup, `Part_v_Part_Group` (13 groups: Capsule,
+    Label, Powder, …), is extracted in both `sales_orders` YAMLs (27
+    `plex_view:` each). `shipping_revenue_report`, `sales_mtd_by_status_change`,
+    `sales_orders` and `sales_orders_open` join it.
+  - Every group key on the parts resolves. Sandbox August revenue: Capsule
+    $3.8M, Label $0.45M, Powder $0.37M.
+  - **Group names appear in PlexTest/PlexProd only after the next apply +
+    Sales Orders run.**
+- **Average daily usage understated the month in progress.**
+  - **Before:** it divided by all the month's days.
+  - **Now:** it divides by days elapsed, and adds `days_in_period`,
+    `is_month_in_progress` and `unit`.
+- **Cycle count accuracy was weighted per count.**
+  - **Now:** each location is judged once a month, on its latest count;
+    `locations_counted` is the denominator; `recounted_locations` is added.
+- **Open caps missed "Schedule Encapsulation".**
+  - **Before:** it filtered by work-centre name. A real open job (1.34M caps)
+    sits on that work centre.
+  - **Now:** it filters by `Workcenter_Group = 'Encapsulating'`, like Open
+    Bottles.
+
+Report docs updated for each view. `docs/reports/part_cycle_count_report.md`
+has never existed, which is a gap against the report-doc convention.
+
+### Changed - `scripts/scorecard_sandbox/build.py`
+A table first extracted after `build.SNAPSHOT` (`raw_Part_v_Part_Group`) has
+no time-travel version, so it is now copied as it is now, and the build says
+so. The sandbox's copy holds the 13 real rows pulled from the Plex test host.
+
+## 2026-09-24 (scorecard) - Fixed: deviations' linked NC, TAT in work days, disposition-cost flags
+
+### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)
+- **`quality_deviation_view.sql`: the linked NC never showed.**
+  - **Before:** `problem_links` joined the classic `Quality_v_Problem`, which
+    is permanently empty; this join was missed when the Quality reports
+    moved to `Quality_v_Problem_2` on 2026-09-22.
+  - **Now:** it reads `Problem_2`. Verified: the real link row (problem key
+    117294) is Problem_2's NC #21. Sandbox: 49 of 151 deviations now show
+    their NC, up from 0.
+  - **Added** `deviation_month`, by add date, so the tile needn't choose
+    between add date and effective date.
+- **`quality_turnaround_time_view.sql`: TAT is counted in work days.**
+  - **Before:** turnaround was `DATE_DIFF(DAY)` (calendar days), judged
+    against Performance/Bonus standards that are work days.
+  - **Now:** it adds `turnaround_work_days` (Mon–Fri) for both clocks, and
+    the met/missed flags use it. The calendar columns are unchanged.
+  - There is no holiday table, so holidays count as work days.
+- **`quality_disposition_cost_view.sql`:**
+  - **`records_missing_cost`** only counted NULL, but an unfilled Plex Cost
+    is 0.00 on every real record. It now counts NULL or 0 on Scrap/Rework.
+  - **"(not yet dispositioned)"** was open and closed-without-material
+    records together. It is now split into open / closed with no material /
+    closed with the disposition missing (sandbox: 91 became 32 / 58 / 1).
+
+Report docs updated for all three views.
+
+## 2026-09-24 (scorecard) - Fixed: sales rep, scrap flag and Deposit Review in nine views
+
+### Fixed - found by the scorecard sandbox, verified against real Plex rows
+Each fix was proven in `ScorecardSandbox`, then compiled and run against real
+PlexTest data. None of them is deployed yet: they reach prod on the next
+`terraform apply` after `dev-sandbox` is merged.
+
+- **Sales rep.** Affects `sales_mtd_by_status_change_view.sql`,
+  `pipeline_plex_value_view.sql` and
+  `sales_orders_pending_accounting_approval_view.sql`.
+  - **Before:** they read the rep from `Sales_v_Order_Salesperson`, which Vox
+    barely uses (one row in all of test, none in prod), so every sale read
+    "(no rep assigned)".
+  - **Now:** the rep resolves order `Inside_Sales` → customer `Assigned_To` →
+    `Order_Salesperson`, the same as the Label Design view's `bdm`. The sales
+    view adds `sales_rep_source`.
+  - **In the sandbox:** 2,704 of 2,720 sale lines resolve a rep (2,559 from
+    the order, 145 from the customer).
+- **Scrap is `Rejected != 0`.** Affects the production monthly, FPY and encap,
+  packaging, labeling and blending daily views.
+  - **Before:** the views tested `= -1`, a change made 2026-08-23 on an
+    assumed convention. The only real rejected record has `Rejected = 1`, so
+    scrap, rejected quantity and DPMO read 0 from then until now. FPY was
+    unaffected.
+  - **Now:** `!= 0`, which holds for either value.
+  - `docs/CHEATSHEET.md`'s boolean table no longer lists any column as
+    confirmed `-1 = true`.
+- **Deposit Review.** Affects
+  `sales_orders_pending_accounting_approval_view.sql`.
+  - **Before:** it matched `= 'DEPOSIT REVIEW'`, but Plex now has two
+    "Deposit Review (…)" statuses (2587, 2656), so the tile was empty.
+  - **Now:** `LIKE 'DEPOSIT REVIEW%'`.
+
+Report docs updated for all nine views. The sandbox's `proposed_sql/`
+overrides for these fixes are deleted now that the fixes live in
+`reports/sql/`.
+
+## 2026-09-24 (scorecard) - What the sandbox found: six view bugs and a stale-data trap
+
+### Found - `docs/SCORECARD_SANDBOX_FINDINGS.md`
+The sandbox built above found these problems. Each one was checked against
+the real Plex record before it was written down. Tile-by-tile status and the
+manual-input list for Jennilyn are in the doc.
+
+1. **Every sale reads "(no rep assigned)".** The sales, pipeline and
+   deposit-review views take the rep from `Sales_v_Order_Salesperson`: one
+   row in all of test, none in prod. Vox records it on the order
+   (`Inside_Sales`) and the customer (`Assigned_To`), as the Label Design view
+   found today.
+2. **Scrap, rejected qty and DPMO are always 0.** The views count
+   `Rejected = -1` (an assumed convention, 2026-08-23); the only real rejected
+   record has `Rejected = 1`. FPY is unaffected.
+3. **Orders pending accounting approval is empty.** It matches
+   `= 'DEPOSIT REVIEW'`, and Plex now has two "Deposit Review (…)" statuses.
+4. **Inventory value reads about $77.** The valuation view sums per-unit
+   standard costs with no quantity.
+5. **Deviations never show their linked NC.** The view joins the classic
+   Problem table, which is always empty.
+6. **Revenue by part group is a single "(no group)" bar.** The group lookup
+   table is empty in test and prod, though parts carry a group key.
+
+Also:
+- TAT counts calendar days against work-day standards.
+- Average daily usage understates the current month.
+- The ETL keeps yesterday's rows whenever Plex returns 0, so a tile whose
+  data genuinely empties shows stale figures silently.
+
+### Added - `scripts/scorecard_sandbox/proposed_sql/` (sandbox only, NOT deployed)
+Fixes for 1–3, used by the sandbox build only, which prints a ⚠ line for
+each so nobody mistakes them for production behaviour:
+- rep resolution: order, then customer, then salesperson;
+- `LIKE 'DEPOSIT REVIEW%'`;
+- scrap counted as `Rejected != 0`.
+
+Editing `reports/sql/` was deliberately left for Emilio's decision, since it
+deploys to prod on the next `terraform apply`. 4–6 have no fix written yet.
+
+## 2026-09-24 (scorecard) - Scorecard sandbox: a full simulated year to design Looker Studio against
+
+### Added - `scripts/scorecard_sandbox/` and dataset `voxdatalake.ScorecardSandbox`
+PlexProd is empty until cutover, and PlexTest had one thin month and is
+overwritten nightly, so no scorecard tile could be designed against real
+shapes. `python scripts/scorecard_sandbox/build.py` (about 7.5 min) builds a
+dataset the ETL never writes:
+- all 35 tile views, created from the same `reports/sql/` files;
+- the 53 base tables under them;
+- a coherent history from 1 Jan 2026 to the build day.
+
+All 35 views plus `safety_incidents` return data, most spanning 9–11 months.
+**Not real business data:** document numbers are `SBX`-prefixed.
+
+The rule it keeps (Emilio's): no random rows.
+- Every synthetic Plex row is a clone of a real PlexTest row, going into the
+  same `raw_*` table the ETL writes.
+- Manual tiles read the manual-data app's own tables.
+- Scale comes from the live scorecard (`scale.py`, cited):
+  - sales $3.7–5.3M a month against real rep goals;
+  - WIP $5.6M; In Shipping $0.95M;
+  - production against the live goals (Encap 100M, Bottling 1.5M,
+    Labeling 700K);
+  - FPY 90.6% / 99.88% / 99.2%;
+  - open caps 219.7M; out of stock 6; cycle count accuracy 98.7%.
+- Costs exist only in the sandbox, derived from real prices and cost ratios.
+
+Built from PlexTest **as of 2026-09-23 12:00 UTC via time travel**
+(`build.SNAPSHOT`). Live PlexTest joined nothing: 0 of 2,119 customer part
+prices matched a customer part after the tenant was cut back from 182
+customers to 24. `snapshot_check.py` scores any instant by the joins the
+views depend on.
+
+Five generators, each owning disjoint tables:
+- `manual`: goals, safety;
+- `sales`: orders through invoices;
+- `production`: jobs, ops, production log;
+- `quality`: NCs, deviations;
+- `inventory`: containers, movements, cycle counts, standard costs.
+
+Full design in `scripts/scorecard_sandbox/README.md`, including the few
+tables with no real row to clone and how each was handled. Supersedes
+`scripts/scorecard_test_data.py` for design work (the build strips that
+injector's rows).
+
+## 2026-09-22 (board) - the Migration Board rebuilt for someone who has never opened BigQuery
+
+### Changed - the board is generated from `scripts/board/`, not hand-edited
+`board_data.py` holds the content, `build_board.py` the layout. The split is
+the point: the content changes weekly, the design does not, and every previous
+update was a patch script in a scratchpad that nobody else could re-run.
+
+Published to the **same URL** as always (v25). Jennilyn and others hold that
+link.
+
+### Changed - written in plain English, front to back
+Emilio's ask, and a fair one: the jargon had become a barrier to reading our
+own status page. Every tile now leads with **the question it answers** rather
+than the view that answers it, and each card shows the whole migration in one
+line - **the source feeding it today, then the Plex view replacing it**.
+
+Three things are new:
+
+- **A 30-term glossary with search**, each entry saying what a term means and
+  then *why it matters here* - which is where the traps actually live.
+  `Encapsulating` vs "Encapsulation", Scrap vs Destroy, Sales vs Revenue, why
+  no goal can come out of an ERP.
+- **Today's source, with the audit's own verdict on it.** Taken from
+  `score-card-reference/Vox_Scorecard_Data_Catalog.md`: of 26 sources, five are
+  **broken** and ten **flagged** today. `Production_Daily` feeds 21 charts;
+  `vw_shipping_daily_snapshot` feeds 7 and is broken. Knowing what we are
+  replacing is half the argument for replacing it.
+- **Real vs test data, marked per tile.** After the injector ran, several tiles
+  carry rows that are ours, not Vox's. A test figure presented as a business
+  figure is worse than a blank tile, so each card says which it is.
+
+### Removed - the progress bar and the andon board
+Both counted views rather than readiness, and both encouraged reading a number
+instead of the question under it. What replaced them: three "start here" cards
+that say what is happening, how to read a tile, and what real-vs-test means.
+
+## 2026-09-22 (test data) - prove the tiles, and one view that was never empty
+
+### Added - `scripts/scorecard_test_data.py`, inject and delete on demand
+A blank tile has two causes that look identical from a dashboard: the view is
+wrong, or the tenant has nothing of that kind. This puts rows underneath so the
+two can be told apart. `--inject`, `--delete`, `--status`, `--recipes`,
+`--days`; five recipes (production, shipping, cycle_count, activity, safety).
+
+**The rows are deliberately not realistic** - shaped to satisfy the views, not
+to resemble the business - and the script says so in its own output.
+
+**Removal is guaranteed twice over**, because a cleanup that depends on a
+record of what was written fails exactly when it matters: every row carries a
+marker (integer keys from 990000000, text keys prefixed `ZZTEST`) and
+`--delete` runs those predicates rather than reading the manifest, so it works
+from a machine that has never injected anything. The manifest backs `--status`
+only. The nightly tenant wipe is a third net. **It refuses to run against
+PlexProd** - not a flag, not an override.
+
+Two bugs in its own first run, both fixed and both worth the note: the manifest
+INSERT was built by f-string and broke on a predicate containing `LIKE '99%'`
+(quotes now escaped like any other literal), and the production recipe took
+*every* work centre in the tenant - 836 rows to prove what 171 proves.
+
+### Fixed - `part_cycle_count_report` was UNQUERYABLE, not empty
+It cast `Cycle_Inventory_Date` - INT64 nanoseconds - straight to TIMESTAMP.
+BigQuery rejects that cast pair outright, and SAFE_CAST does not rescue an
+illegal cast, only a failed parse, so **the view failed to parse and every
+query against it errored**. It was written while the raw table was still
+all-STRING (autodetected at 0 rows) and broke silently the moment real typed
+rows landed - the same 2026-08-23 typing change that fixed other things.
+
+It had been recorded as "0 rows - nothing counted yet on the tenant". A status
+check that reports row counts cannot tell those apart, which is exactly why the
+injector earns its keep. Now returns real figures: **9 locations, 56 items,
+82.1% accuracy** on injected counts.
+
+### Verified after injection
+`shipping_daily` 1 to 14 - `shipping_revenue` 5 to 19 -
+`shipping_pending_revenue` **0 to 4** - `production_monthly_by_workcenter_group`
+1 to 9 - `production_vs_goal` 1 to 9 - `quality_fpy_by_area_month` 1 to 9 -
+`inventory_avg_daily_usage` **0 to 1** - `part_cycle_count` **ERROR to 1**.
+
+Left uncovered on purpose: `inventory_valuation_total_report` (needs three
+joined cost tables, and a fabricated cost is the one number here that would
+mislead rather than prove) and Quality (22 real records already).
+
+## 2026-09-22 (goals) — one goals pipeline, not two
+
+### Changed — the three vs-goal reports read the resolver; the `v2_` copies are gone
+There were two of everything: `revenue_vs_goal_report` read the legacy
+`scorecard_goals` table, and a generated `v2_revenue_vs_goal_report` read the
+resolver — same for sales and production. Six views, two goal sources, one
+resolver, and an Apps Script feeding each table. That shape was right while
+Looker Studio migrated one tile at a time, and stopped being right once there
+was nothing left to migrate.
+
+Now: the three original reports read `scorecard_goals_resolved` (renamed from
+`v2_scorecard_goals_resolved`), the three `v2_` copies are deleted from every
+config, and **nothing reads a goal table directly** — the "newest edit wins"
+dedupe lives in exactly one place.
+
+**This is a fix as well as a simplification.** `sales_vs_goal_report` and
+`revenue_vs_goal_report` had been reading the legacy table only, so a goal
+entered in the web app did not reach them at all — you had to know to look at
+the `v2_` copy instead. Verified after the change in PlexTest: the resolver
+returns **80 goals — 12 from the app, 68 from the legacy table**, and
+`revenue_vs_goal_report` now shows the app's revenue goal where it previously
+showed none.
+
+### Removed — `deploy/goals_sheet_to_bigquery.gs` and `scripts/gen_v2_goal_views.py`
+The legacy sheet-to-BigQuery writer and the generator that produced the `v2_`
+copies. Neither has a job any more.
+
+⚠ **Deleting the file does not stop the deployed Apps Script.** The old
+project still has to be disabled by hand, or it will keep truncating
+`scorecard_goals` on its schedule.
+
+### Added — `importLegacyGoals()` in the manual-data app
+The one manual step that finishes this. `scorecard_goals` still holds **68 real
+sales rep-month goals — the only copy** — and they cannot be moved by writing
+to BigQuery, because `scorecard_goals_app` is rebuilt from its sheet on every
+push. So the import goes through the sheet: it reads the legacy table, appends
+every row to the app's goals tab marked with its origin, **skips keys the app
+already has** so a since-edited goal is never overwritten, and pushes once at
+the end rather than per row.
+
+Afterwards: confirm `goal_source = 'sheet'` returns 0 rows, then the legacy
+branch can be deleted from the resolver and `scorecard_goals` dropped. Until
+then that table stays.
+
+### Still to do by hand
+- **Drop the four orphaned `v2_*` views** in both datasets — they are out of
+  every config so nothing refreshes them, but they still exist. The local
+  permission classifier blocked the DROP.
+- Run `importLegacyGoals()`, then disable the old Apps Script project.
+
+## 2026-09-22 (last) — turnaround standards get a table, sales reps get a roster
+
+### Added — `turnaround_standards`, in both datasets
+Created by hand in `PlexTest` and `PlexProd`; **not** Terraform-managed and
+**not** written by the ETL, the same arrangement as `scorecard_goals` and for
+the same reason. Jennilyn edits it directly in BigQuery.
+
+This is the other half of dropping the web-app tab earlier today: the
+standards needed a home, and a form was the wrong one for numbers that change
+about never. A table she can edit is the right shape.
+
+⚠ **It must exist or `quality_turnaround_time_report` fails to create**, which
+looks like a broken report rather than a missing dependency — the exact trap
+`scorecard_goals` sets for the three vs-goal views. An EMPTY table is fine and
+reads as `none set`. Rebuild DDL, how to add a standard, and the two things to
+get right: `docs/reports/turnaround_standards.md`.
+
+### Changed — turnaround time measures each record against its standard
+`quality_turnaround_time_report` gains `stock_type`,
+`performance_standard_days`, `bonus_standard_days`, `standard_source`,
+`met_performance_standard` and `met_bonus_standard`.
+
+Three decisions worth keeping:
+- **A standard is chosen by WHEN the problem happened**, not by which row is
+  newest. A change is made by adding a row, and the newest row effective on or
+  before that record's month wins — so a standard starting in December is
+  correctly not applied to a September problem.
+- **There is a catch-all.** 12 of 22 live NC records have no part, and
+  therefore no stock type; without a blank-stock_type row they would get no
+  standard at all. `standard_source` says `stock type` or `catch-all`, so a
+  fallback number is never mistaken for a type-specific one.
+- **Met/missed is NULL, not false**, while a record is open or no standard is
+  set. "We don't know yet" and "missed it" are different answers.
+
+Proven end to end in `PlexTest` with three PLACEHOLDER rows (clearly labelled,
+to be deleted when the real figures arrive): record 9 takes the catch-all
+30/15 and meets both; record 2 takes the `Raw Materials` 7/3, meets
+performance at 5 days and **misses bonus** — so the flags discriminate rather
+than always agreeing. `PlexProd` left empty on purpose.
+
+⚠ **`stock_type` assumes the sheet's "Item Stock Type" means Plex's
+`Part_Type`** (Components, Raw Materials, Semi-Finished Goods, Finished Goods,
+WIP, Supply, Inspection). Closest thing on the part master — there is no
+`Stock_Type` column — but unconfirmed against the sheet.
+
+### Added — `sales_reps_report`, and the goals dropdown now reads it
+The manual-data app built its sales-rep list from `DISTINCT sales_rep FROM
+sales_mtd_summary_report` — reps who already sold something **this month**. A
+new or quiet rep never appeared, so they could not be given a goal, which is
+exactly where a goal matters most.
+
+Now reads Plex's `Inside Sales` role roster (`Plexus_Control_v_Role` +
+`Plexus_Control_v_User_Role`, added to both `sales_orders` configs — 26
+extractions, 29 views each). Matched on the role **name**, not its key.
+
+**Verified after deploying:** 13 reps, and **all 7 who carry a real goal today
+are among them** — nobody is lost, six become reachable. Two findings fell out
+of it: `Inside Sales` has `Commissionable = FALSE`, so that flag is NOT how Vox
+marks a sales role and filtering on it would have returned nobody (it is
+published rather than used); and one existing goal is scoped to the literal
+string **"Sales Representative"**, which is not a person and matches nothing —
+invisible while the dropdown only listed reps with sales, and somebody's to
+clean up.
+
+The loader falls back to the old source if the new view is not in the dataset
+yet: an empty dropdown is worse than a short one.
+
+### Deployed
+`terraform apply` — 3 added, 3 changed, 2 destroyed; `plan` after it reports no
+changes. Test jobs for both pipelines run and **every view verified by
+querying it**, not by exit code. Prod views pick the new SQL up on tonight's
+scheduled runs. The web app still needs Deploy > Manage deployments > New
+version — nothing in Apps Script has shipped yet.
+
+## 2026-09-22 (later) — Manual Data app reworked from the Sep-21 call
+
+### Fixed — the app would have broken the goal views on its first real push
+`COMMON_FIELDS` stamped every row with `submitted_by` / `submitted_at`. The
+live `scorecard_goals_app` table carries **`updated_by` / `updated_at`**, and
+`v2_scorecard_goals_resolved` both selects them and dedupes on
+`ORDER BY updated_at DESC` — the "newest edit wins" rule the whole
+append-only design rests on. Pushes are `WRITE_TRUNCATE` with an explicit
+schema, so the first real save from this app would have replaced that table
+with columns the resolver does not have, taking out `revenue_vs_goal`,
+`sales_vs_goal` and `production_vs_goal` together.
+
+Nothing had hit it yet only because nobody has entered a goal through the app.
+Jennilyn's plan on the 2026-09-21 call was to start doing exactly that —
+*"if we can get it connected in writing, we can put in our current goals and
+then just go ahead and start using this"* — so this was about a week from
+being discovered as three broken tiles. Renamed to match the table. Verified
+against PlexTest 2026-09-22.
+
+**If the sheet tabs already carry the old headers, re-run `setupSheets()` or
+rename those two cells** — `appendToSheet_` maps values onto header names, so
+a stale header writes blanks rather than failing.
+
+### Removed — the Turnaround standards tab
+Asked directly on the call: *"should we keep the tab for turnaround
+standards?"* — *"I don't think we need it… they don't change those standards
+very much."* This **reverses the 2026-09-11 decision** to move them into the
+app with restricted edit access, so the reasoning is recorded rather than just
+the outcome: a form earns its keep on numbers that change often enough that
+chasing someone to edit a table is worse than giving them a form. These change
+about never, and the edit-access worry that came with them — they are
+bonus-bearing — is a cost rather than a benefit.
+
+⚠ **Consequence, stated because it is easy to miss:** the standards now have
+no home in BigQuery at all. `quality_turnaround_time_report` publishes
+turnaround actuals with nothing to measure them against; the comparison stays
+wherever the Monthly TAT Analysis sheet lives. The open "who may edit the
+form" decision narrows to goals.
+
+### Changed — goals split into three tabs, storage untouched
+*"Maybe instead split out the production goals and the sales goals into two
+separate tabs."* Done as **Sales goals / Production goals / Revenue goal**,
+each pinning `metric` so the goal-type dropdown disappears — the tab is the
+choice. Revenue keeps its own tab because it is company-wide by definition and
+deliberately a different number from Sales; folding it into Sales would imply
+they are the same thing.
+
+**A presentation split only.** A dataset here is 1:1 with a sheet tab and a
+BigQuery table, and pushes are `WRITE_TRUNCATE`, so three real datasets would
+mean either three tables — breaking every view that reads
+`scorecard_goals_app` — or three tabs racing to truncate one. "Recently
+entered" filters to the pinned metric so each tab lists only its own rows.
+
+### Added — each form shows what is already saved, above the fields
+Pick a goal type, month and scope and the current value appears with who last
+changed it; the incidents tab shows the most recent incident. Jennilyn's
+reasoning is the design: *"if they're editing say a December goal, they're not
+really going to have visibility into seeing what December's goal is in
+BigQuery to know that it's right or wrong without asking me."*
+
+Read-only, and it **never blocks a save** — a failed lookup hides the panel and
+the form still works. "Nothing saved yet" is its own message rather than a
+blank, because on a safety log an empty answer means something specific.
+
+### Still open from the same call
+- **Which roster defines "sales rep"** for the goals dropdown. It reads
+  `DISTINCT sales_rep` from `sales_mtd_summary_report`, so a rep with no
+  qualifying sale this month never appears. Plex's `Inside Sales` role
+  (Role_Key 55369) holds all 7 reps who currently carry a goal plus several who
+  don't — still waiting on Jennilyn before wiring it.
+- **Deploying it.** Apps Script has no version control and saving the code does
+  not update the live app: Deploy > Manage deployments > New version. The part
+  costs removal from 2026-09-16 is still not live either.
+
+**Not a code change to the pipeline** — nothing here ships via Terraform or
+Cloud Build.
+
+## 2026-09-22 — the Quality reports were reading the wrong Plex table
+
+### Fixed — `Quality_v_Problem` is the classic table; Vox writes `Quality_v_Problem_2`
+Jason and Sheldon's Problem Control session produced 22 real records. None of
+them reached BigQuery, and the reason was not the tenant: **Plex has two
+problem tables and Vox records on the UX screen, which writes
+`Quality_v_Problem_2`.** Every Quality report here had been built on the
+classic `Quality_v_Problem`.
+
+Verified live 2026-09-22 against `vox.test.odbc.plex.com`: **19 records in the
+Problem Control UI, 22 rows in `Quality_v_Problem_2`, 0 rows in
+`Quality_v_Problem`.**
+
+**Nothing ever said so.** The extraction genuinely succeeded — it asked the
+right question of the wrong table — so the job exited 0, the run email said
+success, and the zero-row guard logged `0 rows for raw_Quality_v_Problem →
+existing table left untouched`. Four reports had therefore returned 0 rows
+since the day each was built, which read exactly like "the tenant has no
+quality data yet", and was written down as that more than once.
+
+Repointed `quality_nonconformance_view.sql` and
+`quality_turnaround_time_view.sql` at the UX table; `quality_cost_by_category`
+and `quality_disposition_cost` follow automatically, being thin views over the
+nonconformance report. Row counts in `PlexTest` after the fix: **nc 22, tat 22,
+cost-by-category 9, disposition-cost 1, deviations 2** — verified by querying
+each view, not by trusting the exit code.
+
+The classic table stays extracted on purpose, so anything ever recorded on the
+classic screen still lands somewhere and the contrast between the two raw
+tables stays visible.
+
+### Added — `Quality_v_Problem_2` + `Quality_v_Problem_Form` extractions
+Both configs (`reports/quality_nonconformance.yaml` and its `reports/test/`
+twin, 13 extractions each). The form lookup is what makes **Problem Form**
+readable — and Problem Form turns out to be the dimension Quality actually
+classifies by: Material Destruction (3), Non-Conformance Form (3), Risk
+Assessment (4), System Audit CAR (4), 8D (3), Complaint Form (2), Initial
+Problem Report (2), 5P (1).
+
+New columns on `quality_nonconformance_report`: `problem_form`,
+`problem_form_key`, `recorded_date`, `due_date`, `quantity_scrapped`,
+`champion_key`, `department_no`, `building_key`, `workcenter_key`, `job_key`,
+`job_op_key`, `recurrence`, `root_cause_response`, `response_action`, and
+`brief_description_html` beside a tag-stripped `brief_description` (the UX form
+is rich text — records arrive as `<p>**TEST**&nbsp;…</p>`).
+
+**`corrective_action` is gone**, and that is a real difference rather than an
+omission: Problem_2 has no such column. Corrective and preventive actions are
+their own records in the Problem Action family, one row per action, which is
+what lets an 8D carry several. Not extracted yet — add when action-level
+reporting is actually wanted.
+
+### Changed — turnaround time ships BOTH clocks instead of choosing one
+The Problem-Date-vs-Entered-Date decision has been open since 2026-09-11 and
+stayed theoretical while the table was empty. `Problem_2` carries both, both
+populated, genuinely different (Problem_Date is usually date-only,
+Recorded_Date a precise timestamp). `turnaround_days` keeps its existing
+meaning so nothing downstream shifts, and `turnaround_days_from_recorded`,
+`reporting_lag_days` and `closed_on_time` (against Plex's own due date, a
+column the classic table did not have) sit beside it. **The decision is still
+needed** — it picks which column the scorecard reads — but the report is
+usable either way in the meantime.
+
+### Found — three things that block the Quality $ tiles, none of them ours
+- **`Cost` is 0.0 on all 22 records.** The value is being typed into the
+  description instead: records 6, 11 and 17 read `1.5`, `600` and `$2305.57`
+  and nothing else. Destruction $ / Rework $ / Deviation $ read $0 until that
+  changes. Not papered over — a fabricated cost is worse than a visible zero.
+- **`Final_Disposition` is blank on all 22**, including the one Closed record.
+  Destruction is recorded by choosing the Material Destruction *form*, not by
+  dispositioning material as Scrap. `quality_disposition_cost_report` is
+  deliberately **not** repointed at the form: which of the two Vox means is
+  Quality's to answer, and switching it quietly is how the accounting-approval
+  tile went silently dead in the first place.
+- **Deviations are linked to nothing.** Sheldon created 2 in Plex's built-in
+  deviation module (both "machine damaged", 585 pieces) and all four junction
+  tables — Job, Part, Problem, Workcenter — are still empty. Linking them to a
+  job is his next test, from the 2026-09-22 meeting.
+
+Also worth recording from that meeting (`meetings-reference/sep-22/`): the
+custom **CAPA Report** and **Deviation Form** both fail to submit, and Material
+Destruction / Risk Assessment lose data when heavily filled in. Sheldon meets
+Justina Thursday about the forms and will ask his manager whether the custom
+deviation form can be retired in favour of Plex's built-in module.
+
+### Deployed
+SQL and the test config pushed to GCS and the test job run twice (the first
+run caught `Corrective_Action` not existing on Problem_2 — the view-retry
+safety net reported it cleanly instead of failing the run silently).
+**`terraform apply` still needed for prod** — `reports/quality_nonconformance.yaml`
+and both SQL objects are Terraform-managed.
+
+## 2026-09-21 — Label Design part attributes: NULLIF fix, five new attributes
+
+### Fixed — empty-string attribute values leaking as `''` instead of `NULL`
+`reports/sql/label_design_view.sql` pivoted `pa.Value` raw. Verified against
+live BigQuery: all 28 rows in `raw_Part_v_Part_Attribute` (14 parts ×
+Allergen + Hazardous) carry an **empty string**, not NULL — so every
+`part_*` column emitted `''`. Downstream that reads as "filled in, but
+blank", and would have let the not-yet-built Monday push service overwrite a
+hand-entered value with an empty one. Every branch is now
+`NULLIF(TRIM(pa.Value), '')`; re-verified against live BigQuery to return
+`NULL`.
+
+### Added — five more part-attribute columns
+Jennilyn added five attributes in Plex since 2026-09-16, present in **both**
+PlexProd and PlexTest with identical catalogs (so: real production config,
+not test-tenant scratch): `California PDP`, `Prop 65 Requirement`,
+`Trademark`, `Bottle Material`, `Material Classification`. All ten are now
+pivoted — new columns `part_bottle_material`, `part_california_pdp`,
+`part_prop_65_requirement`, `part_trademark`,
+`part_material_classification`. All values are blank today, so all ten read
+NULL; they are exposed rather than pre-selected because this build has
+already been burned once guessing attribute names.
+
+`Bottle Material` existing Plex-side resolves the one mapping there was a
+confident answer for — Ashley confirmed 2026-09-16 that Monday's Bottle
+Material (container: HDPE/PET/Glass) and Plex's Printing Material (label
+stock) are different concepts, and Plex now carries both separately.
+
+### Changed — attribute keys are not stable; the doc said otherwise
+`Printing Material` moved from `Attribute_Key 7427` to `7432`, and `7427` is
+now `California PDP`. The pivot was unaffected **only** because it joins on
+`Attribute_Name` — a key-based pivot would have silently reported California
+PDP as the printing material. Noted in the SQL comments as a rule, not an
+observation. `label-design/STATUS.md` and
+`docs/reports/label_design_report.md` updated; the previously documented
+proof example (`part_allergen = "Yes"` on `Part_Key 11003458`) is gone, that
+part is no longer in the table at all.
+
+SQL-only change — ships via `terraform apply`, not Cloud Build. Dry-run
+validated; **not yet applied.**
+
 ## 2026-09-17 (later) — dev/dev-label-design/dev-scorecard branches, deploy preflight check
 
 ### Added — `scripts/deploy_preflight.sh`

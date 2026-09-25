@@ -1,6 +1,8 @@
 # Vox Scorecard | NC Cost by Category
 
-> **Status:** ✅ Deployed and verified 2026-09-01 — 0 rows, confirmed genuinely empty (`Quality_v_Problem` has no real rows yet on this tenant), not a query bug · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
+> **Status:** ✅ Deployed 2026-09-01 · **returning 9 real category-months as of 2026-09-22** · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
+
+> **It was empty for a reason nobody could see.** This was recorded as "genuinely empty — `Quality_v_Problem` has no rows on this tenant," which was true and misleading: Vox writes to Plex's *other* problem table, and the pipeline was reading the classic one. Repointed 2026-09-22 (see [Quality Nonconformance](quality_nonconformance_report.md)). Two caveats on the output: **cost is 0 on every record**, so this groups counts rather than dollars for now, and **7 of 22 records have no category at all**, which shows up as its own bucket.
 
 ## What this tells you
 

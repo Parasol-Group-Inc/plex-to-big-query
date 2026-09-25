@@ -23,6 +23,7 @@ Reads `Sales_v_PO` filtered to orders whose status is flagged as a quote (`Sales
 
 ## Flags and open questions
 
+- **Fixed 2026-09-24 — `sales_rep` was always blank.** It read `Sales_v_Order_Salesperson`, which Vox barely uses; it now resolves the order's Inside Salesperson, then the customer's Assigned To, then that table — as in [`sales_mtd_by_status_change_report`](sales_mtd_by_status_change_report.md).
 - **⚠ The Monday.com question is unresolved and it's a real one.** Jennilyn's plan keeps Monday permanently for the Opportunities and Forecast stages. This project's working assumption has been that Plex replaces Monday outright. The Monday sync that feeds `voxdatalake.VoxScorecardsLive` is not managed by this repo's Terraform at all. Needs a decision, not a query.
 - **⚠ Overlaps with WIP.** Pending Sales Approval orders counted here are *also* counted by [`sales_order_value_by_status_report`](sales_order_value_by_status_report.md) under its broad WIP reading — see that report's `also_counts_in_pipeline` flag. The same dollars can land in both tiles. Surfaced in both places rather than quietly netted out, because which tile should own them is a business call.
 - **Prices exclude tax and freight.**

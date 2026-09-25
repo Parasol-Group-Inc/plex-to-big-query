@@ -5,8 +5,22 @@ description: "Quality non-conformance (NC) records — TEST environment (vox.tes
 # Same extraction list as reports/quality_nonconformance.yaml.
 
 extractions:
+  # Classic problem table — 0 rows on this tenant, kept for the contrast.
+  # See reports/quality_nonconformance.yaml (prod) for the full rationale.
   - plex_view: Quality_v_Problem
     bq_table: raw_Quality_v_Problem
+    filter: ""
+    date_col: ""
+
+  # ── Added 2026-09-22 — the UX table Vox actually writes to, plus its form
+  # lookup. Every quality view now reads these. Same extraction list as prod.
+  - plex_view: Quality_v_Problem_2
+    bq_table: raw_Quality_v_Problem_2
+    filter: ""
+    date_col: ""
+
+  - plex_view: Quality_v_Problem_Form
+    bq_table: raw_Quality_v_Problem_Form
     filter: ""
     date_col: ""
 

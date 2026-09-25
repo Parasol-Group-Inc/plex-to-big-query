@@ -6,7 +6,7 @@
 -- NEW 2026-09-04. This is the first view in the pipeline that reads a
 -- MAINTAINED table rather than Plex data.
 --
--- WHERE THE GOAL COMES FROM: `{gcp_project}.{dataset}.scorecard_goals`, a
+-- WHERE THE GOAL COMES FROM: `{gcp_project}.{dataset}.scorecard_goals_resolved`, a
 -- plain BigQuery table whose source of truth is a Google Sheet, pushed here
 -- by an Apps Script (see deploy/goals_sheet_to_bigquery.gs). It is NOT
 -- created or written by this ETL — the pipeline only reads it. Created
@@ -37,6 +37,12 @@
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per month.
 
+-- SOURCE CHANGED 2026-09-22: reads `scorecard_goals_resolved` rather than the
+-- `scorecard_goals` table directly. That view is app-first with the legacy
+-- sheet table as a fallback, so this report now shows a goal entered in the
+-- manual-data web app immediately — which is what retired the duplicate
+-- "v2_" copy of this view that used to exist alongside it.
+
 WITH actual AS (
   SELECT
     revenue_month,
@@ -51,7 +57,7 @@ goal AS (
     period_month,
     SUM(goal_value) AS goal_value,
     ANY_VALUE(note) AS goal_note
-  FROM `{gcp_project}.{dataset}.scorecard_goals`
+  FROM `{gcp_project}.{dataset}.scorecard_goals_resolved`
   WHERE LOWER(metric) = 'revenue'
     AND (scope IS NULL OR scope = '')
   GROUP BY period_month

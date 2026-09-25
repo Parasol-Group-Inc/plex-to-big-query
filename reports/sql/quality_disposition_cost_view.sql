@@ -59,9 +59,29 @@
 -- initial would count material that was initially marked Scrap and later
 -- re-introduced.
 --
--- Records with a BLANK final disposition are kept, classed as
--- `(not yet dispositioned)`. They are work in progress, and dropping them
--- would make the report silently understate an open month.
+-- Records with a BLANK final disposition are kept — dropping them would make
+-- the report silently understate an open month — but SPLIT THREE WAYS since
+-- 2026-09-24, because "blank" meant two very different things and the tile
+-- read every one as open work:
+--
+--   `(not yet dispositioned)`       OPEN, blank — the genuine work in progress.
+--   `(closed, no material)`         CLOSED, blank, and the record carries no
+--                                   material at all — audit CARs, safety 8Ds,
+--                                   risk assessments. There is nothing to
+--                                   disposition, so it never will be.
+--   `(closed, disposition missing)` CLOSED, blank, but the record DOES carry
+--                                   material — a real data gap for Quality,
+--                                   kept visible rather than folded into
+--                                   either of the other two.
+--
+-- CLOSED = a Closed_Date is set OR Problem_Status is 'Closed' — the same test
+-- the turnaround report uses (closed_date), widened by status in case Plex
+-- shows 'Closed' before a date is typed. On 2026-09-24 the real records had
+-- one of each shape: NC #2 'Closed' with a date, NC #9 'Submitted for
+-- Closure' with a (future) Closed_Date.
+-- MATERIAL = a part on the record, or any non-zero Quantity /
+-- Quantity_Rejected / Quantity_Scrapped. Of the 28 real records, 17 have no
+-- part and 0 in every quantity — the audit/safety forms this split is for.
 --
 -- ─────────────────────────────────────────────────────────────────────────
 -- ⚠ TRICKY PART 3: WHERE THE MONEY COMES FROM (and where it does NOT)
@@ -79,19 +99,25 @@
 -- column keys to.** Using Plex's own Cost field avoids the question entirely.
 --
 -- The catch on Plex's Cost: nothing guarantees it is filled in. A record with
--- a real Scrap disposition and a NULL cost contributes to `nc_count` and
+-- a real Scrap disposition and no cost contributes to `nc_count` and
 -- `qty_rejected` but not to `total_cost`, so **`records_missing_cost` is
 -- published alongside** — a Destruction $ figure built on half-populated
 -- costs should announce itself rather than read as a small number.
 --
+-- ⚠ "NO COST" MEANS NULL **OR 0** — FIXED 2026-09-24. An unfilled Plex Cost
+-- arrives as 0.00, not NULL (0.0 on all 28 real records, verified
+-- 2026-09-24), so counting only NULLs meant the flag could never fire. It now
+-- counts NULL-or-0 on records whose final disposition implies money was spent
+-- — Scrap and Rework. A Return / Use as is / Re-introduce at $0 is plausible
+-- and is not flagged.
+--
 -- ─────────────────────────────────────────────────────────────────────────
--- 0 ROWS TODAY, AND THAT IS EXPECTED
+-- REAL RECORDS SINCE 2026-09-22 (this block said "0 rows" until then)
 -- ─────────────────────────────────────────────────────────────────────────
--- The quality tables are empty in both PlexTest and PlexProd, so this returns
--- nothing until Vox logs nonconformances. The disposition VALUE LISTS are
--- real and populated — that is what made this answerable now — but the
--- records themselves are not. Jennilyn on the deviation side of the same
--- conversation: "I need them to test this more."
+-- The source report was repointed to Quality_v_Problem_2 on 2026-09-22 and
+-- real nonconformances flow through (28 in PlexTest on 2026-09-24). Final
+-- disposition is blank and Cost is 0.00 on every one of them, so today every
+-- row lands in one of the three blank classes above at $0.
 --
 -- Not re-extracted — bq_view entry in reports/quality_nonconformance.yaml.
 -- MUST be listed AFTER quality_nonconformance_report, which it reads.
@@ -113,8 +139,19 @@ SELECT
     WHEN UPPER(TRIM(final_disposition)) = 'RETURN'       THEN 'Return'
     WHEN UPPER(TRIM(final_disposition)) = 'USE AS IS'    THEN 'Use as is'
     WHEN UPPER(TRIM(final_disposition)) = 'RE-INTRODUCE' THEN 'Re-introduce'
-    WHEN final_disposition IS NULL OR TRIM(final_disposition) = ''
+    -- Blank, split three ways — see TRICKY PART 2 in the header.
+    WHEN (final_disposition IS NULL OR TRIM(final_disposition) = '')
+     AND closed_date IS NULL
+     AND UPPER(TRIM(IFNULL(problem_status, ''))) != 'CLOSED'
                                                          THEN '(not yet dispositioned)'
+    WHEN (final_disposition IS NULL OR TRIM(final_disposition) = '')
+     AND part_no IS NULL
+     AND COALESCE(quantity, 0) = 0
+     AND COALESCE(quantity_rejected, 0) = 0
+     AND COALESCE(quantity_scrapped, 0) = 0
+                                                         THEN '(closed, no material)'
+    WHEN final_disposition IS NULL OR TRIM(final_disposition) = ''
+                                                         THEN '(closed, disposition missing)'
     ELSE final_disposition
   END                                                     AS disposition_class,
 
@@ -126,7 +163,10 @@ SELECT
 
   -- Provenance flag, same habit as price_source / goal_without_sales
   -- elsewhere in this repo: an incomplete figure should say so.
-  COUNTIF(cost IS NULL)                                   AS records_missing_cost
+  -- NULL or 0 — an unfilled Plex Cost is 0.00 — and only where the
+  -- disposition implies a cost. See TRICKY PART 3 in the header.
+  COUNTIF((cost IS NULL OR cost = 0)
+          AND UPPER(TRIM(final_disposition)) IN ('SCRAP', 'REWORK'))                                   AS records_missing_cost
 
 FROM `{gcp_project}.{dataset}.quality_nonconformance_report`
 

@@ -64,7 +64,9 @@ by_area_month AS (
     wc.Workcenter_Group                                                                                  AS area,
     DATE_TRUNC(prod.production_date, MONTH)                                                               AS fpy_month,
     SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0))    AS good_qty,
-    SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = -1, SAFE_CAST(prod.Quantity AS FLOAT64), 0))   AS rejected_qty,
+    -- Rejected is 1 on a real rejected record, not -1 (checked 2026-09-24); `!= 0`
+    -- holds either way. `= -1` here made rejected_qty and DPMO read 0 forever.
+    SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0))   AS rejected_qty,
     SUM(SAFE_CAST(prod.Quantity AS FLOAT64))                                                                AS total_qty
   FROM prod
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc

@@ -161,14 +161,51 @@ extractions:
     date_col: ""
 
   # Product group lookup — Part_Product_Group_Key → product group name
+  # ⚠ Empty on this tenant (0 rows in test AND prod) and NOT the lookup for
+  # Part_v_Part.Part_Group_Key — see Part_v_Part_Group below. No view reads
+  # it since 2026-09-24; kept so the raw table doesn't vanish unannounced.
   - plex_view: Part_v_Part_Product_Group
     bq_table: raw_Part_v_Part_Product_Group
+    filter: ""
+    date_col: ""
+
+  # Part group lookup — Part_v_Part.Part_Group_Key → Part_Group name
+  # (Capsule, Softgel, Tablet, Gummy, Label, Packaging, Raw Ingredient, ...).
+  # Added 2026-09-24: "Revenue by part group" was always one "(no group)" bar
+  # because the views joined Part_Group_Key to Part_v_Part_Product_Group
+  # above, which is empty. Pulled live from the Plex test host 2026-09-24:
+  # 13 rows, and all 10 distinct Part_Group_Key values on Part_v_Part (test
+  # and prod) resolve against it. No PCN column — this view carries
+  # Plexus_Customer_No instead.
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
 
   # User master — Plexus_User_No → sales rep first/last name
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+
+  # ── Added 2026-09-22 — WHO COUNTS AS A SALES REP, for sales_reps_report.
+  #
+  # The manual-data app's goals dropdown read DISTINCT sales_rep from
+  # sales_mtd_summary_report, which lists only reps with a qualifying sale
+  # THIS MONTH — so a new or quiet rep could never be given a goal, which is
+  # exactly where a goal matters most. Plex's `Inside Sales` role roster is
+  # the real answer (confirmed live: it holds all 7 reps who already carry a
+  # goal, plus the ones that were missing).
+  #
+  # Two tables because the membership is a junction: Role holds the name,
+  # User_Role holds who is in it.
+  - plex_view: Plexus_Control_v_Role
+    bq_table: raw_Plexus_Control_v_Role
+    filter: ""
+    date_col: ""
+
+  - plex_view: Plexus_Control_v_User_Role
+    bq_table: raw_Plexus_Control_v_User_Role
     filter: ""
     date_col: ""
 
@@ -329,6 +366,18 @@ bq_view:
   # Plex data. That table is fed from a Google Sheet by an Apps Script and is
   # NOT created by this ETL — if it's missing, these two views fail to create.
   # Both must stay after sales_revenue_summary_report / sales_mtd_summary_report.
+  # ── The ONE goals source, renamed from v2_scorecard_goals_resolved
+  # 2026-09-22 when the duplicate "v2_" report views were retired. App-first
+  # with the legacy `scorecard_goals` table as a fallback until
+  # importLegacyGoals() has run — see the SQL header for how to finish that.
+  #
+  # ORDER MATTERS: it must be created BEFORE the *_vs_goal_report views that
+  # read it. Listed in both sales_orders and work_orders because goal views
+  # live in both pipelines; the SQL is identical, so whichever runs second
+  # replaces an identical view.
+  - name: scorecard_goals_resolved
+    display_name: "Goals | Resolved (one goal per metric/month/scope)"
+    sql_file: gs://voxdatalake-report-configs/sql/scorecard_goals_resolved_view.sql
   - name: revenue_vs_goal_report
     display_name: "Vox Scorecard | Revenue vs Goal"
     sql_file: gs://voxdatalake-report-configs/sql/revenue_vs_goal_view.sql
@@ -336,27 +385,10 @@ bq_view:
     display_name: "Vox Scorecard | Sales vs Goal by Rep"
     sql_file: gs://voxdatalake-report-configs/sql/sales_vs_goal_view.sql
 
-  # ── Added 2026-09-09 — the goals migration seam. Two goal sources now run
-  # side by side: the Apps Script WEB APP writes scorecard_goals_app, and the
-  # SPREADSHEET ETL still writes scorecard_goals. v2_scorecard_goals_resolved
-  # prefers the app and falls back to the sheet, so nothing goes blank while
-  # both are live, and the v2_* report views are generated copies of the
-  # originals above that read the resolver instead of the sheet table.
-  #
-  # The originals stay deployed and unchanged so Looker Studio can migrate one
-  # tile at a time. When the spreadsheet ETL is sunset: delete the originals,
-  # drop the v2_ prefix, delete the resolver's sheet branch.
-  #
-  # ORDER MATTERS — the resolver must be created before any view that reads
-  # it. Both v2 views also depend on the same actuals views as their originals.
-  # v2_*_vs_goal_view.sql files are GENERATED — edit the original and re-run
-  # scripts/gen_v2_goal_views.py, never hand-edit them.
-  - name: v2_scorecard_goals_resolved
-    display_name: "Goals | Resolved (app first, sheet fallback)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_scorecard_goals_resolved_view.sql
-  - name: v2_revenue_vs_goal_report
-    display_name: "Vox Scorecard | Revenue vs Goal (v2 goals)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_revenue_vs_goal_view.sql
-  - name: v2_sales_vs_goal_report
-    display_name: "Vox Scorecard | Sales vs Goal by Rep (v2 goals)"
-    sql_file: gs://voxdatalake-report-configs/sql/v2_sales_vs_goal_view.sql
+  # ── Added 2026-09-22 — the roster behind the manual-data app's sales-goal
+  # dropdown. Reads the Plex `Inside Sales` role rather than "reps who sold
+  # something this month", so a rep can be given a goal before their first
+  # sale. Matched on the role NAME, not its key.
+  - name: sales_reps_report
+    display_name: "Sales Reps (Inside Sales roster)"
+    sql_file: gs://voxdatalake-report-configs/sql/sales_reps_view.sql

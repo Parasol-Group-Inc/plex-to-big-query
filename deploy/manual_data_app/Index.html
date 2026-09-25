@@ -117,6 +117,10 @@
 <script>
 var DATA = null;
 var active = null;
+// A UI tab can PIN one field (Sales goals pins metric=sales), so the tab is
+// the choice and the dropdown disappears. Storage is unchanged — all three
+// goal tabs still write the one goals dataset. See uiTabs in Code.gs.
+var pinned = null;   // { field: 'metric', value: 'sales' } or null
 
 function el(tag, attrs, kids){
   var n = document.createElement(tag);
@@ -140,7 +144,11 @@ function boot(){
       env.textContent = d.dataset;
       if (/prod/i.test(d.dataset)) env.className = 'env prod';
       renderTabs();
-      select(Object.keys(d.datasets)[0]);
+      // Select whatever the FIRST TAB BUTTON is, not the first dataset: with
+      // uiTabs a dataset can render several buttons, and selecting the bare
+      // dataset key would leave the pin unset while the bar shows a pinned tab.
+      var first = document.querySelector('#tabs button');
+      select(first ? first.dataset.key : Object.keys(d.datasets)[0]);
     })
     .withFailureHandler(function(e){
       document.getElementById('boot').innerHTML =
@@ -184,31 +192,52 @@ function renderTabs(){
   var bar = document.getElementById('tabs');
   bar.innerHTML = '';
   Object.keys(DATA.datasets).forEach(function(k){
-    var b = el('button', { type:'button', role:'tab', text: DATA.datasets[k].label });
-    b.setAttribute('aria-selected', 'false');
-    b.onclick = function(){ select(k); };
-    b.dataset.key = k;
-    bar.appendChild(b);
+    var ds = DATA.datasets[k];
+    var tabs = ds.uiTabs && ds.uiTabs.length
+      ? ds.uiTabs.map(function(t){ return { key: k + '|' + t.key, label: t.label }; })
+      : [{ key: k, label: ds.label }];
+    tabs.forEach(function(t){
+      var b = el('button', { type:'button', role:'tab', text: t.label });
+      b.setAttribute('aria-selected', 'false');
+      b.onclick = function(){ select(t.key); };
+      b.dataset.key = t.key;
+      bar.appendChild(b);
+    });
   });
 }
 
 function select(key){
-  active = key;
+  var parts = String(key).split('|');
+  active = parts[0];
+  var ds = DATA.datasets[active];
+  var uiTab = parts[1] && (ds.uiTabs || []).filter(function(t){ return t.key === parts[1]; })[0];
+  pinned = uiTab ? { field: ds.pinnedBy, value: uiTab.key } : null;
+
   Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
     b.setAttribute('aria-selected', String(b.dataset.key === key));
   });
-  document.getElementById('blurb').textContent = DATA.datasets[key].blurb;
+  document.getElementById('blurb').textContent = (uiTab && uiTab.blurb) || ds.blurb;
   document.getElementById('msg').innerHTML = '';
   renderForm();
   renderRecent();
+}
+
+// The value of a field, whether it is on the form or pinned by the tab.
+function valueOf(name){
+  if (pinned && pinned.field === name) return pinned.value;
+  var f = document.querySelector('[name="' + name + '"]');
+  return f ? f.value : '';
 }
 
 // Options for a field: either a fixed set, or one chosen by another field's
 // current value (a goal's scope depends on whether it is sales or production).
 function optionsFor(f){
   if (f.optionsFromBy){
-    var driver = document.querySelector('[name="' + f.dependsOn + '"]');
-    var set = driver ? f.optionsFromBy[driver.value] : null;
+    // The driver may be a pinned tab rather than a visible dropdown — on the
+    // Revenue tab there is no metric select to read, but scope still has to
+    // know it does not apply.
+    var driverValue = valueOf(f.dependsOn);
+    var set = driverValue ? f.optionsFromBy[driverValue] : null;
     return set ? (DATA.options[set] || []) : null;   // null = field not applicable
   }
   return DATA.options[f.optionsFrom] || [];
@@ -219,6 +248,9 @@ function renderForm(){
   form.innerHTML = '';
 
   DATA.datasets[active].fields.forEach(function(f){
+    // The tab already made this choice — don't ask for it twice.
+    if (pinned && f.name === pinned.field) return;
+
     var wrap = el('div', { class:'field' });
     wrap.dataset.field = f.name;
 
@@ -277,6 +309,14 @@ function renderForm(){
     if (driver) driver.addEventListener('change', function(){ refreshDependent(f); });
   });
 
+  // A dependent field whose driver is pinned never fires a change event, so
+  // its applicability has to be resolved on the first paint too — otherwise
+  // the Revenue tab would show an empty "Applies to" dropdown.
+  DATA.datasets[active].fields.forEach(function(f){
+    if (f.dependsOn && pinned && f.dependsOn === pinned.field) refreshDependent(f);
+  });
+
+  if (DATA.datasets[active].currentView) wireCurrentView();
   if (DATA.datasets[active].liveCheck) wireLiveCheck();
 }
 
@@ -305,8 +345,8 @@ function wireLiveCheck(){
   form.appendChild(box);
 
   function update(){
-    var metric = (document.querySelector('[name="metric"]')||{}).value;
-    var month = (document.querySelector('[name="period_month"]')||{}).value;
+    var metric = valueOf('metric');
+    var month = valueOf('period_month');
     if (metric !== 'sales' || !month){ box.hidden = true; return; }
     box.hidden = false;
     box.textContent = 'Checking rep totals…';
@@ -329,6 +369,77 @@ function wireLiveCheck(){
     var f = document.querySelector('[name="' + n + '"]');
     if (f) f.addEventListener('change', update);
   });
+  update();   // the metric may be pinned, so there is something to show at once
+}
+
+/**
+ * "Here is what is already saved for this" — shown ABOVE the form.
+ *
+ * Jennilyn asked for this on 2026-09-21 and her reason is the whole design:
+ * somebody editing a December goal has no way to see what December currently
+ * holds without asking her. A form that writes blind invites overwrites.
+ *
+ * Deliberately never blocks: if the lookup fails the panel hides itself and
+ * the form still saves. And "nothing saved yet" is shown as its own message
+ * rather than as a blank, because on a safety log an empty answer means
+ * something quite specific.
+ */
+function wireCurrentView(){
+  var which = DATA.datasets[active].currentView;
+  var card = document.querySelector('.card');
+  var box = el('div', { class:'check', id:'currentview' });
+  box.hidden = true;
+  card.insertBefore(box, document.getElementById('form'));
+
+  function show(html){ box.innerHTML = html; box.hidden = false; }
+
+  function update(){
+    box.hidden = false;
+    box.textContent = 'Checking what is already saved…';
+    google.script.run
+      .withSuccessHandler(function(r){
+        if (!r || r.state === 'none' || r.state === 'incomplete'){ box.hidden = true; return; }
+        if (r.state === 'error'){ box.hidden = true; return; }
+
+        if (which === 'currentGoal'){
+          if (r.state === 'empty'){
+            show('<b>Nothing saved yet</b> for this goal type, month and scope — this would be the first entry.');
+            return;
+          }
+          var scope = r.scope ? r.scope : '(company-wide)';
+          show('Currently saved: <b>' + (r.unit === 'USD' ? money(r.value) : Number(r.value).toLocaleString()) +
+               '</b> for <b>' + scope + '</b>, ' + r.month.slice(0, 7) +
+               (r.by ? ' — last changed by ' + r.by : '') +
+               (r.note ? '<br>Note: ' + r.note : '') +
+               '<br>Saving replaces it. Nothing is lost: every edit is kept as history.');
+          return;
+        }
+
+        if (which === 'lastIncident'){
+          if (r.state === 'empty'){
+            show('<b>No incidents logged yet.</b> The scorecard reads an empty log as a clean record — which is only true if the log is being kept.');
+            return;
+          }
+          show('Most recent incident: <b>' + String(r.date).slice(0, 10) + '</b> — ' +
+               (r.type || 'type not given') + ' in ' + (r.area || 'area not given') +
+               (r.recordable ? ', OSHA recordable' : '') +
+               (r.daysLost ? ', ' + r.daysLost + ' day(s) lost' : '') +
+               (r.description ? '<br>' + r.description : ''));
+        }
+      })
+      .withFailureHandler(function(){ box.hidden = true; })
+      .getCurrentValue(which, which === 'currentGoal'
+        ? { metric: valueOf('metric'), period_month: valueOf('period_month'), scope: valueOf('scope') }
+        : {});
+  }
+
+  if (which === 'currentGoal'){
+    ['metric','period_month','scope'].forEach(function(n){
+      var f = document.querySelector('[name="' + n + '"]');
+      if (f) f.addEventListener('change', update);
+    });
+  }
+  update();
 }
 
 function money(n){
@@ -350,6 +461,9 @@ function collect(){
     if (f.type === 'month' && v && v.length === 7) v = v + '-01';
     out[f.name] = v;
   });
+  // The tab's pinned choice never rendered an input, so put it back before
+  // the row is saved — otherwise a Sales goal would arrive with no metric.
+  if (pinned) out[pinned.field] = pinned.value;
   return out;
 }
 
@@ -393,13 +507,17 @@ function reloadRecent(){
 function renderRecent(){
   var host = document.getElementById('recent');
   var rows = (DATA.recent || {})[active] || [];
+  // Three goal tabs share one sheet tab, so filter to the pinned metric —
+  // otherwise "Recently entered" under Sales goals would list production ones.
+  if (pinned) rows = rows.filter(function(r){ return String(r[pinned.field]) === pinned.value; });
   if (!rows.length){
     host.innerHTML = '<div class="empty">Nothing entered yet.</div>';
     return;
   }
 
   var cols = DATA.datasets[active].fields.map(function(f){ return f.name; })
-               .concat(['submitted_by','submitted_at']);
+               .filter(function(n){ return !pinned || n !== pinned.field; })
+               .concat(['updated_by','updated_at']);
 
   var table = el('table');
   var head = el('tr');

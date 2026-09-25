@@ -10,9 +10,20 @@
 -- audit itself flagged: the original sheet's "Caps Pending" chart summed
 -- with no status filter applied at all.
 --
--- WORKCENTER MAPPING: 'Encapsulation%' text match, same confirmed-live
--- roster ('Encapsulation 1' through 'Encapsulation 10') already used by
--- encap_daily_report_view.sql's Workcenter_Group = 'Encapsulating' filter.
+-- WORKCENTER MAPPING: Workcenter_Group = 'Encapsulating' — the same filter
+-- encap_daily_report_view.sql uses, and the same group-based rule as the
+-- sibling bottling_job_open_report (Workcenter_Group = 'Bottling').
+-- ⚠ CHANGED 2026-09-24 (found by the scorecard sandbox): this used to be
+-- wc.Name LIKE 'Encapsulation%', which matched only the ten real lines
+-- ('Encapsulation 1'..'10') and MISSED 'Schedule Encapsulation'
+-- (SCHED - Encap, key 88986) — the scheduling centre Vox puts jobs on before
+-- they are dispatched to a line. It is not a pseudo-centre with no work:
+-- in PlexTest on 2026-09-24 it held open job 3 (33001-00VOXNU-0, Scheduled,
+-- 1,342,000 caps, same Encapsulating operation 63914 as the line job), so the
+-- tile read 200,000 open caps instead of 1,542,000. Open bottles never had
+-- this gap: every one of its open jobs sits on 'Schedule Bottling', which its
+-- group filter already includes. The Encapsulating group is exactly the ten
+-- lines plus Schedule Encapsulation (test and prod), so nothing else joins.
 --
 -- CAPS PENDING = the still-open job's planned quantity (Part_v_Job.Quantity).
 -- SELECT DISTINCT on job_no avoids double-counting a job that has multiple
@@ -51,7 +62,7 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Status` js
   ON SAFE_CAST(j.Job_Status_Key AS INT64) = SAFE_CAST(js.Job_Status_Key AS INT64)
 
-WHERE wc.Name LIKE 'Encapsulation%'
+WHERE wc.Workcenter_Group = 'Encapsulating'
   AND COALESCE(SAFE_CAST(js.Completed_Status AS INT64), 0) = 0
   AND COALESCE(SAFE_CAST(js.Cancelled_Status AS INT64), 0) = 0
   AND COALESCE(SAFE_CAST(js.Hold_Status AS INT64), 0) = 0

@@ -2591,6 +2591,17 @@ resource "google_storage_bucket_object" "sales_customers_by_rep_view_sql" {
   content_type = "text/plain"
 }
 
+# Added 2026-09-22 — the Inside Sales roster behind the manual-data app's
+# sales-goal dropdown. Rides the sales_orders pipeline; see
+# reports/sql/sales_reps_view.sql for why the old "reps who sold something
+# this month" list was the wrong source.
+resource "google_storage_bucket_object" "sales_reps_view_sql" {
+  name         = "sql/sales_reps_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/sales_reps_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "sales_revenue_by_rep_view_sql" {
   name         = "sql/sales_revenue_by_rep_view.sql"
   bucket       = google_storage_bucket.report_configs.name
@@ -4925,33 +4936,9 @@ resource "google_storage_bucket_object" "shipping_daily_report_view_sql" {
 # v2_* goal views are generated copies of the originals that read it. Both
 # generations ship side by side until the spreadsheet ETL is sunset; see
 # scripts/gen_v2_goal_views.py.
-resource "google_storage_bucket_object" "v2_scorecard_goals_resolved_view_sql" {
-  name         = "sql/v2_scorecard_goals_resolved_view.sql"
-  bucket       = google_storage_bucket.report_configs.name
-  source       = "${path.module}/../reports/sql/v2_scorecard_goals_resolved_view.sql"
-  content_type = "text/plain"
-}
 
-resource "google_storage_bucket_object" "v2_revenue_vs_goal_view_sql" {
-  name         = "sql/v2_revenue_vs_goal_view.sql"
-  bucket       = google_storage_bucket.report_configs.name
-  source       = "${path.module}/../reports/sql/v2_revenue_vs_goal_view.sql"
-  content_type = "text/plain"
-}
 
-resource "google_storage_bucket_object" "v2_sales_vs_goal_view_sql" {
-  name         = "sql/v2_sales_vs_goal_view.sql"
-  bucket       = google_storage_bucket.report_configs.name
-  source       = "${path.module}/../reports/sql/v2_sales_vs_goal_view.sql"
-  content_type = "text/plain"
-}
 
-resource "google_storage_bucket_object" "v2_production_vs_goal_view_sql" {
-  name         = "sql/v2_production_vs_goal_view.sql"
-  bucket       = google_storage_bucket.report_configs.name
-  source       = "${path.module}/../reports/sql/v2_production_vs_goal_view.sql"
-  content_type = "text/plain"
-}
 
 resource "google_storage_bucket_object" "inventory_available_to_sell_view_sql" {
   name         = "sql/inventory_available_to_sell_view.sql"
@@ -5071,6 +5058,13 @@ resource "google_storage_bucket_object" "production_monthly_by_workcenter_group_
 # created by hand in both datasets 2026-09-04. If it is ever dropped, these
 # three views stop being creatable; the DDL to rebuild it is in
 # docs/reports/scorecard_goals.md.
+
+resource "google_storage_bucket_object" "scorecard_goals_resolved_view_sql" {
+  name         = "sql/scorecard_goals_resolved_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/scorecard_goals_resolved_view.sql"
+  content_type = "text/plain"
+}
 
 resource "google_storage_bucket_object" "revenue_vs_goal_view_sql" {
   name         = "sql/revenue_vs_goal_view.sql"

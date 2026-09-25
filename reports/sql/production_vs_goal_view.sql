@@ -33,6 +33,12 @@
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per (month, work centre group).
 
+-- SOURCE CHANGED 2026-09-22: reads `scorecard_goals_resolved` rather than the
+-- `scorecard_goals` table directly. That view is app-first with the legacy
+-- sheet table as a fallback, so this report now shows a goal entered in the
+-- manual-data web app immediately — which is what retired the duplicate
+-- "v2_" copy of this view that used to exist alongside it.
+
 WITH actual AS (
   SELECT
     production_month,
@@ -50,7 +56,7 @@ goal AS (
     scope           AS workcenter_group,
     SUM(goal_value) AS goal_value,
     ANY_VALUE(note) AS goal_note
-  FROM `{gcp_project}.{dataset}.scorecard_goals`
+  FROM `{gcp_project}.{dataset}.scorecard_goals_resolved`
   WHERE LOWER(metric) = 'production'
     AND scope IS NOT NULL
     AND scope != ''

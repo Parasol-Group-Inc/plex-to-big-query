@@ -24,7 +24,7 @@ confirmation log.
 | Report | Status | Notes |
 |---|---|---|
 | Pending Approval Orders | ✅ Built | `sales_orders_pending_approval_report` — 2nd/3rd `bq_view` on the live `sales_orders.yaml`, filtered to the confirmed "Pending Sales Approval" status (key 2585). No business-rule guess needed. |
-| Orders Pending Approval by Sales Rep | ✅ Built 2026-08-21, decided best-criteria | `sales_orders_pending_approval_by_rep_report` — thin alias view over `sales_orders_pending_approval_report`, decided to be the same underlying data under NetSuite's alternate label rather than a genuinely distinct search. See `docs/NETSUITE_PARITY_OPEN_ITEMS.md`. |
+| Orders Pending Approval by Sales Rep | ✅ Built 2026-08-21, decided best-criteria | `sales_orders_pending_approval_by_rep_report` — thin alias view over `sales_orders_pending_approval_report`, decided to be the same underlying data under NetSuite's alternate label rather than a genuinely distinct search. See `docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`. |
 | Printing Open Work Orders | ✅ Built | `printing_open_work_orders_report` — 4th `bq_view` on `work_orders.yaml`, mirrors the already-deployed `labeling_open_work_orders_report` with workcenter `'Printing%'` instead of `'Labeling Line%'`. Confirmed live workcenter. Conceptually a Production report despite appearing on this tab. |
 | Orders Pending Approval by Accounting | ⚠ Deployed, repointed 2026-09-09 — status choice needs confirming · **2026-09-24: dead again, fixed** — Plex split Deposit Review into two statuses; now `LIKE 'DEPOSIT REVIEW%'`, and the rep comes from the order/customer | `sales_orders_pending_accounting_approval_report`. Was filtered to "Pending Payment Review" (key 2638), decided best-criteria 2026-08-21. **Vox deleted that status on 2026-09-09** when they cut the sales-order list from 10 statuses to 7 (2638, 2639 Pending Shipment and 2655 Quote Lost are gone), so the report silently returned 0 rows and would have forever — indistinguishable from "nothing is pending". Repointed to **Deposit Review**, the only accounting-flavoured stage in the new list, matched on the status **name** rather than the key. Now returns 2 real rows. This is the second inference about what "by Accounting" means and the first was wrong within three weeks — **needs Jennilyn to confirm**. |
 | Report for orders past 14 days old | ✅ Deployed, decided best-criteria | `sales_orders_aging_report` — open orders with `PO_Date` 14+ days ago. Kept 2026-08-21; revisit with `Sales_v_PO_Change` if this looks wrong once real orders age. |
@@ -40,7 +40,7 @@ confirmation log.
 ## Still genuinely open (not a criteria question — missing data)
 
 Everything in the table above was decided 2026-08-21 on Emilio's call not
-to wait for a data-scientist review — see `docs/NETSUITE_PARITY_OPEN_ITEMS.md`
+to wait for a data-scientist review — see `docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`
 for the full reasoning per report. Nothing is currently blocked on missing
 data on this tab as of 2026-08-21 (the last blocker, Rush orders, was
 resolved above).

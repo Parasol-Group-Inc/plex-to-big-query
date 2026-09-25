@@ -160,7 +160,7 @@ YAML rules (enforced — a bad entry is skipped and flagged in the email):
 2. Run the test job — the view is recreated during the run.
 3. Query the view in `PlexTest` to verify, then run the prod job.
 
-Two SQL rules that will save you pain (learned the hard way — full story in the repo's `docs/CODE_REVIEW_2026-07-14.md`):
+Two SQL rules that will save you pain (learned the hard way — full story in the repo's `docs/archive/CODE_REVIEW_2026-07-14.md`):
 - Always use the `{gcp_project}` and `{dataset}` placeholders — never hardcode `voxdatalake.PlexProd`.
 - Date columns arrive from Plex as huge integer nanoseconds. Use the conversion pattern documented in the repo's `CHEATSHEET.md` ("dates as huge numbers") — don't invent your own cast.
 
@@ -232,4 +232,4 @@ Full command-level fixes: repo → `docs/TROUBLESHOOTING.md` and `CHEATSHEET.md`
 | `docs/QUICKSTART.md` | Zero-to-running setup guide |
 | `docs/FRONTEND_GUIDE.md` | The architecture explained for frontend developers |
 | `catalog/plex_catalog_index.md` | Index of every Plex ODBC view, by database |
-| `docs/CODE_REVIEW_2026-07-14.md` | Security/reliability review — what's guarded and why |
+| `docs/archive/CODE_REVIEW_2026-07-14.md` | Security/reliability review — what's guarded and why |

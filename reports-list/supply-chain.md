@@ -6,7 +6,7 @@ Source, Function, Users, Link, Priority.
 | Report | Source | Status | Notes |
 |---|---|---|---|
 | Inventory Activity Detail Usage Per Month | NetSuite | ✅ Already built | This is the exact NetSuite report this project built parity for as `inventory_activity_report` (#29 in `docs/NETSUITE_REPORT_BUILD_PLAN.md`) |
-| Inventory Risk Analysis - Custom Formula | NetSuite | ✅ Deployed, decided 2026-08-21 | No packaged "risk"/aging concept in Plex (confirmed at both the view and 14,350-row stored-procedure layer). Built as `inventory_risk_analysis_report` — on-hand qty + days-since-last-container-activity per part. **Decided: 90+ days since last activity (or none at all) = `is_at_risk`** — a general convention, not Vox-specific policy; `days_since_activity` stays exposed so the cutoff can change with zero recomputation if 90 turns out wrong. See docs/NETSUITE_PARITY_OPEN_ITEMS.md. |
+| Inventory Risk Analysis - Custom Formula | NetSuite | ✅ Deployed, decided 2026-08-21 | No packaged "risk"/aging concept in Plex (confirmed at both the view and 14,350-row stored-procedure layer). Built as `inventory_risk_analysis_report` — on-hand qty + days-since-last-container-activity per part. **Decided: 90+ days since last activity (or none at all) = `is_at_risk`** — a general convention, not Vox-specific policy; `days_since_activity` stays exposed so the cutoff can change with zero recomputation if 90 turns out wrong. See docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md. |
 | Inventory Risk Analysis - Item Stock Type | NetSuite | ✅ Deployed, decided 2026-08-21 | Same underlying view as the row above — both `Part_v_Part.Part_Type` and the real `part_product_type` classification (`Part_v_Part_Product_Type`, added 2026-08-19) are included per-part so it can be grouped/filtered by stock type from the same report. |
 | Open Purchase Orders Report V1 | NetSuite | ✅ Already built | Parity report `purchasing_open_orders_report` (#75) covers this concept |
 | **Approaching MSL** | Google Sheet | 🔍 Candidate — Google Sheet, critical priority, existing overlap | Described as providing "the daily average and current available inventory to the MFG Job Schedule and other sources." This may be the **current manual source** of the exact number `part_on_hand_inventory_report` (built from `Part_v_Container`) now automates — high-value to get real content for and compare directly. Priority: Critical (daily use) |
@@ -41,7 +41,7 @@ inventory — is buildable natively: `Part_v_BOM`/`Part_v_Flat_BOM`/
 `Part_v_Job_Bom` are confirmed live, joined against `Part_v_Job`
 (scheduled quantity) and `Part_v_Container` (on-hand). This may be the real
 Plex-native answer "Approaching MSL" is manually approximating, and/or the
-lead for `docs/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption"
+lead for `docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`'s "Inventory consumption"
 row. See `catalog/plex_catalog_index.md`'s 2026-08-21 confirmed-values
 section for the full detail.
 

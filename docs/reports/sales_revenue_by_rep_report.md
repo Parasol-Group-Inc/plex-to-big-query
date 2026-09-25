@@ -8,7 +8,7 @@ One row per sales order, showing which sales rep owns it and that order's comput
 
 ## Where it fits
 
-Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Revenue per sales rep"). The confirmation history behind the revenue basis is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md). It's the revenue-flavored sibling of **Customer List by Sales Rep** — both reports lean on the same per-order rep-assignment decision.
+Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Revenue per sales rep"). The confirmation history behind the revenue basis is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md). It's the revenue-flavored sibling of **Customer List by Sales Rep** — both reports lean on the same per-order rep-assignment decision.
 
 ## How it's built (high level)
 

@@ -1,8 +1,12 @@
 # API & Commands Reference
 
+Last reviewed: 2026-09-25
+
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **16** live jobs (8 report families × prod/test). Substitute any other job name in the commands below the same way.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **26** live jobs (13 pipelines × prod/test: `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; schedulers `plex-<pipeline>-sync[-test][-retry]`). Substitute any other job name in the commands below the same way.
+>
+> **Deploys:** anything Terraform manages ships with `./scripts/deploy.sh` from the primary folder (`C:\F\Parasol\plex-to-big-query`) on a clean, pushed `main`; images ship with `./scripts/deploy_preflight.sh` + `gcloud builds submit` (§9). See `CONTRIBUTING.md`.
 
 ---
 
@@ -136,7 +140,7 @@ gcloud run jobs update plex-etl-sales-orders \
   --update-env-vars=PLEX_HOST=vox.odbc.plex.com
 ```
 
-> **This is a temporary/drifting change unless mirrored in `terraform.tfvars`.** Every job's `lifecycle { ignore_changes }` only covers the `image`/`client`/`client_version` fields — env vars are still fully Terraform-managed, so the next `terraform apply` will silently revert this back to whatever `terraform.tfvars` says. Use this for a quick live test only; make the durable change in `terraform.tfvars` (and re-upload its GCS backup) if you want it to stick.
+> **This is a temporary/drifting change unless mirrored in `terraform.tfvars`.** Every job's `lifecycle { ignore_changes }` only covers the `image`/`client`/`client_version` fields — env vars are still fully Terraform-managed, so the next `./scripts/deploy.sh` will revert this back to whatever `terraform.tfvars` says. Use this for a quick live test only; make the durable change in `terraform.tfvars` (and re-upload its GCS backup) and deploy it if you want it to stick.
 
 ### Update multiple environment variables at once
 
@@ -173,7 +177,7 @@ gcloud run jobs executions describe <execution-name> \
   --project=voxdatalake
 ```
 
-> Get the execution name from `executions list` above. Looks like `plex-etl-abc12`.
+> Get the execution name from `executions list` above. Looks like `plex-etl-sales-orders-abc12`.
 
 ---
 
@@ -217,17 +221,17 @@ gcloud scheduler jobs resume plex-sales-orders-sync \
 ```
 Resume the paired `-retry` scheduler too, if you paused it.
 
-### Change the cron schedule (easier via Terraform)
+### Change the cron schedule (via Terraform)
 
-Edit `terraform/terraform.tfvars`:
+Sales Orders' times come from `terraform/terraform.tfvars` (only in the primary folder):
 ```hcl
-scheduler_cron = "30 19 * * *"   # 7:30 PM Mountain instead of 7:00 PM (scheduler_time_zone is now America/Denver)
+scheduler_cron = "30 19 * * *"   # 7:30 PM Mountain instead of 7:00 PM (scheduler_time_zone is America/Denver)
 ```
-Then:
+Every other pipeline's time is a `schedule` literal in its `google_cloud_scheduler_job` in `terraform/main.tf` — change that on a `dev*` branch and merge to `main`. Either way, then from the primary folder:
 ```bash
-cd terraform
-terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh
 ```
+Keep `docs/EMAIL_SCHEDULE.md` in step.
 
 ---
 
@@ -341,7 +345,7 @@ Console → **Cloud Run** → **Jobs** → `plex-etl-sales-orders` → click any
 
 ## 8. Terraform
 
-All Terraform commands must be run from the `terraform/` directory.
+All Terraform commands must be run from the `terraform/` directory — **in the primary folder** (`C:\F\Parasol\plex-to-big-query`), on `main`, with a clean tree equal to `origin/main`. Terraform runs a deploy guard (`data "external" "deploy_guard"` → `scripts/tf_guard.py`) on every plan, apply and destroy and refuses otherwise. `terraform.tfvars` exists only in that folder.
 
 ```bash
 cd terraform
@@ -357,12 +361,17 @@ terraform init
 
 ```bash
 terraform plan -var-file=terraform.tfvars
+
+# Read-only look from anywhere else (a dev branch or ptbq-* folder) — state the reason:
+TF_GUARD_OVERRIDE="read-only drift check" terraform plan -var-file=terraform.tfvars
 ```
 
 ### Apply changes
 
+Not with a bare `terraform apply`. From the repo root of the primary folder:
+
 ```bash
-terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh    # preflight, guard, plan to a file, review, type the change count, apply that plan, tag deploy/<UTC time>
 ```
 
 After any edit to `terraform.tfvars` itself (not just after applying it), back it up — it's gitignored and only ever exists on your machine:
@@ -384,7 +393,7 @@ terraform state show google_cloud_run_v2_job.etl
 
 ### Import an existing GCP resource into state
 
-Use when `terraform apply` fails with 409 "Already Exists" — the resource exists in GCP but not in your state file.
+Use when a deploy fails with 409 "Already Exists" — the resource exists in GCP but not in your state file.
 
 ```bash
 # Secrets
@@ -429,7 +438,7 @@ State lives in `gs://voxdatalake-terraform-state/plex-to-big-query/default.tfsta
 ```bash
 gcloud storage rm gs://voxdatalake-terraform-state/plex-to-big-query/default.tfstate
 terraform init
-# Then re-import everything above, then apply
+# Then re-import everything above, then ./scripts/deploy.sh
 ```
 
 ### Show Terraform outputs (handy commands after apply)
@@ -442,7 +451,7 @@ terraform output
 
 ## 9. Docker
 
-> **Building and pushing an image is not a complete deploy by itself.** Every `google_cloud_run_v2_job` has `lifecycle { ignore_changes = [image, ...] }` — no job ever auto-picks up a new image, not per-execution and not via `terraform apply`. After pushing, you must explicitly redeploy (see the last command below), or use `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 16 jobs from one build.
+> **Building and pushing an image is not a complete deploy by itself.** Every `google_cloud_run_v2_job` has `lifecycle { ignore_changes = [image, ...] }` — no job ever auto-picks up a new image, not per-execution and not via `terraform apply`. After pushing, you must explicitly redeploy (see the last command below), or use `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 26 jobs from one build (the normal route — see the end of this section).
 
 ### Build the image
 
@@ -472,7 +481,13 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA && \
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest && \
 gcloud run jobs update plex-etl-sales-orders --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
-Repeat the last `gcloud run jobs update` per job, or loop over all 16 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the full loop), or just run `gcloud builds submit --config deploy/cloudbuild.yaml` instead — it does all of this in one call.
+Repeat the last `gcloud run jobs update` per job, or loop over all 26 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the loop). The normal route does all of it in one call, from the primary folder on an up-to-date `main`:
+
+```bash
+./scripts/deploy_preflight.sh
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
+```
 
 ### Run locally (Phase 1 — writes CSVs to ./output/)
 

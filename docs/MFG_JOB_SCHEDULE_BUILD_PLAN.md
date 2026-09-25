@@ -1,5 +1,7 @@
 # MFG Job Schedule Report Build Plan
 
+> **Historical build log.** The MFG Job Schedule reports it planned are built; per-tab status lives in [`spreadsheets/mfg_job_schedule.md`](../spreadsheets/mfg_job_schedule.md). Kept for the reasoning behind each decision.
+
 Source of truth for a manually maintained "MFG Job Schedule - Open" tracking
 spreadsheet (blending/encapsulation production board: raw-material sourcing
 status, lot/QC tracking, equipment/room assignment). Goal: make every column

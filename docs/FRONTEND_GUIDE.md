@@ -1,5 +1,7 @@
 # Frontend Developer's Guide to the Plex → BigQuery Pipeline
 
+Last reviewed: 2026-09-25
+
 > Written for developers comfortable with JavaScript, APIs, and the browser — but new to backend infrastructure, cloud deployments, and databases. Every concept has a frontend analogy. Use this to understand *why* the system works the way it does, and the second half as a step-by-step guide to build it from scratch.
 
 ---
@@ -27,8 +29,8 @@ graph TD
         CRJ -->|reads config| GCS[☁ Cloud Storage\nvoxdatalake-report-configs]
         CRJ -->|reads secret| SM[🔑 Secret Manager\nplex-access-token]
         SA[🪪 Service Account\nplex-etl-sa] -->|identity for| CRJ
-        CRJ -->|writes 13 raw tables| BQ[(📊 BigQuery\nPlexProd dataset)]
-        CRJ -->|creates JOIN views| VIEW[(📊 sales_orders_report +\nsales_orders_open_report)]
+        CRJ -->|writes 27 raw tables| BQ[(📊 BigQuery\nPlexProd dataset)]
+        CRJ -->|creates JOIN views| VIEW[(📊 sales_orders_report,\nsales_orders_open_report,\n+ 25 more)]
     end
 
     subgraph "Plex ERP — external"
@@ -39,12 +41,12 @@ graph TD
 **Every arrow is a network call.** The Cloud Run job is a single Python script that makes all of them in sequence.
 
 **This diagram is one report family (Sales Orders / `plex-etl-sales-orders`) as a
-worked example** — the same shape repeats 8 times (16 jobs total, prod +
+worked example** — the same shape repeats 13 times (26 jobs total, prod +
 test), each with its own schedule and its own `Cloud Run Job` box reading
 its own YAML from the same `voxdatalake-report-configs` bucket. Not
 pictured: the daily scheduler shown here has a sibling 9:45 PM Mountain retry
 scheduler on every job, and `CRJ -->|creates JOIN views|` can fan out to
-several named reports from one job (Sales Orders → 9, Work Orders → 4),
+several named reports from one job (Sales Orders → 27, Work Orders → 19),
 not always exactly one.
 
 ---
@@ -95,16 +97,18 @@ Production: PLEX_ACCESS_TOKEN → read from Secret Manager at startup
 
 ### Cloud Storage (GCS) = S3 / a CDN but for config files
 
-Report definitions (which Plex views to query, what SQL to run in BigQuery) live in GCS as YAML and SQL files. The container downloads them at startup. Edit a file in GCS → next run picks it up. No code change, no deployment.
+Report definitions (which Plex views to query, what SQL to run in BigQuery) are YAML and SQL files in the repo's `reports/` folder. Terraform uploads each one to GCS, and the container downloads them at startup. Change a file → merge to `main` → `./scripts/deploy.sh` uploads it → next run picks it up. No code change, no image rebuild.
 
 ```
 Old way:  change a query → edit code → rebuild Docker → redeploy
-New way:  change a query → edit YAML in GCS Console → trigger job
+New way:  change a query → edit the YAML → merge to main → ./scripts/deploy.sh
 ```
+
+Like a CDN, the bucket is a *deploy target*, not a place to edit: nobody edits files in the GCS Console (see `docs/OPERATIONS.md`).
 
 ### Terraform = `npm install` for cloud infrastructure
 
-You describe what GCP resources you want in `.tf` files. `terraform apply` creates them.
+You describe what GCP resources you want in `.tf` files. `terraform apply` creates them — in this repo always run through `./scripts/deploy.sh` (like a CI pipeline that shows you the diff and makes you confirm), which Terraform itself enforces with a deploy guard.
 
 ```
 package.json     →  terraform/*.tf
@@ -159,11 +163,11 @@ sequenceDiagram
     CR->>SM: GET plex-access-token
     SM-->>CR: token string
     CR->>GCS: GET reports/sales_orders.yaml
-    GCS-->>CR: 13 extractions + bq_view config
+    GCS-->>CR: 27 extractions + bq_view config
     CR->>PLEX: ODBC connect (driver-direct)<br/>HOST=vox.odbc.plex.com:19995<br/>UID=edominguez.parasol<br/>authmethod=iam; accesstoken=...
     PLEX-->>CR: connection established
 
-    loop For each of 13 Plex views
+    loop For each of 27 Plex views
         CR->>PLEX: SELECT * FROM {view}
         PLEX-->>CR: rows as DataFrame
         CR->>BQ: WRITE_TRUNCATE → raw_{view}
@@ -185,21 +189,23 @@ The biggest architectural decision: **report definitions don't live in the code*
 ```
 gs://voxdatalake-report-configs/
 ├── reports/
-│   ├── sales_orders.yaml      ← prod: which 13 views to extract (shown below)
-│   └── ... 7 more report families (work_orders, purchasing_open_orders,
-│           part_obsolescence, inventory_activity, inventory_snapshot,
-│           quality_nonconformance, part_on_hand_inventory)
+│   ├── sales_orders.yaml      ← prod: which 27 views to extract (shown below)
+│   └── ... 12 more pipelines (work_orders, purchasing_open_orders,
+│           purchasing_pending_requisitions, part_obsolescence,
+│           inventory_activity, inventory_snapshot, part_on_hand_inventory,
+│           quality_nonconformance, quality_supplier_returns, sales_quotes,
+│           sales_returns, label_design)
 ├── test/
-│   └── sales_orders.yaml      ← test: same views → PlexTest dataset (+ the other 7)
+│   └── sales_orders.yaml      ← test: same views → PlexTest dataset (+ the other 12)
 └── sql/
-    └── sales_orders_view.sql  ← BigQuery JOIN view — the actual report SQL
+    └── sales_orders_view.sql  ← BigQuery JOIN view — ONE copy, read by prod and test
 ```
 
-Sales Orders is one of **8 report families** (16 Cloud Run jobs total, prod+test) — used here as the running example because it's the original pipeline, not because it's the only one.
+Sales Orders is one of **13 pipelines** (26 Cloud Run jobs total, prod+test) — used here as the running example because it's the original pipeline, not because it's the only one.
 
-The Cloud Run job reads the YAML at startup on every execution. To change a query: edit the file in GCS and trigger the job. No container rebuild, no Terraform apply.
+The Cloud Run job reads the YAML at startup on every execution. To change a query: edit the YAML in the repo (both the prod and the `test/` copy), merge to `main`, run `./scripts/deploy.sh`. No container rebuild.
 
-**The `REPORT_CONFIG_GCS_PATH` env var** tells the container which YAML to load — pointing a different job at a different YAML is how 16 jobs share one Docker image. It's not the *only* difference between a prod and test job, though (see the diagram below — `PLEX_HOST` and the BigQuery dataset differ too); it's the one that decides *what gets extracted*, which is this section's point.
+**The `REPORT_CONFIG_GCS_PATH` env var** tells the container which YAML to load — pointing a different job at a different YAML is how 26 jobs share one Docker image. It's not the *only* difference between a prod and test job, though (see the diagram below — `PLEX_HOST` and the BigQuery dataset differ too); it's the one that decides *what gets extracted*, which is this section's point.
 
 ---
 
@@ -231,7 +237,7 @@ graph LR
 
 Same container image, same GCS bucket, different ODBC host and BigQuery dataset. Both use the same IAM token — it works on both endpoints.
 
-This diagram shows one report family (Sales Orders) — the other 7 follow the identical prod/test pattern, just with their own job names, schedules, and `REPORT_CONFIG_GCS_PATH`. Every job here also has a **third** scheduler not pictured: a shared 9:45 PM Mountain retry trigger (`RUN_MODE=retry`) that only actually re-runs the job if today's regular scheduled run failed — see `docs/EMAIL_SCHEDULE.md` for the full 16-job/32-scheduler picture.
+This diagram shows one pipeline (Sales Orders) — the other 12 follow the identical prod/test pattern, just with their own job names, schedules, and `REPORT_CONFIG_GCS_PATH`. Every job here also has a **third** scheduler not pictured: a shared 9:45 PM Mountain retry trigger (`RUN_MODE=retry`) that only actually re-runs the job if today's regular scheduled run failed — see `docs/EMAIL_SCHEDULE.md` for the full 26-job/52-scheduler picture.
 
 ---
 
@@ -299,8 +305,8 @@ graph TD
 | `Dockerfile` | `package.json` + setup script | Defines the container: Python, ODBC driver, pip packages |
 | `docker-compose.yml` | `vite.config.js` for local dev | Local runner — forces `OUTPUT_MODE=local`, mounts `./output/` |
 | `.env` | `.env.local` | Local secrets — never committed |
-| `reports/sales_orders.yaml` | feature flag config | Which 13 Plex views to extract, and — since `bq_view` can be a list — its `category`/`display_name` fields and which named report(s) get built from them. Today it actually produces **two** peer reports (`sales_orders_report` + `sales_orders_open_report`) from the same 13-view extraction, not one. |
-| `reports/sql/sales_orders_view.sql` | a database migration | The BigQuery JOIN SQL that produces the 16-field report — its sibling `sales_orders_open_view.sql` produces the second one from the same raw tables |
+| `reports/sales_orders.yaml` | feature flag config | Which 27 Plex views to extract, and — since `bq_view` can be a list — its `category`/`display_name` fields and which named report(s) get built from them. Today it produces **27** peer reports (`sales_orders_report`, `sales_orders_open_report`, …) from the same extraction, not one. Its twin `reports/test/sales_orders.yaml` is maintained by hand. |
+| `reports/sql/sales_orders_view.sql` | a database migration | The BigQuery JOIN SQL that produces the 16-field report — each sibling `*_view.sql` produces another report from the same raw tables |
 | `config/odbcinst.ini` | driver registration | Tells unixODBC where the Plex driver binary lives |
 | `terraform/main.tf` | infrastructure definition | All GCP resources: Service Account, BigQuery, Cloud Run, Scheduler, GCS bucket |
 | `terraform/terraform.tfvars` | `.env` for Terraform | Your project-specific values — gitignored, never committed |
@@ -312,18 +318,18 @@ graph TD
 ```mermaid
 flowchart TD
     change[You made a change] --> q1{Where is the change?}
-    q1 -->|YAML or SQL in GCS| gcs["gcloud storage cp → trigger job\nNo code change, no deployment"]
-    q1 -->|terraform.tfvars| apply["terraform apply\n~30 seconds"]
-    q1 -->|.py file, Dockerfile, requirements.txt| rebuild["docker build + push a SHA tag,\nTHEN explicitly gcloud run jobs update --image=...\n(or deploy-all in cloudbuild.yaml)\n3–8 minutes"]
+    q1 -->|reports/ YAML or SQL| gcs["merge to main → ./scripts/deploy.sh\nuploads it; next run picks it up"]
+    q1 -->|terraform.tfvars or main.tf| apply["./scripts/deploy.sh\n(primary folder, main)"]
+    q1 -->|.py file, Dockerfile, requirements.txt| rebuild["merge to main → deploy_preflight.sh →\ngcloud builds submit (deploy-all moves every job)\n3–8 minutes"]
 ```
 
-**Only `gcloud storage cp` + trigger** (seconds, no deployment):
-- Which Plex views to extract (`reports/*.yaml`)
+**Only `./scripts/deploy.sh`, no image rebuild** — report files (Terraform uploads them to GCS):
+- Which Plex views to extract (`reports/*.yaml` — prod and `test/` copies both)
 - Filters, date columns on any view
-- BigQuery JOIN view SQL (`reports/sql/*.sql`)
+- BigQuery JOIN view SQL (`reports/sql/*.sql` — one copy, used by prod and test)
 - A report's `category`/`display_name` (controls the email subject/body)
 
-**Only `terraform apply`** (30 seconds, no code change):
+**Only `./scripts/deploy.sh`, no code change** — Terraform settings:
 - ODBC host, port, ServerDataSource
 - BigQuery table or dataset name
 - Email on/off, sender, recipients
@@ -344,7 +350,7 @@ The image only moves when something explicitly says so:
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
 or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which loops this over
-all 16 jobs from one build. Always tag with the commit SHA, never
+all 26 jobs from one build. Always tag with the commit SHA, never
 `:latest` — `:latest` is still pushed for manual `docker pull`
 convenience, but nothing deployed ever reads it.
 
@@ -399,10 +405,12 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars — fill in gcp_project, plex_host, plex_odbc_user,
 # image_url, email settings, etc.
 
-# 3. Init and apply — creates all GCP infrastructure
+# 3. Init, then deploy — creates all GCP infrastructure. deploy.sh shows the
+# plan and asks you to type the change count; Terraform's deploy guard refuses
+# unless this is the primary clone, on a clean main equal to origin/main
+# (a fresh clone passes). Cloud Run jobs fail "image not found" until step 4b.
 terraform init
-terraform apply -var-file=terraform.tfvars
-# Type 'yes' when prompted. Takes ~2 minutes on first run.
+cd .. && ./scripts/deploy.sh && cd terraform
 
 # 4. Build and push the container image — tag with the commit SHA, never
 # ":latest" (nothing deployed ever reads that tag; see step 4b for why)
@@ -413,28 +421,21 @@ docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT/plex-pipeline/etl:$SHA \
 docker push us-central1-docker.pkg.dev/YOUR_PROJECT/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/YOUR_PROJECT/plex-pipeline/etl:latest
 
-# 4b. Set image_url in terraform.tfvars to that :$SHA tag and re-apply —
-# this is what actually creates the job on a real image (only works
-# because it doesn't exist yet; every job's lifecycle.ignore_changes means
-# a LATER rebuild needs an explicit `gcloud run jobs update` instead, not
-# another `terraform apply`):
-cd terraform && terraform apply -var-file=terraform.tfvars && cd ..
+# 4b. Set image_url in terraform.tfvars to that :$SHA tag and deploy again —
+# this is what actually creates the jobs on a real image (only works
+# because they don't exist yet; every job's lifecycle.ignore_changes means
+# a LATER rebuild goes through deploy/cloudbuild.yaml, not another deploy):
+./scripts/deploy.sh
 
 # 5. Store the Plex IAM token in Secret Manager
 echo -n 'YOUR_PLEX_TOKEN' | \
   gcloud secrets versions add plex-access-token \
   --data-file=- --project=YOUR_PROJECT
 
-# 6. Upload report configs to GCS — BOTH sql files, not just one, since
-# sales_orders.yaml's bq_view is a list producing two peer reports
-gcloud storage cp reports/sales_orders.yaml \
-  gs://YOUR_PROJECT-report-configs/reports/
-gcloud storage cp reports/test/sales_orders.yaml \
-  gs://YOUR_PROJECT-report-configs/test/
-gcloud storage cp reports/sql/sales_orders_view.sql \
-  gs://YOUR_PROJECT-report-configs/sql/
-gcloud storage cp reports/sql/sales_orders_open_view.sql \
-  gs://YOUR_PROJECT-report-configs/sql/
+# 6. Nothing to upload: step 3 already put every reports/ YAML and SQL file
+# in the bucket (each is a Terraform-managed object). Note the YAMLs' sql_file
+# URIs hardcode gs://voxdatalake-report-configs/ — a different bucket name
+# needs them changed first.
 
 # 7. Trigger the test job and watch it run
 gcloud run jobs execute plex-etl-sales-orders-test \
@@ -442,14 +443,14 @@ gcloud run jobs execute plex-etl-sales-orders-test \
 ```
 
 This walks through just `plex-etl-sales-orders`/`sales_orders` — a real from-scratch
-deploy creates all 16 jobs at once in step 3 (no per-job gating in
-`terraform/main.tf`), so you'd repeat steps 6-7 for the other 7 report
-families too before trusting the whole stack.
+deploy creates all 26 jobs at once in step 3 (no per-job gating in
+`terraform/main.tf`), so you'd repeat step 7 for the other 12 pipelines'
+`-test` jobs too before trusting the whole stack.
 
 ### Phase 3 — Validate
 
 ```bash
-# Check all 13 raw tables exist with data
+# Check the raw tables exist with data
 bq query --nouse_legacy_sql --project=YOUR_PROJECT \
   "SELECT table_name, row_count
    FROM YOUR_PROJECT.PlexTest.INFORMATION_SCHEMA.PARTITIONS
@@ -495,10 +496,10 @@ Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container exec
 
 | GCP Service | What it does in this pipeline |
 |---|---|
-| **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 16 jobs total (8 report families × prod/test), all sharing one image |
-| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl-sales-orders` at 7:00 PM Mountain (prod) / 7:10 PM Mountain (test) as the running example, staggered 10 minutes apart through 9:30 PM Mountain across all 8 families, each job also with its own retry trigger firing together at 9:45 PM Mountain (32 scheduler jobs total) |
+| **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 26 jobs total (13 pipelines × prod/test), all sharing one image |
+| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl-sales-orders` at 7:00 PM Mountain (prod) / 7:10 PM Mountain (test) as the running example, staggered 10 minutes apart through 10:50 PM Mountain across 12 pipelines, Label Design at 9:30 AM / 1:30 PM, each job also with its own retry trigger firing together at 9:45 PM Mountain (52 scheduler jobs total) |
 | **BigQuery** | Stores dozens of raw Plex tables across `PlexProd`/`PlexTest` + one or more named JOIN views per report family (`sales_orders_report` + `sales_orders_open_report` for this one) |
-| **Cloud Storage** | Holds YAML report configs and SQL view definitions — editable at runtime |
+| **Cloud Storage** | Holds YAML report configs and SQL view definitions — read at runtime, uploaded by Terraform |
 | **Secret Manager** | Stores the Plex IAM token and SendGrid API key |
 | **Artifact Registry** | Private Docker registry — stores the ETL container image |
 | **IAM / Service Accounts** | `plex-etl-sa@voxdatalake` runs the job with least-privilege access |
@@ -532,5 +533,5 @@ Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container exec
 | **Artifact Registry** | GCP's private Docker registry |
 | **Secret Manager** | GCP's encrypted secrets store |
 | **Terraform** | Infrastructure-as-code tool — defines GCP resources in `.tf` files |
-| **WRITE_TRUNCATE** | BigQuery write mode: delete and replace the entire table. Used for full-refresh (all 13 views) |
+| **WRITE_TRUNCATE** | BigQuery write mode: delete and replace the entire table. Used for every extraction today (incremental sync isn't implemented) |
 | **DataDirect OpenAccess SDK** | The Plex ODBC driver — a C binary (`.so`) that speaks Plex's proprietary ODBC protocol |

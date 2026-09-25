@@ -14,6 +14,65 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (docs) - Documentation reviewed end to end for the new workflow
+
+A read-only audit of every doc in the repo (verdicts per file) drove the
+fixes.
+
+### Changed
+- **The deploy docs no longer teach the mechanism behind the 2026-09-22
+  rollback.**
+  - **What they used to say:** CHEATSHEET, OPERATIONS and a comment in
+    `terraform/main.tf` told people to `gcloud storage cp` YAML/SQL straight
+    into the prod GCS paths "with no deployment".
+  - **What they say now:** iterate on YAML in `test/` only. SQL objects are
+    shared by prod and test, so iterate on SQL with dry-run queries or the
+    ScorecardSandbox. Everything lands through a dev branch → `main` →
+    `./scripts/deploy.sh`.
+  - The `main.tf` comment also wrongly claimed Terraform manages only the
+    initial copy of each object.
+- **Every engineering guide:**
+  - Counts corrected: 13 pipelines / 26 jobs / 52 schedulers / 68 views, not
+    8/16 or 12/24.
+  - Legacy `plex-etl` / `plex-daily-sync` names replaced.
+  - Bare `terraform apply` replaced by `deploy.sh`, except in genuine
+    bootstrap and recovery steps, which now explain the guard.
+  - `-auto-approve` advice removed.
+  - `SHORT_SHA` stated as manual for local builds.
+  - EMAIL_SCHEDULE rebuilt from `main.tf`, including Label Design.
+  - Incremental sync documented as not implemented (no `WRITE_APPEND` /
+    `get_last_sync` exists).
+  - Each reviewed doc carries "Last reviewed: 2026-09-25".
+- **`terraform/terraform.tfvars.example`** still set the pre-2026-09-04 job
+  and scheduler names. Cloud Run names are immutable, so a fresh setup copied
+  from it would have **destroyed and recreated** the Sales Orders jobs under
+  the old names. It now matches `variables.tf`; the live `terraform.tfvars`
+  was already correct.
+- **Archived to `docs/archive/`** (history, with banners):
+  `CODE_REVIEW_2026-07-14.md`, `APPLY_DRIVER_LICENSE.md` (licensed
+  2026-08-24) and `NETSUITE_PARITY_OPEN_ITEMS.md`. Links in 21 files are
+  repointed; none are broken. Two of those links sit in comments in
+  `sales_orders_pending_approval_by_rep_view.sql` and
+  `sales_orders_rush_open_view.sql`, so the next deploy re-uploads them with
+  comment-only changes.
+- CHEATSHEET, README, CONTRIBUTING and the report docs were committed
+  separately today (see `git log`).
+
+### Found - the 9:45 PM retry has never produced a run
+`job_run_log` holds **zero** `run_mode = 'retry'` rows since logging began
+(2026-07-21). Over the same period there were 1 failed and 9 partial prod
+runs, and 22 failed and 30 partial test runs. So either:
+- the retry schedulers never fire; or
+- the retry path exits without logging; or
+- retries always find "already ran today".
+
+Separately, the retry's "today" is the UTC date while the schedules are
+Mountain. That could make it misjudge jobs that run after 9:50 PM, but the
+empty log shows it is not re-running them.
+
+**Not diagnosed yet:** checking the retry schedulers and executions needs
+`gcloud`, which was behind the reauthentication wall. It's a real gap: the
+failure-retry safety net described in OPERATIONS may not be doing anything.
 ## 2026-09-25 (label design) - Run the Label Design sync on demand from a web app
 
 ### Added - `deploy/label_design_trigger/` (Apps Script web app)

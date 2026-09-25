@@ -112,10 +112,13 @@ resource "google_storage_bucket_iam_member" "etl_config_reader" {
   member = "serviceAccount:${google_service_account.etl.email}"
 }
 
-# Upload initial report config files (Terraform manages the initial copy only).
-# After initial setup, edit files directly in GCS Console or via:
-#   gcloud storage cp reports/sales_orders.yaml gs://${var.report_configs_bucket}/reports/
-#   gcloud storage cp reports/sql/sales_orders_view.sql gs://${var.report_configs_bucket}/sql/
+# Report configs and SQL: every object below is `source`-linked to its file in
+# reports/, so Terraform keeps GCS equal to the repo on every apply. Change a
+# file on a dev branch, merge to main, and run ./scripts/deploy.sh.
+# Do NOT edit these objects in the GCS Console or `gcloud storage cp` them into
+# the prod reports/ or sql/ paths: the next apply silently reverts the edit,
+# and an apply from a branch that lacks it rolls prod back — which is what
+# happened to label_design_view.sql on 2026-09-22 (CLAUDE.md, Known friction).
 
 resource "google_storage_bucket_object" "sales_orders_config_prod" {
   name         = "reports/sales_orders.yaml"

@@ -1,8 +1,12 @@
 # Troubleshooting Cheatsheet
 
+Last reviewed: 2026-09-25
+
 Quick-reference commands for every common error. Copy-paste ready — substitute your project values where shown.
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **16** live jobs (8 report families × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
+> **Deploying a fix:** anything Terraform manages (`terraform.tfvars`, `main.tf`, `reports/` YAML/SQL) goes out with `./scripts/deploy.sh` from the primary folder on a clean, pushed `main` — never a bare `terraform apply`. Terraform's own deploy guard refuses plan/apply anywhere else. See `CONTRIBUTING.md` § "Branches, folders and locks".
+
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **26** live jobs (13 pipelines × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -114,9 +118,10 @@ The `ServerDataSource` doesn't exist on the host you're pointing at. This happen
 
 ```bash
 # Switch to test host (works with ReportDataSource)
-cd terraform
-# Edit terraform.tfvars: plex_host = "vox.test.odbc.plex.com"
-terraform apply -var-file=terraform.tfvars
+# terraform.tfvars exists only in the primary folder (C:/F/Parasol/plex-to-big-query), on main
+# Edit terraform/terraform.tfvars: plex_host = "vox.test.odbc.plex.com"
+# Back it up (command in the file's header), then deploy:
+./scripts/deploy.sh
 ```
 
 For production: contact Plex support to confirm the correct `ServerDataSource` name for `vox.odbc.plex.com`. (As of 2026-07-20, `ReportDataSource` is confirmed working on both hosts — this error is more likely to resurface if the `ServerDataSource` name is ever changed on one side only.)
@@ -138,7 +143,7 @@ ruling out all four:
 - Reproduced identically with a brand-new IAM token — not a token
   validity/expiry issue.
 - Persisted after properly licensing the DataDirect driver (see
-  [APPLY_DRIVER_LICENSE.md](APPLY_DRIVER_LICENSE.md)) — not a client-side
+  [archive/APPLY_DRIVER_LICENSE.md](archive/APPLY_DRIVER_LICENSE.md)) — not a client-side
   license issue.
 - The identical account/token connects successfully to the test host
   throughout — rules out the account being globally disabled.
@@ -169,8 +174,10 @@ Wrong ODBC username. The format must be `username.company` (e.g. `edominguez.par
 
 ```bash
 # Update the env var via terraform (no rebuild needed)
-# Edit terraform.tfvars: plex_odbc_user = "correct.username"
-cd terraform && terraform apply -var-file=terraform.tfvars
+# terraform.tfvars exists only in the primary folder (C:/F/Parasol/plex-to-big-query), on main
+# Edit terraform/terraform.tfvars: plex_odbc_user = "correct.username"
+# Back it up (command in the file's header), then deploy:
+./scripts/deploy.sh
 ```
 
 ### Driver prints license warning but job still runs
@@ -218,10 +225,13 @@ for e in envs:
 "
 ```
 
-If fields are empty: edit `terraform.tfvars`, then:
+If fields are empty, set them in `terraform.tfvars`:
 
 ```bash
-cd terraform && terraform apply -var-file=terraform.tfvars
+# terraform.tfvars exists only in the primary folder (C:/F/Parasol/plex-to-big-query), on main
+# Edit terraform/terraform.tfvars: report_from_email / report_to_emails
+# Back it up (command in the file's header), then deploy:
+./scripts/deploy.sh
 ```
 
 ### `INFO SendGrid disabled; skipping email report`
@@ -229,8 +239,10 @@ cd terraform && terraform apply -var-file=terraform.tfvars
 `SENDGRID_ENABLED` is `"false"`. To enable:
 
 ```bash
-# Edit terraform.tfvars: sendgrid_enabled = "true"
-cd terraform && terraform apply -var-file=terraform.tfvars
+# terraform.tfvars exists only in the primary folder (C:/F/Parasol/plex-to-big-query), on main
+# Edit terraform/terraform.tfvars: sendgrid_enabled = "true"
+# Back it up (command in the file's header), then deploy:
+./scripts/deploy.sh
 ```
 
 ### Email sends (status 202) but lands in spam
@@ -251,11 +263,13 @@ gcloud projects add-iam-policy-binding voxdatalake \
 
 ### `404 Not found: Dataset voxdatalake:PlexTest`
 
-Dataset was deleted or never created. Re-apply Terraform:
+Dataset was deleted or never created. Terraform recreates it — from the primary folder on `main`:
 
 ```bash
-cd terraform && terraform apply -var-file=terraform.tfvars
+./scripts/deploy.sh
 ```
+
+The plan should show the dataset being created. The raw tables and views in it come back on each job's next run, not from Terraform.
 
 ### Check what's in BigQuery
 
@@ -297,7 +311,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
-or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 16 jobs in one build.
+or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 26 jobs in one build (see "Full rebuild procedure" below).
 
 ### `denied: Unauthenticated request`
 
@@ -376,17 +390,34 @@ gcloud projects get-iam-policy voxdatalake \
 
 ### `Too many command line arguments` (Windows PowerShell)
 
-Terraform multiline commands fail in PowerShell. Use Git Bash, or pass vars as a single line:
+Terraform multiline commands fail in PowerShell. Deploy from **Git Bash** —
+`./scripts/deploy.sh` is a bash script anyway. Don't reach for
+`-auto-approve`: the point of `deploy.sh` is that someone reads the plan and
+confirms the change count before anything is applied.
 
-```bash
-terraform apply -var-file=terraform.tfvars -auto-approve
-```
+### `DEPLOY GUARD: refusing to plan/apply`
+
+Terraform runs `scripts/tf_guard.py` on every plan, apply and destroy
+(`data "external" "deploy_guard"` in `terraform/main.tf`). It refuses unless
+you are in the primary folder (`C:\F\Parasol\plex-to-big-query`, not a
+`ptbq-*` worktree), on `main`, with a clean working tree, and `main` equals
+`origin/main`. The message lists which of those failed — fix that (switch
+folder, commit, push or pull). Don't override it to apply. It also needs
+`python` on `PATH` — that is what Terraform calls.
 
 ### Check what Terraform will do without applying
+
+From the primary folder on a clean, pushed `main`:
 
 ```bash
 cd terraform
 terraform plan -var-file=terraform.tfvars
+```
+
+To look at drift from anywhere else (read-only), give the guard a reason:
+
+```bash
+TF_GUARD_OVERRIDE="read-only drift check from dev" terraform plan -var-file=terraform.tfvars
 ```
 
 ### Show current Terraform state
@@ -401,50 +432,43 @@ terraform show
 
 ## Full rebuild procedure
 
-Use this when you've changed Python code, the email template, or Python dependencies.
+Use this when you've changed Python code, the email template, or Python dependencies. The change goes through a `dev*` branch and `main` like any other; then, from the primary folder on an up-to-date `main`:
 
 ```bash
-# 1. Make your code changes
-# 2. Rebuild and push the image, tagged with the current commit SHA — never ":latest"
-SHA=$(git rev-parse --short HEAD)
-docker build -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA \
-             -t us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest .
-docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
-docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
+# 1. Refuses unless you're on a clean main (an image deploy has no guard inside it)
+./scripts/deploy_preflight.sh
 
-# 3. Explicitly redeploy every job you want on the new image — pushing alone
-# does nothing (every job's `lifecycle { ignore_changes = [image] }` means
-# terraform apply won't do this either). Loop over all 16, or use
-# deploy/cloudbuild.yaml's deploy-all step instead of steps 2-3 entirely:
-for job in plex-etl-sales-orders plex-etl-sales-orders-test plex-etl-work-orders plex-etl-work-orders-test \
-           plex-etl-purchasing-open-orders plex-etl-purchasing-open-orders-test \
-           plex-etl-part-obsolescence plex-etl-part-obsolescence-test \
-           plex-etl-inventory-activity plex-etl-inventory-activity-test \
-           plex-etl-inventory-snapshot plex-etl-inventory-snapshot-test \
-           plex-etl-quality-nonconformance plex-etl-quality-nonconformance-test \
-           plex-etl-part-on-hand-inventory plex-etl-part-on-hand-inventory-test; do
-  gcloud run jobs update "$job" --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
-done
+# 2. Build, push, move all 26 jobs onto the new image (deploy-all step), then
+#    smoke-test plex-etl-sales-orders-test. SHORT_SHA must be passed by hand.
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
 
-# 4. (Separately) apply any terraform.tfvars changes, if you made any
-cd terraform && terraform apply -var-file=terraform.tfvars
-
-# 5. Run manually to verify
+# 3. Run a prod job manually to verify (Cloud Build never runs prod)
 gcloud run jobs execute plex-etl-sales-orders \
   --region=us-central1 --project=voxdatalake --wait
 
-# 6. Check logs
+# 4. Check logs
 gcloud logging read \
   "resource.type=cloud_run_job AND resource.labels.job_name=plex-etl-sales-orders" \
   --project=voxdatalake --limit=50 \
   --format="value(timestamp,textPayload)"
 ```
 
+Pushing an image alone moves nothing — every job's `lifecycle { ignore_changes = [image] }` means neither a push nor `terraform apply` changes the image a job runs. If Cloud Build isn't available, the manual equivalent after `docker build`/`docker push` of an `:$SHA` tag is `gcloud run jobs update` on **every** job in `_ALL_JOBS` in `deploy/cloudbuild.yaml` (26 names, `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`):
+
+```bash
+for job in $(grep '_ALL_JOBS:' deploy/cloudbuild.yaml | cut -d'"' -f2); do
+  gcloud run jobs update "$job" --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
+done
+```
+
+Changed `terraform.tfvars` as well? That is a separate `./scripts/deploy.sh`.
+
 ---
 
 ## Config changes that DON'T need a rebuild
 
-These only need `terraform apply` (takes ~30 seconds):
+These only need a `terraform.tfvars` edit (in the primary folder, the only place that file exists — back it up afterwards, see its header) and `./scripts/deploy.sh`:
 
 | What you're changing | Variable in tfvars |
 |---|---|
@@ -455,7 +479,7 @@ These only need `terraform apply` (takes ~30 seconds):
 | Company name (subject's no-category fallback) | `company_name` |
 | How far back to backfill | `backfill_minutes` |
 
-**`plex_view`/`plex_filter`/`plex_date_col`/`bq_table` are legacy single-view-mode fallbacks — no live job uses them.** Every real job sets `REPORT_CONFIG_GCS_PATH`, which bypasses these entirely. To change what a report queries or filters, edit that report's `reports/*.yaml` (`extractions[]`) and push it to GCS instead — no `terraform apply` needed for that, it's picked up on the report's next run. See `docs/TECHNICAL_REFERENCE.md` § "Hot-updatable configuration."
+**`plex_view`/`plex_filter`/`plex_date_col`/`bq_table` are legacy single-view-mode fallbacks — no live job uses them.** Every real job sets `REPORT_CONFIG_GCS_PATH`, which bypasses these entirely. To change what a report queries or filters, edit that report's YAML pair (`reports/<pipeline>.yaml` and `reports/test/<pipeline>.yaml`, `extractions[]`) on a `dev*` branch, merge to `main`, and `./scripts/deploy.sh` — Terraform uploads the YAML to GCS and the job picks it up on its next run. See `docs/OPERATIONS.md` § "Edit an Existing Report".
 
 Secrets (token, API key, password) can be rotated with a single `gcloud secrets versions add` command — no Terraform apply, no rebuild.
 
@@ -463,29 +487,30 @@ Secrets (token, API key, password) can be rotated with a single `gcloud secrets 
 
 ## Nuke and redeploy to a new project
 
-Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire 16-job stack**, not one job:
+Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (26 jobs, 52 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
 
 ```bash
-# 1. Destroy all GCP resources (run from terraform/)
+# 1. Destroy all GCP resources (from terraform/, after TEARDOWN.md steps 1-4)
 terraform destroy -var-file=terraform.tfvars
 
 # 2. Update terraform.tfvars with the new project ID and a real (not :latest) image tag
 #    gcp_project = "new-project-id"
 #    image_url   = "us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA"
+#    (plus the backend bucket in main.tf, committed — see TEARDOWN.md)
 
-# 3. Re-deploy — creates all 16 jobs referencing image_url, which doesn't exist yet
-terraform apply -var-file=terraform.tfvars
+# 3. Create the infrastructure. Cloud Run jobs fail to create until the image exists — expected
+cd terraform && terraform init && cd ..
+./scripts/deploy.sh
 
 # 4. Push the image to the new project's registry — tag with a commit SHA, never ":latest"
 gcloud auth configure-docker us-central1-docker.pkg.dev --project=new-project-id
 SHA=$(git rev-parse --short HEAD)
 docker build -t us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA .
 docker push us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA
-# Re-apply so this first-time creation picks up the now-real image (only
-# works because the jobs didn't exist yet at step 3 — on every later
-# rebuild, ignore_changes means apply won't touch the image; use
-# `gcloud run jobs update` instead, same as "Full rebuild procedure" above)
-terraform apply -var-file=terraform.tfvars
+# Deploy again so the jobs get created on the now-real image (this only works
+# because they don't exist yet — on every later rebuild, ignore_changes means
+# apply won't touch the image; see "Full rebuild procedure" above)
+./scripts/deploy.sh
 
 # 5. Re-populate ALL FIVE secrets in the new project
 echo -n 'TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=new-project-id
@@ -494,12 +519,13 @@ echo -n 'USER'     | gcloud secrets versions add plex-odbc-user     --data-file=
 echo -n 'PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=new-project-id
 echo -n 'CODE'     | gcloud secrets versions add plex-company-code  --data-file=- --project=new-project-id
 
-# 6. Re-upload all 8 report YAML pairs + their SQL files (not shown — see
-# docs/DISASTER_RECOVERY.md, which has the full loop) — the Cloud Run jobs
-# exist now, but each one reads its config from GCS at runtime and there's
-# nothing there yet on a brand-new report_configs bucket.
+# 6. Nothing to upload by hand: every reports/ YAML and SQL file is a Terraform-managed
+#    GCS object, created in step 3. BUT every YAML's sql_file is a hardcoded
+#    gs://voxdatalake-report-configs/... URI — a bucket with a different name
+#    needs those URIs changed (and committed) first.
 
-# 7. Run each job to verify — at minimum, loop the *-test variants:
-gcloud run jobs execute plex-etl-sales-orders \
-  --region=us-central1 --project=new-project-id --wait
+# 7. Run each job to verify — at minimum, every *-test job:
+for job in $(grep '_ALL_JOBS:' deploy/cloudbuild.yaml | cut -d'"' -f2 | tr ' ' '\n' | grep -- '-test$'); do
+  gcloud run jobs execute "$job" --region=us-central1 --project=new-project-id --wait
+done
 ```

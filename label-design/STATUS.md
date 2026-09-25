@@ -9,6 +9,32 @@
 
 ---
 
+## UPDATE — 2026-09-24 (later): the push service EXISTS now
+
+`label_design_service/push.py` (see its docstring) is built and verified end
+to end against PlexTest → `18432111755`, using tracked test data from
+`scripts/label_design_test_data.py`. 7 `ZZTEST-LD-` items are on the board
+for Ashley; `--delete` removes them. Terraform for a scheduled **test** job is
+written and planned (3 to add) but **not applied**. Deploy order: `terraform
+apply` → add the secret version → Cloud Build (the new job needs an image that
+contains `label_design_service/`; tfvars' `image_url` is stale). Still open:
+prod job + prod target board, part-attribute → Monday column mapping,
+pre-cutover dedupe fallback, and whether the push should set a starting Design
+Status. See CHANGELOG 2026-09-24.
+
+## UPDATE — 2026-09-24: new board for Ashley, with real history on it
+
+**"Plex Import" `18432111755`** (workspace "blank landing page") now holds a
+full copy of Design & QA: 59 columns, 16 groups, 183 items, checked cell by
+cell. It was made with `scripts/copy_monday_board.py --wipe-target`. Files
+(1,071, ~3 GB) were **not** copied. **Jennette's `MONDAY_API_KEY` can write
+here**, so this board, not `18430735110`, is the realistic target for the push
+service. It's a point-in-time copy; nothing keeps it in sync with Design & QA.
+**Re-running the copy script with `--wipe-target` deletes anything added to the
+board since, test data included.** See CHANGELOG 2026-09-24.
+
+---
+
 ## UPDATE — 2026-09-22 — read the Sep-21 fast follow first
 
 Two decisions from the 2026-09-21 Emilio/Jennilyn call change what gets built,

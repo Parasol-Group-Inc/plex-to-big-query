@@ -161,8 +161,24 @@ extractions:
     date_col: ""
 
   # Product group lookup — Part_Product_Group_Key → product group name
+  # ⚠ Empty on this tenant (0 rows in test AND prod) and NOT the lookup for
+  # Part_v_Part.Part_Group_Key — see Part_v_Part_Group below. No view reads
+  # it since 2026-09-24; kept so the raw table doesn't vanish unannounced.
   - plex_view: Part_v_Part_Product_Group
     bq_table: raw_Part_v_Part_Product_Group
+    filter: ""
+    date_col: ""
+
+  # Part group lookup — Part_v_Part.Part_Group_Key → Part_Group name
+  # (Capsule, Softgel, Tablet, Gummy, Label, Packaging, Raw Ingredient, ...).
+  # Added 2026-09-24: "Revenue by part group" was always one "(no group)" bar
+  # because the views joined Part_Group_Key to Part_v_Part_Product_Group
+  # above, which is empty. Pulled live from the Plex test host 2026-09-24:
+  # 13 rows, and all 10 distinct Part_Group_Key values on Part_v_Part (test
+  # and prod) resolve against it. No PCN column — this view carries
+  # Plexus_Customer_No instead.
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
 

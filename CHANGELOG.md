@@ -14,6 +14,55 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - Fixed: inventory value, part groups, daily usage, cycle count, open caps
+
+### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)
+- **Inventory value read about $77 for the whole building.**
+  - **Before:** `inventory_valuation_summary_view.sql` summed per-unit
+    standard costs with no quantity, added every operation's cost for a part,
+    and took the cost model from the snapshot (NULL on real rows).
+  - **Now:** value = on-hand quantity (`part_on_hand_inventory_report`) ×
+    unit cost. The unit cost is the part's latest cost rows at its
+    highest-costed operation (costs are cumulative through the routing),
+    summed across the cost sub-types. The cost model comes from the history
+    rows. Plex's snapshot pointer table is used when populated, otherwise the
+    cost history on or before the snapshot date.
+  - **In the sandbox:** $76.65 → $2,760,901.76, matching an independent
+    on-hand × latest-cost query to the cent.
+  - **Limitation:** `Part_v_Snapshot` has no quantity, so only the current
+    snapshot is valued. There is no month-end trend yet.
+- **Revenue by part group was always one "(no group)" bar.**
+  - **Before:** four views joined `Part_Group_Key` to
+    `Part_v_Part_Product_Group`, which is empty in test and prod.
+  - **Now:** the real lookup, `Part_v_Part_Group` (13 groups: Capsule,
+    Label, Powder, …), is extracted in both `sales_orders` YAMLs (27
+    `plex_view:` each). `shipping_revenue_report`, `sales_mtd_by_status_change`,
+    `sales_orders` and `sales_orders_open` join it.
+  - Every group key on the parts resolves. Sandbox August revenue: Capsule
+    $3.8M, Label $0.45M, Powder $0.37M.
+  - **Group names appear in PlexTest/PlexProd only after the next apply +
+    Sales Orders run.**
+- **Average daily usage understated the month in progress.**
+  - **Before:** it divided by all the month's days.
+  - **Now:** it divides by days elapsed, and adds `days_in_period`,
+    `is_month_in_progress` and `unit`.
+- **Cycle count accuracy was weighted per count.**
+  - **Now:** each location is judged once a month, on its latest count;
+    `locations_counted` is the denominator; `recounted_locations` is added.
+- **Open caps missed "Schedule Encapsulation".**
+  - **Before:** it filtered by work-centre name. A real open job (1.34M caps)
+    sits on that work centre.
+  - **Now:** it filters by `Workcenter_Group = 'Encapsulating'`, like Open
+    Bottles.
+
+Report docs updated for each view. `docs/reports/part_cycle_count_report.md`
+has never existed, which is a gap against the report-doc convention.
+
+### Changed - `scripts/scorecard_sandbox/build.py`
+A table first extracted after `build.SNAPSHOT` (`raw_Part_v_Part_Group`) has
+no time-travel version, so it is now copied as it is now, and the build says
+so. The sandbox's copy holds the 13 real rows pulled from the Plex test host.
+
 ## 2026-09-24 (scorecard) - Fixed: deviations' linked NC, TAT in work days, disposition-cost flags
 
 ### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)

@@ -25,7 +25,7 @@ it was written down.
 | Section | Tile | View | Status | What to know |
 |---|---|---|---|---|
 | Revenue | MTD / YTD Revenue | `sales_revenue_summary_report` | ✅ | YTD only covers months Plex has; earlier history needs a one-off top-up. |
-| Revenue | Revenue by part group | `sales_revenue_summary_report` | 🏗 | **Always one bar, "(no group)".** Parts carry `Part_Group_Key` (14,149 of 14,150), but the lookup it joins, `Part_v_Part_Product_Group`, is empty in test *and* prod. The group names live in a different Plex view, not yet identified. |
+| Revenue | Revenue by part group | `sales_revenue_summary_report` | 🔧 | **Always one bar, "(no group)".** Parts carry `Part_Group_Key` (14,149 of 14,150), but the lookup it joined, `Part_v_Part_Product_Group`, is empty in test *and* prod. The names live in **`Part_v_Part_Group`** (13 groups, Capsule … Supplies; every key in use resolves). See finding 7. **Needs a new extraction:** the groups appear only after the next `terraform apply` + Sales Orders ETL run; not provable in the sandbox yet. |
 | Revenue | Revenue detail | `shipping_revenue_report` | ✅ | Has both ship date and invoice date; the month is by ship date. |
 | Revenue | % into month and run rate | `sales_revenue_run_rate_report` | ✅ | Calendar days, not working days. |
 | Revenue | Revenue goal and % to goal | `revenue_vs_goal_report` | ❓ | The goal is the company *sales* goal reused. Is there a separate revenue target? |
@@ -43,16 +43,16 @@ it was written down.
 | Production | Encap / Bottling / Labeling daily | `encap_` / `packaging_` / `labeling_daily_report` | 🔧 | Output is right; **scrap is 0** (finding 2). The employee column is blank because Plex's `Common_Name` is empty for all 132 employees. |
 | Quality | FPY by area | `quality_fpy_by_area_month_report` | 🔧 ❓ | FPY is right (good ÷ total). Rejected quantity and DPMO are 0 (finding 2). DPMO uses 1 opportunity per unit as a placeholder. |
 | Quality | Reworks (NCs) | `quality_nonconformance_report` | ✅ | |
-| Quality | Deviations | `quality_deviation_report` | 🏗 | The linked NC never shows (finding 5). No month column, so the tile must pick add date or effective date. |
-| Quality | Destruction $ / Rework $ | `quality_disposition_cost_report` | ❓ | Works in the sandbox only because costs are modelled there. On real records Cost is 0.00 and the money is typed into the description. The "missing cost" flag counts NULLs, so it never fires on those 0.00s. |
-| Quality | 30-day rolling TAT | `quality_turnaround_time_report` | 🏗 ❓ | Counts **calendar** days against **work-day** standards, so met/missed is skewed. The standards themselves are placeholders. |
+| Quality | Deviations | `quality_deviation_report` | 🔧 | The linked NC never showed (finding 5). Now has `deviation_month` (by add date), so the tile doesn't have to pick. |
+| Quality | Destruction $ / Rework $ | `quality_disposition_cost_report` | 🔧 ❓ | Works in the sandbox only because costs are modelled there. On real records Cost is 0.00 and the money is typed into the description. The "missing cost" flag now counts 0.00 as missing on Scrap/Rework records (finding 6). |
+| Quality | 30-day rolling TAT | `quality_turnaround_time_report` | 🔧 ❓ | Counted **calendar** days against **work-day** standards; now has work-day columns and met/missed uses them (finding 6). Mon–Fri only, no holidays. The standards themselves are placeholders. |
 | Inventory | Quantity available | `inventory_available_to_sell_report` | ✅ | |
 | Inventory | Out of stock | `inventory_out_of_stock_report` | ✅ | One part number can appear twice (two Part_Keys). |
 | Inventory | Top quantity | `inventory_top_quantity_report` | ✅ | Quantity only. |
-| Inventory | Average daily usage | `inventory_avg_daily_usage_report` | 🏗 | The current month is divided by all its days, so it reads low. It also adds capsules and bottles together. |
-| Inventory | Inventory value | `inventory_valuation_total_report` | 🏗 ❓ | **Reads about $77.** See finding 4. The interim source is NetSuite anyway. |
-| Inventory | Cycle count accuracy | `part_cycle_count_report` | ✅ | Averages per count, not per location. No location names, because no location master is extracted. |
-| Operations | Open caps | `mfg_job_open_caps_report` | ✅ | Filters by name (`Encapsulation%`), which misses "Schedule Encapsulation". Open bottles filters by group instead. |
+| Inventory | Average daily usage | `inventory_avg_daily_usage_report` | 🔧 | The current month was divided by all its days, so it read low; now by days elapsed through today (finding 6). It is per part, in each part's own unit: a tile that sums parts adds capsules to bottles. The new `unit` column lets Looker filter; the view converts nothing. |
+| Inventory | Inventory value | `inventory_valuation_total_report` | 🔧 ❓ | Read about $77; now on-hand × unit cost, **$2.76M** in the sandbox (finding 4). **Only the current snapshot has a value**: Plex's snapshot holds cost, not quantity, and no month-end on-hand is extracted, so there is no trend yet. The interim source is NetSuite anyway. |
+| Inventory | Cycle count accuracy | `part_cycle_count_report` | 🔧 | Averaged per count, not per location; now each location's latest count in the month (finding 6). No location names, because no location master is extracted. |
+| Operations | Open caps | `mfg_job_open_caps_report` | 🔧 | Filtered by name (`Encapsulation%`), which missed "Schedule Encapsulation", where real open jobs sit. Now filters by the Encapsulating group, like Open bottles (finding 6). |
 | Operations | Open bottles | `bottling_job_open_report` | ✅ | |
 | Operations | Safe days | `safety_incidents` (table) | 🏗 ❓ | No view computes Safe Days; Looker has to (today − latest incident date). An empty log reads as a clean record. |
 
@@ -107,24 +107,101 @@ runs the broken versions.
   "total inventory value" comes to about $77 for the whole building. It also
   adds every operation's cost for a part, and groups by the snapshot's
   `Cost_Model_Key`, which is NULL. The cost model is on the history rows.
-- **Fix:** needs quantity × cost; not written yet.
+- **Fix (🔧 on `dev-sandbox` 2026-09-24, not deployed):** value = on-hand
+  quantity (`part_on_hand_inventory_report`) × the part's per-unit cost at
+  the snapshot. That cost is the sum of the two cost sub-types at **one**
+  operation: the highest-costed operation from the part's latest cost change.
+  Operation costs are cumulative (the real blend is $1.25 at the op with its
+  BOM and $1.354 at the next op, which has no BOM). The latest-change filter
+  drops operations left behind by a re-routing. The pointer table is empty in
+  real Plex, so the cost falls back to "cost history as of the snapshot date".
+  Sandbox: **$76.65 → $2,760,901.76** on 1 Sep. That matches an independent
+  on-hand × latest-cost sum to the cent. PlexTest: compiles, 5 costed parts,
+  none on hand, so the value is $0 with 57 on-hand parts uncosted.
+- **Still open:** (a) no trend. `Part_v_Snapshot` has no quantity column,
+  so earlier snapshots show a NULL value, not today's stock at old costs. A
+  trend needs month-end on-hand captured somewhere. (b) Operation order is a
+  proxy, because `Part_v_Part_Operation` is not extracted. (c) One part
+  number can have two revisions ("Rev 00" and "Weighed"), and a cost is per
+  revision. In the sandbox 10 "Rev 00" powders (~2.8M units) are on hand but
+  uncosted, because the generator costs only parts whose containers carry an
+  operation. `uncosted_on_hand_part_count` shows this.
 
 **5. Deviations never show their linked NC.**
 - **Affects:** `quality_deviation_view.sql:66-68`.
 - **What's wrong:** it joins the classic `Quality_v_Problem`, which is
   permanently empty. Vox's NCs live in `Quality_v_Problem_2`, the UX screen's
   table, the same trap the Quality reports fell into before 2026-09-22.
-- **Fix:** read `Quality_v_Problem_2`; not written yet.
+- **Fix:** read `Quality_v_Problem_2`. **Fixed in `reports/sql/` on
+  `dev-sandbox` (2026-09-24), not yet deployed.** The link table's
+  `Problem_Key` is Problem_2's own key: the one real link (problem 117294)
+  resolves to NC #21. Sandbox: deviations with an NC went from 0 of 151 to 49.
+  The view also gained `deviation_month` (by add date).
+- **Still blank on real data, correctly:** that one real link belongs to
+  deviation 14453, which is gone from Plex; today's only deviation (14461) has
+  no NC linked. The stale link row fits the "0 rows keeps yesterday's data"
+  finding below.
 
 **6. Smaller:**
-- **TAT** uses `DATE_DIFF(DAY)`, which is calendar days
-  (`quality_turnaround_time_view.sql:132-136`).
-- **Average daily usage** divides the month in progress by the full month
-  (`inventory_avg_daily_usage_view.sql:26-29`).
-- **Cycle count** is weighted per count, not per location
-  (`part_cycle_count_view.sql:82`).
-- **Disposition cost** puts closed no-material records into
-  "(not yet dispositioned)" (`quality_disposition_cost_view.sql:116-117`).
+- **TAT** used `DATE_DIFF(DAY)`, which is calendar days
+  (`quality_turnaround_time_view.sql:132-136`). **Fixed on `dev-sandbox`
+  (2026-09-24), not deployed:** work-day columns for both clocks, and
+  met/missed now uses them. Mon–Fri only; there is no holiday table. Sandbox
+  misses fell 31 → 6 (Performance) and 95 → 73 (Bonus).
+- **Average daily usage** divided the month in progress by the full month
+  (`inventory_avg_daily_usage_view.sql:26-29`). **Fixed on `dev-sandbox`
+  (2026-09-24), not deployed:** the current month divides by days elapsed
+  through today (today included, the run-rate tile's rule); past months by
+  their full length. Through today, not the last usage date, so idle days
+  count as zero. Sandbox, September (25 days elapsed by UTC date): the top
+  part reads 3.05M/day, not 2.54M. Adds `days_in_period`,
+  `is_month_in_progress` and `unit`.
+- **Cycle count** was weighted per count, not per location
+  (`part_cycle_count_view.sql:82`). **Fixed on `dev-sandbox` (2026-09-24),
+  not deployed:** each location counts once a month, on its latest count
+  that month. `locations_counted` is now exactly the accuracy denominator;
+  `items_counted` still counts every count; new `recounted_locations`.
+  Sandbox May: 92.5% → 94.1%. (PlexTest's September "82.1%" is **not**
+  evidence either way: those 56 counts were rows the retired
+  `scorecard_test_data.py` injector wrote, which outlived it because the ETL
+  keeps a raw table when Plex returns 0 rows. They were deleted 2026-09-24.)
+- **Open caps** filtered `wc.Name LIKE 'Encapsulation%'`
+  (`mfg_job_open_caps_view.sql:54`), which misses **Schedule Encapsulation**.
+  That is not an empty pseudo-centre: in PlexTest it holds open job 3
+  (1,342,000 caps, the same Encapsulating operation as the line job), and
+  all four open bottling jobs sit on Schedule Bottling, which Open bottles'
+  group filter already includes. **Fixed on `dev-sandbox` (2026-09-24), not
+  deployed:** `Workcenter_Group = 'Encapsulating'` (exactly the ten lines plus
+  Schedule Encapsulation). PlexTest: 200,000 → 1,542,000 open caps. The
+  sandbox has no Schedule Encapsulation jobs, so it is unchanged there.
+- **Disposition cost** put closed no-material records into
+  "(not yet dispositioned)" (`quality_disposition_cost_view.sql:116-117`), and
+  its "missing cost" flag counted only NULLs, while an unfilled Plex Cost is
+  0.00. **Both fixed on `dev-sandbox` (2026-09-24), not deployed:** blanks
+  split into open / closed-no-material / closed-disposition-missing (sandbox:
+  91 → 32 / 58 / 1), and the flag counts NULL-or-0 on Scrap/Rework.
+
+**7. Part group joins the wrong lookup.**
+- **Affects:** `shipping_revenue_report.sql` (so `sales_revenue_summary_report`
+  and "Revenue by part group"), `sales_mtd_by_status_change_view.sql`, and the
+  `product_group` column of `sales_orders_view.sql` and
+  `sales_orders_open_view.sql`.
+- **What's wrong:** they joined `Part_v_Part.Part_Group_Key` to
+  `Part_v_Part_Product_Group`, which has 0 rows in test and prod.
+- **Where the names are:** `Part_v_Part_Group` (`Part_Group_Key`, `Part_Group`;
+  no PCN column). Pulled live from the Plex test host on 2026-09-24: 13 groups,
+  and all 10 distinct keys on `Part_v_Part` (test and prod) resolve.
+- **Fix, on `dev-sandbox` (2026-09-24), not deployed:** new extraction
+  `Part_v_Part_Group` → `raw_Part_v_Part_Group` in both `reports/sales_orders.yaml`
+  and `reports/test/sales_orders.yaml` (26 → 27 `plex_view:` entries each), and
+  the four views join it. Checked read-only against PlexTest with the 13 rows
+  inlined: the sales view's 21 rows all read `Capsule`; 36 of 40 order lines
+  get a group.
+- **Not in the sandbox yet:** the raw table doesn't exist in PlexTest until the
+  next `terraform apply` + Sales Orders ETL run, so the sandbox keeps the old
+  versions of `shipping_revenue_report` and `sales_mtd_by_status_change_report`
+  (their recreate fails). After that run, `build.copy_base_tables(sb,
+  ['raw_Part_v_Part_Group'])` and a view rebuild will prove it.
 
 ## ETL and data findings
 

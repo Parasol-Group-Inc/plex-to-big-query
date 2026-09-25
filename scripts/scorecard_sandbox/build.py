@@ -137,13 +137,25 @@ def copy_base_tables(sb, base):
         except Exception:
             print(f"  ! {t} missing in {SOURCE} — the view that reads it will fail")
             continue
-        if COPY_CURRENT.match(t):
+        copy_now = COPY_CURRENT.match(t)
+        if not copy_now:
+            try:
+                sb.client.query(
+                    f"CREATE OR REPLACE TABLE `{dst}` AS "
+                    f"SELECT * FROM `{src}` FOR SYSTEM_TIME AS OF TIMESTAMP '{SNAPSHOT}'").result()
+            except Exception as e:
+                # A table first extracted AFTER the snapshot instant has no
+                # version to travel back to (raw_Part_v_Part_Group, added
+                # 2026-09-24). Master/lookup tables like that are copied as
+                # they are now — say so, since it breaks the one-instant rule.
+                if "SYSTEM_TIME" not in str(e) and "time travel" not in str(e).lower() \
+                        and "before" not in str(e).lower():
+                    raise
+                print(f"  ~ {t} did not exist at {SNAPSHOT}; copied as it is now")
+                copy_now = True
+        if copy_now:
             sb.client.copy_table(src, dst, job_config=bigquery.CopyJobConfig(
                 write_disposition="WRITE_TRUNCATE")).result()
-        else:
-            sb.client.query(
-                f"CREATE OR REPLACE TABLE `{dst}` AS "
-                f"SELECT * FROM `{src}` FOR SYSTEM_TIME AS OF TIMESTAMP '{SNAPSHOT}'").result()
         pred = LEGACY_INJECTOR_ROWS.get(t)
         if pred:
             sb.exec(f"DELETE FROM `{{ds}}.{t}` WHERE {pred}")

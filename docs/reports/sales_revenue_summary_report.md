@@ -19,8 +19,9 @@ This report was rebuilt the same day it was first written. The original version 
 
 ## Flags and open questions
 
+- **⚠ Fixed 2026-09-24 (upstream) — "Revenue by part group" was always one bar, "(no group)".** This view's own SQL is unchanged; the `part_group` it groups by comes from `shipping_revenue_report`, which joined the wrong, empty lookup (`Part_v_Part_Product_Group`) instead of `Part_v_Part_Group`. Fixed there on branch `dev-sandbox`, not deployed; the groups appear only after the next `terraform apply` + Sales Orders ETL run extracts `raw_Part_v_Part_Group`. See [`shipping_revenue_report.md`](shipping_revenue_report.md).
 - **The name is now slightly stale** — still says "sales_revenue" even though the source is Shipping. Kept the same name deliberately (replace in place, not a second dead view) — a rename is a cosmetic cleanup for later.
-- **Live-verified with real data**: September 2026, 1 shipment, 17,000 units, $25,500. Part group came back `(no group)` for that shipment — the shipped part doesn't have a `Part_Group_Key` assigned on this tenant yet, a real data-completeness gap on Plex's side, not a query bug.
+- **Live-verified with real data**: September 2026, 1 shipment, 17,000 units, $25,500. Part group came back `(no group)` for that shipment — at the time put down to a missing `Part_Group_Key`; corrected 2026-09-24, it was the wrong lookup table (see the fix above).
 - **`Sales_v_Shipper_Status.Shipped` uses `1 = true`**, not the `-1 = true` convention used elsewhere in this pipeline — confirmed by checking the real status rows before writing this, not assumed.
 
 ## More detail

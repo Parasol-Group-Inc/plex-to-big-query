@@ -122,6 +122,11 @@ extractions:
     filter: ""
     date_col: ""
 
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
+    filter: ""
+    date_col: ""
+
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
     filter: ""

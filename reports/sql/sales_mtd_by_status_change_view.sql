@@ -205,7 +205,7 @@ SELECT
 
   p.Part_No                                             AS part_no,
   p.Name                                                AS part_name,
-  pgrp.Part_Product_Group                               AS part_group,
+  pgrp.Part_Group                                       AS part_group,
 
   SAFE_CAST(rel.Quantity AS FLOAT64)                    AS qty_sold,
   COALESCE(lp.Price, bp.Price)                          AS price_ea,
@@ -252,8 +252,10 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pol.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)
+-- Part group name — Part_v_Part_Group, not the empty Part_v_Part_Product_Group
+-- this joined until 2026-09-24 (every row read NULL).
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 LEFT JOIN line_price lp
   ON SAFE_CAST(pol.PO_Line_Key AS INT64) = lp.PO_Line_Key

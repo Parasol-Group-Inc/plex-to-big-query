@@ -46,7 +46,7 @@ SELECT
   cust.Name                                             AS customer_name,
   p.Part_No                                             AS part_no,
   p.Name                                                AS part_name,
-  pgrp.Part_Product_Group                               AS part_group,
+  pgrp.Part_Group                                       AS part_group,
 
   SAFE_CAST(sl.Quantity AS FLOAT64)                     AS quantity_shipped,
   SAFE_CAST(sl.Price AS FLOAT64)                        AS price,
@@ -71,8 +71,12 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(sl.Part_Key AS INT64) = p.Part_Key
 
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)
+-- Part group name. Part_v_Part.Part_Group_Key belongs to Part_v_Part_Group
+-- (Capsule, Softgel, Label, ...), NOT Part_v_Part_Product_Group, which this
+-- joined until 2026-09-24 and which is empty on this tenant (test and prod),
+-- so every row read NULL -> one "(no group)" bar downstream.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 WHERE SAFE_CAST(ss.Shipped AS INT64) = 1
 

@@ -26,7 +26,7 @@
 --   Part_v_Customer_Part_Price → price per Customer_Part_Key + Breakpoint_Quantity
 --   Part_v_Part           → part master (Part_No, Name, product classification keys)
 --   Part_v_Part_Product_Type  → product type name
---   Part_v_Part_Product_Group → product group name
+--   Part_v_Part_Group     → part group name (Capsule, Label, ...), shown as product_group
 
 WITH
 
@@ -149,7 +149,7 @@ SELECT
   -- NOTE: Part_Product_Type_Key / Part_Product_Group_Key column names on
   -- Part_v_Part are assumed from standard Plex schema. Adjust if needed.
   ptype.Product_Type                                    AS product_type,
-  pgrp.Part_Product_Group                               AS product_group
+  pgrp.Part_Group                                       AS product_group
 
 FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
 
@@ -196,5 +196,8 @@ LEFT JOIN base_price bp
 -- Product type and group
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` ptype
   ON p.Product_Type_Key = ptype.Product_Type_Key
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON p.Part_Group_Key = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)
+-- product_group is Plex's Part GROUP: Part_v_Part.Part_Group_Key belongs to
+-- Part_v_Part_Group. Until 2026-09-24 this joined Part_v_Part_Product_Group,
+-- which is empty on this tenant, so product_group was always NULL.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)

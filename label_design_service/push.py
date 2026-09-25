@@ -33,6 +33,7 @@ Environment:
     GCP_PROJECT            voxdatalake
     BQ_DATASET             PlexTest | PlexProd
     MONDAY_BOARD_ID        target board
+    PLEX_WEB_HOST          Plex UI host for the part/PO links (default: by dataset)
     MONDAY_GROUP_TITLE     group new items land in (created if missing)   [New from Plex]
     MONDAY_API_KEY         token, direct (local runs) ...
     SECRET_MONDAY_API_KEY  ... or its Secret Manager name                 [monday-api-key]
@@ -45,6 +46,7 @@ import json
 import logging
 import os
 import sys
+import urllib.parse
 import uuid
 
 from google.cloud import bigquery
@@ -65,6 +67,9 @@ BOARD_ID = os.environ["MONDAY_BOARD_ID"]
 GROUP_TITLE = os.environ.get("MONDAY_GROUP_TITLE", "New from Plex")
 MAX_NEW_ITEMS = int(os.environ.get("MAX_NEW_ITEMS", "60"))
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0", "false", "False")
+# The browser host, not the ODBC one. Prod is the test host minus ".test".
+PLEX_WEB_HOST = os.environ.get("PLEX_WEB_HOST") or (
+    "vox.on.plex.com" if BQ_DATASET == "PlexProd" else "vox.test.on.plex.com")
 
 VIEW = "label_design_report"
 AUDIT_TABLE = "label_design_push_log"
@@ -127,6 +132,30 @@ def _label(field):
     return lambda r: {"label": str(r[field]).strip()} if (r.get(field) or "").strip() else None
 
 
+def _plex_part_url(r):
+    key = r.get("part_key")
+    if key is None:
+        return None
+    q = {"__sk": 5, "__sak": 2, "FromPartMenu": "True", "PartKey": key}
+    # Plex opens the part from PartKey alone; No/Revision are passed as the
+    # part menu itself does, when the part master row is there to supply them.
+    if r.get("part_no"):
+        q["PartNo"] = r["part_no"]
+        q["Revision"] = r.get("part_revision") or ""
+    url = f"https://{PLEX_WEB_HOST}/Engineering/Part/ViewForm?" + urllib.parse.urlencode(
+        q, quote_via=urllib.parse.quote)
+    text = " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(key)
+    return {"url": url, "text": text}
+
+
+def _plex_po_url(r):
+    key = r.get("po_key")
+    if key is None:
+        return None
+    url = f"https://{PLEX_WEB_HOST}/SalesAndCRM/OrderEntry/ViewOrderForm?POKey={key}"
+    return {"url": url, "text": f"SO {r.get('order_number') or key}"}
+
+
 def _reason_code(r):
     return {"label": REASON_CODE_LABELS[r["_reason_index"]]} if r.get("_reason_index") is not None else None
 
@@ -147,6 +176,8 @@ COLUMNS = [
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),
     ("LCR", "text", _text("_lcr")),
+    ("Plex Part URL", "link", _plex_part_url),
+    ("PO URL", "link", _plex_po_url),
 ]
 
 

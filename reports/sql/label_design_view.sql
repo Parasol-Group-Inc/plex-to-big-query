@@ -300,6 +300,14 @@ release_lines AS (
     -- what the Apps Script reads.
     ps.PO_Status                                  AS order_status,
 
+    -- Added 2026-09-25 — the parts of the two Plex links the push writes to
+    -- Monday ("Plex Part URL", "PO URL"). Only the keys and part number come
+    -- from here; label_design_service/push.py adds the per-environment host.
+    SAFE_CAST(po.PO_Key AS INT64)                 AS po_key,
+    SAFE_CAST(pol.Part_Key AS INT64)              AS part_key,
+    part.Part_No                                  AS part_no,
+    part.Revision                                 AS part_revision,
+
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
     -- collapses together; no aggregation needed beyond the plain passthrough.
@@ -341,6 +349,9 @@ release_lines AS (
 
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Customer_Part` AS cp
     ON SAFE_CAST(cp.Customer_Part_Key AS INT64) = SAFE_CAST(pol.Customer_Part_Key AS INT64)
+
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS part
+    ON SAFE_CAST(part.Part_Key AS INT64) = SAFE_CAST(pol.Part_Key AS INT64)
 
   LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
     ON SAFE_CAST(cust.Customer_No AS INT64) = SAFE_CAST(po.Customer_No AS INT64)
@@ -392,6 +403,10 @@ SELECT
   customer_phone,
   customer_part_description,
   order_status,
+  po_key,
+  part_key,
+  part_no,
+  part_revision,
   part_size,
   part_allergen,
   part_hazardous,

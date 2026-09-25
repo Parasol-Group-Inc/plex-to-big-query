@@ -60,6 +60,15 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Part master — added 2026-09-25 for the "Plex Part URL" Monday column,
+  # whose link needs Part_No and Revision alongside Part_Key. sales_orders
+  # already extracts this overnight; it is pulled again here for the same
+  # reason as the tables above (a part created this morning must be linkable).
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""

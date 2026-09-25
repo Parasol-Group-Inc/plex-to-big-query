@@ -9,7 +9,107 @@
 
 ---
 
-## UPDATE — 2026-09-16 (start here)
+## UPDATE — 2026-09-22 — read the Sep-21 fast follow first
+
+Two decisions from the 2026-09-21 Emilio/Jennilyn call change what gets built,
+and one of them partly undoes the attribute work that shipped the same day:
+**part attributes stay in Plex and are not going into Monday**, and
+**attributes will only be placed on "sevens" (label parts) while our queue
+carries "nines" (finished goods)** — so the attribute pivot can never match
+unless it hops through the BOM (`93… → 73…`, proven in `PlexProd`). The Monday
+write blocker also has a named cause at last: the account holds a **CRM**
+licence, not **Work Management**, which is why no permission change ever fixed
+it.
+
+Full write-up, with every figure checked against live data:
+[`SEP21_FAST_FOLLOW.md`](SEP21_FAST_FOLLOW.md).
+
+---
+
+## UPDATE — 2026-09-21 (start here)
+
+### The Plex attribute catalog doubled — Jennilyn added five more
+
+Read straight from `raw_Part_v_Attribute`, and **identical in PlexProd and
+PlexTest**, so this is real production configuration rather than test-tenant
+scratch work:
+
+| Key | Name | Assignments |
+|---|---|---|
+| 2383 | Size | 0 |
+| 6537 | Allergen | 14 |
+| 6538 | Hazardous | 14 |
+| 6770 | Certifications | 0 |
+| 7427 | **California PDP** | 0 *(new)* |
+| 7428 | **Prop 65 Requirement** | 0 *(new)* |
+| 7429 | **Trademark** | 0 *(new)* |
+| 7431 | **Bottle Material** | 0 *(new)* |
+| 7432 | Printing Material | 0 |
+| 7435 | **Material Classification** | 0 *(new)* |
+
+**Attribute keys are not stable.** `Printing Material` moved from `7427` to
+`7432`, and `7427` is now `California PDP`. The pivot survived this only
+because it joins on `Attribute_Name`, never on `Attribute_Key` — a key-based
+pivot would have silently started reporting California PDP as the printing
+material. **Keep it name-based**; never cache these keys anywhere.
+
+All ten have `Use_Value_Table = 1` except `Size`, i.e. controlled dropdowns,
+which is what the pass-through-untouched design already assumes.
+
+**`Bottle Material` now exists Plex-side.** That resolves the one attribute
+mapping there was a confident answer for: Ashley confirmed 2026-09-16 that
+Monday's Bottle Material (container — HDPE/PET/Glass) and Plex's Printing
+Material (label stock — white BOPP, metallic, laminated) are different
+concepts, and Plex now carries both as separate attributes. Monday's
+100%-hand-typed Bottle Material column finally has a real source. `Prop 65
+Requirement` also now exists, which bears on the pending "Prop 65 → Regulatory"
+rename — worth confirming with Jennilyn whether the Plex attribute is meant to
+feed that column before she finalises it.
+
+### All values are blank, and they were empty strings, not NULLs
+
+28 assignments (14 parts × Allergen + Hazardous), **every one an empty
+string** — verified against live BigQuery, not assumed:
+
+```
+Attribute_Key | Attribute_Name | cnt | n_null | n_empty | n_real
+         6537 | Allergen       |  14 |      0 |      14 |      0
+         6538 | Hazardous      |  14 |      0 |      14 |      0
+```
+
+That was a real defect. The pivot selected `pa.Value` raw, so every attribute
+column emitted `''` rather than `NULL` — which reads downstream as "filled in,
+but blank" and would have let the Monday push service overwrite a hand-entered
+value with an empty one. **Fixed**: every branch is now
+`NULLIF(TRIM(pa.Value), '')`, confirmed against live BigQuery to return `NULL`.
+
+Also note: the previously documented proof example (`part_allergen = "Yes"` on
+`Part_Key 11003458`) is **gone** — that part is no longer in the table at all,
+so the test data has been reloaded since 2026-09-16. There is currently no
+populated value anywhere to prove the pivot end-to-end against.
+
+### Built this session
+
+- `reports/sql/label_design_view.sql` — pivot rebuilt: `NULLIF(TRIM(...), '')`
+  on all branches, and all ten attributes exposed (five new columns:
+  `part_bottle_material`, `part_california_pdp`, `part_prop_65_requirement`,
+  `part_trademark`, `part_material_classification`). Dry-run validated against
+  live BigQuery.
+- `docs/reports/label_design_report.md` updated to match.
+
+**Not yet deployed** — needs `terraform apply` (SQL-only change; the view file
+is shared, so no prod/test double-edit, unlike `extractions:` lists).
+
+### Known gap
+
+`Part_v_Attribute_Value` — the table holding each dropdown's allowed options —
+**is not extracted at all**. Only two of Plex's four attribute tables are in
+BigQuery. Fine today, but required the moment you want to validate a value or
+pre-populate Monday dropdown options.
+
+---
+
+## UPDATE — 2026-09-16
 
 ### Terraform drift — RESOLVED same day, verified in prod
 
@@ -31,6 +131,10 @@ Attribute_Keys** as test's (`2383` Size, `6537` Allergen, `6538` Hazardous,
 `6770` Certifications) — these four are real production Plex configuration,
 not test-tenant fabrications. Only `Printing Material` (`7427`) exists in
 test so far, not yet promoted to prod.
+
+> ⚠ **Superseded 2026-09-21** — `Printing Material` is now key **`7432`**, not
+> `7427`; `7427` is now `California PDP`. Prod and test catalogs are identical
+> and both hold ten attributes. See the 2026-09-21 update at the top.
 
 ### The architecture pivot
 
@@ -126,6 +230,10 @@ existed. The real five, read directly rather than guessed again:
 | Hazardous | `part_hazardous` |
 | Certifications | `part_certifications` |
 | Printing Material | `part_printing_material` |
+
+> ⚠ **Superseded 2026-09-21** — there are now **ten** attributes, not five, and
+> `Part_Key 11003458` (the proof example cited just below) no longer exists in
+> the table. See the 2026-09-21 update at the top.
 
 **Verified against live BigQuery, twice** (wrong names, then corrected
 names) — the view recreates successfully both times, and a standalone proof

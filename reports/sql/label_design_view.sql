@@ -119,20 +119,52 @@ job_notes AS (
 -- in the meeting doesn't apply here — this is Plex's stable internal key
 -- either way).
 --
--- REAL ATTRIBUTE NAMES, confirmed 2026-09-16 by querying Jennilyn's own test
--- upload (`raw_Part_v_Attribute`) rather than guessed: Size, Allergen,
--- Hazardous, Certifications, Printing Material. The original build here
--- guessed 'Bottle Material' and 'Regulatory' — NEITHER exists — so all five
--- real ones are exposed below instead of re-guessing which two matter.
--- Which of these (if any) maps to which *Monday* column (e.g. does
--- "Printing Material" feed the existing Bottle Material dropdown? does
--- Prop 65 information live under "Hazardous" or "Certifications"?) is a
--- separate, later decision — not yet answered, and not needed to expose the
--- data itself.
+-- REAL ATTRIBUTE NAMES, read from `raw_Part_v_Attribute` rather than guessed.
+-- The original build here guessed 'Bottle Material' and 'Regulatory' and BOTH
+-- were wrong, so this pivot deliberately exposes every attribute Plex actually
+-- defines instead of pre-selecting the ones that look relevant.
 --
--- Most of her 28 test assignments still carry a blank Value (structure
--- created, values mostly not yet filled in) — the one populated example as
--- of this writing is Allergen = "Yes" on Part_Key 11003458.
+-- UPDATED 2026-09-21: Jennilyn added five more attributes since 2026-09-16,
+-- and they are in BOTH PlexProd and PlexTest (identical catalogs), so this is
+-- real production configuration, not test-tenant scratch work. Full catalog:
+--
+--   Key  | Name                    | Assignments as of 2026-09-21
+--   2383 | Size                    | 0
+--   6537 | Allergen                | 14
+--   6538 | Hazardous               | 14
+--   6770 | Certifications          | 0
+--   7427 | California PDP          | 0   (new)
+--   7428 | Prop 65 Requirement     | 0   (new)
+--   7429 | Trademark               | 0   (new)
+--   7431 | Bottle Material         | 0   (new)
+--   7432 | Printing Material       | 0
+--   7435 | Material Classification | 0   (new)
+--
+-- NOTE the key churn: 'Printing Material' MOVED from Attribute_Key 7427 to
+-- 7432, and 7427 is now 'California PDP'. That is exactly why this pivot joins
+-- on Attribute_Name and never on Attribute_Key -- a key-based pivot would have
+-- silently started reporting California PDP as the printing material. Keep it
+-- name-based.
+--
+-- All ten have `Use_Value_Table = 1` except Size, i.e. they are controlled
+-- dropdowns, which is what the pass-through-untouched design above assumes.
+--
+-- Which of these (if any) maps to which *Monday* column is still open and is
+-- NOT decided by exposing them here. Two data points that narrow it: Ashley
+-- confirmed 2026-09-16 that Monday's "Bottle Material" (container material:
+-- HDPE/PET/Glass) and Plex's "Printing Material" (label stock) are different
+-- concepts -- and Plex now has its own separate 'Bottle Material' attribute,
+-- so that mapping finally has a real source. The rest is pending Jennilyn's
+-- internal team meeting.
+--
+-- Values are currently ALL BLANK -- 28 assignments (14 parts x Allergen +
+-- Hazardous), every one an EMPTY STRING, not NULL (verified against live
+-- BigQuery 2026-09-21). Hence the NULLIF(TRIM(...), '') on every branch below:
+-- without it these columns emit '' rather than NULL, which reads downstream as
+-- "filled in, but blank" and would let the Monday push service overwrite a
+-- hand-entered value with an empty one. Note the previously-documented
+-- populated example (Allergen = "Yes" on Part_Key 11003458) is GONE -- that
+-- part is no longer in the table at all, so the data has been reloaded since.
 part_attribute_types AS (
   SELECT
     SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
@@ -149,11 +181,16 @@ part_attribute_types AS (
 part_attributes_pivoted AS (
   SELECT
     SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
-    MAX(CASE WHEN pt.Attribute_Name = 'Size'               THEN pa.Value END) AS part_size,
-    MAX(CASE WHEN pt.Attribute_Name = 'Allergen'           THEN pa.Value END) AS part_allergen,
-    MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'          THEN pa.Value END) AS part_hazardous,
-    MAX(CASE WHEN pt.Attribute_Name = 'Certifications'     THEN pa.Value END) AS part_certifications,
-    MAX(CASE WHEN pt.Attribute_Name = 'Printing Material'  THEN pa.Value END) AS part_printing_material
+    MAX(CASE WHEN pt.Attribute_Name = 'Size'                    THEN NULLIF(TRIM(pa.Value), '') END) AS part_size,
+    MAX(CASE WHEN pt.Attribute_Name = 'Allergen'                THEN NULLIF(TRIM(pa.Value), '') END) AS part_allergen,
+    MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'               THEN NULLIF(TRIM(pa.Value), '') END) AS part_hazardous,
+    MAX(CASE WHEN pt.Attribute_Name = 'Certifications'          THEN NULLIF(TRIM(pa.Value), '') END) AS part_certifications,
+    MAX(CASE WHEN pt.Attribute_Name = 'Printing Material'       THEN NULLIF(TRIM(pa.Value), '') END) AS part_printing_material,
+    MAX(CASE WHEN pt.Attribute_Name = 'Bottle Material'         THEN NULLIF(TRIM(pa.Value), '') END) AS part_bottle_material,
+    MAX(CASE WHEN pt.Attribute_Name = 'California PDP'          THEN NULLIF(TRIM(pa.Value), '') END) AS part_california_pdp,
+    MAX(CASE WHEN pt.Attribute_Name = 'Prop 65 Requirement'     THEN NULLIF(TRIM(pa.Value), '') END) AS part_prop_65_requirement,
+    MAX(CASE WHEN pt.Attribute_Name = 'Trademark'               THEN NULLIF(TRIM(pa.Value), '') END) AS part_trademark,
+    MAX(CASE WHEN pt.Attribute_Name = 'Material Classification' THEN NULLIF(TRIM(pa.Value), '') END) AS part_material_classification
   FROM `{gcp_project}.{dataset}.raw_Part_v_Part_Attribute` AS pa
   JOIN part_attribute_types AS pt
     ON pt.Attribute_Key = SAFE_CAST(pa.Attribute_Key AS INT64)
@@ -257,6 +294,11 @@ release_lines AS (
     pap.part_hazardous                             AS part_hazardous,
     pap.part_certifications                        AS part_certifications,
     pap.part_printing_material                     AS part_printing_material,
+    pap.part_bottle_material                       AS part_bottle_material,
+    pap.part_california_pdp                        AS part_california_pdp,
+    pap.part_prop_65_requirement                   AS part_prop_65_requirement,
+    pap.part_trademark                             AS part_trademark,
+    pap.part_material_classification               AS part_material_classification,
 
     -- Tie-breaker only — never surfaced. Keeps the QUALIFY below deterministic
     -- on the rare case where two releases for the same part share a Due_Date.
@@ -336,6 +378,11 @@ SELECT
   part_hazardous,
   part_certifications,
   part_printing_material,
+  part_bottle_material,
+  part_california_pdp,
+  part_prop_65_requirement,
+  part_trademark,
+  part_material_classification,
   COUNT(*) OVER (PARTITION BY order_number, customer_part_no)               AS release_count,
   CONCAT(CAST(order_number AS STRING), '|', IFNULL(customer_part_no, ''))   AS dedupe_key
 

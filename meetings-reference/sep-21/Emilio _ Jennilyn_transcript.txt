@@ -1,0 +1,188 @@
+Emilio Dominguez  00:00
+I saw that you put some attributes on complex, right? So they are being now extracted, or were they just already there? Because yeah, part attributes. Now I have this new extraction for part part attributes. Yeah, and I'm seeing. Let me just show you. So the the raw table it's part against part attribute, right, and there are 28 rows there. Just gathering the information, they resemble this. Right, so I don't know if it was your your doing, but they are there, right? And they will be.
+
+Speaker 1  01:54
+Those are all on Monday or in Plex.
+
+Emilio Dominguez  01:58
+Plex, yeah, Plex.
+
+Speaker 1  02:02
+Okay, and I think I think I'll double check that they decided today that um look that we want most of those to just stay in Plex.
+
+Emilio Dominguez  02:21
+We
+
+Speaker 1  02:22
+won't need to bring them in.
+
+Emilio Dominguez  02:26
+Right on.
+
+Speaker 1  02:42
+Wow. I'm trying to find the attributes because I want to see them. But I've started. on that already. Then I think maybe just the types have been created because I'm not seeing any part attributes yet.
+
+Emilio Dominguez  03:47
+Oh yeah, is this in test? Test, yeah, test. Because yeah, pulling from test, and let me just show you the raw raw Part attribute that is coming with the attribute name, attribute type. This is row part attribute. These are the ones there. The keys, also the customer.
+
+Speaker 1  04:38
+Yeah, I can see that the attributes exist.
+
+Emilio Dominguez  04:44
+Yeah. Then for the part attributes being joined, part. Part key. And the the thing that follows is also getting the part attribute value. Give me a second. Okay, so this is the email that you wrote about just how many of those, or what will the structure be for parsing that into Monday, right?
+
+Speaker 1  13:05
+Yeah, and I think what we're gonna do is we're gonna keep the part attributes out of Monday.
+
+Emilio Dominguez  13:27
+Like the same, yeah. Sorry to interrupt. Same regard of the same thought, but they go into Plex and check in.
+
+Speaker 1  13:39
+Yeah,
+
+Emilio Dominguez  13:40
+check in the order, right,
+
+Speaker 1  13:43
+right,
+
+Speaker 2  13:44
+right on.
+
+Emilio Dominguez  13:51
+Okay, I have a question on this on the seven level. What's seven level level against nine level?
+
+Speaker 1  14:00
+The part numbers, what they start at. So the label part numbers are sevens, and the finished good part numbers are nines.
+
+Emilio Dominguez  14:14
+Okay, nice. You enter something here that was kind of like a glossary or some no, it was documentation that you have, but that's just available to you, right? Complex because you had quite quite a few things there, structure and things like that, but like clicking on the gear button, and I I think it was documents or something like here. But those are something. Yeah, I will assume those are things that you have built as catalogs or reference points to the how you are getting data into right into Plex. The
+
+Speaker 1  15:19
+right now we're just Uploading it daily, we've added some keywords to our glossary, but yeah, not not everything.
+
+Emilio Dominguez  15:41
+Okay,
+
+Speaker 1  15:43
+but I guess for the Monday theme, it's good news in the sense that we don't need to worry about the attributes, and I'm gonna guess that they're gonna delete a bunch of these columns, like in the future.
+
+Emilio Dominguez  16:16
+Okay. Yeah, these are tests on my own board.
+
+Speaker 1  16:24
+Are you able to get the rep in there?
+
+Emilio Dominguez  16:27
+Yeah, it was a matter of getting the plexus and the category correct correctly. So yeah, this is JNC maze, and there are like nine or 12 sales representatives, but yeah, they are they are being fetched now. This is a test coming from the ETL extraction and dumping everything into my this this rudimentary board, trying to match what the most things match, like this Taylor Taylor watch, the label, the description, right? So Things like very manual things like design status are from them, but yeah, this was extracted. This is the query on what things we are getting, but it has this the attributes now. But I think that will be a matter of not having this structure and just trying to get the attribute value because not not every of this is going to be filled with each order, right? That's a matter of the attribute.
+
+Speaker 1  18:20
+Yeah, we don't. We won't need to get in all the attributes from that query. And the hard thing is too is the part numbers you're going to be bringing over are won't have these part attributes. We're only going to put them on the sevens, not the nines. So,
+
+Emilio Dominguez  18:50
+yeah, they must they must fetch that. Okay.
+
+Speaker 1  18:55
+Yeah. So there, we're just going to leave it, and they'll they'll have to come in.
+
+Emilio Dominguez  19:02
+Okay, Ryan. This is this. Yeah, right now they are not placing orders, right, on on Plex.
+
+Speaker 1  19:56
+Yeah. And we're gonna have it just pushed to that landing test board, right?
+
+Emilio Dominguez  20:07
+This one I had problems with the oh, where is the Lexingport? that you have this blank landing page. That's the one you gave me permissions to. This the you Because I I don't recognize this work workspace because I was here on label design and there was a a board here that was legging board.
+
+Speaker 1  20:55
+I think somebody deleted it. Yeah, see it there anymore.
+
+Emilio Dominguez  20:59
+Yeah, but I didn't have the the capabilities to even write on it. Even when you you did the the workspace edition, I couldn't. I couldn't. What is happening maybe is about the seat, the license seat that it may not have the capabilities for the API to write to the to that one because it was quite strange. But for this blank blank landing page, is that my workspace or do you do you see that also that on because I don't know if I can do a board here and create a board. Yeah, Seems like I'm able to to do that, but I don't know if they could see this one. This this blank blank landing page thingy, and let me give you the board. To check if you have permissions, or are
+
+Speaker 1  22:40
+you going to give me permissions to that
+
+Emilio Dominguez  22:43
+one? Yeah, because it seems like yeah. What I want to just be sure is that could be one for them, and that you are able to see it correctly, right? Because I don't have the same restrictions as the other ones, as the other ones that show you're not the owner or things like that. So just let me know if you can access that, please.
+
+Speaker 1  23:17
+Yeah, let's see. The
+
+Emilio Dominguez  23:38
+workspace is called Lang Landing Page and.
+
+Speaker 1  23:43
+Okay. Yeah, I'm in there.
+
+Emilio Dominguez  23:48
+Yeah, I think Jennette maybe created that one, but yeah, this is the board, and yeah, I can just dump data there that resembles the majority of things that are on the other one, except for the things that we have discussed and drop downs and things that they will need to fetch, right?
+
+Speaker 1  24:24
+Yeah, I mean, you could also you could make a board in here if you wanted, and I could just make sure that they know not to delete it.
+
+Emilio Dominguez  24:34
+Yeah, but that's the tricky part because yeah,
+
+Speaker 1  24:38
+it's the product is so. This is the you have a work management license, not a license. Is that? Let me go back.
+
+Emilio Dominguez  24:52
+Yeah, I really don't know what because this is this is Jeanette's login. He
+
+Speaker 1  24:58
+yeah she
+
+Emilio Dominguez  24:59
+has shared that with me, but I don't know if it has the full license.
+
+Speaker 1  25:08
+Let me look real quick. Trying to get it to load the list of everybody here. All right. Is it Jeanette's or is it marketing?
+
+Emilio Dominguez  26:05
+No, this is Jeanette. But let me just confirm. It has
+
+Speaker 1  26:13
+CRM, but not work management. Okay.
+
+Emilio Dominguez  26:19
+Yeah.
+
+Speaker 1  26:20
+We're gonna have to get you the other one,
+
+Emilio Dominguez  26:27
+and that's paid, right?
+
+Speaker 1  26:30
+Yeah, so they're just different products, and
+
+Emilio Dominguez  26:38
+yeah, because I I couldn't write to that one, to this one, like, well, I didn't want to, but I wanted to write to the Plex import one, but couldn't because this this is like a production one, so.
+
+Speaker 1  27:49
+Okay, we'll get that changed for you.
+
+Emilio Dominguez  27:55
+Right on, thank you. All right. So I guess we only have to wait for some orders there, there right.
+
+Speaker 1  28:44
+Yeah, there should be some. Let me make sure there should be test data in there to pull later. If we, if you ever need test data, please feel free to just go ahead and message Ashley too, and she'll make some or have her team make some.
+
+Emilio Dominguez  29:11
+All right. Yeah, that will be good.
+
+Speaker 1  29:16
+Um, because she's yeah, she's gonna be the one working through that,
+
+Emilio Dominguez  29:28
+Brandon.
+
+Speaker 1  29:44
+Is the widget ready for the little web app widget ready?
+
+Emilio Dominguez  29:53
+Most of it getting into the safety incidents. I was working on the goals to bring the the sales representatives, so that spending, right? On which one is going to be applied to? So this one it says company wide for now, but it needs to bring From BigQuery, the ones that are already there, and safety incidents is the same, the same form or the same type of data that was on the on the spreadsheet, saving into that it has this tab for turnaround standards. That is static value there on on the spreadsheet, and the question for this is also like effective from what type of date should this be placed? But that's a matter of maybe you or the one that the person that is going to get this data, and we talked about the part codes. So these part codes, this needs to go away, and just leave turnaround safety incidents and goals.
+
+
+Transcribed by https://otter.ai

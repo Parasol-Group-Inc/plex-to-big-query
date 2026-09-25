@@ -43,31 +43,52 @@ list would miss exactly the new orders it exists to surface.
 
 ## Flags and open questions
 
-- **Five part-level columns, added 2026-09-16, verified end-to-end against
-  Jennilyn's real test data.** `part_size`, `part_allergen`, `part_hazardous`,
-  `part_certifications`, `part_printing_material` pull from Plex's generic
-  Part Attribute system, keyed on `Part_Key` (the underlying Plex part, not
-  the customer-specific part number). Confirmed with Jennilyn: one value per
-  attribute per part — a need for several flags at once (e.g. Prop 65 *and*
-  Organic) is handled by Plex's own dropdown having pre-defined combined
-  entries ("Prop 65 + Organic") as a single value, passed through untouched
-  rather than parsed.
+- **Ten part-level columns**, pulled from Plex's generic Part Attribute
+  system and keyed on `Part_Key` (the underlying Plex part, not the
+  customer-specific part number):
 
-  The build originally guessed at two attribute names ('Bottle Material',
-  'Regulatory') before any real data existed — **both were wrong.** Once
-  Jennilyn's test upload landed (5 attributes, 28 part assignments), the real
-  names were queried directly rather than guessed again, and the pivot
-  rebuilt around all five. Verified with a standalone proof query against her
-  one currently-populated example: `part_allergen = "Yes"` on `Part_Key
-  11003458` comes through correctly.
+  | Plex attribute | Column | Values populated? |
+  |---|---|---|
+  | Size | `part_size` | no |
+  | Allergen | `part_allergen` | no (14 parts assigned, all blank) |
+  | Hazardous | `part_hazardous` | no (14 parts assigned, all blank) |
+  | Certifications | `part_certifications` | no |
+  | Printing Material | `part_printing_material` | no |
+  | Bottle Material | `part_bottle_material` | no |
+  | California PDP | `part_california_pdp` | no |
+  | Prop 65 Requirement | `part_prop_65_requirement` | no |
+  | Trademark | `part_trademark` | no |
+  | Material Classification | `part_material_classification` | no |
 
-  **Still open, not blocking:** which of these five (if any) maps to which
-  *Monday* column — e.g. does "Printing Material" feed the existing Bottle
-  Material dropdown? does Prop 65 information belong under "Hazardous" or
-  "Certifications"? Most of her 28 test rows still carry a blank `Value`, so
-  there isn't enough populated data yet to infer this from content — it needs
-  a direct answer once she's filled in more examples. Not wired to any Monday
-  push yet either way.
+  Confirmed with Jennilyn: one value per attribute per part — a need for
+  several flags at once (e.g. Prop 65 *and* Organic) is handled by Plex's own
+  dropdown having pre-defined combined entries ("Prop 65 + Organic") as a
+  single value, passed through untouched rather than parsed.
+
+  **The list grew from five to ten on 2026-09-21** — Jennilyn added California
+  PDP, Prop 65 Requirement, Trademark, Bottle Material and Material
+  Classification in Plex. They are present in **both** PlexProd and PlexTest
+  with identical catalogs, so this is real production configuration, not
+  test-tenant scratch work. All ten are exposed here rather than pre-selecting
+  the ones that look relevant: the build originally *guessed* at two attribute
+  names ('Bottle Material', 'Regulatory') before any real data existed and both
+  were wrong, so names are now always read from Plex, never assumed.
+
+  **Every value is currently blank.** 28 assignments exist (14 parts ×
+  Allergen + Hazardous) and all 28 carry an empty `Value` — the structure has
+  been set up in Plex but nobody has filled anything in. The previously
+  documented populated example (`part_allergen = "Yes"` on `Part_Key
+  11003458`) is gone; that part is no longer in the table, so the data was
+  reloaded at some point. **All ten columns therefore read `NULL` today.**
+
+  **Still open, not blocking:** which of these maps to which *Monday* column.
+  Ashley confirmed 2026-09-16 that Monday's "Bottle Material" (the container —
+  HDPE/PET/Glass) and Plex's "Printing Material" (label stock — white BOPP,
+  metallic, laminated) are genuinely different concepts; Plex now carries its
+  own separate Bottle Material attribute, so that one mapping finally has a
+  real source. The rest is pending Jennilyn's internal team meeting, and she
+  has separately signalled that bottle/label size probably don't need a Monday
+  column at all. Not wired to any Monday push yet either way.
 
 - **Two sales reps ship, not one.** Plex holds a primary and a secondary rep
   and nobody has ever stated which one Vox calls the BDM, so both are exposed

@@ -14,6 +14,42 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (deploy) - dev-sandbox merged to main; a Label Design rollback found in prod
+
+### Found - prod has been running the pre-fix Label Design view since 2026-09-23 00:18 UTC
+- **What was supposed to be live:** `80c6431` shipped the part-attribute
+  pivot fix (`NULLIF(TRIM(pa.Value), '')` on all ten attributes) to prod on
+  2026-09-22 from `dev-label-design`.
+- **What happened:** an apply from `dev-scorecard` that evening, a branch
+  that never had the commit, rewrote `gs://…/sql/label_design_view.sql` with
+  the old view.
+- **Evidence:** the object's update time is 2026-09-23 00:18 UTC. It matches
+  `dev-scorecard`'s copy byte for byte, and has 0 of the fix's 10 `NULLIF`
+  branches.
+- **Why nothing caught it:** the view still builds; it just emits `''`
+  instead of NULL again.
+- **NOT fixed by this deploy.** Merging the Label Design commits into `main`
+  is a decision for that workstream. Until it happens, every apply from
+  `main` keeps the old view. `2eff172` (the push job) must not go with it
+  until its secret version and image exist.
+
+### Deploy - `main` = `dev-sandbox` (merge `3de2121`)
+`terraform plan` from `main`: 0 to add, 30 to change, 0 to destroy.
+- **22 are real content changes:** the view fixes dated 2026-09-24 above,
+  plus both `sales_orders` configs, which gain the `Part_v_Part_Group`
+  extraction.
+- **8 are line-ending only:** the Label Design, Part On-Hand and Quality NC
+  configs, and two views. GCS holds a mix of LF and CRLF uploads. Each
+  object was verified by downloading it and comparing with `\r\n`
+  normalised; the check is a short Python loop over `terraform plan`'s
+  object list, comparing `gcloud storage cp` output with each resource's
+  `source`.
+
+### Docs
+Status notes added to `reports-list/{production,sales,quality}.md` and the
+four `spreadsheets/*_daily_report.md` trackers. CLAUDE.md "Known friction"
+now records the cross-branch rollback and the line-ending plan noise.
+
 ## 2026-09-24 (scorecard) - Fixed: inventory value, part groups, daily usage, cycle count, open caps
 
 ### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)

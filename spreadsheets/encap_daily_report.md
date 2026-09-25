@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Encap Scheduling / Planning
 - **Departments:** Production, Planning
-- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), promoted to prod GCS config 2026-08-22, 0 rows — `encap_daily_report` (`reports/work_orders.yaml`)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), promoted to prod GCS config 2026-08-22, 0 rows — `encap_daily_report` (`reports/work_orders.yaml`) · **2026-09-24:** scrap was always 0 (`Rejected = -1` test; real Plex writes 1) — fixed to `!= 0`
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **worst fit of the 4 Daily Reports, see verdict below**
 
 ## What it is

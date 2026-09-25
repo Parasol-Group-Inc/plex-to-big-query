@@ -1,11 +1,11 @@
-// Vox Scorecard: ETL views, manual-data app, Migration Board.
-// Opens ../ptbq-scorecard, the git worktree bound to `dev-scorecard`. Each project has its own
+// Scorecard Sandbox: the ScorecardSandbox dataset build and the fixes it finds.
+// Opens ../ptbq-sandbox, the git worktree bound to `dev-sandbox`. Each project has its own
 // folder so two sessions can never share a working tree (CONTRIBUTING.md).
 {
 	"folders": [
 		{
-			"name": "Vox Scorecard  [dev-scorecard]",
-			"path": "../ptbq-scorecard"
+			"name": "Scorecard Sandbox  [dev-sandbox]",
+			"path": "../ptbq-sandbox"
 		}
 	],
 	"settings": {
@@ -15,8 +15,7 @@
 			"deploy/label_design_sync": true,
 			"deploy/label_design_trigger": true,
 			"meetings-reference/label-design": true,
-			"scripts/scorecard_sandbox": true,
-			"docs/SCORECARD_SANDBOX_FINDINGS.md": true
+			"deploy/manual_data_app": true
 		},
 		"search.exclude": {
 			"label-design": true,
@@ -24,12 +23,11 @@
 			"deploy/label_design_sync": true,
 			"deploy/label_design_trigger": true,
 			"meetings-reference/label-design": true,
-			"scripts/scorecard_sandbox": true,
-			"docs/SCORECARD_SANDBOX_FINDINGS.md": true
+			"deploy/manual_data_app": true
 		},
-		"window.title": "Vox Scorecard [dev-scorecard] \u2014 ${activeEditorShort}",
+		"window.title": "Scorecard Sandbox [dev-sandbox] \u2014 ${activeEditorShort}",
 		"workbench.colorCustomizations": {
-			"titleBar.activeBackground": "#1f6f43",
+			"titleBar.activeBackground": "#7a4a00",
 			"titleBar.activeForeground": "#ffffff"
 		},
 		"git.branchProtection": [

@@ -57,38 +57,20 @@ technical enforces that: `terraform apply` and `gcloud builds submit` both
 deploy whatever's on local disk, regardless of branch. Work happens on one
 of three long-running branches instead of `main` directly:
 
-| Branch | For | VS Code workspace |
-|---|---|---|
-| `dev` | Shared pipeline code — `main.py`, `Dockerfile`, `requirements.txt`, `terraform/main.tf` structure, cross-cutting `docs/` | either |
-| `dev-label-design` | `label-design/`, `label_design_service/`, `reports/label_design*.yaml`, `deploy/label_design_sync/` | `label-design.code-workspace` |
-| `dev-scorecard` | `score-card-reference/`, `deploy/manual_data_app/`, scorecard-facing report YAMLs/views | `scorecard.code-workspace` |
+| Project | Branch | Folder | Workspace |
+|---|---|---|---|
+| Deploy only | `main` | `plex-to-big-query` | `main-deploy.code-workspace` |
+| Vox Scorecard | `dev-scorecard` | `ptbq-scorecard` | `scorecard.code-workspace` |
+| Scorecard Sandbox | `dev-sandbox` | `ptbq-sandbox` | `sandbox-scorecard.code-workspace` |
+| Label Design | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` |
+| Shared tooling | `dev` | `ptbq-dev` | `dev-shared.code-workspace` |
 
-**Example — a `dev` change reaching `main` via PR:**
-
-```bash
-git checkout dev
-git pull
-# ...make the change, commit...
-git push origin dev
-gh pr create --base main --head dev --title "..." --body "..."
-# review, then merge (gh pr merge, or the GitHub UI)
-
-git checkout main
-git pull
-./scripts/deploy_preflight.sh   # refuses unless on main with a clean tree
-# then terraform apply / gcloud builds submit, as usual
-
-git checkout dev
-git merge main                  # re-sync so dev doesn't drift from what's live
-```
-
-Same shape for `dev-label-design` and `dev-scorecard` — only the branch
-name changes. **Merge to `main` often, not in batches**: these three
-branches don't merge into each other or get deleted, so a long-lived
-unmerged branch drifts from shared files (`main.py`, `terraform/main.tf`)
-changing elsewhere, turning a small fix into a real conflict later. Full
-detail, including why these are long-running branches instead of
-short-lived topic branches: [CONTRIBUTING.md](CONTRIBUTING.md).
+Each project has **its own folder** (a git worktree bound to its branch), and
+**versioned hooks plus a Terraform guard** block the mistakes that happened on
+2026-09-24: wrong-branch commits, cross-project commits, and applies from
+anywhere but `main`. Deploy with **`./scripts/deploy.sh`** from the primary
+folder. Setup, every lock and its override, and the full change → main →
+deploy flow: [CONTRIBUTING.md](CONTRIBUTING.md#branches-folders-and-locks--main-is-prod-work-happens-on-dev).
 
 ---
 

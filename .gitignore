@@ -60,3 +60,7 @@ assets/Copy of Design in Monday- NEW - historical.csv
 # the OS temp dir, never the repo -- this pattern is only a safety net for
 # the rare case --out-dir is pointed inside the repo by mistake.
 monday_board_snapshot_*.csv
+
+# scripts/deploy.sh plan artifacts (it deletes them on exit; never commit a plan)
+terraform/deploy.tfplan
+terraform/deploy.plan.json

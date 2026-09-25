@@ -7,14 +7,18 @@ hand, upload to Monday). **Not related to the Vox Nutrition scorecard work**
 this repo otherwise tracks — this folder exists so the two don't blend
 together.
 
-> **Mid-pivot as of 2026-09-16**: the Google Sheet is being dropped from this
-> flow entirely, replaced by a standalone service comparing BigQuery directly
-> against the Monday board. **For the actual current status — what's built,
-> what's verified, what's still blocked — see
-> [`STATUS.md`](STATUS.md)
-> first, before anything else on this page.** Most of this README still
-> describes the Sheet-based flow and hasn't been rewritten for the new
-> architecture yet.
+> **Where it stands (2026-09-25).** The Google Sheet is being dropped from
+> the flow.
+> - **Replacement:** `label_design_service/push.py` compares BigQuery
+>   directly with the Monday board. It is built and verified against the
+>   "Plex Import" board, but not yet scheduled in prod: its terraform waits
+>   for a Monday API key secret version and a rebuilt image.
+> - **Refreshing on demand:** `deploy/label_design_trigger/` is a one-button
+>   web app that runs the ETL (test job first).
+> - **Still in use until the push service ships:** the Sheet-based Apps
+>   Script (`deploy/label_design_sync/`).
+>
+> For what's built, verified and blocked, read [`STATUS.md`](STATUS.md) first.
 
 This page is a map, not a copy. The working files live where the rest of the
 pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
@@ -29,7 +33,10 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 | What the Monday board's columns mean | [`monday_board_guide.md`](monday_board_guide.md) |
 | The board's real column ids + full option lists | [`monday_board_catalog.md`](monday_board_catalog.md) |
 | The business-facing report doc | [`docs/reports/label_design_report.md`](../docs/reports/label_design_report.md) |
-| The technical design of the Apps Script | [`deploy/label_design_sync/README.md`](../deploy/label_design_sync/README.md) |
+| The technical design of the Sheet-based Apps Script (being retired) | [`deploy/label_design_sync/README.md`](../deploy/label_design_sync/README.md) |
+| The Plex → Monday push service (replacing the Sheet) | [`label_design_service/push.py`](../label_design_service/push.py) docstring |
+| Run the ETL on demand (web app) | [`deploy/label_design_trigger/README.md`](../deploy/label_design_trigger/README.md) |
+| How to work on this project: its folder, branch, hooks, deploy | [`CONTRIBUTING.md`](../CONTRIBUTING.md): folder `ptbq-label-design`, branch `dev-label-design` |
 
 ## How the data flows
 
@@ -38,12 +45,11 @@ Plex ERP
   │  (Cloud Run job: plex-etl-label-design, 09:30 / 13:30 Mountain, every day)
   ▼
 BigQuery — label_design_report view
-  │  (Apps Script: reads BigQuery, dedupes, writes new rows)
-  ▼
-Google Sheet — MONDAY tab (reviewable) / historical tab (append-only archive)
-  │  (Apps Script: pushes to Monday, only once a person has reviewed)
-  ▼
-Monday.com — "Design & QA" board (18395121955)
+  │  (also on demand: deploy/label_design_trigger web app)
+  ├──── TODAY: Apps Script → Google Sheet (MONDAY tab, reviewed) → Monday "Design & QA" (18395121955)
+  │
+  └──── REPLACING IT: label_design_service/push.py (Cloud Run job) → Monday "Plex Import" (18432111755)
+             dedupes by LCR hash + an audit table; no Sheet in the middle
 ```
 
 ## Where everything actually lives

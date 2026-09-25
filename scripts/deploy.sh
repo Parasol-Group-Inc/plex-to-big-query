@@ -26,6 +26,10 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
 fi
 
 cd terraform
+# Remove the plan files however this script ends — Ctrl+C at the prompt
+# included. Left behind, they make the tree dirty and the deploy guard then
+# refuses every later plan (happened 2026-09-25).
+trap 'rm -f deploy.tfplan deploy.plan.json' EXIT
 terraform plan -var-file=terraform.tfvars -out=deploy.tfplan -no-color | tail -3
 terraform show -json deploy.tfplan > deploy.plan.json
 set +e
@@ -39,18 +43,17 @@ print(sum(1 for r in p.get("resource_changes", []) if r["change"]["actions"] not
 PY
 )
 if [ "$content" = "0" ]; then
-  echo "Nothing to deploy."; rm -f deploy.tfplan deploy.plan.json; exit 0
+  echo "Nothing to deploy."; exit 0
 fi
 [ "$review" = "2" ] && echo -e "\n⚠ This plan DESTROYS or REPLACES resources. Read them above before confirming."
 
 echo
 read -r -p "Type the total number of resource changes ($content) to apply exactly this plan: " answer
 if [ "$answer" != "$content" ]; then
-  echo "Not confirmed — nothing applied."; rm -f deploy.tfplan deploy.plan.json; exit 1
+  echo "Not confirmed — nothing applied."; exit 1
 fi
 
 terraform apply deploy.tfplan
-rm -f deploy.tfplan deploy.plan.json
 
 tag="deploy/$(date -u +%Y-%m-%dT%H%MZ)"
 git tag -a "$tag" -m "terraform apply of $(git rev-parse --short HEAD) — $content resource change(s)"

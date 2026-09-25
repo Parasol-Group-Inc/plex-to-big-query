@@ -10,6 +10,8 @@ onto what's actually buildable from Plex.
 This repo tracks its own state obsessively — read these before assuming
 anything is undocumented or before re-deriving status from scratch:
 
+- **`docs/OPEN_ITEMS.md`** — every open item across all projects, with owner
+  and next step. **Read it first when resuming.** Delete items as they close.
 - **`CHANGELOG.md`** — top entries are the most recent, dated (not
   versioned). Every deploy/behavior change gets an entry here.
 - **`reports-list/*.md`** — company-wide report inventory, one file per

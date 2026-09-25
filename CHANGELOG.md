@@ -14,6 +14,34 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
+
+### Added
+- **`docs/OPEN_ITEMS.md`:** every open item across Deploy, Scorecard and
+  Label Design, with owner and next step. Linked from the README and
+  CLAUDE.md. Items are deleted when they close; the history stays in this
+  file.
+
+### Fixed
+- **`scripts/deploy.sh` left `deploy.tfplan` / `deploy.plan.json` behind**
+  when it was stopped at the confirmation prompt. The tree then stayed dirty,
+  so the deploy guard refused every later plan (seen 2026-09-25, when a run
+  was declined).
+  - A `trap … EXIT` now removes both however the script ends.
+  - Both files are gitignored.
+  - Nothing had been applied by that run: no `deploy/` tag exists.
+
+### Found - what the next deploy proposes
+PR #3 brought `2eff172` into `main`, so a plan now shows **3 to add, 3 to
+change**:
+- **added:** the `monday-api-key` secret, plus the
+  `plex-etl-label-design-push-test` job and scheduler;
+- **changed:** `label_design_view.sql` (the BDM sales-rep fields), plus two
+  comment-only SQL files.
+
+The scheduled push job fails until its secret version and a new image
+exist. That decision is `docs/OPEN_ITEMS.md` D1 / L1.
+
 ## 2026-09-25 (dev) - Terraform lock file records the deploy guard's provider
 
 `terraform/.terraform.lock.hcl` gains `hashicorp/external` 2.4.2, the

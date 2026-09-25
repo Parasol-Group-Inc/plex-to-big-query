@@ -5,7 +5,8 @@ terraform/terraform.tfvars
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform/
-terraform/.terraform.lock.hcl
+# terraform/.terraform.lock.hcl is COMMITTED on purpose (pins provider versions
+# for everyone); it was listed here but tracked since the first apply anyway.
 
 # Python bytecode
 __pycache__/

@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev) - Terraform lock file records the deploy guard's provider
+
+`terraform/.terraform.lock.hcl` gains `hashicorp/external` 2.4.2, the
+provider behind `data "external" "deploy_guard"`. `hashicorp/google` is
+unchanged at 5.45.2.
+
+The file had been tracked since the first apply, but `.gitignore` also
+listed it. That made it look disposable, so any `terraform init` left the
+primary folder dirty and the deploy guard refused. It is now committed on
+purpose, and the misleading ignore line is replaced with a note.
+
 ## 2026-09-25 (docs) - Documentation reviewed end to end for the new workflow
 
 A read-only audit of every doc in the repo (verdicts per file) drove the

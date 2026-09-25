@@ -1,5 +1,7 @@
 # Vox Scorecard → Plex/BigQuery Readiness Map
 
+> **Superseded (2026-09-25)** by the [Vox Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9), generated from `scripts/board/board_data.py`. This map is the original 2026-09-04 planning record: its "not yet deployed" notes, the goals mechanism it cites (`deploy/goals_sheet_to_bigquery.gs`, deleted 2026-09-22) and its deploy commands are out of date. For how each view is built today, see `docs/reports/`.
+
 ## Goals resolved — 2026-09-04: every "% to Goal" tile is now buildable
 
 The longest-standing gap on this map is closed. Goals were never a Plex

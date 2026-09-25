@@ -1,4 +1,6 @@
-# Sep 14 brief and pending items
+# Label Design — status
+
+*(This file began as the 2026-09-14 brief; newest updates first.)*
 
 > **⚠ READ THIS SECTION FIRST.** Everything below "## UPDATE — 2026-09-16" is
 > the original 2026-09-14 brief, kept for history. Large parts of it are

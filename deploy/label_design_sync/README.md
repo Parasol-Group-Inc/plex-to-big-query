@@ -1,5 +1,7 @@
 # Label Design sync — BigQuery → Sheet → Monday
 
+> **Being retired (2026-09-25).** This describes the Sheet-based flow, which the push service (`label_design_service/push.py`) replaces once it is scheduled in prod. It stays accurate for the Apps Script that is still live until then. Current status: [`label-design/STATUS.md`](../../label-design/STATUS.md).
+
 > **Looking for the plain-English "how do I use the two buttons" guide
 > instead?** See [TEAM_GUIDE.md](./TEAM_GUIDE.md). This document is the
 > technical design/reference.

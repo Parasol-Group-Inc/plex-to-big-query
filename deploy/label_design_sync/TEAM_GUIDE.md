@@ -1,5 +1,7 @@
 # Label Design queue — how to use it (team guide)
 
+> **Being retired (2026-09-25).** This describes the Sheet-based flow, which the push service (`label_design_service/push.py`) replaces once it is scheduled in prod. It stays accurate for the Apps Script that is still live until then. Current status: [`label-design/STATUS.md`](../../label-design/STATUS.md).
+
 This is the plain-English version. For the technical design, see
 [README.md](./README.md) in this same folder.
 

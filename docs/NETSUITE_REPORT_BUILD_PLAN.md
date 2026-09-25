@@ -1,5 +1,7 @@
 # NetSuite → Plex Report Build Plan
 
+> **Historical build log.** The reports it planned are built and tracked in `reports-list/`; kept for the reasoning behind each decision. Current status: [`reports-list/REPORTS_LIST_CATALOG.md`](../reports-list/REPORTS_LIST_CATALOG.md).
+
 Scope: the 7 reports flagged **High** confidence (exact/near-exact Plex name
 match) in [`mapping/netsuite-report-mapping.md`](../mapping/netsuite-report-mapping.md#patterns-worth-noting-for-the-one-by-one-pass)
 — #15, #29, #73, #74, #75, #76, #77. Goal: make each available as a

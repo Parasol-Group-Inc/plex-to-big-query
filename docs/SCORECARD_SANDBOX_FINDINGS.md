@@ -15,7 +15,7 @@ it was written down.
 | Symbol | Meaning |
 |---|---|
 | ✅ | Works on the deployed SQL. |
-| 🔧 | Was broken; **fixed in `reports/sql/` on branch `dev-sandbox` (2026-09-24), not yet deployed** — reaches prod on the next `terraform apply` after merge. |
+| 🔧 | Was broken; **fixed and deployed** (`terraform apply` from `main`, 2026-09-25 01:10 UTC). Each prod view switches to the fixed SQL on its pipeline's next scheduled run. |
 | 🏗 | The view needs rebuilding. |
 | ❓ | Needs a decision or data from someone outside this team. |
 | ⛔ | No Plex source, by design. |
@@ -58,10 +58,12 @@ it was written down.
 
 ## View bugs
 
-**1–3 are fixed in `reports/sql/`** (branch `dev-sandbox`, 2026-09-24),
-verified in the sandbox and compiled against real PlexTest data. They reach
-production on the next `terraform apply` after merge — until then prod still
-runs the broken versions.
+**Every fix below is deployed** (`terraform apply` from `main`, 2026-09-25
+01:10 UTC) and was verified on real PlexTest data after the test runs. Prod
+views switch over on each pipeline's next scheduled run: Work Orders at
+01:20 UTC the same night, Quality and Inventory from 02:20 UTC, and Sales
+Orders — which also brings the new `Part_v_Part_Group` extraction — at its
+next 01:00 UTC run.
 
 **1. The sales rep comes from a table Vox doesn't use.**
 - **Affects:** `sales_mtd_by_status_change_view.sql` (rep1/rep2),
@@ -107,7 +109,7 @@ runs the broken versions.
   "total inventory value" comes to about $77 for the whole building. It also
   adds every operation's cost for a part, and groups by the snapshot's
   `Cost_Model_Key`, which is NULL. The cost model is on the history rows.
-- **Fix (🔧 on `dev-sandbox` 2026-09-24, not deployed):** value = on-hand
+- **Fix (🔧 deployed 2026-09-25):** value = on-hand
   quantity (`part_on_hand_inventory_report`) × the part's per-unit cost at
   the snapshot. That cost is the sum of the two cost sub-types at **one**
   operation: the highest-costed operation from the part's latest cost change.
@@ -132,8 +134,7 @@ runs the broken versions.
 - **What's wrong:** it joins the classic `Quality_v_Problem`, which is
   permanently empty. Vox's NCs live in `Quality_v_Problem_2`, the UX screen's
   table, the same trap the Quality reports fell into before 2026-09-22.
-- **Fix:** read `Quality_v_Problem_2`. **Fixed in `reports/sql/` on
-  `dev-sandbox` (2026-09-24), not yet deployed.** The link table's
+- **Fix:** read `Quality_v_Problem_2`. **Fixed 2026-09-24, deployed 2026-09-25.** The link table's
   `Problem_Key` is Problem_2's own key: the one real link (problem 117294)
   resolves to NC #21. Sandbox: deviations with an NC went from 0 of 151 to 49.
   The view also gained `deviation_month` (by add date).
@@ -144,21 +145,20 @@ runs the broken versions.
 
 **6. Smaller:**
 - **TAT** used `DATE_DIFF(DAY)`, which is calendar days
-  (`quality_turnaround_time_view.sql:132-136`). **Fixed on `dev-sandbox`
-  (2026-09-24), not deployed:** work-day columns for both clocks, and
+  (`quality_turnaround_time_view.sql:132-136`). **Fixed 2026-09-24,
+  deployed 2026-09-25:** work-day columns for both clocks, and
   met/missed now uses them. Mon–Fri only; there is no holiday table. Sandbox
   misses fell 31 → 6 (Performance) and 95 → 73 (Bonus).
 - **Average daily usage** divided the month in progress by the full month
-  (`inventory_avg_daily_usage_view.sql:26-29`). **Fixed on `dev-sandbox`
-  (2026-09-24), not deployed:** the current month divides by days elapsed
+  (`inventory_avg_daily_usage_view.sql:26-29`). **Fixed 2026-09-24,
+  deployed 2026-09-25:** the current month divides by days elapsed
   through today (today included, the run-rate tile's rule); past months by
   their full length. Through today, not the last usage date, so idle days
   count as zero. Sandbox, September (25 days elapsed by UTC date): the top
   part reads 3.05M/day, not 2.54M. Adds `days_in_period`,
   `is_month_in_progress` and `unit`.
 - **Cycle count** was weighted per count, not per location
-  (`part_cycle_count_view.sql:82`). **Fixed on `dev-sandbox` (2026-09-24),
-  not deployed:** each location counts once a month, on its latest count
+  (`part_cycle_count_view.sql:82`). **Fixed 2026-09-24, deployed 2026-09-25:** each location counts once a month, on its latest count
   that month. `locations_counted` is now exactly the accuracy denominator;
   `items_counted` still counts every count; new `recounted_locations`.
   Sandbox May: 92.5% → 94.1%. (PlexTest's September "82.1%" is **not**
@@ -170,14 +170,14 @@ runs the broken versions.
   That is not an empty pseudo-centre: in PlexTest it holds open job 3
   (1,342,000 caps, the same Encapsulating operation as the line job), and
   all four open bottling jobs sit on Schedule Bottling, which Open bottles'
-  group filter already includes. **Fixed on `dev-sandbox` (2026-09-24), not
-  deployed:** `Workcenter_Group = 'Encapsulating'` (exactly the ten lines plus
+  group filter already includes. **Fixed 2026-09-24,
+  deployed 2026-09-25.** `Workcenter_Group = 'Encapsulating'` (exactly the ten lines plus
   Schedule Encapsulation). PlexTest: 200,000 → 1,542,000 open caps. The
   sandbox has no Schedule Encapsulation jobs, so it is unchanged there.
 - **Disposition cost** put closed no-material records into
   "(not yet dispositioned)" (`quality_disposition_cost_view.sql:116-117`), and
   its "missing cost" flag counted only NULLs, while an unfilled Plex Cost is
-  0.00. **Both fixed on `dev-sandbox` (2026-09-24), not deployed:** blanks
+  0.00. **Both fixed 2026-09-24, deployed 2026-09-25:** blanks
   split into open / closed-no-material / closed-disposition-missing (sandbox:
   91 → 32 / 58 / 1), and the flag counts NULL-or-0 on Scrap/Rework.
 
@@ -191,7 +191,7 @@ runs the broken versions.
 - **Where the names are:** `Part_v_Part_Group` (`Part_Group_Key`, `Part_Group`;
   no PCN column). Pulled live from the Plex test host on 2026-09-24: 13 groups,
   and all 10 distinct keys on `Part_v_Part` (test and prod) resolve.
-- **Fix, on `dev-sandbox` (2026-09-24), not deployed:** new extraction
+- **Fix, deployed 2026-09-25:** new extraction
   `Part_v_Part_Group` → `raw_Part_v_Part_Group` in both `reports/sales_orders.yaml`
   and `reports/test/sales_orders.yaml` (26 → 27 `plex_view:` entries each), and
   the four views join it. Checked read-only against PlexTest with the 13 rows

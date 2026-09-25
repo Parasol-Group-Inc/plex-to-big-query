@@ -14,6 +14,44 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (deploy) - Scorecard view fixes applied and verified
+
+### Deployed - `terraform apply` from `main` (`65eefcb`), 2026-09-25 01:10 UTC
+The plan was 0 add / 30 change / 0 destroy: 22 content changes and 8
+line-ending-only. A re-plan afterwards shows **No changes**.
+
+**Verified on real PlexTest data after the test runs**, one view at a time:
+all six test jobs succeeded and the logs show no failed view.
+- **Sales rep:** 16 of 21 sale lines now resolve a rep (9 from the order,
+  7 from the customer). All 21 were "(no rep assigned)" before.
+- **Part group:** `Part_v_Part_Group` loaded 13 rows. The `sales_orders_test`
+  job loaded 27 extractions, which matches `grep -c plex_view`. All 21 sale
+  lines read "Capsule", where every one was NULL before.
+- **Scrap:** the real rejected records (1,000 units) now count as scrap and
+  rejects in production monthly, FPY and the packaging daily report. They
+  read 0 before.
+- **Open caps:** 2 jobs and 1,542,000 caps, up from 200,000. The job on
+  Schedule Encapsulation now counts.
+- **Disposition cost:** blanks split 26 open / 1 closed with the disposition
+  missing / 1 closed with no material. **TAT** has work-day columns (2
+  closed NCs). **Average daily usage:** the month in progress uses its 25
+  days elapsed.
+- **Returning 0, and correctly so:**
+  - Deposit Review: no PlexTest order is in either Deposit Review status.
+  - Inventory value: $0, because none of the 5 costed parts is on hand.
+  - Deviation → NC: the only link row belongs to a deviation Plex has since
+    deleted.
+
+**Prod** switches as each pipeline next runs:
+- Work Orders already did, at 01:20 UTC: the PlexProd views were recreated
+  at 01:22 from the new SQL.
+- Quality and Inventory run from 02:20 UTC the same night.
+- Sales Orders ran at 01:00, just before the apply, so its fixes, and the
+  new extraction, land at the next 01:00 UTC run.
+
+Still not fixed in prod: the Label Design view rollback (2026-09-24
+(deploy) entry). It needs `dev-label-design` merged to `main`.
+
 ## 2026-09-24 (deploy) - dev-sandbox merged to main; a Label Design rollback found in prod
 
 ### Found - prod has been running the pre-fix Label Design view since 2026-09-23 00:18 UTC

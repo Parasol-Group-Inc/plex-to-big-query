@@ -1,6 +1,6 @@
 # Vox Scorecard | NC Cost by Disposition (Destruction/Rework)
 
-> **Status:** ⚠ Built 2026-09-09 · **now returning rows (2026-09-22) but every one of them reads "(not yet dispositioned)" at $0** — see the warning below · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
+> **Status:** ⚠ Built 2026-09-09 · **returning rows since 2026-09-22, but every real record has a blank disposition and $0 cost** — see the warning below · 🔧 **missing-cost flag and blank-disposition split fixed on branch `dev-sandbox` (2026-09-24), not yet deployed** · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline
 
 > **What changed 2026-09-22, and why this tile still can't go live.** The report it reads was pointing at the wrong Plex table and has been repointed — 22 real nonconformance records now flow through. Two things about those records stop this tile working as designed: **Final Disposition is blank on all of them**, and **cost is 0 on all of them**. Vox records a destruction by choosing the **Material Destruction form** when the record is created, not by dispositioning material as Scrap afterwards, and the dollar value is being typed into the description ("$2305.57") rather than into Plex's Cost field. So this report is correct and its inputs aren't there yet. Deliberately **not** repointed at the form in the meantime: which of the two Vox means is a question for Quality, and quietly switching it is how a tile ends up confidently wrong. The form name is available on [Quality Nonconformance](quality_nonconformance_report.md) the moment that answer arrives.
 
@@ -49,6 +49,9 @@ its own name.
 
 ## Flags and open questions
 
+- **Fixed 2026-09-24 (branch `dev-sandbox`, not yet deployed): two things that made the tile look better or worse than it was.**
+  - **The "missing cost" flag could never fire.** It counted records with *no* cost, but Plex stores an unfilled Cost as **0.00**, not blank — 0.00 on all 28 real records. `records_missing_cost` now counts a cost of blank **or** 0, on records whose final disposition is **Scrap or Rework** (the two that imply money was spent; a Return or Use as is at $0 is plausible and isn't flagged). Tested in the scorecard sandbox with every cost set to 0.00, as on the real records: the flag goes from 0 to **41 of 41** Destruction and **28 of 28** Rework records.
+  - **"(not yet dispositioned)" overstated open work.** It held every record with a blank disposition, including *closed* records that never involved any material — audit CARs, safety 8Ds, risk assessments — which will never get a disposition. Blank records are now split three ways: **`(not yet dispositioned)`** (still open — real work in progress), **`(closed, no material)`** (closed, no part and zero quantities — nothing to disposition), and **`(closed, disposition missing)`** (closed, carries material, but nobody recorded what was done with it — a gap for Quality). "Closed" means a closed date is set or the status is Closed. On the real records this is 26 / 1 / 1; in the sandbox the old 91 "not yet dispositioned" became **32 open, 58 closed with no material, 1 closed with material missing**.
 - **⚠ "Rework" exists in two places, and we have not picked for you.** Rework
   is both a disposition here *and* a container inventory status — and Jennilyn
   named the **container** one for the Rework $ tile: *"so rework should have
@@ -68,11 +71,10 @@ its own name.
   `Sort & Rework`). For "how much did we destroy", the outcome is the honest
   number — using initial would count material that was first marked Scrap and
   later re-introduced.
-- **Blank dispositions are kept**, classed as `(not yet dispositioned)`.
-  They're work in progress; dropping them would silently understate an open
-  month.
-- **⚠ The money is Plex's own `Quality_v_Problem.Cost`, and it may be
-  patchy.** A record with a real Scrap disposition but no cost adds to
+- **Blank dispositions are kept**, split into the three classes above.
+  Dropping them would silently understate an open month.
+- **⚠ The money is Plex's own Cost field (on `Quality_v_Problem_2` since
+  2026-09-22), and it may be patchy.** A record with a real Scrap disposition but no cost (blank or 0.00) adds to
   `nc_count` and `qty_rejected` and nothing to `total_cost`, so
   **`records_missing_cost`** is published beside it — a Destruction $ figure
   built on half-filled costs should say so rather than read as a small number.
@@ -82,10 +84,10 @@ its own name.
   against Plex's full numbers (`12335-01VOXNU-1`), with duplicate rows. It is
   the obvious thing to grab and it does not work — **ask what its `part`
   column keys to first.**
-- **0 rows today, expected.** The quality tables are empty in both datasets.
-  The value lists are populated — that's what made this answerable now — but
-  the records aren't. Same situation as deviations, where Jennilyn said *"I
-  need them to test this more."*
+- **Real records, but not yet the right inputs.** This said "0 rows" until
+  2026-09-22. Real nonconformances now flow through (28 in PlexTest on
+  2026-09-24), but with a blank final disposition and 0.00 cost on every one,
+  so today the report shows only the three blank classes at $0.
 - **Relationship to [`quality_cost_by_category_report`](quality_cost_by_category_report.md):**
   that one groups by *problem category* (why it went wrong), this one by
   *disposition* (what happened to the material). Both read the same records;

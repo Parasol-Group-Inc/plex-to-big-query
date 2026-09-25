@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - Fixed: deviations' linked NC, TAT in work days, disposition-cost flags
+
+### Fixed - found by the scorecard sandbox (not deployed; reaches prod on the next apply after merge)
+- **`quality_deviation_view.sql`: the linked NC never showed.**
+  - **Before:** `problem_links` joined the classic `Quality_v_Problem`, which
+    is permanently empty; this join was missed when the Quality reports
+    moved to `Quality_v_Problem_2` on 2026-09-22.
+  - **Now:** it reads `Problem_2`. Verified: the real link row (problem key
+    117294) is Problem_2's NC #21. Sandbox: 49 of 151 deviations now show
+    their NC, up from 0.
+  - **Added** `deviation_month`, by add date, so the tile needn't choose
+    between add date and effective date.
+- **`quality_turnaround_time_view.sql`: TAT is counted in work days.**
+  - **Before:** turnaround was `DATE_DIFF(DAY)` (calendar days), judged
+    against Performance/Bonus standards that are work days.
+  - **Now:** it adds `turnaround_work_days` (Mon–Fri) for both clocks, and
+    the met/missed flags use it. The calendar columns are unchanged.
+  - There is no holiday table, so holidays count as work days.
+- **`quality_disposition_cost_view.sql`:**
+  - **`records_missing_cost`** only counted NULL, but an unfilled Plex Cost
+    is 0.00 on every real record. It now counts NULL or 0 on Scrap/Rework.
+  - **"(not yet dispositioned)"** was open and closed-without-material
+    records together. It is now split into open / closed with no material /
+    closed with the disposition missing (sandbox: 91 became 32 / 58 / 1).
+
+Report docs updated for all three views.
+
 ## 2026-09-24 (scorecard) - Fixed: sales rep, scrap flag and Deposit Review in nine views
 
 ### Fixed - found by the scorecard sandbox, verified against real Plex rows

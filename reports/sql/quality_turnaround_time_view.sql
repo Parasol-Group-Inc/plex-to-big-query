@@ -45,7 +45,8 @@
 -- THE STANDARDS ARE NOW JOINED IN — from a hand-maintained table
 -- ─────────────────────────────────────────────────────────────────────────
 -- `{dataset}.turnaround_standards` holds the Performance and Bonus day counts
--- per stock type. It is **hand-maintained by Jennilyn directly in BigQuery**:
+-- per stock type, in WORK days — compared against turnaround_work_days (see
+-- the `wd` CTE below; calendar days were compared until 2026-09-24). It is **hand-maintained by Jennilyn directly in BigQuery**:
 -- not written by the ETL, not managed by Terraform, and deliberately not fed
 -- by the manual-data web app — that tab was dropped on 2026-09-21 because
 -- these change about never, and a form is for numbers that change often.
@@ -122,19 +123,53 @@ WITH dated AS (
     ON SAFE_CAST(q.Part_Key AS INT64) = SAFE_CAST(pt.Part_Key AS INT64)
 ),
 
+-- WORK DAYS — ADDED 2026-09-24. The Performance/Bonus standards are WORK
+-- days (the old TAT sheets say so), but DATE_DIFF(..., DAY) counts calendar
+-- days, so a record closed in 8 work days read as 10-12 and was marked as
+-- missing a 10-day standard it had met. Each date gets a running weekday
+-- index here, and the work-day turnaround is simply the difference.
+--
+-- The index counts Mon–Fri days from Monday 1900-01-01 up to and INCLUDING
+-- the date: 5 per full week plus the weekdays in the part week. Subtracting
+-- two of them therefore counts the work days AFTER the start date up to and
+-- including the close date — the same "start day excluded" convention as
+-- DATE_DIFF, so a same-day close is 0 either way, Friday → Monday is 1, and a
+-- close dated before its open comes out negative rather than silently 0.
+--
+-- ⚠ Mon–Fri ONLY — NO HOLIDAYS. No holiday calendar is extracted from Plex or
+-- kept anywhere in this project, so a record open over Thanksgiving counts
+-- that day as a work day. If Quality's sheets excluded holidays, a holiday
+-- table joined here is the fix; the shape of the columns would not change.
+wd AS (
+  SELECT
+    *,
+    5 * DIV(DATE_DIFF(opened_date,   DATE '1900-01-01', DAY) + 1, 7)
+      + LEAST(MOD(DATE_DIFF(opened_date,   DATE '1900-01-01', DAY) + 1, 7), 5) AS opened_wd_idx,
+    5 * DIV(DATE_DIFF(recorded_date, DATE '1900-01-01', DAY) + 1, 7)
+      + LEAST(MOD(DATE_DIFF(recorded_date, DATE '1900-01-01', DAY) + 1, 7), 5) AS recorded_wd_idx,
+    5 * DIV(DATE_DIFF(closed_date,   DATE '1900-01-01', DAY) + 1, 7)
+      + LEAST(MOD(DATE_DIFF(closed_date,   DATE '1900-01-01', DAY) + 1, 7), 5) AS closed_wd_idx
+  FROM dated
+),
+
 -- The day counts live one layer up from the dates they are built on: a SELECT
 -- alias cannot be referenced by a sibling item in the same SELECT, and
 -- repeating the date-conversion COALESCE four more times would be worse.
 base AS (
   SELECT
-    *,
+    * EXCEPT (opened_wd_idx, recorded_wd_idx, closed_wd_idx),
+    -- CALENDAR days, kept exactly as before so nothing built on them moves.
     -- The clock as originally built: when the problem happened → closed.
     DATE_DIFF(closed_date, opened_date, DAY)            AS turnaround_days,
     -- The same clock started when the problem was written up. The gap
     -- between the two is reporting lag.
     DATE_DIFF(closed_date, recorded_date, DAY)          AS turnaround_days_from_recorded,
-    DATE_DIFF(recorded_date, opened_date, DAY)          AS reporting_lag_days
-  FROM dated
+    DATE_DIFF(recorded_date, opened_date, DAY)          AS reporting_lag_days,
+    -- WORK days (Mon–Fri) for both clocks — what the standards are written
+    -- in, and what met_performance_standard / met_bonus_standard use.
+    closed_wd_idx - opened_wd_idx                       AS turnaround_work_days,
+    closed_wd_idx - recorded_wd_idx                     AS turnaround_work_days_from_recorded
+  FROM wd
 ),
 
 -- A change to a standard is made by ADDING a row, so history stays intact.
@@ -196,6 +231,8 @@ SELECT
   b.turnaround_days,
   b.turnaround_days_from_recorded,
   b.reporting_lag_days,
+  b.turnaround_work_days,
+  b.turnaround_work_days_from_recorded,
 
   -- On-time closure against Quality's own due date — a metric the classic
   -- table could not support, because it had no due date.
@@ -223,15 +260,19 @@ SELECT
 
   -- NULL rather than FALSE when the record is open or no standard exists —
   -- "we do not know yet" and "missed it" are different answers.
+  --
+  -- Measured in WORK days since 2026-09-24 (they compared calendar days to a
+  -- work-day standard before), on the original Problem_Date clock — which
+  -- clock the standards mean is still Quality's call; see the header.
   CASE
-    WHEN b.turnaround_days IS NULL THEN NULL
+    WHEN b.turnaround_work_days IS NULL THEN NULL
     WHEN COALESCE(t.std.performance_days, c.std.performance_days) IS NULL THEN NULL
-    ELSE b.turnaround_days <= COALESCE(t.std.performance_days, c.std.performance_days)
+    ELSE b.turnaround_work_days <= COALESCE(t.std.performance_days, c.std.performance_days)
   END                                                   AS met_performance_standard,
   CASE
-    WHEN b.turnaround_days IS NULL THEN NULL
+    WHEN b.turnaround_work_days IS NULL THEN NULL
     WHEN COALESCE(t.std.bonus_days, c.std.bonus_days) IS NULL THEN NULL
-    ELSE b.turnaround_days <= COALESCE(t.std.bonus_days, c.std.bonus_days)
+    ELSE b.turnaround_work_days <= COALESCE(t.std.bonus_days, c.std.bonus_days)
   END                                                   AS met_bonus_standard
 
 FROM base b

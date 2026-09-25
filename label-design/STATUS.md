@@ -9,6 +9,19 @@
 
 ---
 
+## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
+
+`deploy/label_design_trigger/` is a one-button Apps Script page that starts
+`plex-etl-label-design-test` and shows recent runs. It runs as the deployer,
+gated by an allowlist, refuses while a run is in progress, and has a
+cooldown. **Not deployed yet:** paste it into a new Apps Script project in
+`parasoldatalake` with the Cloud Run Admin API enabled, set `JOB_NAME` and
+`ALLOWED_EMAILS`, run `testSetup()`, then deploy as a web app (its README
+has the steps). It targets **test only**; prod is one property flip, once
+it has been used.
+
+---
+
 ## UPDATE — 2026-09-25: the pivot fix was rolled back in prod, and is restored
 
 The `NULLIF(TRIM(pa.Value), '')` pivot fix and the five new attribute columns

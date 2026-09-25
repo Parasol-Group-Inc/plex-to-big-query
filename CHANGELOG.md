@@ -14,6 +14,34 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (label design) - Run the Label Design sync on demand from a web app
+
+### Added - `deploy/label_design_trigger/` (Apps Script web app)
+A one-button page that starts the Label Design Cloud Run job, so the team can
+refresh `label_design_report` without waiting for 09:30 / 13:30. It also
+shows the last five executions with log links, and who started what.
+
+- **Test job first.** `JOB_NAME=plex-etl-label-design-test`. Promoting to
+  prod is one Script Property change, and the page badge turns red.
+- **Runs as the deployer, gated by an `ALLOWED_EMAILS` allowlist.** Nobody
+  else needs GCP permissions; everyone else gets view-only.
+- **It refuses** while an execution is running, and within
+  `COOLDOWN_MINUTES` (default 10) of the last start. A script lock
+  serialises simultaneous clicks.
+- **Every start, refusal and error** is kept in `RUN_LOG` and shown on the
+  page.
+- **Checked against the live Cloud Run v2 API before commit:**
+  - The executions list returns `startTime` / `completionTime` /
+    `succeededCount`, as read.
+  - `POST …/jobs/plex-etl-label-design-test:run` returns the new execution
+    in `metadata.name` (`plex-etl-label-design-test-w5kvn`, an ordinary test
+    sync).
+- **It only starts the existing job.** Nothing Terraform-managed changes.
+  Setup and promotion steps are in its README.
+
+First feature built through the new flow: made in `ptbq-label-design` on
+`dev-label-design`, committed past the hooks, and merged to `main` by PR.
+
 ## 2026-09-25 (dev) - Locks: a folder per project, commit/push hooks, a deploy guard inside Terraform
 
 Three things went wrong on 2026-09-24:

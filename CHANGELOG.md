@@ -26,6 +26,12 @@ don't need an entry.
   guard. Done for the first time today: the backup (2026-09-22) matched
   every value checked in the live state.
 
+### Fixed
+- **`scripts/deploy_preflight.sh` was committed without its executable bit**
+  (mode `100644`, probably from Windows, which has no such bit). On macOS and
+  Linux, `deploy.sh` stopped at `Permission denied`. It is now `100755`, like
+  the other scripts.
+
 ## 2026-09-25 (dev-label-design) - Plex Part URL and PO URL on the Monday push
 
 ### Added

@@ -14,6 +14,18 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev-label-design) - Deploying from a second machine
+
+### Added
+- **macOS checksums in `terraform/.terraform.lock.hcl`** (`darwin_arm64`,
+  2 lines). The provider versions are unchanged. Without them a Mac's first
+  `terraform init` dirties the tree, and the deploy guard refuses.
+- **CONTRIBUTING.md / README: how to deploy from another machine.** Restore
+  tfvars from `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`,
+  check it isn't stale, and set up ADC and a `python` on `PATH` for the
+  guard. Done for the first time today: the backup (2026-09-22) matched
+  every value checked in the live state.
+
 ## 2026-09-25 (dev-label-design) - Plex Part URL and PO URL on the Monday push
 
 ### Added

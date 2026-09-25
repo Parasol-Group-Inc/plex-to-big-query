@@ -8,7 +8,7 @@ One row per sales order whose total value comes out to $10,000 or more — order
 
 ## Where it fits
 
-Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Orders over $10k"). The confirmation history for the $10k basis decision is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Orders over $10k"). The confirmation history for the $10k basis decision is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 

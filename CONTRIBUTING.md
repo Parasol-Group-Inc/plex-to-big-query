@@ -112,7 +112,7 @@ cd C:/F/Parasol/plex-to-big-query && git pull
 ./scripts/deploy.sh                        # preflight, guard, plan, review, confirm, apply, tag
 
 # 4. Re-sync every dev branch with what is live
-cd C:/F/Parasol/ptbq-label-design && git merge main && git push
+cd C:/F/Parasol/ptbq-label-design && git merge main && git push origin HEAD
 ```
 
 - **A Cloud Build (image) deploy is separate:** `gcloud builds submit`, same
@@ -124,9 +124,163 @@ long-running and don't merge into each other, so the longer one sits
 unmerged, the more it drifts on shared files. Step 4 exists for the same
 reason.
 
+## Commits
+
+- **One change, one commit.** A milestone that builds, runs or reads right
+  on its own is the unit. Several milestones in a day is normal.
+- **Message:** `type(scope): what changed, in plain words`. Then a body
+  saying *why*, and what was verified, with numbers where there are any.
+  - **Types in use:** `feat`, `fix`, `docs`, `chore`, `refactor`.
+  - **Scopes** name the project or area: `label-design`, `scorecard`,
+    `sandbox`, `views`, `quality`, `dev`, `deploy`.
+  - Commits written with Claude end with its `Co-Authored-By:` trailer.
+- **Stage by explicit path, never `git add -A` / `git add .`.** Another
+  session, or you in another window, may have files in progress in the same
+  folder. That's how a day of Label Design work nearly went out under a
+  scorecard commit. `git status` before every commit.
+- **Anything that deploys gets a `CHANGELOG.md` entry in the same commit.**
+  That's `reports/`, `terraform/`, and the Python the image runs. The hook
+  enforces it for `reports/` and `terraform/`.
+  - **Where the entry goes:** at the top, newest first, headed
+    `## YYYY-MM-DD (project) - what happened`.
+  - **What it says:** what was wrong, what changed, and how it was verified.
+- **A change to a report's YAML or SQL** also updates its business doc in
+  `docs/reports/` (the catalog has the template), and the status line in the
+  `reports-list/` / `spreadsheets/` file that tracks it.
+- **Prod and test YAML change together.** `reports/<p>.yaml` and
+  `reports/test/<p>.yaml` are both hand-kept, and the hook compares their
+  `plex_view:` counts.
+
+## Pull requests
+
+`main` receives work in two ways; both end in a merge commit on `main`.
+
+| Use | When |
+|---|---|
+| **PR** (`gh pr create --base main --head <branch>`) | Anything someone else should see before it's live, and anything touching `terraform/` or `main.py`. The PR page is the review record. |
+| **Local merge** (in the primary folder: `git merge --no-ff <branch>`, then `git push origin main`) | Docs-only or already-reviewed changes, when you're the only reviewer. |
+
+```bash
+# from the project's folder, after committing
+git push origin dev-label-design
+gh pr create --base main --head dev-label-design \
+  --title "Label Design: run the sync on demand" \
+  --body "What / why / how verified. Terraform changes: none (or: list them)."
+gh pr view --web                 # review
+gh pr merge --merge              # a merge commit, not squash: keeps the per-milestone history
+```
+
+- **Always say in the PR body whether it changes Terraform.**
+  `deploy.sh` will show the same list; they should match.
+- **Never push a dev branch into `main`** (`git push origin dev-x:main`). The
+  pre-push hook blocks it.
+- **`main` never takes force-pushes.**
+
+## When branches conflict
+
+These files conflict routinely. Each has one right resolution:
+
+| File | Resolution |
+|---|---|
+| `CHANGELOG.md` | Keep **both** sides' entries, **newest date first**. For the same day, order by when the work happened. Check no heading appears twice. |
+| `label-design/STATUS.md`, other status files | Same: keep both `## UPDATE` sections, newest first. |
+| `terraform/main.tf` | Usually auto-merges (different resources). If not, keep both resources. Then run a read-only plan from the primary folder after merging; it must show only what the PR says. |
+| `reports/sql/*.sql` | A real conflict: two projects changed one view. Resolve by hand, then dry-run the SQL against PlexTest (`SELECT COUNT(*) FROM (<sql>)`) before committing. |
+
+## Kinds of deploy
+
+| What | How | Guard |
+|---|---|---|
+| Report YAML/SQL, Cloud Run jobs, schedulers, IAM: **anything in `terraform/`** | `./scripts/deploy.sh` from the primary folder | Terraform deploy guard + plan review + typed confirmation. Tagged `deploy/<UTC>`. |
+| **Container image** (`main.py`, `email_utils.py`, `Dockerfile`, `label_design_service/`) | `./scripts/deploy_preflight.sh`, then `gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .` | Preflight only; nothing inside Cloud Build checks the branch. Run it from the primary folder. |
+| **Apps Script** (`deploy/manual_data_app/`, `deploy/label_design_sync/`, `deploy/label_design_trigger/`) | Paste from the repo into the Apps Script editor, then Deploy → Manage deployments → **New version** | None. The repo copy is the record; paste from `main`. Saving in the editor does not update a live web app. |
+| **Hand-kept BigQuery tables** (`scorecard_goals*`, `turnaround_standards`, `safety_incidents`) | The manual-data app, or DDL in `docs/reports/` | None. Never `CREATE OR REPLACE` them: they hold people's entries. |
+
+**Quick iteration** on a view is not a deploy:
+- **For SQL:** dry-run the query against PlexTest, or rebuild it in the
+  ScorecardSandbox.
+- **For a YAML:** copy it into the `test/` path only, and run only the
+  `-test` job.
+- **SQL objects in GCS are shared by prod and test,** so a copied SQL file
+  changes prod's next run too. Every iteration still lands through a branch,
+  `main` and `deploy.sh`, or the next deploy silently reverts it.
+
+## After a deploy: verify, then re-sync
+
+1. **Run the `-test` job** of each pipeline you changed:
+   `gcloud run jobs execute plex-etl-<pipeline>-test --region=us-central1 --wait`.
+2. **In the logs,** check `Report '<name>' loaded: N extraction(s)` against
+   `grep -c 'plex_view:' reports/test/<pipeline>.yaml`.
+3. **Query the view itself.** Exit code 0 does not mean the view was created
+   (CLAUDE.md, "Verifying a report deploy actually worked").
+4. **Prod picks up the change on its next scheduled run.** Check the prod
+   view's `modified` time afterwards. Don't fire prod jobs to hurry it: they
+   email the team.
+5. **Re-sync every dev branch** so none drifts from what is live:
+   ```bash
+   for d in ptbq-scorecard ptbq-sandbox ptbq-label-design ptbq-dev; do
+     (cd ../$d && git merge --no-edit main && git push origin HEAD)
+   done
+   ```
+
+## Rolling back
+
+**Revert, don't reset.** On the project's branch, `git revert <commit>`, then
+PR or merge, then `deploy.sh`. The `deploy/<UTC>` tags show what was live
+when:
+- `git tag -l 'deploy/*'` lists every deploy;
+- `git diff deploy/<a> deploy/<b> -- reports/` shows what changed between two.
+
+`main`'s history is never rewritten. It is the record of what prod ran.
+
+## The workspace files
+
+| File | Opens | Title bar | Hides |
+|---|---|---|---|
+| `scorecard.code-workspace` | `ptbq-scorecard` | green | Label Design and Sandbox folders |
+| `sandbox-scorecard.code-workspace` | `ptbq-sandbox` | amber | Label Design folders, manual-data app |
+| `label-design.code-workspace` | `ptbq-label-design` | purple | Scorecard and Sandbox folders |
+| `dev-shared.code-workspace` | `ptbq-dev` | slate | nothing |
+| `main-deploy.code-workspace` | the primary folder | **red**: deploy only | nothing |
+
+- **Open a workspace file, not the folder.** It sets the title, the colour,
+  the hidden folders, and git branch protection on `main`.
+- **Hidden isn't protected.** Hidden files are still there. The hooks, not
+  the explorer, stop cross-project commits.
+- **Every folder has a copy of every workspace file**, and they all resolve
+  to the same five sibling folders.
+
+## Working with Claude Code sessions
+
+- **One session per folder.** Start it in the folder of the project you want
+  worked on, via the workspace or `cd`.
+- **A user-level hook warns every session.** It runs on every prompt and
+  after every shell command, and flags: another session in the same folder;
+  another session on the same branch; the session's own branch having
+  changed. It lives at `~/.claude/hooks/session_branch_guard.py`, registered
+  in `~/.claude/settings.json`. The session stops and asks.
+- **Memory is shared.** Every folder's memory directory is linked to the
+  primary folder's, so a session anywhere sees the same notes.
+- **Claude's own limits:** it can't `terraform apply` or push to GitHub on
+  this machine (the permission classifier blocks both). It prepares the
+  deploy, and you run `deploy.sh` and `git push`.
+- **Parallel subagents** each own disjoint files, and one session reviews and
+  commits. That's how the 2026-09-24/25 sandbox and doc work was done.
+
+## What the locks don't catch
+
+- **Deploys outside Terraform.** Apps Script pastes, Cloud Build from a dev
+  folder, `bq` DDL, and `gcloud storage cp` into prod paths. Follow the
+  table above.
+- **Silent data gaps.** The ETL keeps yesterday's rows when Plex returns 0
+  (see `main.py` `write_to_bigquery`), so an empty tile and a stale tile can
+  both look fine. `docs/SCORECARD_SANDBOX_FINDINGS.md` has the details.
+- **Two humans on one branch in two clones.** Git worktrees prevent it on
+  one machine only. Pull before you start; push when you stop.
+
 ## Everything else
 
-See [README.md](./README.md) for the project overview and
-`docs/`/`reports-list/`/`spreadsheets/` for where live status actually lives
-— read those before re-deriving status from scratch (see the pointers at the
-top of those folders / the root README).
+See [README.md](./README.md) for the project overview, and
+[docs/CHEATSHEET.md](docs/CHEATSHEET.md) for every command on one page. Live
+status lives in `reports-list/`, `spreadsheets/`, `label-design/STATUS.md` and
+the Migration Board. Read those before re-deriving status from scratch.

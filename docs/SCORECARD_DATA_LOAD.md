@@ -1,5 +1,7 @@
 # Loading the scorecard with data before a demo
 
+Last reviewed: 2026-09-25
+
 The goal: every Vox scorecard tile shows a real number, or we know exactly why
 it doesn't and whose side that sits on. Written for the Sep-12 meeting, but the
 sequence is the same any time.
@@ -43,20 +45,20 @@ view creation fails, and the job still reports PARTIAL and exits 0.
 
 ## Step 2 — deploy anything not yet in GCS
 
+Everything the scorecard reads from GCS — both YAMLs of each pipeline and every
+`reports/sql/*.sql` — is a `source`-linked Terraform object, so "is GCS behind
+the repo?" and "deploy it" are the same command. Make sure the change is merged
+to `main`, then from the primary folder:
+
 ```bash
-cd terraform && terraform plan -var-file=terraform.tfvars
+cd C:/F/Parasol/plex-to-big-query && git pull
+./scripts/deploy.sh
 ```
 
-If it shows `google_storage_bucket_object.*` changing, GCS is behind the repo.
-`terraform apply` is the reliable deploy mechanism — it manages both
-`reports/*.yaml` and `reports/test/*.yaml` as `source`-linked objects, so it
-catches the prod/test pair that a manual `gcloud storage cp` will miss.
-
-> `terraform apply` is blocked by this machine's local permission classifier —
-> it has to be run by a human in their own terminal.
-
-**Pending as of 2026-09-11:** `part_cycle_count_view.sql` (new),
-`part_on_hand_inventory.yaml` and its test twin (two new extractions each).
+It plans, shows which `google_storage_bucket_object.*` would change (real
+content changes separated from line-ending noise), and applies only after you
+confirm the count. "Nothing to deploy." means GCS already matches `main`.
+Terraform's deploy guard refuses from any other folder or branch.
 
 ## Step 3 — run the pipelines, in dependency order
 
@@ -128,18 +130,23 @@ tiles — `scorecard_goals` carries 68 rows from the spreadsheet and
 
 ---
 
-## Faster iteration than a full apply
+## Faster iteration than a deploy
 
-For a single SQL edit during a working session, `gcloud storage cp` is quicker
-and `main()` re-creates the view on the next run:
+**Don't copy SQL into the bucket.** There is one `sql/<view>.sql` object and
+both the prod and the test jobs read it, so a copied file changes prod's next
+run too — and a later deploy of `main` silently puts the old version back.
+That is how a live fix was rolled back once already. Iterate without touching
+GCS instead:
 
-```bash
-gcloud storage cp reports/sql/<view>.sql gs://voxdatalake-report-configs/sql/
-```
+- run the view's SQL directly in BigQuery (replace `{gcp_project}` /
+  `{dataset}` with `voxdatalake` / `PlexTest`), or
+  `bq query --dry_run --use_legacy_sql=false "..."` to check it parses;
+- prove a tile against realistic data in the **scorecard sandbox** (below).
 
-**This is iteration, not deployment.** It does not update the YAML pair, and it
-leaves Terraform's state believing GCS matches the repo when it doesn't. Always
-finish with a `terraform apply` so prod and test agree.
+Then land it the normal way: `dev-scorecard` → `main` → `./scripts/deploy.sh`,
+and re-run the `-test` job. A YAML-only change may be tried first by copying
+the **test** YAML to `gs://voxdatalake-report-configs/test/` and running the
+`-test` job — see `docs/OPERATIONS.md` § "Edit an Existing Report".
 
 ## Prod
 

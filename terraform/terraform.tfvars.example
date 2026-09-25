@@ -75,7 +75,10 @@ secret_odbc_password = "plex-odbc-password"
 secret_company_code  = "plex-company-code"
 
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
-cloud_run_job = "plex-etl"
+# Renamed 2026-09-04 from the legacy "plex-etl". Cloud Run job names are
+# immutable: a different value here DESTROYS and recreates the job, so keep
+# this equal to the live name (and to the default in variables.tf).
+cloud_run_job = "plex-etl-sales-orders"
 
 # Full container image URL in Artifact Registry.
 # Format: REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:TAG
@@ -84,12 +87,12 @@ cloud_run_job = "plex-etl"
 image_url = "us-central1-docker.pkg.dev/your-gcp-project-id/plex-pipeline/etl:latest"
 
 # ── Cloud Scheduler ───────────────────────────────────────────────────────────
-# 2026-08-19: the live deployment moved off UTC entirely — all 16 jobs (8
-# categories x prod/test) now cascade through a 7-10 PM Mountain window, 10
+# 2026-08-19: the live deployment moved off UTC entirely — all jobs (13
+# pipelines x prod/test = 26) now cascade through a 7-10 PM Mountain window, 10
 # min apart, so nothing lands in early-morning/odd-hour emails. See the real
 # terraform.tfvars and the per-category "schedule" literals in main.tf for
 # the actual values; UTC below is just this generic template's placeholder.
-scheduler_job       = "plex-daily-sync"
+scheduler_job       = "plex-sales-orders-sync"   # was "plex-daily-sync" before 2026-09-04
 scheduler_cron      = "0 2 * * *"   # 2 AM UTC daily — adjust to your needs
 scheduler_time_zone = "UTC"          # Any IANA tz name works and Cloud
                                       # Scheduler handles DST transitions
@@ -131,8 +134,8 @@ artifact_registry_repo = "plex-pipeline"
 # Separate Cloud Run job + BigQuery dataset for the test Plex endpoint.
 plex_host_test      = "vox.test.odbc.plex.com"
 bq_dataset_test     = "PlexTest"
-cloud_run_job_test  = "plex-etl-test"
-scheduler_job_test  = "plex-daily-sync-test"
+cloud_run_job_test  = "plex-etl-sales-orders-test"
+scheduler_job_test  = "plex-sales-orders-sync-test"
 scheduler_cron_test = "0 3 * * *"   # offset from prod to avoid overlap
 
 # ── Report config (GCS-backed, editable without deployment) ───────────────────

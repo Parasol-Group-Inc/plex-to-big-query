@@ -12,7 +12,7 @@ The scorecard's **Encapsulation / Bottling / Labeling "Actual vs. Goal"** bars a
 
 ## How it's built (high level)
 
-Joins [`production_monthly_by_workcenter_group_report`](production_monthly_by_workcenter_group_report.md) to [`scorecard_goals`](scorecard_goals.md) on month and work centre group.
+Joins [`production_monthly_by_workcenter_group_report`](production_monthly_by_workcenter_group_report.md) to [`scorecard_goals_resolved`](scorecard_goals_resolved.md) on month and work centre group (since 2026-09-22). That resolver is the single list of "one goal per month and area": a goal entered in the **Manual Data app** (Production tab) wins, and anything not entered there falls back to the older [`scorecard_goals`](scorecard_goals.md) table. No real production goals have been entered in either yet.
 
 This is the only one of the three goal views on the Work Orders pipeline; the other two are on Sales Orders. Split that way deliberately, so neither pipeline depends on a view the other creates.
 
@@ -21,7 +21,7 @@ This is the only one of the three goal views on the Work Orders pipeline; the ot
 
 ## Flags and open questions
 
-- **⚠ The Plex group name is not the tile name.** Plex uses **`Encapsulating`**, the scorecard tile says "Encapsulation". The sheet must use the Plex spelling or the goal silently won't match. `goal_without_production` flags exactly this.
+- **⚠ The Plex group name is not the tile name.** Plex uses **`Encapsulating`**, the scorecard tile says "Encapsulation". A goal must use the Plex spelling or it silently won't match — the app's area dropdown reads its names from the production report for exactly this reason. `goal_without_production` flags exactly this.
 - **Confirmed live 2026-09-04:** only `Bottling` and `Pre-Weigh` have logged production so far, so the full list of group names isn't visible from the data yet.
 - **Full outer join** — a group with a target and no output yet shows at 0%, which is the point of the tile early in a month.
 - **Verified 2026-09-04** against placeholder goals: Bottling 3,000 of 5,000 (60%), Pre-Weigh 429 of 1,000 (43%). The join and the percentage both work.

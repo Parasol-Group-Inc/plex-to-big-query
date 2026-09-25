@@ -1,155 +1,147 @@
 # Plex to BigQuery ETL Pipeline
 
-Pulls operational data from **Plex ERP** via ODBC and loads it into **Google BigQuery** on a daily schedule. Runs as Cloud Run Jobs triggered by Cloud Scheduler; credentials live in Secret Manager. Report definitions (which views to pull, filters, JOIN logic) live in **Cloud Storage** and can be edited without rebuilding the container.
+Pulls operational data from **Plex ERP** over ODBC into **Google BigQuery**,
+builds business-facing views on top, and emails a run report every time.
+It runs as Cloud Run Jobs triggered by Cloud Scheduler; credentials live in
+Secret Manager. What each pipeline extracts and the SQL of each view live in
+Cloud Storage, deployed from this repo by Terraform.
 
-**GCP project:** `voxdatalake` | **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
+**GCP project:** `voxdatalake` · **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
 
-**12 report families** (24 Cloud Run jobs, prod + test): Sales Orders, Sales Quotes, Sales Returns, Work Orders, Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence, Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality Non-Conformance, Quality Supplier Returns — producing ~60 BigQuery views. Full list: [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md).
-
-> **One table here isn't from Plex.** `scorecard_goals` holds the negotiated targets behind every "% to Goal" tile. It's fed from a Google Sheet by an Apps Script (`deploy/goals_sheet_to_bigquery.gs`), is not managed by Terraform, and is not created by the ETL — but three views read it. See [docs/reports/scorecard_goals.md](docs/reports/scorecard_goals.md).
-
-> **One pipeline here isn't a scorecard report.** `label_design` is a Plex → BigQuery → Google Sheet → Monday.com operational queue (replacing a twice-daily manual NetSuite loop), unrelated to the Vox Nutrition scorecard work the rest of this repo tracks. It has its own hub: [label-design/README.md](label-design/README.md), and its own status file at [label-design/STATUS.md](label-design/STATUS.md) (not the Scorecard's [Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9) — keep these two separate, that's the whole point of this split).
->
-> **Working on one project at a time?** Open `scorecard.code-workspace` or `label-design.code-workspace` instead of the repo folder directly — same single repo, same git history, just VS Code's explorer/search filtered to hide the other project's exclusive folders so the two don't bleed into each other while you work.
+**13 pipelines, 26 Cloud Run jobs (prod + test), about 68 BigQuery views.**
+The pipelines are Sales Orders, Sales Quotes, Sales Returns, Work Orders,
+Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence,
+Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality
+Non-Conformance, Quality Supplier Returns and Label Design. Every deployed
+view has a business-facing doc:
+[docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md).
 
 ---
 
-## Learning this project
+## Three projects, one repo
 
-Three places, in the order you'd want them:
+| Project | What it is | Branch | Folder | Open with | Status lives in |
+|---|---|---|---|---|---|
+| **Vox Scorecard** | Plex views behind every tile of the Vox MTD scorecard; manual-data app for goals and safety | `dev-scorecard` | `ptbq-scorecard` | `scorecard.code-workspace` | [Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9) |
+| **Scorecard Sandbox** | `voxdatalake.ScorecardSandbox`: a full simulated year under every tile, for designing Looker Studio | `dev-sandbox` | `ptbq-sandbox` | `sandbox-scorecard.code-workspace` | [findings](docs/SCORECARD_SANDBOX_FINDINGS.md) |
+| **Label Design** | Plex → BigQuery → Monday.com artwork queue, plus an on-demand sync app | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` | [label-design/STATUS.md](label-design/STATUS.md) |
+| *Shared tooling* | `main.py`, Terraform structure, hooks, deploy scripts | `dev` | `ptbq-dev` | `dev-shared.code-workspace` | [CHANGELOG.md](CHANGELOG.md) |
+| ***Deploy*** | merges and deploys only, no edits | `main` | `plex-to-big-query` | `main-deploy.code-workspace` | `git tag -l 'deploy/*'` |
 
-| | |
-|---|---|
-| **[Scorecard Field Manual](https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a)** | Every tile taken apart — its Plex source, why it is built that way, what might not be true. Written to answer *"where is that used?"* and *"why do we need it at all?"* Includes a searchable glossary. |
-| **[Vox Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9)** | Live status per tile, and the decisions still open. Shared with Vox. |
-| **[`docs/PLEX_GLOSSARY.md`](docs/PLEX_GLOSSARY.md)** | Plex's own definitions for the fields this repo reads — 93 of its 61,022 entries, cut down by `scripts/distill_glossary.py`. |
+Each project has **its own folder**, a git worktree bound to its branch, so
+two sessions can never share a working tree. Git hooks and a guard *inside
+Terraform* block the mistakes that happened on 2026-09-24: commits on the
+wrong branch, commits mixing projects, and deploys from anywhere but `main`.
 
-Then `docs/CHEATSHEET.md` for the pipeline mechanics, and `CHANGELOG.md` for
-why anything is the way it is.
+### The flow, at a glance
+
+```
+edit in the project's folder ─► commit on its dev branch ─► PR / merge into main
+      (hooks check every commit)                                    │
+                                                                    ▼
+      re-sync every dev branch ◄── verify the view in BigQuery ◄── ./scripts/deploy.sh
+          (git merge main)                                         (primary folder only)
+```
+
+- **Setup, every lock and its override, PRs, conflicts:**
+  [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Every command on one page:** [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
+
+> **Not everything here comes from Plex.** Goals and safety incidents are
+> typed by people into the **manual-data app** (`deploy/manual_data_app/`).
+> Goals then reach every "% to goal" view through `scorecard_goals_resolved`:
+> the app's newest entry wins, with the legacy `scorecard_goals` table as the
+> fallback. See [docs/reports/scorecard_goals_resolved.md](docs/reports/scorecard_goals_resolved.md).
+
+---
 
 ## How it works
 
 ```mermaid
 graph LR
-    SCHED["⏰ Cloud Scheduler\n7:00 PM Mountain"] -->|trigger| CR
-    GCS["☁ GCS\nreport configs"] -->|YAML + SQL| CR
-    SM["🔑 Secret Manager\nIAM token"] --> CR
+    SCHED["⏰ Cloud Scheduler"] -->|trigger| CR
+    GCS["☁ GCS\nreport configs + SQL\n(deployed by Terraform)"] -->|YAML + SQL| CR
+    SM["🔑 Secret Manager"] --> CR
 
-    subgraph CR["📦 Cloud Run Job"]
-        MAIN["main.py\nreads YAML → queries Plex\n→ loads BigQuery → creates VIEW"]
+    subgraph CR["📦 Cloud Run Job (one per pipeline, prod + test)"]
+        MAIN["main.py\nreads YAML → queries Plex\n→ loads raw tables → creates VIEWs"]
     end
 
     CR -->|ODBC| PLEX["🏭 Plex ERP"]
     PLEX --> CR
-    CR -->|raw tables + VIEW| BQ["📊 BigQuery\nPlexProd / PlexTest"]
+    CR -->|raw_* tables + views| BQ["📊 BigQuery\nPlexProd / PlexTest"]
+    CR -->|SUCCESS / PARTIAL / FAILED| MAIL["✉ SendGrid run email"]
 ```
 
-- **Change a report query:** edit the YAML or SQL in GCS — no rebuild, no Terraform.
-- **Add a new report:** new YAML + SQL in GCS, one Cloud Run Job block in Terraform.
-- **After every run:** an HTML email report (SUCCESS / PARTIAL / FAILED) goes out via SendGrid.
+- **Change a report's query or extraction:**
+  1. edit `reports/…` on the project's branch;
+  2. merge into `main`;
+  3. deploy with `./scripts/deploy.sh`.
+
+  No container rebuild is needed.
+- **Change Python** (`main.py`, `email_utils.py`): same flow, then a Cloud
+  Build image deploy (docs/OPERATIONS.md, Step 5).
+- **Exit code 0 does not mean the view exists.** Query the view after a run
+  (CLAUDE.md explains why).
 
 ---
 
-## Branch workflow
+## Read next
 
-`main` is the only branch anything ever gets deployed from — but nothing
-technical enforces that: `terraform apply` and `gcloud builds submit` both
-deploy whatever's on local disk, regardless of branch. Work happens on one
-of three long-running branches instead of `main` directly:
-
-| Project | Branch | Folder | Workspace |
-|---|---|---|---|
-| Deploy only | `main` | `plex-to-big-query` | `main-deploy.code-workspace` |
-| Vox Scorecard | `dev-scorecard` | `ptbq-scorecard` | `scorecard.code-workspace` |
-| Scorecard Sandbox | `dev-sandbox` | `ptbq-sandbox` | `sandbox-scorecard.code-workspace` |
-| Label Design | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` |
-| Shared tooling | `dev` | `ptbq-dev` | `dev-shared.code-workspace` |
-
-Each project has **its own folder** (a git worktree bound to its branch), and
-**versioned hooks plus a Terraform guard** block the mistakes that happened on
-2026-09-24: wrong-branch commits, cross-project commits, and applies from
-anywhere but `main`. Deploy with **`./scripts/deploy.sh`** from the primary
-folder. Setup, every lock and its override, and the full change → main →
-deploy flow: [CONTRIBUTING.md](CONTRIBUTING.md#branches-folders-and-locks--main-is-prod-work-happens-on-dev).
-
----
-
-## Quick navigation
-
-| What you want to do | Where to look |
+| You want to… | Go to |
 |---|---|
-| **Quick reference — everything on one page** | [CHEATSHEET.md](docs/CHEATSHEET.md) ← start here |
-| New here? Step-by-step guide | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Frontend dev learning the stack | [docs/FRONTEND_GUIDE.md](docs/FRONTEND_GUIDE.md) |
-| Run locally and get CSV output | [LOCAL_SETUP.md](docs/LOCAL_SETUP.md) |
-| Deploy to GCP with Terraform | [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) |
-| Understand the data flow and config | [TECHNICAL_REFERENCE.md](docs/TECHNICAL_REFERENCE.md) |
-| Edit reports, add new reports, SendGrid | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
-| Browse all Plex ODBC views by database | [catalog/plex_catalog_index.md](catalog/plex_catalog_index.md) |
-| gcloud / docker / terraform commands | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
-| Fix errors (copy-paste commands) | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
-| Code review findings + safety guards | [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
-| What if the GCP account/project is lost? | [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md) |
-| Tear down all GCP infrastructure | [docs/TEARDOWN.md](docs/TEARDOWN.md) |
+| Find a command | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) |
+| Learn the workflow: folders, hooks, commits, PRs, deploy | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Run it locally and get CSVs | [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md), then [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Stand up GCP from zero | [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) |
+| Edit or add a report; retries; SendGrid | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Understand the data flow and config | [docs/TECHNICAL_REFERENCE.md](docs/TECHNICAL_REFERENCE.md) |
+| Learn the stack as a frontend developer | [docs/FRONTEND_GUIDE.md](docs/FRONTEND_GUIDE.md) |
+| Look up gcloud / docker / terraform detail | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
+| Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
+| Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
+| Look up a Plex field | [docs/PLEX_GLOSSARY.md](docs/PLEX_GLOSSARY.md), [catalog/plex_catalog_index.md](catalog/plex_catalog_index.md) |
+| Understand the scorecard, tile by tile | [Scorecard Field Manual](https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a) |
+| Recover from a lost project, or tear down | [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md), [docs/TEARDOWN.md](docs/TEARDOWN.md) |
+| Know why something is the way it is | [CHANGELOG.md](CHANGELOG.md), newest first |
+| Read finished work: code review, driver license, NetSuite parity | [docs/archive/](docs/archive/) |
 
 ---
 
 ## Repository layout
 
-| Path | Purpose |
-|---|---|
-| `main.py` | ETL entry point — loads GCS config, loops Plex extractions, creates BigQuery VIEW |
-| `email_utils.py` | SendGrid email report builder |
-| `templates/report.html` | HTML template for email run summaries |
-| **`reports/`** | **Report definitions — edit to change what the pipeline extracts** |
-| `reports/*.yaml` | Prod report configs — one per pipeline, 12 of them |
-| `reports/test/*.yaml` | Test report configs (same views → `PlexTest`) |
-| `reports/sql/*.sql` | BigQuery JOIN SQL — one file per report view |
-| `terraform/` | All GCP infrastructure as code (jobs, schedulers, buckets, IAM) |
-| `deploy/cloudbuild.yaml` | CI/CD — build, push, deploy, smoke-test (test job only) |
-| `Dockerfile` / `docker-compose.yml` | Container image + local Phase-1 runner |
-| `config/` | ODBC driver registration (`odbcinst.ini`) and DSNs (`odbc.ini`) |
-| `driver/` | Plex Linux ODBC driver files — gitignored, fetched from GCS in CI |
-| `docs/` | Guides: quickstart, operations, troubleshooting, API reference, code review |
-| `catalog/` | Plex ODBC view catalogs — reference data, one file per Plex database |
-| `output/` | CSV files from local runs — gitignored |
+| Path | Purpose | Project |
+|---|---|---|
+| `main.py`, `email_utils.py`, `templates/` | ETL engine and the run email | shared |
+| `reports/*.yaml`, `reports/test/*.yaml` | Per-pipeline extractions and views; prod and test are **separate, hand-kept** files | shared |
+| `reports/sql/*.sql` | One file per BigQuery view (used by prod and test) | shared |
+| `terraform/` | All GCP infrastructure, including the deploy guard | shared |
+| `deploy/cloudbuild.yaml` | Image build and deploy to all 26 jobs | shared |
+| `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
+| `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
+| `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |
+| `label-design/`, `label_design_service/`, `deploy/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, sheet sync, on-demand app | Label Design |
+| `docs/` | Guides; `docs/reports/` holds the business docs; `docs/archive/` holds finished history | shared |
+| `reports-list/`, `spreadsheets/` | Company report inventory and the Google Sheets being mapped, with status per row | shared |
+| `catalog/`, `mapping/` | Plex ODBC schema catalogs; NetSuite ↔ Plex mapping | shared |
+| `*.code-workspace` | One VS Code workspace per project folder | shared |
+| `driver/`, `output/`, `.env`, `terraform/terraform.tfvars` | Gitignored: ODBC driver, local CSVs, secrets, Terraform variables (primary folder only) | — |
 
----
+## First run on a new machine
 
-## Two-phase setup
-
-**Phase 1** — get local extraction working:
 ```bash
-cp .env.example .env        # fill in Plex credentials and IAM token
-docker compose build
-docker compose up
-# inspect ./output/*.csv
+git clone https://github.com/Parasol-Group-Inc/plex-to-big-query.git C:/F/Parasol/plex-to-big-query
+cd C:/F/Parasol/plex-to-big-query
+./scripts/install_hooks.sh                       # once per clone
+git worktree add ../ptbq-scorecard dev-scorecard  # one folder per project
+git worktree add ../ptbq-sandbox dev-sandbox
+git worktree add ../ptbq-label-design dev-label-design
+git worktree add ../ptbq-dev dev
+cp .env.example .env && docker compose build && docker compose up   # local, read-only health check
 ```
 
-**Phase 2** — deploy to GCP once extraction is verified:
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars   # fill in GCP project details
-terraform init && terraform apply -var-file=terraform.tfvars
-# push Docker image, add secret versions, trigger job
-```
-
-Full step-by-step in [docs/QUICKSTART.md](docs/QUICKSTART.md).
-
----
-
-## Current status
-
-| Component | State |
-|---|---|
-| GCP infrastructure | ✅ Deployed — `voxdatalake`, Terraform-managed |
-| Multi-report GCS architecture | ✅ Live — YAML + SQL in GCS, editable without any deployment |
-| Sales Orders — test | ✅ Live and verified — 16-field view, dates confirmed as real DATEs (2026-07-15) |
-| Sales Orders — prod | ✅ Resolved (2026-07-20) — was failing with ODBC error 2404 "Session refused by service"; confirmed a Plex-side account restriction (not our driver/license/code), fixed by Plex Support |
-| Work Orders (prod + test) | ✅ Live — test data confirmed; prod still empty on the Plex side (Vox has not gone live) |
-| Code review (2026-07-14) | ✅ All findings fixed and verified — [docs/CODE_REVIEW_2026-07-14.md](docs/CODE_REVIEW_2026-07-14.md) |
-| DataDirect ODBC license | ✅ Applied (driver was running unlicensed — see [docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md)) |
-| Terraform state | ✅ Migrated to shared GCS backend (2026-07-20) — any team member with access can safely run `plan`/`apply`, no longer tied to one machine |
-| Team readiness | ✅ Audited (2026-07-20) — stale project/host/dataset references across 6 docs fixed; see [docs/CLICKUP_TEAM_GUIDE.md](docs/CLICKUP_TEAM_GUIDE.md) |
-| Vox scorecard migration | 🛠 In progress — 31 of 37 tiles have a BigQuery view; `PlexProd` still empty pending go-live. See [score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md](score-card-reference/VOX_SCORECARD_PLEX_MIGRATION_MAP.md) |
-| SendGrid domain auth | ✅ Resolved 2026-08-21 — CNAME records added, no more "couldn't verify" warning |
+`terraform/terraform.tfvars` goes in the primary folder only; that is
+where deploys happen. Full local setup:
+[docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md). GCP from zero:
+[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md).

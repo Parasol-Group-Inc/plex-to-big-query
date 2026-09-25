@@ -5,7 +5,7 @@
 -- the search criteria (Search Title "ATL | RUSH Open SOs", ID
 -- customsearch3967, owner Aaron T Luke) does NOT use a Priority/Rush status
 -- field at all — that was the wrong lead (Sales_v_Priority returned 0 rows
--- live, see docs/NETSUITE_PARITY_OPEN_ITEMS.md). The real filter is a text
+-- live, see docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md). The real filter is a text
 -- search: `Memo (Main) contains RUSH`. A real order (SO0117746) confirms
 -- the convention — its Memo starts literally with "RUSH | New label
 -- review...". Plex's `Sales_v_PO.Note` is the equivalent free-text field.

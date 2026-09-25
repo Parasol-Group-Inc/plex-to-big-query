@@ -12,14 +12,15 @@ The scorecard's **"$4.7M Goal"** and **"88% to Goal"** tiles.
 
 ## How it's built (high level)
 
-Rolls up [`sales_revenue_summary_report`](sales_revenue_summary_report.md) per month, then joins the goal from [`scorecard_goals`](scorecard_goals.md) — the maintained table fed from a Google Sheet. Revenue goals are company-wide, so it matches rows where `scope` is blank.
+Rolls up [`sales_revenue_summary_report`](sales_revenue_summary_report.md) per month, then joins the goal from [`scorecard_goals_resolved`](scorecard_goals_resolved.md) (since 2026-09-22) — the single list of "one goal per month and scope". A goal entered in the **Manual Data app** wins; a goal not entered there falls back to the older [`scorecard_goals`](scorecard_goals.md) table, so no tile goes blank while the last legacy goals are retired. Revenue goals are company-wide, so it matches rows where `scope` is blank.
 
 - **Pipeline:** `reports/sales_orders.yaml` → `revenue_vs_goal_report`
 - **SQL:** `reports/sql/revenue_vs_goal_view.sql`
 
 ## Flags and open questions
 
-- **Depends on a table the ETL doesn't create.** If `scorecard_goals` is dropped, this view stops being creatable. See [`scorecard_goals`](scorecard_goals.md).
+- **Depends on tables the ETL doesn't create.** The resolver reads two hand-made tables — `scorecard_goals_app` (the app's) and `scorecard_goals` (legacy). If either is dropped, the resolver and this view stop being creatable. See [`scorecard_goals_resolved`](scorecard_goals_resolved.md).
+- **The revenue goal is the company *sales* goal, reused.** No separate revenue target has been supplied; the app's Revenue tab holds a copy until someone confirms it or enters a real one. See [`scorecard_goals`](scorecard_goals.md).
 - **A month with revenue but no goal still appears**, with `goal_value` and `pct_to_goal` NULL. That's a deliberate LEFT JOIN: an inner join would make the revenue tile vanish whenever someone forgets to fill in next month's goal — exactly the failure a hand-maintained table invites. Actuals are Plex truth and shouldn't disappear because a spreadsheet is behind.
 - **A goal of 0 yields NULL, not an error** — `SAFE_DIVIDE` guards the case where a row is typed as 0 before being filled in.
 - **Verified 2026-09-04** against a placeholder goal: September revenue $65 against a $200,000 placeholder. The join works; the numbers are test data.

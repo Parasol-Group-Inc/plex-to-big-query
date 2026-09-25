@@ -1,5 +1,7 @@
 # NetSuite Reports → Plex Module/Category Mapping (First Pass)
 
+> **First pass, superseded** by [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../docs/NETSUITE_REPORT_BUILD_PLAN.md) and the per-department `reports-list/` files. Kept as the original mapping reference.
+
 Working doc mapping the NetSuite saved-search/report list against the Plex
 (vox.test.on.plex.com) module → category taxonomy in
 [available-reports.md](available-reports.md) / [enabled-reports.md](enabled-reports.md).

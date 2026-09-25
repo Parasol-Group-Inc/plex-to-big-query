@@ -1,12 +1,12 @@
 # Vox Scorecard | Goals Table
 
-> **Status:** ✅ Created 2026-09-04 in `PlexTest` and `PlexProd`; joined by a second, app-fed table 2026-09-09 · **Category:** Reference data · **Fed by:** a Google Sheet via Apps Script — *not* the ETL
+> **Status:** 🗄 **Legacy** — created 2026-09-04 in `PlexTest` and `PlexProd`; no longer pushed since 2026-09-22; kept only as the fallback behind [`scorecard_goals_resolved`](scorecard_goals_resolved.md) until retired · **Category:** Reference data · **Fed by:** nothing any more (goals are now entered in the Manual Data app) — *not* the ETL
 
 ## What this is
 
-The one maintained table behind every **"Goal"** and **"% to Goal"** figure on the Vox scorecard — revenue goals, sales goals by rep, and production goals by work centre group.
+The **original** goals table behind the Vox scorecard's **"Goal"** and **"% to Goal"** figures — revenue goals, sales goals by rep, and production goals by work centre group. It is now the *legacy* half of a two-table setup: new goals are entered in the **Manual Data app** and land in `scorecard_goals_app`, and the reports read [`scorecard_goals_resolved`](scorecard_goals_resolved.md), which takes the app's goal first and only falls back to this table when the app has none.
 
-A negotiated target isn't a transaction Plex records, so no amount of ETL work produces it. Goals live in a spreadsheet people can actually edit, and an Apps Script pushes that sheet into BigQuery so the goal sits in the same dataset as the actuals and can be joined in SQL rather than blended in Looker Studio.
+A negotiated target isn't a transaction Plex records, so no amount of ETL work produces it. Goals have to be typed by people and stored in BigQuery beside the actuals, so they can be joined in SQL rather than blended in Looker Studio. This page still documents the column layout, which both goal tables share, and the rebuild DDL for both.
 
 ## Where it lives
 
@@ -15,7 +15,7 @@ voxdatalake.PlexTest.scorecard_goals
 voxdatalake.PlexProd.scorecard_goals
 ```
 
-**This table is not managed by Terraform and not created by the ETL.** It was created by hand in both datasets. The three views that read it — [`revenue_vs_goal_report`](revenue_vs_goal_report.md), [`sales_vs_goal_report`](sales_vs_goal_report.md), [`production_vs_goal_report`](production_vs_goal_report.md) — **fail to create if it's missing**, so don't drop it. Rebuild DDL is at the bottom of this page.
+**This table is not managed by Terraform and not created by the ETL.** It was created by hand in both datasets. [`scorecard_goals_resolved`](scorecard_goals_resolved.md) reads it, and the three reports behind the goal tiles — [`revenue_vs_goal_report`](revenue_vs_goal_report.md), [`sales_vs_goal_report`](sales_vs_goal_report.md), [`production_vs_goal_report`](production_vs_goal_report.md) — read that, so **all four fail to create if this table is missing**. Don't drop it until its branch has been removed from the resolver's SQL. Rebuild DDL is at the bottom of this page.
 
 ## Columns
 
@@ -27,16 +27,16 @@ voxdatalake.PlexProd.scorecard_goals
 | `goal_value` | FLOAT64 | The target |
 | `unit` | STRING | `USD` or `units` — a label for readers, nothing enforces it |
 | `note` | STRING | Free text |
-| `updated_by` | STRING | Who last edited the row in the sheet |
-| `updated_at` | TIMESTAMP | Stamped by the Apps Script on each push |
+| `updated_by` | STRING | Who entered or last edited the goal |
+| `updated_at` | TIMESTAMP | When it was saved (stamped by the Apps Script, not the person's own clock) |
 
 ## Why one long table instead of three
 
-One row per (metric, month, scope) rather than a wide table with a column per metric. Revenue is company-wide, sales goals are per rep, and production goals are per work centre group — three different grains a wide table can't hold without NULL-padding or three separate tables to keep in sync. Long format also means **adding a new metric later is a new row, not a schema migration plus an Apps Script edit**.
+One row per (metric, month, scope) rather than a wide table with a column per metric. Revenue is company-wide, sales goals are per rep, and production goals are per work centre group — three different grains a wide table can't hold without NULL-padding or three separate tables to keep in sync. Long format also means **adding a new metric later is a new row, not a schema migration**.
 
 ## The one thing that will bite you
 
-**`scope` is an exact string join.** The sheet must spell the value exactly as the matching report emits it:
+**`scope` is an exact string join.** A goal must spell the value exactly as the matching report emits it (the Manual Data app's dropdowns offer the report's own values for exactly this reason):
 
 - **Sales** → the `sales_rep` value from `sales_mtd_summary_report`, including the literal `(no rep assigned)` bucket that unassigned orders collapse into
 - **Production** → the `workcenter_group` value from Plex. Confirmed live: **`Encapsulating`, not `Encapsulation`** — the Plex spelling differs from the scorecard tile name
@@ -48,46 +48,58 @@ A mismatch produces a NULL goal, not an error. All three views expose a flag (`g
 From 2026-09-09 a second table sits alongside this one:
 
 ```
-voxdatalake.<dataset>.scorecard_goals       ← this page: the spreadsheet ETL
-voxdatalake.<dataset>.scorecard_goals_app   ← the Apps Script WEB APP
+voxdatalake.<dataset>.scorecard_goals       ← this page: legacy, no longer pushed
+voxdatalake.<dataset>.scorecard_goals_app   ← the Manual Data app (current)
 ```
 
 Reports do not read either one directly any more — they read
 [`scorecard_goals_resolved`](scorecard_goals_resolved.md), which
 **prefers the app table and falls back to this one** for any goal not entered
 in the form. Read that page for the precedence rules, the tombstone behaviour
-and the sunset plan.
+and the steps to retire this table.
 
 `scorecard_goals_app` shares this table's columns and adds one:
 
 | Column | Type | Meaning |
 |---|---|---|
-| `is_deleted` | BOOL | `TRUE` retracts an override, so the goal falls back to the spreadsheet value rather than blanking the tile |
+| `is_deleted` | BOOL | `TRUE` retracts an app goal, so it falls back to this table's value (if any) rather than blanking the tile |
 
 It is **append-only** — the newest row per `(metric, period_month, scope)`
-wins — whereas this table is replaced wholesale on every push. Both are
-hand-created and outside Terraform.
+wins. Both tables are hand-created and outside Terraform.
 
-## How the push works
+## How it was fed, and why it no longer is
 
-`deploy/goals_sheet_to_bigquery.gs`, run on a time-driven trigger from the spreadsheet.
+Until 2026-09-22 an Apps Script (`deploy/goals_sheet_to_bigquery.gs`) copied a
+Google Sheet into this table on a timer, replacing the whole table each time.
+That script was **deleted from the repo on 2026-09-22**, when every goal moved
+to one entry point, the Manual Data app. **Nothing writes to this table any
+more.**
 
-- **WRITE_TRUNCATE** — the whole table is replaced on every push, so the sheet is the single source of truth and deleting a row there removes it here. An append-only load would accumulate duplicate goals for the same month and every "% to Goal" tile would quietly double.
-- **Refuses to push an empty sheet** — that would truncate the table to nothing and blank every goal tile.
-- **Schema is declared, not autodetected** — autodetect infers types from the first rows, so a month of round numbers can land `goal_value` as INTEGER and break the next push containing a decimal.
-- **Bad rows are skipped and logged, not fatal** — one typo shouldn't stop every other goal reaching the scorecard.
+- **Its rows have been moved into the app.** The 68 real sales goals were
+  imported into the app with `importLegacyGoals()` in `PlexTest` on
+  2026-09-24, so the app now holds its own copy of each of them and the app's
+  copy is the one the reports use.
+- **It stays only as a fallback.** [`scorecard_goals_resolved`](scorecard_goals_resolved.md)
+  still reads it for any goal the app has nothing to say about, so dropping
+  it early can't blank a tile. It will be retired once the resolver shows no
+  goal coming from it (`goal_source = 'sheet'` reads 0 rows) and its branch is
+  removed from the resolver's SQL.
+- **⚠ One loose end:** deleting the script from the repo does not switch off
+  the copy deployed in Apps Script. If that old project is still enabled, its
+  trigger can keep overwriting this table from the old sheet. It needs
+  disabling by hand.
 
 ## Current contents
 
-`PlexTest` holds **68 real goal rows** — 8 reps x 7 months of sales goals loaded straight from Vox's existing `VoxScorecardsLive.sales_goals` table, plus 12 company-wide monthly figures lifted out of the hardcoded SQL in `vw_sales_mtd_vs_goal`. Both were loaded **by query, not retyped**, so there is no transcription risk. The 4 placeholder rows seeded 2026-09-04 were deleted once the real ones landed.
+`PlexTest` holds **68 real goal rows** — 8 reps x 7 months of sales goals loaded straight from Vox's existing `VoxScorecardsLive.sales_goals` table, plus 12 company-wide monthly figures lifted out of the hardcoded SQL in `vw_sales_mtd_vs_goal`. Both were loaded **by query, not retyped**, so there is no transcription risk. The 4 placeholder rows seeded 2026-09-04 were deleted once the real ones landed. **All 68 were imported into the Manual Data app on 2026-09-24**, so in `PlexTest` the app's copy of each now takes precedence and these rows are only a fallback.
 
 **Revenue goals were loaded 2026-09-09 — as overrides, and under a stated
 assumption.** All 12 monthly figures now exist as `metric = 'revenue'` rows in
 **`scorecard_goals_app`**, not here. Two things about that worth knowing:
 
-- **Why the app table and not this one:** this table is replaced
-  `WRITE_TRUNCATE` on every spreadsheet push, so anything hand-loaded here
-  disappears the moment somebody saves the sheet. The app table is
+- **Why the app table and not this one:** at the time this table was
+  replaced wholesale on every spreadsheet push, so anything hand-loaded here
+  would have disappeared the moment somebody saved the sheet. The app table is
   append-only, which is exactly what an override is for.
 - **⚠ The assumption:** they are copied from the **company-wide sales goal**,
   because that is the only company-wide monthly target that exists anywhere in

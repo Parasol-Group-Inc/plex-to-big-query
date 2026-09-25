@@ -1,5 +1,7 @@
 # Local Setup Guide — Phase 1
 
+Last reviewed: 2026-09-25
+
 ## What this gets you
 
 By the end of this guide you will have the ETL container running on your machine, connecting to real Plex via ODBC, and writing CSV files to `./output/`. No GCP account required.
@@ -11,7 +13,7 @@ By the end of this guide you will have the ETL container running on your machine
 > instead and reads a multi-report YAML from GCS. See Step 4 below for how
 > to locally test that path instead once basic connectivity is confirmed.
 
-When the CSVs look correct — right columns, reasonable row counts, no obvious nulls — you are ready for [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
+When the CSVs look correct — right columns, reasonable row counts, no obvious nulls — your setup works. If you're joining the existing `voxdatalake` project, stop there: the cloud side already exists, and changes reach it through a `dev*` branch → `main` → `./scripts/deploy.sh` (`CONTRIBUTING.md`, [OPERATIONS.md](OPERATIONS.md)). [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) is for standing up a brand-new GCP project.
 
 ---
 
@@ -29,7 +31,7 @@ Before you start, confirm you have everything:
   - ODBC password
   - CompanyCode
 - [ ] **Plex ODBC driver** — see Step 1 below for the fast path (shared GCS bucket)
-  - Only if that bucket isn't available: Linux 64-bit `.so` files from Plex support — see [PLEX_SUPPORT_TEMPLATE.md](PLEX_SUPPORT_TEMPLATE.md) for the request email template
+  - Only if that bucket isn't available: Linux 64-bit `.so` files from Plex support — the old request-email template was removed in the 2026-07-21 docs reorg; it's in git history: `git show c4eda6d^:PLEX_SUPPORT_TEMPLATE.md`
 - [ ] **GCP account with access to `voxdatalake`** — needed for Step 1's fast path and for Phase 2 later
 
 ---
@@ -78,7 +80,7 @@ GCP access for this project to grant you `roles/storage.objectViewer` on the
 
 Only needed if the GCS bucket is unavailable, or you're installing a new
 driver version. This path does **not** include a license — see
-[docs/APPLY_DRIVER_LICENSE.md](docs/APPLY_DRIVER_LICENSE.md) afterward if you
+[archive/APPLY_DRIVER_LICENSE.md](archive/APPLY_DRIVER_LICENSE.md) afterward if you
 need one (the container prints a cosmetic warning without it; only escalates
 to a hard error if Plex disables unlicensed ODBC access).
 
@@ -99,7 +101,7 @@ to a hard error if Plex disables unlicensed ODBC access).
    ```
 
 6. Remove installer artifacts that are not needed in the image (**skip this
-   if you plan to apply a license per docs/APPLY_DRIVER_LICENSE.md** — that
+   if you plan to apply a license per docs/archive/APPLY_DRIVER_LICENSE.md** — that
    process needs `unixpi.ksh` and `makelic64`):
    ```powershell
    # These are safe to delete after extraction, once licensed
@@ -144,7 +146,7 @@ BQ_TABLE=production_orders
 
 ## Step 3 — Verify the ODBC connection config
 
-Open [config/odbc.ini](config/odbc.ini) and check the `[PlexProduction]` section:
+Open [config/odbc.ini](../config/odbc.ini) and check the `[PlexProduction]` section:
 
 ```ini
 [PlexProduction]
@@ -309,4 +311,4 @@ docker compose build && docker compose up
 
 ## Next step
 
-Once your CSV output looks correct, proceed to **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** to deploy the pipeline to GCP.
+Once your CSV output looks correct, you're done if you're joining the existing project (see the note at the top). Only for a brand-new GCP project, proceed to **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**.

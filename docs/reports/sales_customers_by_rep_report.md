@@ -8,7 +8,7 @@ One row per sales-rep-and-customer pair — which customers each sales rep cover
 
 ## Where it fits
 
-Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Customer List by Sales Rep"). The confirmation history for the underlying decision is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuite-sourced row in [`reports-list/sales.md`](../../reports-list/sales.md) (row: "Customer List by Sales Rep"). The confirmation history for the underlying decision is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 

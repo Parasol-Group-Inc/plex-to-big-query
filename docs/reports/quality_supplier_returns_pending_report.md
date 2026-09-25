@@ -8,7 +8,7 @@ One row per supplier return — return number, the date it was created, its retu
 
 ## Where it fits
 
-Fulfills NetSuite's **"Approve Vendor Return Authorizations"** report, tracked as the "Approve Vendor Return Authorizations" row in [`reports-list/supply-chain.md`](../../reports-list/supply-chain.md). Full research and decision history is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+Fulfills NetSuite's **"Approve Vendor Return Authorizations"** report, tracked as the "Approve Vendor Return Authorizations" row in [`reports-list/supply-chain.md`](../../reports-list/supply-chain.md). Full research and decision history is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 
@@ -26,4 +26,4 @@ Pulls every supplier return from Plex, attaches its status name, return type, an
 
 ## More detail
 
-[`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) have the full research trail, including how the dead Approving/Approved flags were discovered and the reasoning behind keeping the status-exclusion proxy.
+[`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) have the full research trail, including how the dead Approving/Approved flags were discovered and the reasoning behind keeping the status-exclusion proxy.

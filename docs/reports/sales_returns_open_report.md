@@ -8,7 +8,7 @@ One row per customer return (RMA) that's still open — not yet Closed or Cancel
 
 ## Where it fits
 
-This is a NetSuite parity report — it replaces the "Open RMA's" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+This is a NetSuite parity report — it replaces the "Open RMA's" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 
@@ -26,4 +26,4 @@ Pulls from a new pair of Plex views built specifically for this report (returns 
 
 ## More detail
 
-[`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) has the full decision history, [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) has the original confirmation log, and [`reports-list/sales.md`](../../reports-list/sales.md) has the original NetSuite search this replaces.
+[`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has the full decision history, [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) has the original confirmation log, and [`reports-list/sales.md`](../../reports-list/sales.md) has the original NetSuite search this replaces.

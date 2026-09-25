@@ -8,7 +8,7 @@ One row per open sales quote — quote number, title, the date it was created, i
 
 ## Where it fits
 
-Fulfills NetSuite's **"Sales | Open Quotes"** saved search, tracked as the "Open Quotes" row in [`reports-list/sales.md`](../../reports-list/sales.md). Full research and decision history is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+Fulfills NetSuite's **"Sales | Open Quotes"** saved search, tracked as the "Open Quotes" row in [`reports-list/sales.md`](../../reports-list/sales.md). Full research and decision history is in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 
@@ -26,4 +26,4 @@ Pulls every quote from Plex, attaches its status name and the customer's name, a
 
 ## More detail
 
-[`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) have the full research trail, including how the dead Open_Quote flag was discovered and the reasoning behind the Approved-is-closed decision.
+[`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) have the full research trail, including how the dead Open_Quote flag was discovered and the reasoning behind the Approved-is-closed decision.

@@ -1,25 +1,36 @@
 # Operations Guide
 
+Last reviewed: 2026-09-25
+
 Day-to-day operations: editing reports, adding new reports, configuring SendGrid, and managing environments.
+
+> **Every change reaches production the same way:** commit on a `dev*` branch
+> in its project folder → merge to `main` → `./scripts/deploy.sh` from the
+> primary folder (`C:\F\Parasol\plex-to-big-query`). The full flow and every
+> lock that enforces it: `CONTRIBUTING.md` § "Branches, folders and locks".
+> Nothing in this guide is a way around that.
 
 ---
 
 ## How the Report System Works
 
-Reports are defined by **YAML files stored in Cloud Storage** — not hardcoded in the container image or Terraform variables. This means you can change what gets extracted and how the BigQuery view looks without any code deployment.
+Reports are defined by **YAML files** (plus the SQL files they point at) — not
+hardcoded in the container image. The Cloud Run job reads them from Cloud
+Storage at the start of every run, so a report change needs no image rebuild.
+But the GCS copies are **Terraform-managed**: every file under `reports/`
+(each pipeline's prod YAML, its test YAML, and every `reports/sql/*.sql`) is a
+`google_storage_bucket_object` in `terraform/main.tf` with `source` pointing at
+the repo file. `./scripts/deploy.sh` is what puts them in GCS.
 
 ```
 gs://voxdatalake-report-configs/
-├── reports/
-│   ├── sales_orders.yaml          ← prod: 13 Plex views → PlexProd (7:00 PM Mountain)
-│   └── work_orders.yaml           ← prod: 4 Part DB views → PlexProd (7:20 PM Mountain)
-├── test/
-│   ├── sales_orders.yaml          ← test: same views → PlexTest (7:10 PM Mountain)
-│   └── work_orders.yaml           ← test: same views → PlexTest (7:30 PM Mountain)
-└── sql/
-    ├── sales_orders_view.sql      ← BigQuery JOIN SQL for 16-field sales report ✏
-    └── work_orders_view.sql       ← BigQuery JOIN SQL for work orders report ✏
+├── reports/<pipeline>.yaml   ← PROD config, one per pipeline (13) → PlexProd
+├── test/<pipeline>.yaml      ← TEST config, one per pipeline (13) → PlexTest
+└── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
+
+13 pipelines, 26 Cloud Run jobs (prod + test), 68 BigQuery views. Schedule
+for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
@@ -27,13 +38,29 @@ gs://voxdatalake-report-configs/
 
 The Cloud Run Job reads the YAML at startup on every run. The `REPORT_CONFIG_GCS_PATH` env var tells it which YAML to load.
 
+> **The prod and test YAMLs are two hand-maintained files.** Any change to an
+> `extractions:` or `bq_view:` list goes in both `reports/<pipeline>.yaml` and
+> `reports/test/<pipeline>.yaml` (the pre-commit hook refuses a pair whose
+> `plex_view:` counts differ). The SQL files are not paired — there is one.
+
 ---
 
-## Edit an Existing Report (No Deployment)
+## Edit an Existing Report
+
+Every edit is a normal change: make it in the project's folder on its `dev*`
+branch, commit it with its `CHANGELOG.md` entry, merge to `main`, deploy with
+`./scripts/deploy.sh`. What follows is what to edit, and how to check it
+safely **before** it goes through that flow.
+
+> **Never `gcloud storage cp` into `reports/` or `sql/` in the bucket.** This
+> guide used to recommend it as a "no-deployment" edit. That is how prod GCS
+> drifted away from `main`, and how a later `terraform apply` of `main` then
+> silently rolled a live fix back (the fix only ever existed in GCS). Copying
+> into `test/` for a quick look is the only exception — see below.
 
 ### Change a filter on a Plex view
 
-1. Edit `reports/sales_orders.yaml` — find the extraction you want to filter and set the `filter` field:
+Edit the extraction in **both** YAMLs — find it and set the `filter` field:
 
 ```yaml
 extractions:
@@ -43,22 +70,9 @@ extractions:
     date_col: ""
 ```
 
-2. Push to GCS:
-
-```bash
-gcloud storage cp reports/sales_orders.yaml gs://voxdatalake-report-configs/reports/
-```
-
-3. Trigger a run:
-
-```bash
-gcloud run jobs execute plex-etl-sales-orders-test \
-  --region=us-central1 --project=voxdatalake --wait
-```
-
 ### Add a Plex view to an existing report
 
-Add a new entry to the `extractions[]` list in the YAML:
+Add a new entry to the `extractions[]` list, in both YAMLs:
 
 ```yaml
   - plex_view: Sales_v_PO_Type        # ← Plex view name (always {DB}_v_{View})
@@ -67,25 +81,52 @@ Add a new entry to the `extractions[]` list in the YAML:
     date_col: ""                       # ← timestamp column for incremental, or ""
 ```
 
-Then push and trigger as above.
-
-### Change the BigQuery JOIN view SQL
-
-The `sales_orders_view.sql` file defines the 16-field report. Edit it and push:
+Check the pair still matches before committing:
 
 ```bash
-# Edit reports/sql/sales_orders_view.sql locally, then:
-gcloud storage cp reports/sql/sales_orders_view.sql \
-  gs://voxdatalake-report-configs/sql/
+grep -c 'plex_view:' reports/sales_orders.yaml reports/test/sales_orders.yaml
+```
 
-# The next pipeline run will CREATE OR REPLACE the view in BigQuery.
-# You can also edit the view directly in the BigQuery Console —
-# your changes persist until the next pipeline run.
+### Quick iteration on a YAML change — test path and `-test` job only
+
+To see a YAML change run before merging, you may copy the **test** YAML into
+the bucket's `test/` path and run the **test** job:
+
+```bash
+gcloud storage cp reports/test/sales_orders.yaml \
+  gs://voxdatalake-report-configs/test/ --content-type=text/plain
 gcloud run jobs execute plex-etl-sales-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 ```
 
+Then check the log line `Report 'sales_orders_test' loaded: N extraction(s)`
+against the `grep -c` above, and query the view — a `--wait` exit code of 0
+does not prove the view was created (CLAUDE.md). This is iteration, not a
+deploy: the next `./scripts/deploy.sh` puts `test/` back to whatever `main`
+says, which is the point. Land the change through the normal flow.
+
+### Change the BigQuery JOIN view SQL
+
+Edit `reports/sql/<view>.sql` and send it through the normal flow. **There is
+only one copy of each SQL file in GCS (`sql/`), and prod and test both read
+it** — so copying an edited SQL file into the bucket changes the *prod* job's
+next run as well, not just test's. Don't. Iterate on SQL without touching GCS:
+
+- **BigQuery dry run / console query** — paste the SQL with `{gcp_project}`
+  and `{dataset}` replaced by `voxdatalake` and `PlexTest`, and run it (or
+  `bq query --dry_run --use_legacy_sql=false "..."` to check it parses).
+- **The scorecard sandbox** (`voxdatalake.ScorecardSandbox`, see
+  [`scripts/scorecard_sandbox/README.md`](../scripts/scorecard_sandbox/README.md))
+  for scorecard views that need realistic data behind them.
+
+After `./scripts/deploy.sh` has put the new SQL in GCS, the next run of each
+job that lists it does `CREATE OR REPLACE VIEW`. To see it at once, run the
+`-test` job, then the prod job if you don't want to wait for its schedule.
+
 > **Note on SQL placeholders:** The SQL file uses `{gcp_project}` and `{dataset}` which the container replaces at runtime with the `GCP_PROJECT` and `BQ_DATASET` env var values. Never hardcode `voxdatalake` or `PlexProd` in the SQL file — it must work for both prod and test.
+
+> **Editing a view in the BigQuery console** lasts only until the next run
+> recreates it from GCS. Fine for a look; never a fix.
 
 ---
 
@@ -137,7 +178,7 @@ bq_view:
   sql_file: gs://voxdatalake-report-configs/sql/purchasing_orders_view.sql
 ```
 
-> **Don't skip `category`/`display_name`.** Without them, the email subject falls back to a generic `[Plex ETL] {company_name} — DATE` with no report name in it at all, and the body has no "Reports Produced" breakdown. Pick `category` from [`reports-list/`](../reports-list/) (the department the report belongs to — Sales, Production, Quality, Supply Chain, ...) and `display_name` from the report's real name as your stakeholders know it, not the internal `bq_table`/`report_name` identifiers.
+> **Don't skip `category`/`display_name`.** Without `category`, the subject falls back to the bare pipeline name (`[Plex ETL] - Purchasing Orders — DATE`) with no department in it; without `display_name`, the body's "Reports Produced" list shows raw view names. Pick `category` from [`reports-list/`](../reports-list/) (the department the report belongs to — Sales, Production, Quality, Supply Chain, ...) and `display_name` from the report's real name as your stakeholders know it, not the internal `bq_table`/`report_name` identifiers.
 
 Edit `reports/test/purchasing_orders.yaml` — change only `report_name` to `purchasing_orders_test`:
 
@@ -178,79 +219,36 @@ SUM(SAFE_CAST(line.Amount AS FLOAT64)) AS total_amount
 
 `SAFE_CAST` is a no-op when the column is already the correct type — safe to apply defensively.
 
-### Step 3 — Create a test YAML in GCS and push all files
+### Step 3 — Add the Terraform resources (GCS objects, jobs, schedulers)
 
-```bash
-# Push prod config
-gcloud storage cp reports/purchasing_orders.yaml \
-  gs://voxdatalake-report-configs/reports/ --project=voxdatalake
+Copy the **`sales_quotes`** blocks in `terraform/main.tf` — the most recent
+complete single-view pipeline — and rename them. A pipeline is nine resources:
 
-# Push test config
-gcloud storage cp reports/test/purchasing_orders.yaml \
-  gs://voxdatalake-report-configs/test/ --project=voxdatalake
+| Resource | Copy of | What to change |
+|---|---|---|
+| `google_storage_bucket_object` × 3 | `sales_quotes_config_prod`, `sales_quotes_config_test`, `sales_quotes_open_view_sql` | object `name` and `source` — one per YAML, plus **one per SQL file** the YAML lists (Terraform doesn't infer SQL files from `bq_view`; a missing one means that view's SQL never reaches GCS) |
+| `google_cloud_run_v2_job` × 2 | `etl_sales_quotes`, `etl_sales_quotes_test` | `name` (`plex-etl-<pipeline>` / `plex-etl-<pipeline>-test`) and the `REPORT_CONFIG_GCS_PATH` value (`reports/…` vs `test/…`) |
+| `google_cloud_scheduler_job` × 4 | `etl_sales_quotes`, `etl_sales_quotes_retry`, `etl_sales_quotes_test`, `etl_sales_quotes_test_retry` | `name` (`plex-<pipeline>-sync[-test][-retry]`), the job reference in `uri`, and the two main `schedule` crons (Mountain time, `var.scheduler_time_zone`) — pick a free 10-minute slot from [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Retries keep `var.retry_scheduler_cron`. |
 
-# Push SQL
-gcloud storage cp reports/sql/purchasing_orders_view.sql \
-  gs://voxdatalake-report-configs/sql/ --project=voxdatalake
-```
+Keep the `lifecycle { ignore_changes = [...image...] }` block on both jobs.
 
-### Step 4 — Add Cloud Run Jobs in `terraform/main.tf`
-
-Copy the `etl_work_orders` and `etl_work_orders_test` blocks. The only required changes per report are: job name, `REPORT_CONFIG_GCS_PATH`, `BQ_DATASET`, `PLEX_HOST`, and schedule.
-
-```hcl
-resource "google_cloud_run_v2_job" "etl_purchasing" {
-  name     = "plex-etl-purchasing"
-  location = var.gcp_region
-
-  template {
-    template {
-      service_account = google_service_account.etl.email
-      max_retries     = 1
-      timeout         = "600s"
-      containers {
-        image = var.image_url
-        env { name = "GCP_PROJECT";            value = var.gcp_project }
-        env { name = "BQ_DATASET";             value = var.bq_dataset }      # "PlexProd"
-        env { name = "PLEX_HOST";              value = var.plex_host }        # prod host
-        env { name = "PLEX_PORT";              value = "19995" }
-        env { name = "PLEX_SERVER_DATASOURCE"; value = "ReportDataSource" }
-        env { name = "REPORT_CONFIG_GCS_PATH"
-              value = "gs://${var.report_configs_bucket}/reports/purchasing_orders.yaml" }
-        env { name = "METADATA_TABLE";         value = var.metadata_table }
-        env { name = "SENDGRID_ENABLED";       value = var.sendgrid_enabled }
-        env { name = "REPORT_FROM_EMAIL";      value = var.report_from_email }
-        env { name = "REPORT_TO_EMAILS";       value = var.report_to_emails }
-        env { name = "SECRET_SENDGRID_KEY";    value = var.secret_sendgrid_key }
-        env { name = "SECRET_ACCESS_TOKEN";    value = var.secret_access_token }
-        env { name = "COMPANY_NAME";           value = var.company_name }
-        env { name = "REPORT_SUBJECT";         value = var.report_subject }
-      }
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing" {
-  name      = "plex-purchasing-sync"
-  schedule  = "0 6 * * *"   # pick a time after your upstream reports finish
-  time_zone = "UTC"
-  region    = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-# Repeat for the test job — change: name, BQ_DATASET=PlexTest, PLEX_HOST=plex_host_test,
-# REPORT_CONFIG_GCS_PATH=.../test/purchasing_orders.yaml, schedule cron
-```
+Also add both new job names to **`_ALL_JOBS` in `deploy/cloudbuild.yaml`** —
+a job missing from that list never gets a new image from a Cloud Build deploy.
 
 > **Note on `BQ_TABLE` and `PLEX_VIEW`:** these env vars are only used in the legacy single-view mode and have no effect when `REPORT_CONFIG_GCS_PATH` is set. You don't need to set them for new multi-report pipelines.
 
-### Step 5 — Apply Terraform and deploy the image
+### Step 4 — Commit, merge, deploy
+
+Commit the YAML pair, SQL, `main.tf` and `cloudbuild.yaml` changes together
+with a `CHANGELOG.md` entry, a `docs/reports/<view>.md` doc, and a status-line
+update in the `reports-list/`/`spreadsheets/` doc that tracks the report
+(CLAUDE.md "Convention"). Push the `dev*` branch, merge to `main`, then from the
+primary folder:
+
+```bash
+cd C:/F/Parasol/plex-to-big-query && git pull
+./scripts/deploy.sh
+```
 
 > **Deploy Terraform-managed changes with `./scripts/deploy.sh`, from the
 > primary folder on `main`.** It runs the preflight, plans to a file (the
@@ -258,20 +256,26 @@ resource "google_cloud_scheduler_job" "etl_purchasing" {
 > `main` in the primary folder), separates real content changes from
 > line-ending noise, flags destroys, asks you to confirm the change count,
 > applies exactly that plan, and tags the commit `deploy/<UTC time>`.
-> Background and every lock: `CONTRIBUTING.md`.
->
-> An image deploy (`gcloud builds submit`) has no guard inside it — run
-> `./scripts/deploy_preflight.sh` first, every time.
+> Background and every lock: `CONTRIBUTING.md`. Never a bare `terraform apply`.
+
+A new job is created on whatever `image_url` in `terraform.tfvars` says.
+Check that against a live job first — it can be several deploys stale:
 
 ```bash
-# If you changed Python code (main.py, email_utils.py):
-gcloud builds submit \
-  --config deploy/cloudbuild.yaml \
-  --project=voxdatalake \
-  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+gcloud run jobs describe plex-etl-sales-orders --region=us-central1 \
+  --project=voxdatalake --format="value(spec.template.spec.template.spec.containers[0].image)"
+```
 
-# Infrastructure only (YAML/SQL + new Cloud Run jobs):
-./scripts/deploy.sh      # never a bare terraform apply; see the note above
+### Step 5 — Deploy the image (only if Python code changed)
+
+`main.py`/`email_utils.py`/`templates/` changes ship as an image, not through
+Terraform. An image deploy has no guard inside it — run the preflight first,
+every time, from the primary folder on an up-to-date `main`:
+
+```bash
+./scripts/deploy_preflight.sh
+gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
 ```
 
 > **Cloud Build safety:** the build's smoke test runs **`plex-etl-sales-orders-test`
@@ -282,15 +286,23 @@ gcloud builds submit \
 ### Step 6 — Test and validate
 
 ```bash
-# Trigger test job
-gcloud run jobs execute plex-etl-purchasing-test \
+# Trigger the test job
+gcloud run jobs execute plex-etl-purchasing-orders-test \
   --region=us-central1 --project=voxdatalake --wait
 
-# Preview the BQ view (BigQuery Console or bq.cmd):
-# SELECT * FROM `voxdatalake.PlexTest.purchasing_orders_report` LIMIT 10
+# Then confirm the VIEW exists — exit code 0 does not prove it (CLAUDE.md)
+bq query --use_legacy_sql=false --project_id=voxdatalake \
+  "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.purchasing_orders_report\`"
 ```
 
-Check the email — subject will be `[Plex ETL] {category}: {display_name} — DATE` (from the `category`/`display_name` fields in the report's YAML — set those before deploying so the subject isn't just the bare report_name). Status and PRODUCTION/TEST are never in the subject — check the body for those.
+Check the log line `Report 'purchasing_orders_test' loaded: N extraction(s)`
+against `grep -c 'plex_view:' reports/test/purchasing_orders.yaml`.
+
+Check the email — subject will be `[Plex ETL] - {Category}: {Pipeline} — {date}`
+(built in `email_utils.py` from the YAML's `category` and the pipeline name,
+e.g. `[Plex ETL] - Sales: Quotes — 2026-09-25`). Each view's `display_name` is
+listed in the body under "REPORTS PRODUCED". Status and PRODUCTION/TEST are
+never in the subject — check the body for those.
 
 ---
 
@@ -298,12 +310,14 @@ Check the email — subject will be `[Plex ETL] {category}: {display_name} — D
 
 | Setting | Production | Test |
 |---|---|---|
-| Sales Orders job | `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-sales-orders-test` (7:10 PM Mountain) |
-| Work Orders job | `plex-etl-work-orders` (7:20 PM Mountain) | `plex-etl-work-orders-test` (7:30 PM Mountain) |
-| Failure retry (all 16 jobs) | 9:45 PM Mountain daily — see [Failure Retry](#failure-retry-9-45-pm-mountain) below | |
+| Cloud Run jobs (13 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
+| Schedulers | `plex-<pipeline>-sync` | `plex-<pipeline>-sync-test` |
+| Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
+| Failure retry (all 26 jobs) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
-| Report Config bucket | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
+| Report config (YAML) | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
+| View SQL | `gs://voxdatalake-report-configs/sql/` — **shared** | same files |
 | Status | ✅ Live | ✅ Active — develop and validate here first |
 
 **Always test in the test environment first.** The test jobs write to `PlexTest` — safe to run repeatedly, no impact on production data.
@@ -318,11 +332,18 @@ gcloud run jobs execute plex-etl-sales-orders --region=us-central1 --project=vox
 # Work Orders
 gcloud run jobs execute plex-etl-work-orders-test --region=us-central1 --project=voxdatalake --wait
 gcloud run jobs execute plex-etl-work-orders --region=us-central1 --project=voxdatalake --wait
+
+# Any pipeline: plex-etl-<pipeline>[-test]; list them all with
+gcloud run jobs list --region=us-central1 --project=voxdatalake
 ```
 
 ### Promote to production
 
-After verifying results in `PlexTest`, trigger the corresponding prod job. The prod job reads from `reports/*.yaml` (not `test/*.yaml`) and writes to `PlexProd`.
+Production changes only through `main` + `./scripts/deploy.sh` (top of this
+guide). Once deployed, you can trigger the prod job instead of waiting for its
+schedule — it reads `reports/<pipeline>.yaml` (not `test/`) and writes to
+`PlexProd`. Prod runs email the whole recipient list, so don't fire them
+repeatedly.
 
 ---
 
@@ -344,16 +365,18 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 
 ## Failure Retry (9:45 PM Mountain)
 
-All 16 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
+All 26 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
 `America/Denver`** (handles the MST/MDT switch automatically — no manual
-adjustment needed):
+adjustment needed). The naming is uniform — `plex-<pipeline>-sync-retry`
+retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
+`plex-etl-<pipeline>-test`:
 
 | Retry scheduler | Retries |
 |---|---|
-| `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (sales, prod) |
-| `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (sales, test) |
+| `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (prod) |
+| `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (test) |
 | `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
-| `plex-work-orders-sync-test-retry` | `plex-etl-work-orders-test` (test) |
+| … one pair per pipeline, 52 schedulers in all | |
 
 **How it decides whether to actually do anything:** the retry trigger
 re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution
@@ -362,6 +385,8 @@ checks a `job_run_log` BigQuery table (in the same dataset it already
 writes to) for the most recent **scheduled**-mode run logged today:
 
 - **FAILED** → proceeds with a full real run, same as any other execution
+- **no scheduled run logged today** → also proceeds with a full run (see the
+  caution below)
 - **SUCCESS or PARTIAL** → already covered for today; the job exits cleanly
   without doing any real work and **without sending an email** (a silent
   no-op, to avoid inbox noise from a trigger that had nothing to do)
@@ -369,6 +394,16 @@ writes to) for the most recent **scheduled**-mode run logged today:
 Only a genuine **FAILED** run triggers a retry — **PARTIAL** does not,
 since that's a different severity tier (some data got through) and isn't
 treated as "the run needs to happen again."
+
+> **Caution — "today" is the UTC date, and some jobs run after the retry.**
+> `run_date` and the check both use UTC. A job scheduled *after* 9:45 PM
+> Mountain (sales quotes, sales returns, quality supplier returns, and
+> `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM), or one whose
+> scheduled runs land on the previous UTC day (Label Design, 9:30 AM / 1:30 PM),
+> has no "scheduled run today" when its retry fires — so, reading the code, the
+> retry does a full run and sends an email every night. Confirm against
+> `job_run_log` (query below, `run_mode = 'retry'`) before relying on the
+> retry for those pipelines.
 
 **Checking what happened:**
 ```sql
@@ -390,15 +425,17 @@ gcloud scheduler jobs resume plex-sales-orders-sync-retry --location=us-central1
 ```
 
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /
-`retry_time_zone` in `terraform.tfvars` (defaults: `"45 21 * * *"` /
-`"America/Denver"`) — applies to all 16 jobs at once — then
-`terraform apply`.
+`retry_time_zone` in `terraform.tfvars` (live values: `"45 21 * * *"` /
+`"America/Denver"`; the `variables.tf` defaults are `"0 6 * * *"` /
+`"America/Denver"`) — applies to all 26 retry schedulers at once — back up
+`terraform.tfvars` (its header has the command), then `./scripts/deploy.sh`
+from the primary folder. `terraform.tfvars` exists only there.
 
 ---
 
 ## Data Safety Guards
 
-These are enforced by `main.py` (added in the 2026-07-14 code review — see [CODE_REVIEW_2026-07-14.md](CODE_REVIEW_2026-07-14.md)):
+These are enforced by `main.py` (added in the 2026-07-14 code review — see [archive/CODE_REVIEW_2026-07-14.md](archive/CODE_REVIEW_2026-07-14.md)):
 
 | Guard | Behavior |
 |---|---|
@@ -425,7 +462,7 @@ What `date_col` actually does today:
 1. Adds `ORDER BY Change_Date ASC` to the Plex query
 2. Records the column's max value as `max_modified_at` in the `sync_metadata` table — so if incremental sync is built later, the watermark history is already accurate
 
-If incremental sync is implemented in the future, use BigQuery **query parameters** (not string interpolation) for the watermark comparison — see finding 9 in [CODE_REVIEW_2026-07-14.md](CODE_REVIEW_2026-07-14.md).
+If incremental sync is implemented in the future, use BigQuery **query parameters** (not string interpolation) for the watermark comparison — see finding 9 in [archive/CODE_REVIEW_2026-07-14.md](archive/CODE_REVIEW_2026-07-14.md).
 
 ---
 
@@ -494,7 +531,7 @@ report_to_emails  = "emilio.dominguez@parasolgroupinc.com,jennilyn.tockstein@par
 company_name      = "Vox Nutrition"
 ```
 
-Then `terraform apply -var-file=terraform.tfvars`.
+Then back up `terraform.tfvars` (command in its header) and run `./scripts/deploy.sh` from the primary folder.
 
 **5. Test**
 
@@ -516,9 +553,10 @@ If no email arrives:
 
 - [ ] Identify the Plex view name (`{Database}_v_{ViewName}` format)
 - [ ] Verify your ODBC user has read access to the view (run `SELECT TOP 3 * FROM {view}` in Plex SQL Dev)
-- [ ] Add entry to the report YAML, push to GCS, trigger test run
+- [ ] Add the entry to **both** report YAMLs (prod + test); optionally copy the test YAML to `gs://…/test/` and run the `-test` job to try it
 - [ ] Check BigQuery for the new table: `bq query --nouse_legacy_sql "SELECT COUNT(*) FROM \`voxdatalake.PlexTest.{table}\`"`
 - [ ] Decide: full refresh or incremental? (does the view have a timestamp column?)
-- [ ] If adding a new report: add Cloud Run job + scheduler to `main.tf`, run `terraform apply`
+- [ ] If adding a new report: add the GCS objects, both Cloud Run jobs and all four schedulers to `main.tf`, and the jobs to `_ALL_JOBS` in `deploy/cloudbuild.yaml`
+- [ ] Commit with `CHANGELOG.md` + `docs/reports/` doc, merge to `main`, `./scripts/deploy.sh`
 - [ ] Test the BigQuery VIEW if you added `bq_view` to the YAML
 - [ ] Verify row counts and spot-check a few rows against Plex

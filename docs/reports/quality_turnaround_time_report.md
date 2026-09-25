@@ -8,7 +8,7 @@ One row per quality problem (NC) record, showing when it was opened, when — if
 
 ## Where it fits
 
-Built for NetSuite parity against **Turn Around Time Report - Last Month** and **Turn Around Time Report - Rolling**, rows #69/#70 in [`mapping/netsuite-report-mapping.md`](../../mapping/netsuite-report-mapping.md) — the closest existing Plex analog identified there was "Average Days to Problem Resolution," rated Low-Med confidence. The choice of which date starts the turnaround clock was decided in [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md). It's a sibling view on the same pipeline as `quality_nonconformance_report` and `quality_deviation_report` — same underlying quality-problem data, cut a different way.
+Built for NetSuite parity against **Turn Around Time Report - Last Month** and **Turn Around Time Report - Rolling**, rows #69/#70 in [`mapping/netsuite-report-mapping.md`](../../mapping/netsuite-report-mapping.md) — the closest existing Plex analog identified there was "Average Days to Problem Resolution," rated Low-Med confidence. The choice of which date starts the turnaround clock was decided in [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md). It's a sibling view on the same pipeline as `quality_nonconformance_report` and `quality_deviation_report` — same underlying quality-problem data, cut a different way.
 
 ## How it's built (high level)
 
@@ -30,4 +30,4 @@ Starts from the same quality-problem records pulled for the Quality Nonconforman
 
 ## More detail
 
-[`mapping/netsuite-report-mapping.md`](../../mapping/netsuite-report-mapping.md) (rows #69-70) has the original NetSuite parity mapping, and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) has the clock-start decision. `reports/quality_nonconformance.yaml` covers the shared problem-record data this report and its two siblings (Quality Nonconformance, Quality Deviations) all draw from.
+[`mapping/netsuite-report-mapping.md`](../../mapping/netsuite-report-mapping.md) (rows #69-70) has the original NetSuite parity mapping, and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has the clock-start decision. `reports/quality_nonconformance.yaml` covers the shared problem-record data this report and its two siblings (Quality Nonconformance, Quality Deviations) all draw from.

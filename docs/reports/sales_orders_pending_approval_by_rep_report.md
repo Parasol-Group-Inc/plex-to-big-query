@@ -8,7 +8,7 @@ The same list as "Pending Approval Orders" — every sales order line still sitt
 
 ## Where it fits
 
-NetSuite parity for the **"Orders Pending Approval by Sales Rep"** saved search tracked in [`reports-list/sales.md`](../../reports-list/sales.md). See [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) and [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../NETSUITE_REPORT_BUILD_PLAN.md) for the full reasoning behind how it was built.
+NetSuite parity for the **"Orders Pending Approval by Sales Rep"** saved search tracked in [`reports-list/sales.md`](../../reports-list/sales.md). See [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) and [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../NETSUITE_REPORT_BUILD_PLAN.md) for the full reasoning behind how it was built.
 
 ## How it's built (high level)
 
@@ -25,4 +25,4 @@ NetSuite's saved-search list had two entries — "Pending Approval Orders" and "
 
 ## More detail
 
-[`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) has the specific decision record for this report, and [`reports-list/sales.md`](../../reports-list/sales.md) has the full department-wide inventory it fits into.
+[`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has the specific decision record for this report, and [`reports-list/sales.md`](../../reports-list/sales.md) has the full department-wide inventory it fits into.

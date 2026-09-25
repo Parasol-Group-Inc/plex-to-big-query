@@ -8,7 +8,7 @@ One row per order line/release that's sitting at the "Pending Payment Review" st
 
 ## Where it fits
 
-Built as NetSuite parity, tracked in [`reports-list/sales.md`](../../reports-list/sales.md). Also logged in the decisions table in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+Built as NetSuite parity, tracked in [`reports-list/sales.md`](../../reports-list/sales.md). Also logged in the decisions table in [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../../docs/NETSUITE_REPORT_BUILD_PLAN.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 

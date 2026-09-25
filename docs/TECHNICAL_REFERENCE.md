@@ -1,9 +1,11 @@
 # Technical Reference
 
+Last reviewed: 2026-09-25
+
 > **Read this first if you're new:** the project started as one Cloud Run
 > job pulling one Plex view (`Part_v_Part`) into one BigQuery table — the
-> "legacy single-view mode" described below. It has since grown into **16
-> Cloud Run jobs** running a **multi-report YAML config mode**, each
+> "legacy single-view mode" described below. It has since grown into **26
+> Cloud Run jobs** (13 pipelines × prod/test, 68 BigQuery views) running a **multi-report YAML config mode**, each
 > producing one or more named BigQuery views from a shared set of raw
 > extractions. Both modes are real, live code paths in `main.py` — legacy
 > mode still works and is what you get by default if `REPORT_CONFIG_GCS_PATH`
@@ -20,7 +22,7 @@
 1. Container starts; env vars from the Cloud Run job definition, including `REPORT_CONFIG_GCS_PATH` (e.g. `gs://voxdatalake-report-configs/reports/work_orders.yaml`)
 2. `load_report_config()` downloads and parses that YAML — `report_name`, `category`, `extractions[]`, `bq_view` (single mapping or list)
 3. IAM token fetched from Secret Manager; one `pyodbc` connection is opened and reused across every extraction in the file
-4. For each entry in `extractions[]`: `validate_extraction()` checks the view/table/filter/date_col are safe identifiers, then `SELECT * FROM {plex_view} {filter} [ORDER BY {date_col}]` runs and writes to its own raw BigQuery table (`WRITE_TRUNCATE` for full refresh, `WRITE_APPEND` + `sync_metadata` update if `date_col` is set) — one extraction failing is logged as a `partial_error` and does **not** stop the others
+4. For each entry in `extractions[]`: `validate_extraction()` checks the view/table/filter/date_col are safe identifiers, then `SELECT * FROM {plex_view} {filter} [ORDER BY {date_col}]` runs and writes to its own raw BigQuery table with `WRITE_TRUNCATE` (always — incremental sync is not implemented; a `date_col` only adds the `ORDER BY` and records a `sync_metadata` watermark) — one extraction failing is logged as a `partial_error` and does **not** stop the others
 5. For each entry in `bq_view` (via `bq_view_configs()`): `validate_bq_view()` checks the name/SQL are safe, the `.sql` file is downloaded from GCS, `{gcp_project}`/`{dataset}` placeholders are substituted, and `create_or_replace_bq_view()` runs a `CREATE OR REPLACE VIEW` — again, one bad view doesn't block the others
 6. `log_job_run()` writes one row to `job_run_log` recording this run's status — this is what the 9:45 PM Mountain retry trigger checks before deciding whether to actually do anything (see "Retry mechanism" below)
 7. `send_report()` in `email_utils.py` sends a SendGrid email if `SENDGRID_ENABLED=true`, listing every report this run produced by its real `display_name`, not just the raw table name
@@ -30,11 +32,10 @@
 Still fully functional — this is what runs if you leave `REPORT_CONFIG_GCS_PATH` empty and set `PLEX_VIEW`/`BQ_TABLE`/`PLEX_FILTER` directly instead. Useful for a one-off local test of a single view without writing a YAML file.
 
 1. Container starts; `PLEX_VIEW`, `BQ_TABLE`, `PLEX_FILTER`, `PLEX_DATE_COL` read directly from env vars
-2. `get_last_sync()` queries `sync_metadata` for `MAX(max_modified_at)` where `table_name = BQ_TABLE`; returns epoch (`1970-01-01`) on first run
-3. `pyodbc.connect()` establishes a driver-direct connection (IAM token or username/password)
-4. `query_plex()` runs `SELECT * FROM {PLEX_VIEW} {PLEX_FILTER} ORDER BY {PLEX_DATE_COL}` and returns a DataFrame
-5. Full refresh (no `PLEX_DATE_COL`): `WRITE_TRUNCATE`. Incremental (`PLEX_DATE_COL` set): `WRITE_APPEND` + `sync_metadata` updated
-6. `send_report()` sends the email — with no `category`/`display_name` to work from, the subject falls back to the bare `report_name` (or `company_name` if that's empty too)
+2. `pyodbc.connect()` establishes a driver-direct connection (IAM token or username/password)
+3. `query_plex()` runs `SELECT * FROM {PLEX_VIEW} {PLEX_FILTER} ORDER BY {PLEX_DATE_COL}` and returns a DataFrame
+4. Written with `WRITE_TRUNCATE`; if `PLEX_DATE_COL` is set, its max value is recorded in `sync_metadata`
+5. `send_report()` sends the email — with no `category`/`display_name` to work from, the subject falls back to the bare `report_name` (or `company_name` if that's empty too)
 
 ### Local mode (`OUTPUT_MODE=local`) — either config mode, no BigQuery
 
@@ -58,12 +59,12 @@ The only script that runs when the container starts. Orchestrates every step for
 - **`get_credential(env_var, secret_name)`** — direct env var first, Secret Manager fallback. Lets local runs bypass Secret Manager via `.env`.
 - **`ensure_metadata_table(bq)`** — creates `sync_metadata` if missing, adds any new columns if the schema evolved. Safe to call every run.
 - **`ensure_job_run_log_table(bq)`** — same idea for `job_run_log` (see "Retry mechanism" below).
-- **`get_last_sync(bq)` / `update_last_sync(bq, ...)`** — the incremental-sync high-water mark, read before and written after a successful load.
+- **`update_last_sync(bq, ...)`** — records the `date_col` high-water mark after a successful load. Nothing reads it back yet (incremental sync isn't implemented).
 
 **ODBC & query**
 - **`get_odbc_connection(user, password, company_code, access_token)`** — builds the driver-direct connection string, calls `pyodbc.connect()`. See "ODBC architecture" below for why driver-direct (not DSN) is required.
 - **`query_plex(conn)`** — legacy mode only: builds and runs the single `SELECT` from `PLEX_VIEW`/`PLEX_FILTER`/`PLEX_DATE_COL`. Returns a DataFrame.
-- **`validate_extraction(extraction)`** — multi-report mode: checks one `extractions[]` entry's `plex_view`/`bq_table`/`date_col` are safe identifiers and `filter` contains no `;`/`--`/`/*` before it's interpolated into SQL. The YAML lives in GCS and is editable outside code review, so this boundary matters.
+- **`validate_extraction(extraction)`** — multi-report mode: checks one `extractions[]` entry's `plex_view`/`bq_table`/`date_col` are safe identifiers and `filter` contains no `;`/`--`/`/*` before it's interpolated into SQL. The YAML is read from GCS at runtime, so this boundary matters even though every change to it now goes through `main`.
 
 **Multi-report config**
 - **`load_report_config(gcs_path)`** — downloads and YAML-parses a report config from GCS.
@@ -72,7 +73,7 @@ The only script that runs when the container starts. Orchestrates every step for
 - **`create_or_replace_bq_view(bq, dataset, name, sql)`** — runs the actual `CREATE OR REPLACE VIEW` DDL.
 
 **Write**
-- **`write_to_bigquery(bq, df)`** — loads a DataFrame with `WRITE_TRUNCATE` (or `WRITE_APPEND`, decided by caller). Returns row count.
+- **`write_to_bigquery(bq, df)`** — loads a DataFrame with `WRITE_TRUNCATE` (always). Returns row count.
 - **`write_to_csv(df, output_dir, table_name)`** — local-mode CSV writer.
 
 **Retry mechanism**
@@ -266,7 +267,7 @@ When Plex releases a new driver version (e.g. from `ivoa27` to `ivoa28`):
    ```bash
    gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
    ```
-   or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which loops over all 16 jobs from one build.
+   or (after `./scripts/deploy_preflight.sh`) run `deploy/cloudbuild.yaml`, whose `deploy-all` step loops over all 26 jobs from one build.
 6. Run a `-test` job to verify connectivity before trusting prod on the new driver
 
 ### Driver license
@@ -286,22 +287,31 @@ There is no license file to rotate or renew yourself. It is not a file on disk.
 
 ## Hot-updatable configuration (no rebuild required)
 
-Changes in this table take effect on the report's **next run** — either immediately (editing a report YAML in GCS, picked up at the start of the next execution) or after `terraform apply` (~30 seconds, for anything that's a Terraform variable rather than YAML).
+Everything in this table changes without an image rebuild, and every one of
+them still ships the same way: commit on a `dev*` branch → merge to `main` →
+`./scripts/deploy.sh` from the primary folder. The YAML and SQL files are
+Terraform-managed GCS objects (one `google_storage_bucket_object` per file
+under `reports/`), so `deploy.sh` is what uploads them; the job picks them up
+at the start of its next run. `terraform.tfvars` lives only in the primary
+folder — back it up after editing (its header has the command). Don't
+`gcloud storage cp` into the bucket's `reports/` or `sql/` paths; see
+`docs/OPERATIONS.md` § "Edit an Existing Report" for why, and for the one
+test-only exception.
 
 | What you're changing | Where | Notes |
 |---|---|---|
-| Which Plex views a report pulls | `reports/*.yaml` → `extractions[]` | Edit in GCS Console or `gcloud storage cp` — no `terraform apply` needed |
-| SQL WHERE filter on one extraction | `reports/*.yaml` → `extractions[].filter` | Include the word `WHERE`; no `;`/`--`/`/*` (rejected) |
-| Timestamp column for incremental sync | `reports/*.yaml` → `extractions[].date_col` | Empty = full refresh |
-| The BigQuery JOIN view's SQL | `reports/sql/*.sql` | `{gcp_project}`/`{dataset}` placeholders substituted at runtime — never hardcode |
-| A report's email category/name | `reports/*.yaml` → `category` / `bq_view[].display_name` | Drives the subject and the body's "Reports Produced" section |
-| Plex host (test vs production) | `terraform.tfvars` → `plex_host` | apply |
-| ODBC username | `terraform.tfvars` → `plex_odbc_user` | apply |
-| Email on/off | `terraform.tfvars` → `sendgrid_enabled` | apply |
-| Sender / recipients | `terraform.tfvars` → `report_from_email` / `report_to_emails` | apply |
-| Company name (subject's no-category fallback) | `terraform.tfvars` → `company_name` | apply |
-| Backfill window | `terraform.tfvars` → `backfill_minutes` | apply |
-| Cron schedule for a specific job | `terraform/main.tf` → that job's `google_cloud_scheduler_job.schedule` | apply |
+| Which Plex views a report pulls | `reports/<pipeline>.yaml` **and** `reports/test/<pipeline>.yaml` → `extractions[]` | Both files, by hand — the pre-commit hook refuses a pair whose `plex_view:` counts differ |
+| SQL WHERE filter on one extraction | both YAMLs → `extractions[].filter` | Include the word `WHERE`; no `;`/`--`/`/*` (rejected) |
+| Watermark column | both YAMLs → `extractions[].date_col` | Adds `ORDER BY` + a `sync_metadata` watermark; tables are still fully refreshed |
+| The BigQuery JOIN view's SQL | `reports/sql/*.sql` | One copy, read by prod **and** test. `{gcp_project}`/`{dataset}` placeholders substituted at runtime — never hardcode |
+| A report's email category/name | both YAMLs → `category` / `bq_view[].display_name` | `category` drives the subject; `display_name` the body's "Reports Produced" list |
+| Plex host (test vs production) | `terraform.tfvars` → `plex_host` | |
+| ODBC username | `terraform.tfvars` → `plex_odbc_user` | |
+| Email on/off | `terraform.tfvars` → `sendgrid_enabled` | |
+| Sender / recipients | `terraform.tfvars` → `report_from_email` / `report_to_emails` | |
+| Company name (subject's no-report-name fallback) | `terraform.tfvars` → `company_name` | |
+| Backfill window | `terraform.tfvars` → `backfill_minutes` | Unused until incremental sync exists |
+| Cron schedule for a specific job | `terraform/main.tf` → that job's `google_cloud_scheduler_job.schedule` (Sales Orders: `scheduler_cron` in `terraform.tfvars`) | |
 
 **Secrets rotate with a single command — no Terraform, no rebuild:**
 
@@ -333,11 +343,13 @@ echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
 
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 16 jobs from one build (see its `_ALL_JOBS` substitution). Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 26 jobs from one build (see its `_ALL_JOBS` substitution) — run `./scripts/deploy_preflight.sh` first and pass `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)`. Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
 
 ---
 
 ## Environment variable reference
+
+"apply" below means the value is set by Terraform (`terraform.tfvars` or `main.tf`) and ships with `./scripts/deploy.sh`; "rebuild" means it is baked into the image.
 
 | Variable | Default | Hot-update? | Description |
 |---|---|---|---|
@@ -356,8 +368,8 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `PLEX_DSN` | `PlexProduction` | apply | DSN name for password auth fallback |
 | `PLEX_VIEW` | `Part_v_Part` | apply | Legacy single-view mode only — which view/stored procedure to query |
 | `PLEX_FILTER` | `""` | apply | Legacy mode only — SQL WHERE clause (include the word `WHERE`) |
-| `PLEX_DATE_COL` | `""` | apply | Legacy mode only — timestamp column for incremental sync |
-| `BACKFILL_MINUTES` | `5` | apply | Minutes to subtract from last sync (incremental) |
+| `PLEX_DATE_COL` | `""` | apply | Legacy mode only — `ORDER BY` + watermark column (incremental sync not implemented) |
+| `BACKFILL_MINUTES` | `5` | apply | Reserved for incremental sync — currently unused |
 | `PLEX_ACCESS_TOKEN` | — | secret | IAM token (direct). Normally fetched from Secret Manager. |
 | `SECRET_ACCESS_TOKEN` | `plex-access-token` | apply | Secret Manager secret name for the IAM token |
 | `SECRET_ODBC_USER` | `plex-odbc-user` | apply | Secret Manager secret name for ODBC username |
@@ -368,8 +380,8 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `SECRET_SENDGRID_KEY` | `sendgrid-api-key` | apply | Secret Manager secret name for SendGrid key |
 | `REPORT_FROM_EMAIL` | `""` | apply | Verified sender address |
 | `REPORT_TO_EMAILS` | `""` | apply | Comma-separated recipients — same list for prod and test today, see `docs/EMAIL_SCHEDULE.md`'s "Worth deciding" section |
-| `REPORT_SUBJECT` | `""` | apply | Override for auto subject. Empty = `[Plex ETL] {category}: {report names} — DATE`, or `[Plex ETL] {company_name} — DATE` with no category set. Status and PRODUCTION/TEST are never in the subject — body only |
-| `COMPANY_NAME` | `Parasol` | apply | Company name in the subject's no-category fallback only |
+| `REPORT_SUBJECT` | `""` | apply | Override for auto subject. Empty = `[Plex ETL] - {Category}: {Pipeline} — DATE` (pipeline name with a leading category word dropped, e.g. `[Plex ETL] - Sales: Orders`), the bare pipeline name with no category set, or `[Plex ETL] - {company_name} — DATE` with no report name either. Status and PRODUCTION/TEST are never in the subject — body only |
+| `COMPANY_NAME` | `Parasol` | apply | Company name in the subject's last-resort fallback only (no report name) |
 | `CLOUD_RUN_JOB` | set by GCP | — | Auto-injected job name; used as the retry mechanism's `job_identity` key |
 | `CLOUD_RUN_EXECUTION` | set by GCP | — | Execution ID (auto, used to build logs link) |
 | `CLOUD_RUN_REGION` | `us-central1` | apply | Used to build the Cloud Console logs URL in the email |
@@ -378,9 +390,9 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **8 report families × prod/test = 16 Cloud Run jobs**, each on its own 10-minute-staggered schedule within a 7:00 PM–9:30 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes — plus a shared 9:45 PM Mountain retry trigger for all of them. Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **13 pipelines × prod/test = 26 Cloud Run jobs** (68 BigQuery views). Twelve run once a day on a 10-minute-staggered 7:00 PM–10:50 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes; Label Design runs twice a day, 9:30 AM and 1:30 PM (test 9:40/1:40). Every job also has a retry trigger at 9:45 PM Mountain (52 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
-Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl`/`sales_orders.yaml`, since expanded to 13 extractions + 2 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
+Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl-sales-orders`/`sales_orders.yaml`, since expanded to 27 extractions + 27 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 
 Plex exposes its data through views following the naming convention `{Module}_v_{ObjectName}`. To find a view for a new report, start with [`catalog/plex_catalog_index.md`](../catalog/plex_catalog_index.md) (per-database view lists) and [`catalog/full_schema_catalog.csv`](../catalog/full_schema_catalog.csv) (confirmed-live columns for ~2,800 views) before querying Plex directly.
 
@@ -395,15 +407,14 @@ No date column on the source. The entire table is replaced on each run:
 - `sync_metadata` records the run timestamp as the watermark
 - Suitable for reference/master data (parts lists, customer master, etc.) and anything where the source has no reliable modified-date column
 
-### Incremental (for tables with a date column)
+### Incremental — not implemented
 
-A timestamp column (e.g. `Modified_Date`, `Ship_Date`, `Change_Date`) acts as the high-water mark:
-- `get_last_sync()` reads `MAX(max_modified_at)` from `sync_metadata`
-- `BACKFILL_MINUTES` subtracted to catch late-arriving rows
-- `write_disposition = WRITE_APPEND`
-- `update_last_sync()` records the new high-water mark after each run
-
-To enable on a multi-report extraction: set that entry's `date_col` in the YAML. In legacy mode: set `PLEX_DATE_COL` in `terraform.tfvars` and apply.
+`main.py` has no incremental path today: `write_to_bigquery()` always uses
+`WRITE_TRUNCATE`, and nothing reads the watermark back. Setting `date_col`
+(YAML) or `PLEX_DATE_COL` (legacy mode) only adds `ORDER BY` to the Plex query
+and records the column's max in `sync_metadata` via `update_last_sync()`, so
+the history is there if incremental sync is built. See `docs/OPERATIONS.md`
+§ "Full vs Incremental Sync".
 
 ---
 
@@ -419,7 +430,7 @@ To enable on a multi-report extraction: set that entry's `date_col` in the YAML.
 
 ## GCP infrastructure reference
 
-Terraform state lives remotely in `gs://voxdatalake-terraform-state/plex-to-big-query/` (GCS backend, versioning enabled) — any team member with access can safely run `plan`/`apply` from their own machine. `terraform.tfvars` itself is gitignored and only ever exists locally; back it up after every edit (documented in the file's own header) to `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`.
+Terraform state lives remotely in `gs://voxdatalake-terraform-state/plex-to-big-query/` (GCS backend, versioning enabled), so it isn't tied to one machine — but **plan and apply run only from the primary folder (`C:\F\Parasol\plex-to-big-query`) on a clean `main` equal to `origin/main`**: `data "external" "deploy_guard"` in `main.tf` runs `scripts/tf_guard.py` on every plan/apply/destroy and refuses otherwise (`TF_GUARD_OVERRIDE="<reason>"` for a read-only plan elsewhere). Deploy with `./scripts/deploy.sh`. `terraform.tfvars` itself is gitignored and exists only in the primary folder; back it up after every edit (documented in the file's own header) to `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`.
 
 | Terraform resource | Purpose |
 |---|---|
@@ -428,11 +439,13 @@ Terraform state lives remotely in `gs://voxdatalake-terraform-state/plex-to-big-
 | `google_project_iam_member.etl_roles` | Grants BQ Editor, BQ Job User, Secret Accessor, AR Reader, Run Invoker |
 | `google_bigquery_dataset.plex` (+ `_test`) | `PlexProd`/`PlexTest` datasets holding all Plex tables |
 | `google_bigquery_table.sync_metadata` | Incremental sync state (used for date-based extractions) |
-| `google_storage_bucket.report_configs` | `voxdatalake-report-configs` — holds every `reports/*.yaml`/`reports/sql/*.sql`, editable without a deploy |
+| `data.external.deploy_guard` | Runs `scripts/tf_guard.py` on every plan/apply/destroy; output `deployed_from` records branch and commit |
+| `google_storage_bucket.report_configs` | `voxdatalake-report-configs` — holds every `reports/*.yaml`, `reports/test/*.yaml` and `reports/sql/*.sql` |
+| `google_storage_bucket_object.*` (94) | One per file under `reports/`, `source`-linked to the repo file — `./scripts/deploy.sh` is what uploads a changed YAML/SQL |
 | `google_artifact_registry_repository.etl` | Docker image repository |
 | `google_secret_manager_secret.access_token` / `.sendgrid_api_key` / etc. | Plex IAM token, ODBC creds, SendGrid key |
-| `google_cloud_run_v2_job.etl` (× 16, one per report family × prod/test) | Each job's `containers.image` has `lifecycle { ignore_changes = [image, client, client_version] }` — Terraform intentionally doesn't manage the deployed image; `deploy/cloudbuild.yaml` or a manual `gcloud run jobs update` does |
-| `google_cloud_scheduler_job.etl` (× 16 scheduled + 16 retry = 32) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
+| `google_cloud_run_v2_job.etl*` (× 26, one per pipeline × prod/test) | Each job's `containers.image` has `lifecycle { ignore_changes = [image, client, client_version] }` — Terraform intentionally doesn't manage the deployed image; `deploy/cloudbuild.yaml` or a manual `gcloud run jobs update` does |
+| `google_cloud_scheduler_job.etl*` (× 26 scheduled + 26 retry = 52) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
 
 ---
 
@@ -466,7 +479,7 @@ plex-to-big-query/
 │   ├── rscshell                   32-bit utility (needs i386 libs)
 │   └── etc/lang/                  Driver locale and error message files
 │
-├── reports/                      One YAML + one SQL per report family (16 YAMLs incl. test/)
+├── reports/                      One YAML pair per pipeline (26 YAMLs incl. test/) + one SQL per view
 │   ├── {report}.yaml               Prod config — extractions[], category, bq_view[]
 │   ├── test/{report}.yaml          Test config — same shape, different dataset/host
 │   └── sql/{report}_view.sql       BigQuery JOIN SQL for each bq_view entry
@@ -481,20 +494,20 @@ plex-to-big-query/
 ├── spreadsheets/                  Google Sheet → BigQuery mapping docs (MFG Job Schedule, etc.)
 │
 ├── terraform/
-│   ├── main.tf                    All GCP resources — 16 Cloud Run jobs, 32 schedulers, buckets, IAM
+│   ├── main.tf                    All GCP resources — 26 Cloud Run jobs, 52 schedulers, GCS objects, IAM, deploy guard
 │   ├── variables.tf                Input variable definitions
 │   ├── outputs.tf                  Post-apply copy-paste commands
 │   ├── terraform.tfvars.example    Template for your tfvars (tracked in git)
 │   └── terraform.tfvars            Your real values (gitignored — back up to GCS, see its header)
 │
 ├── deploy/
-│   └── cloudbuild.yaml             Cloud Build CI — builds once, deploys to all 16 jobs
+│   └── cloudbuild.yaml             Cloud Build — builds once, deploys to all 26 jobs
 │
 ├── docs/
 │   ├── QUICKSTART.md               Step-by-step from zero to deployed (original single-pipeline walkthrough)
 │   ├── DEPLOYMENT_GUIDE.md         Same ground as QUICKSTART, more detail + troubleshooting
 │   ├── OPERATIONS.md               Day-to-day: edit a report, add a brand-new report, SendGrid setup
-│   ├── EMAIL_SCHEDULE.md           Full 16-job schedule, real run history, naming convention rationale
+│   ├── EMAIL_SCHEDULE.md           Every job's schedule, retry caveats, email subjects
 │   ├── NETSUITE_REPORT_BUILD_PLAN.md  NetSuite-parity report build log + step-by-step for the next one
 │   ├── CLICKUP_TEAM_GUIDE.md       Condensed team-facing walkthrough
 │   ├── CHEATSHEET.md               Quick-reference commands, condensed "add a report" version
@@ -502,7 +515,8 @@ plex-to-big-query/
 │   ├── API_REFERENCE.md            All gcloud / docker / terraform / bq commands
 │   ├── TROUBLESHOOTING.md          Error cheatsheet — copy-paste fixes
 │   ├── DISASTER_RECOVERY.md        Full-loss recovery procedure
-│   └── TEARDOWN.md                 Full infrastructure destroy and redeploy
+│   ├── TEARDOWN.md                 Full infrastructure destroy and redeploy
+│   └── archive/                    Finished work kept for the record (see its README)
 │
 └── output/                       CSV files from local runs (gitignored)
 ```

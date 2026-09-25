@@ -22,20 +22,22 @@ anything is undocumented or before re-deriving status from scratch:
 - **`docs/*_BUILD_PLAN.md`** — detailed build logs for specific efforts
   (e.g. `NETSUITE_REPORT_BUILD_PLAN.md`, `MFG_JOB_SCHEDULE_BUILD_PLAN.md`).
 
-**Don't trust "deployed to test" to mean prod is current too.** Historically
-on this project it has meant test-only — `gcloud storage cp`/manual pushes
-during iteration went to the `test/` GCS path and prod lagged behind.
-Before assuming production config is current, run:
+**Don't trust "deployed to test" to mean prod is current too.** Historically,
+`gcloud storage cp` pushes during iteration updated one GCS path and not the
+other, and prod drifted from `main`. The truth is the plan. From the primary
+folder, on a clean, pushed `main`:
 
 ```bash
 cd terraform && terraform plan -var-file=terraform.tfvars
 ```
 
-If it shows `google_storage_bucket_object.*_config_prod` changing, prod is
-stale — `terraform apply` syncs it (terraform manages both `reports/*.yaml`
-and `test/*.yaml` GCS objects as `source`-linked resources, so apply is
-the reliable deploy mechanism, not just the manual `gcloud storage cp`
-shown in `docs/OPERATIONS.md` for quick iteration).
+Anything it lists is GCS drifting from `main`. **Sync it with
+`./scripts/deploy.sh`,** never a bare `terraform apply`. From a project folder,
+the deploy guard refuses the plan unless you add
+`TF_GUARD_OVERRIDE="read-only drift check"`, and that folder has no
+`terraform.tfvars` anyway. **Never `gcloud storage cp` into the prod `reports/`
+or `sql/` paths:** that is how prod diverged and a fix got rolled back
+(Known friction, below).
 
 ## Folders, branches and the deploy locks (read before any git or terraform)
 
@@ -177,25 +179,34 @@ tries to resolve them as (nonexistent) substitutions and fails. Also keep
 `terraform/main.tf` — a job missing from that list silently never gets a
 new image from this pipeline again.
 
-## `scorecard_goals` — the one table nothing here creates
+## Goals — two tables, one resolver, three views
 
-`voxdatalake.{PlexProd,PlexTest}.scorecard_goals` holds the negotiated targets
-behind every "% to Goal" tile on the Vox scorecard. It is **not managed by
-Terraform and not written by the ETL** — a Google Sheet is the source of truth
-and `deploy/goals_sheet_to_bigquery.gs` (an Apps Script) replaces the table on
-each push.
+Goals are typed by people, never pulled from Plex:
+- **`scorecard_goals_app`** is written by the manual-data web app
+  (`deploy/manual_data_app/`, via its Google Sheet). This is where goals are
+  entered now.
+- **`scorecard_goals`** is the legacy table. The Apps Script that used to
+  fill it (`deploy/goals_sheet_to_bigquery.gs`) was deleted on 2026-09-22.
+  Its 68 rows were imported into the app in PlexTest on 2026-09-24. **The old
+  deployed Apps Script project still has to be disabled by hand,** or its
+  trigger keeps truncating the table.
+- **`scorecard_goals_resolved`** is a view: the app's newest row per
+  (metric, month, scope), falling back to the legacy table.
+  `revenue_vs_goal_report`, `sales_vs_goal_report` and
+  `production_vs_goal_report` all read it.
 
-Three views read it — `revenue_vs_goal_report`, `sales_vs_goal_report`,
-`production_vs_goal_report` — and **all three fail to create if the table is
-missing**, which looks exactly like a broken view rather than a missing
-dependency. Rebuild DDL and the full column list are in
-`docs/reports/scorecard_goals.md`.
+Neither table is Terraform-managed or created by the ETL, and **the resolver
+fails to create if either is missing.** That looks exactly like a broken view
+rather than a missing dependency. DDL and columns:
+`docs/reports/scorecard_goals.md`, `docs/reports/scorecard_goals_resolved.md`.
 
 The join that bites: `scope` is an **exact string match**, and Plex disagrees
-with the scorecard's own labels — the work centre group is `Encapsulating`, the
-tile says "Encapsulation". A mismatch yields a NULL goal, not an error, so it
-reads as 0% forever. All three views expose `goal_without_sales` /
-`goal_without_production` flags precisely so an unmatched row surfaces.
+with the scorecard's own labels. The work centre group is `Encapsulating`,
+but the tile says "Encapsulation". A mismatch yields a NULL goal, not an
+error, so it reads as 0% forever. The views expose `goal_without_sales` /
+`goal_without_production` flags so an unmatched row surfaces. In
+`sales_vs_goal_report` the company-wide goal is **its own row with actual 0**,
+so don't sum `goal_value` across rows.
 
 ## Scorecard sandbox (`voxdatalake.ScorecardSandbox`)
 
@@ -268,16 +279,16 @@ the two environments thread together; PRODUCTION/TEST shows as a body badge.
   to prod on 2026-09-22 from `dev-label-design`; that evening an apply from
   `dev-scorecard`, which never had the commit, rewrote
   `sql/label_design_view.sql` in GCS (2026-09-23 00:18 UTC) with the old
-  view, and nothing noticed for two days. Apply only from `main`, after
-  `scripts/deploy_preflight.sh`, and read the plan: a file you didn't touch
-  showing up is either this, or line endings (below).
-- **Plans show phantom changes from line endings.** `core.autocrlf=true`
-  rewrites files as CRLF on checkout, GCS holds a mix of LF and CRLF uploads,
-  and Terraform compares hashes — so a branch switch can add a dozen
-  "changed" objects with identical content, hiding the real ones. Before an
-  apply, compare each planned object with GCS ignoring line endings (the
-  script used 2026-09-24 is in that day's CHANGELOG entry). The re-upload
-  itself is harmless; BigQuery and the YAML loader read either ending.
+  view, and nothing noticed for two days. **Deploy only with
+  `./scripts/deploy.sh`.** The guard refuses any other folder or branch, and
+  `plan_review.py` prints what each change is and which project owns it. A
+  file you didn't touch in that list means stop.
+- **Line endings used to fake plan changes.** `core.autocrlf=true` rewrote
+  files as CRLF on checkout and GCS held a mix, so on 2026-09-24, 8 of 30
+  planned changes were identical content. `.gitattributes` now pins LF on
+  everything Terraform uploads, and `plan_review.py` still separates
+  "line-ending only" from real content changes in case an old CRLF object
+  remains in GCS.
 
 ## Convention
 

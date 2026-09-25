@@ -1,5 +1,7 @@
 # Applying the DataDirect OEM SDK Client license to the Plex ODBC driver
 
+> **Archived 2026-09-25 — historical record; the license was applied for real on 2026-08-24 and the licensed driver (with `OAODBC64.LIC`) is what `gs://voxdatalake-build-assets/plex-odbc-driver/` holds. You only need this again to re-license a fresh Plex driver package (e.g. [`docs/DISASTER_RECOVERY.md`](../DISASTER_RECOVERY.md) with no driver backup).**
+
 ## Why
 
 The driver has been running **unlicensed** this whole time. `Dockerfile` just

@@ -8,7 +8,7 @@ One row per part, showing how much is on hand right now, how many days it's been
 
 ## Where it fits
 
-Built for NetSuite parity against **Inventory Risk Analysis - Custom Formula** and **Inventory Risk Analysis - Item Stock Type**, both tracked in [`reports-list/supply-chain.md`](../../reports-list/supply-chain.md) and decided 2026-08-21 — see [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) for the threshold decision. It's a sibling view on the same pipeline as [`part_on_hand_inventory_report`](part_on_hand_inventory_report.md) — it reuses that report's on-hand-quantity logic and builds the aging/risk layer on top of it.
+Built for NetSuite parity against **Inventory Risk Analysis - Custom Formula** and **Inventory Risk Analysis - Item Stock Type**, both tracked in [`reports-list/supply-chain.md`](../../reports-list/supply-chain.md) and decided 2026-08-21 — see [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) for the threshold decision. It's a sibling view on the same pipeline as [`part_on_hand_inventory_report`](part_on_hand_inventory_report.md) — it reuses that report's on-hand-quantity logic and builds the aging/risk layer on top of it.
 
 ## How it's built (high level)
 
@@ -26,4 +26,4 @@ Starts from the same "how much of this part is sitting in active, good-status co
 
 ## More detail
 
-[`reports-list/supply-chain.md`](../../reports-list/supply-chain.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../NETSUITE_PARITY_OPEN_ITEMS.md) have the parity decision and threshold reasoning. [`part_on_hand_inventory_report.md`](part_on_hand_inventory_report.md) covers the shared on-hand-quantity logic this report builds on.
+[`reports-list/supply-chain.md`](../../reports-list/supply-chain.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) have the parity decision and threshold reasoning. [`part_on_hand_inventory_report.md`](part_on_hand_inventory_report.md) covers the shared on-hand-quantity logic this report builds on.

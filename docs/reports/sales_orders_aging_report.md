@@ -8,7 +8,7 @@ One row per open sales order line/release where the order was placed more than 1
 
 ## Where it fits
 
-This is a NetSuite parity report — it replaces the "Report for orders past 14 days old" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+This is a NetSuite parity report — it replaces the "Report for orders past 14 days old" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 
@@ -24,4 +24,4 @@ Starts from the same order/line/release data already extracted for the Sales Ord
 
 ## More detail
 
-[`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) has the full "PO_Date vs. last status change" decision and what would need to change to revisit it.
+[`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has the full "PO_Date vs. last status change" decision and what would need to change to revisit it.

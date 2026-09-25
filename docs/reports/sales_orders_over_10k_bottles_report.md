@@ -25,4 +25,4 @@ Uses the same Sales Order header, line, release, status, and customer data alrea
 
 ## More detail
 
-[`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) has this report's specific open question ("Which `Quantity_Unit` value(s) mean bottles?") alongside the same question for every other best-criteria Sales report decided the same day. [`reports-list/sales.md`](../../reports-list/sales.md) has the full NetSuite-search-by-search confirmation log this report came out of.
+[`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has this report's specific open question ("Which `Quantity_Unit` value(s) mean bottles?") alongside the same question for every other best-criteria Sales report decided the same day. [`reports-list/sales.md`](../../reports-list/sales.md) has the full NetSuite-search-by-search confirmation log this report came out of.

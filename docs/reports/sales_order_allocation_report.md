@@ -8,7 +8,7 @@ One row per production job that was generated from a sales order and is still op
 
 ## Where it fits
 
-This is a NetSuite parity report — it replaces the "Vox | Allocation Report" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md).
+This is a NetSuite parity report — it replaces the "Vox | Allocation Report" saved search from NetSuite. Tracked in [`reports-list/sales.md`](../../reports-list/sales.md) and [`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md).
 
 ## How it's built (high level)
 
@@ -26,4 +26,4 @@ Starts from the same sales order and line data already extracted for the Sales O
 
 ## More detail
 
-[`docs/NETSUITE_PARITY_OPEN_ITEMS.md`](../../docs/NETSUITE_PARITY_OPEN_ITEMS.md) has the full decision history, and [`reports-list/sales.md`](../../reports-list/sales.md) has the original NetSuite search this replaces.
+[`docs/archive/NETSUITE_PARITY_OPEN_ITEMS.md`](../archive/NETSUITE_PARITY_OPEN_ITEMS.md) has the full decision history, and [`reports-list/sales.md`](../../reports-list/sales.md) has the original NetSuite search this replaces.

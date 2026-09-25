@@ -1,5 +1,7 @@
 # NetSuite Parity — Open Items (2026-08-14, decided 2026-08-21)
 
+> **Archived 2026-09-25 — historical record; the Part 1 decisions were made 2026-08-21 and are built. Current status of every report, including the Part 2 items that still have no Plex match, lives in [`reports-list/`](../../reports-list/) and [`docs/NETSUITE_REPORT_BUILD_PLAN.md`](../NETSUITE_REPORT_BUILD_PLAN.md).**
+
 Consolidated punch list from the 2026-08-14 reports-list-wide equivalent
 sweep (`docs/NETSUITE_REPORT_BUILD_PLAN.md` § "2026-08-14 batch").
 

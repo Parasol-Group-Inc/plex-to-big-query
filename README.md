@@ -143,6 +143,8 @@ cp .env.example .env && docker compose build && docker compose up   # local, rea
 ```
 
 `terraform/terraform.tfvars` goes in the primary folder only; that is
-where deploys happen. Full local setup:
+where deploys happen. A versioned copy is kept in
+`gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`.
+To deploy from a new machine, see CONTRIBUTING.md. Full local setup:
 [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md). GCP from zero:
 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md).

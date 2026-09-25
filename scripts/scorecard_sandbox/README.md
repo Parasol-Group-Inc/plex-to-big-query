@@ -201,6 +201,6 @@ the next fix found in the sandbox has somewhere to go first.
 
 `scripts/scorecard_test_data.py`, the earlier per-tile injector, was **deleted
 on 2026-09-24** — this sandbox replaced it. The build still strips its leftover
-rows on copy (`build.STRIP`), because rows it wrote before then can outlive it:
+rows on copy (`build.LEGACY_INJECTOR_ROWS`), because rows it wrote before then can outlive it:
 the ETL's zero-row guard preserves an existing table when Plex returns nothing,
 so they do not expire on their own.

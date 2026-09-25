@@ -163,6 +163,26 @@ tile says "Encapsulation". A mismatch yields a NULL goal, not an error, so it
 reads as 0% forever. All three views expose `goal_without_sales` /
 `goal_without_production` flags precisely so an unmatched row surfaces.
 
+## Scorecard sandbox (`voxdatalake.ScorecardSandbox`)
+
+A full simulated year under every scorecard tile, for designing Looker Studio
+against: `python scripts/scorecard_sandbox/build.py` (about 7.5 min). The ETL
+never writes it. Design and rules are in `scripts/scorecard_sandbox/README.md`;
+what it found is in `docs/SCORECARD_SANDBOX_FINDINGS.md`. Three things to know
+before touching it:
+
+- **No random rows.** Every synthetic Plex row clones a real PlexTest row into
+  the same `raw_*` table, and manual tiles read the app's tables. A shortcut
+  that writes into a view's output, or invents a row from nothing, breaks the
+  point of the thing.
+- **It is built from a time-travel snapshot** (`build.SNAPSHOT`), because live
+  PlexTest's tables stopped joining each other on 2026-09-24. BigQuery time
+  travel reaches back only 7 days, so after 2026-09-30 the copy step fails
+  until a new instant is picked with `snapshot_check.py`.
+- **`proposed_sql/` overrides are NOT deployed.** The sandbox uses them for
+  fixes found there (rep resolution, Deposit Review, scrap flag). Production
+  still runs `reports/sql/`. When a fix lands there, delete its override.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers
@@ -209,6 +229,21 @@ the two environments thread together; PRODUCTION/TEST shows as a body badge.
   org security policy requiring periodic interactive re-login. Needs a
   human to run `gcloud auth login` in their own terminal; can't be
   scripted around.
+- **A `terraform apply` from a `dev*` branch rolls back the other
+  workstream — it happened.** `80c6431` shipped the Label Design pivot fix
+  to prod on 2026-09-22 from `dev-label-design`; that evening an apply from
+  `dev-scorecard`, which never had the commit, rewrote
+  `sql/label_design_view.sql` in GCS (2026-09-23 00:18 UTC) with the old
+  view, and nothing noticed for two days. Apply only from `main`, after
+  `scripts/deploy_preflight.sh`, and read the plan: a file you didn't touch
+  showing up is either this, or line endings (below).
+- **Plans show phantom changes from line endings.** `core.autocrlf=true`
+  rewrites files as CRLF on checkout, GCS holds a mix of LF and CRLF uploads,
+  and Terraform compares hashes — so a branch switch can add a dozen
+  "changed" objects with identical content, hiding the real ones. Before an
+  apply, compare each planned object with GCS ignoring line endings (the
+  script used 2026-09-24 is in that day's CHANGELOG entry). The re-upload
+  itself is harmless; BigQuery and the YAML loader read either ending.
 
 ## Convention
 

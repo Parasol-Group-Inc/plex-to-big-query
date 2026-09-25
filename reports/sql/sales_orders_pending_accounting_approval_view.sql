@@ -68,7 +68,12 @@ SELECT
   po.Customer_No,
   cust.Name                                             AS customer_name,
 
-  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep_1,
+  -- REPOINTED 2026-09-24: rep from the order's Inside_Sales, then the customer's
+  -- Assigned_To, then Order_Salesperson, which Plex barely uses (one row in all
+  -- of test, none in prod). Same resolution as sales_mtd_by_status_change_view.sql.
+  COALESCE(CONCAT(ui.First_Name, ' ', ui.Last_Name),
+           CONCAT(ua.First_Name, ' ', ua.Last_Name),
+           CONCAT(u1.First_Name, ' ', u1.Last_Name))  AS sales_rep_1,
   CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
 
   p.Part_No                                             AS part_number,
@@ -95,6 +100,10 @@ LEFT JOIN rep1 ON po.PO_Key = rep1.PO_Key
 LEFT JOIN rep2 ON po.PO_Key = rep2.PO_Key
 LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u1
   ON rep1.Plexus_User_No = u1.Plexus_User_No
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)
 LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u2
   ON rep2.Plexus_User_No = u2.Plexus_User_No
 
@@ -128,4 +137,6 @@ LEFT JOIN base_price bp
 --
 -- Matched on the status NAME, not the key, deliberately: a key that vanished
 -- is what broke this report, and the same consolidation could renumber again.
-WHERE UPPER(TRIM(CAST(sts.PO_Status AS STRING))) = 'DEPOSIT REVIEW'
+-- FIXED 2026-09-24: Plex now has TWO Deposit Review statuses, "(Initiate Payment
+-- Request)" 2587 and "(Bypass Payment Request)" 2656; the exact match found 0.
+WHERE UPPER(TRIM(CAST(sts.PO_Status AS STRING))) LIKE 'DEPOSIT REVIEW%'

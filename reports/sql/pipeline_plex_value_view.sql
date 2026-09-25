@@ -133,7 +133,12 @@ SELECT
   )                                                     AS date_created,
 
   cust.Name                                             AS customer_name,
-  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep,
+  -- REPOINTED 2026-09-24: rep from the order's Inside_Sales, then the customer's
+  -- Assigned_To, then Order_Salesperson, which Plex barely uses (one row in all
+  -- of test, none in prod). Same resolution as sales_mtd_by_status_change_view.sql.
+  COALESCE(CONCAT(ui.First_Name, ' ', ui.Last_Name),
+           CONCAT(ua.First_Name, ' ', ua.Last_Name),
+           CONCAT(u1.First_Name, ' ', u1.Last_Name))  AS sales_rep,
 
   p.Part_No                                             AS part_no,
   p.Name                                                AS part_name,
@@ -162,6 +167,10 @@ LEFT JOIN rep1
   ON SAFE_CAST(po.PO_Key AS INT64) = rep1.PO_Key
 LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u1
   ON rep1.Plexus_User_No = SAFE_CAST(u1.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pol.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)

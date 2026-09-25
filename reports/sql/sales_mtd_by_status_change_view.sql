@@ -56,6 +56,11 @@
 -- `sales_rep_2`, and the primary rep's own `commission_pct` — so a
 -- commission-weighted split is available downstream without rebuilding the
 -- view if she wants that instead of whole-credit-to-rep-1.
+-- ⚠ Superseded 2026-09-24 for `sales_rep` itself: Order_Salesperson turned out
+-- to be nearly unused, so every sale read "(no rep assigned)". `sales_rep` now
+-- resolves order Inside_Sales -> customer Assigned_To -> Order_Salesperson, and
+-- `sales_rep_source` says which. `sales_rep_2` / `commission_pct` still come
+-- from Order_Salesperson and will usually be NULL.
 --
 -- VALUE: same customer base-tier price join used by sales_orders_report and
 -- sales_order_value_by_status_report — price x release quantity. Does not
@@ -177,13 +182,30 @@ SELECT
 
   cust.Name                                             AS customer_name,
 
-  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep,
+  -- REPOINTED 2026-09-24. Order_Salesperson (rep1 above) is nearly unused
+  -- in Plex: one row in all of test, none in production, and that one has
+  -- Sort_Order 0. Vox records the rep in the "BDM" field group instead — on
+  -- the ORDER (Sales_v_PO.Inside_Sales, "Inside Salesperson") and on the
+  -- CUSTOMER (Common_v_Customer.Assigned_To, the account owner). Same
+  -- resolution as label_design_view.sql's `bdm`: order, then customer, then
+  -- the salesperson table. Before this every sale read "(no rep assigned)",
+  -- which the scorecard sandbox showed for a full year of orders.
+  COALESCE(
+    CONCAT(ui.First_Name, ' ', ui.Last_Name),
+    CONCAT(ua.First_Name, ' ', ua.Last_Name),
+    CONCAT(u1.First_Name, ' ', u1.Last_Name)
+  )                                                     AS sales_rep,
+  CASE
+    WHEN ui.Plexus_User_No IS NOT NULL THEN 'order'
+    WHEN ua.Plexus_User_No IS NOT NULL THEN 'customer'
+    WHEN u1.Plexus_User_No IS NOT NULL THEN 'order_salesperson'
+  END                                                   AS sales_rep_source,
   CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
   rep1.Commission                                       AS commission_pct,
 
   p.Part_No                                             AS part_no,
   p.Name                                                AS part_name,
-  pgrp.Part_Product_Group                               AS part_group,
+  pgrp.Part_Group                                       AS part_group,
 
   SAFE_CAST(rel.Quantity AS FLOAT64)                    AS qty_sold,
   COALESCE(lp.Price, bp.Price)                          AS price_ea,
@@ -222,12 +244,18 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u1
   ON rep1.Plexus_User_No = SAFE_CAST(u1.Plexus_User_No AS INT64)
 LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u2
   ON rep2.Plexus_User_No = SAFE_CAST(u2.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pol.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
-LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Group` pgrp
-  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Product_Group_Key AS INT64)
+-- Part group name — Part_v_Part_Group, not the empty Part_v_Part_Product_Group
+-- this joined until 2026-09-24 (every row read NULL).
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 LEFT JOIN line_price lp
   ON SAFE_CAST(pol.PO_Line_Key AS INT64) = lp.PO_Line_Key

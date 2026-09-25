@@ -758,8 +758,16 @@ produces a view that returns zero rows forever without erroring.
 
 | Convention | Confirmed on | Examples |
 |---|---|---|
-| **`-1` = true** | some `Part_v_*` columns | `Part_v_Production.Rejected` |
-| **`1` = true** | `Sales_v_*` status lookups, **and `Part_v_Container`** | `Sales_v_Shipper_Status.Shipped`, `Sales_v_PO_Status.Is_Quote`, `Sales_v_PO_Status.Cancelled_Status`, `Sales_v_PO_Type.Blanket`, **`Part_v_Container.Active`**, **`Part_v_Container_Status.OK_Status`** |
+| **`-1` = true** | **nothing confirmed** — every column once listed here has turned out to be `1` | — |
+| **`1` = true** | `Sales_v_*` status lookups, **`Part_v_Container`**, **and `Part_v_Production`** | `Sales_v_Shipper_Status.Shipped`, `Sales_v_PO_Status.Is_Quote`, `Sales_v_PO_Status.Cancelled_Status`, `Sales_v_PO_Type.Blanket`, **`Part_v_Container.Active`**, **`Part_v_Container_Status.OK_Status`**, **`Part_v_Production.Rejected`** |
+
+> ⚠ **It happened again, 2026-09-24.** `Part_v_Production.Rejected` was the
+> last column still listed as `-1 = true`, never checked against a real row.
+> The first real rejected record (Bottling Line 1, 500 units) holds **`1`**, and
+> six production views had counted no scrap at all since 2026-08-23 — the day a
+> "fix" changed their test from the correct `1` to `-1`. They now test `!= 0`,
+> which is right whichever value Plex uses. Prefer `!= 0` / `= 0` over either
+> literal whenever the column is a flag.
 
 > ⚠ **This table said the opposite until 2026-09-04, and it cost real time.**
 > `Part_v_Container.Active` and `Part_v_Container_Status.OK_Status` were listed

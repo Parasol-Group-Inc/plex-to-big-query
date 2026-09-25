@@ -23,8 +23,9 @@ Reads `Part_v_Production` (the production log) joined to `Part_v_Workcenter` for
 
 ## Flags and open questions
 
+- **⚠ Reversed 2026-09-24: scrap is `Rejected != 0`.** The 2026-08-23 change moved the test from `1` to `-1`; the only real rejected record in PlexTest (Bottling Line 1, 500 units, 2026-09-24) has `Rejected = 1`, so scrap read **0** from 2026-08-23 until this fix. `!= 0` counts either value. Found by the scorecard sandbox — see [`docs/SCORECARD_SANDBOX_FINDINGS.md`](../SCORECARD_SANDBOX_FINDINGS.md).
 - **Structurally immune to the join bug that bit the Daily Reports.** Those had to reach through `Part_v_Job_Op` to get Job/Part, and that join silently dropped every row whose operation had since closed (fixed 2026-09-01). This view needs neither Job nor Part, so it doesn't make that join at all.
-- **Boolean convention:** `Part_v_Production.Rejected` uses `-1 = true`, the convention on the `Part_v_*` family. Do **not** copy the `1 = true` convention confirmed on the `Sales_v_Shipper_Status`/`Sales_v_PO_Status` tables used by the sibling revenue views — this pipeline genuinely has both.
+- **Boolean convention — corrected 2026-09-24:** `Part_v_Production.Rejected` is **`1`** on a rejected record (the only real one in PlexTest, Bottling Line 1, 500 units). This bullet used to say `-1`, from a `Part_v_*` family "convention" the container flags had already disproved; the view counted no scrap at all. Scrap is now `Rejected != 0`, which holds either way. **Check real rows, never the family** ([`docs/CHEATSHEET.md`](../CHEATSHEET.md), Booleans).
 - **Are these the same groups the scorecard means?** The scorecard names Encapsulation, Bottling and Labeling. Plex's group values include `Encapsulating` and others. Worth confirming with Jennilyn that the group names line up with the tiles, since this view no longer hardcodes a mapping.
 - **Scrap rate should agree with FPY.** [`quality_fpy_by_area_month_report`](quality_fpy_by_area_month_report.md) is computed on the same table at the same grain — if the two disagree, one has a bug.
 - **Limited real data so far** — only Bottling has logged production on this tenant (3,000 units, 2026-08-31).

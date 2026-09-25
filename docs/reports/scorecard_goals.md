@@ -53,7 +53,7 @@ voxdatalake.<dataset>.scorecard_goals_app   ← the Apps Script WEB APP
 ```
 
 Reports do not read either one directly any more — they read
-[`v2_scorecard_goals_resolved`](v2_scorecard_goals_resolved.md), which
+[`scorecard_goals_resolved`](scorecard_goals_resolved.md), which
 **prefers the app table and falls back to this one** for any goal not entered
 in the form. Read that page for the precedence rules, the tombstone behaviour
 and the sunset plan.

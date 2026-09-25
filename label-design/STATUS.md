@@ -9,6 +9,28 @@
 
 ---
 
+## UPDATE — 2026-09-25: the pivot fix was rolled back in prod, and is restored
+
+The `NULLIF(TRIM(pa.Value), '')` pivot fix and the five new attribute columns
+(`80c6431`, "shipped to prod" 2026-09-22) **were live for about an hour.** That
+evening a `terraform apply` from `dev-scorecard` rewrote
+`sql/label_design_view.sql` in GCS with the old view (2026-09-23 00:18 UTC).
+That branch never had the commit. Prod ran the old view from then until
+2026-09-25, emitting `''` instead of NULL and no bottle material, California
+PDP, Prop 65, trademark or material-classification columns.
+
+- **Fixed by merging `dev-label-design` up to `588fd2b` into `main`** (merge
+  `7563821`) and applying from `main`.
+- **Checked before the apply:** the view compiles against both datasets, has
+  the same row counts as the live one, drops no columns and adds the five
+  attribute columns.
+- **`2eff172` (push service, test push job, BDM rep fields) is NOT on `main`
+  yet.** Its terraform creates a scheduled job that fails until the Monday API
+  key secret version exists and an image containing `label_design_service/`
+  is built. Merge it once both are in hand; the deploy order is in the
+  2026-09-24 section below it on `dev-label-design`.
+- **The lesson** is in CLAUDE.md "Known friction": apply only from `main`, and
+  read the plan for files you didn't touch.
 ## UPDATE — 2026-09-24 (later): the push service EXISTS now
 
 `label_design_service/push.py` (see its docstring) is built and verified end

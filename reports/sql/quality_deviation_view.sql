@@ -26,7 +26,7 @@
 -- "Deviation" in quality terminology classically means a planned, approved
 -- exception to spec/process (see Approved_By/Effective_Date/Expiration_Date
 -- below) — not necessarily every reactive nonconformance. Validate
--- problem_nos coverage against real Quality_v_Problem volume once live data
+-- problem_nos coverage against real Quality_v_Problem_2 volume once live data
 -- lands (data load begins 2026-08-24) before treating this as the complete
 -- NC-to-job answer.
 --
@@ -59,14 +59,31 @@ job_links AS (
 ),
 
 -- Problem/NC record(s) this deviation was raised for.
+--
+-- ⚠ READS Quality_v_Problem_2, NOT the classic Quality_v_Problem — FIXED
+-- 2026-09-24. The Quality reports were repointed on 2026-09-22 (see
+-- quality_nonconformance_view.sql) but this join was missed, so problem_nos
+-- was NULL on every deviation: the classic table is permanently empty on this
+-- tenant. Deviation_Problem.Problem_Key is Problem_2's own Problem_Key —
+-- verified 2026-09-24: the one real link row (Deviation_Key 14453) points at
+-- Problem_Key 117294, which is Problem_2's NC #21.
+--
+-- Problem_No is an INTEGER on Problem_2 (it was text on the classic table),
+-- so it is de-duplicated first and then ordered numerically — a plain
+-- STRING_AGG(DISTINCT ... ORDER BY) on the text would sort 10 before 9.
 problem_links AS (
   SELECT
-    dp.Deviation_Key,
-    STRING_AGG(DISTINCT q.Problem_No, ', ' ORDER BY q.Problem_No)  AS problem_nos
-  FROM `{gcp_project}.{dataset}.raw_Quality_v_Deviation_Problem` dp
-  LEFT JOIN `{gcp_project}.{dataset}.raw_Quality_v_Problem` q
-    ON SAFE_CAST(dp.Problem_Key AS INT64) = SAFE_CAST(q.Problem_Key AS INT64)
-  GROUP BY dp.Deviation_Key
+    Deviation_Key,
+    STRING_AGG(CAST(problem_no AS STRING), ', ' ORDER BY problem_no) AS problem_nos
+  FROM (
+    SELECT DISTINCT
+      dp.Deviation_Key,
+      SAFE_CAST(q.Problem_No AS INT64)                             AS problem_no
+    FROM `{gcp_project}.{dataset}.raw_Quality_v_Deviation_Problem` dp
+    JOIN `{gcp_project}.{dataset}.raw_Quality_v_Problem_2` q
+      ON SAFE_CAST(dp.Problem_Key AS INT64) = SAFE_CAST(q.Problem_Key AS INT64)
+  )
+  GROUP BY Deviation_Key
 ),
 
 -- Part(s) this deviation covers. raw_Part_v_Part is owned by the
@@ -143,7 +160,22 @@ SELECT
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(d.Add_Date AS STRING) AS INT64), 0), 1000))),
     NULLIF(SAFE_CAST(CAST(d.Add_Date AS STRING) AS DATE), DATE '1970-01-01'),
     NULLIF(DATE(SAFE_CAST(CAST(d.Add_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
-  )                                               AS add_date
+  )                                               AS add_date,
+
+  -- The month a deviation COUNTS in — ADDED 2026-09-24 so a tile does not
+  -- have to choose between add date and effective date itself. It is the
+  -- ADD date (when the deviation was raised in Plex): Plex stamps it on
+  -- every record, it is the event a "deviations this month" / open-closed
+  -- trend counts, and it cannot be moved later. Effective_Date is the start
+  -- of the window the approved exception applies to — user-entered, can be
+  -- set ahead of time — so it stays available above for an "in effect" view
+  -- but is not what the monthly count uses. Same expression as add_date; a
+  -- SELECT alias cannot be reused by a sibling column.
+  DATE_TRUNC(COALESCE(
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(d.Add_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(d.Add_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(d.Add_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+  ), MONTH)                                       AS deviation_month
 
 FROM `{gcp_project}.{dataset}.raw_Quality_v_Deviation` d
 

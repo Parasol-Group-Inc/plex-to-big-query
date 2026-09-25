@@ -91,11 +91,13 @@ SELECT
   STRING_AGG(DISTINCT emp.Common_Name, ', ' ORDER BY emp.Common_Name) AS employees,
   STRING_AGG(DISTINCT prod.Report_Shift, ', ' ORDER BY prod.Report_Shift) AS shifts,
 
-  -- Plex represents boolean true as -1, not 1 (confirmed live 2026-08-11,
-  -- see part_on_hand_inventory_view.sql/inventory_risk_analysis_view.sql's
-  -- Active/OK_Status columns) — Rejected follows the same convention.
+  -- Rejected is 1 on a rejected record, NOT -1: checked 2026-09-24 against the
+  -- only real rejected row in PlexTest (Bottling Line 1, 500 units). The old
+  -- `= -1` test rested on a 2026-08-11 "convention" that the container flags
+  -- had already disproved (docs/CHEATSHEET.md, Booleans), and it counted no
+  -- scrap at all. `!= 0` catches either value, so scrap is never dropped.
   SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS actual_qty,
-  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = -1, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS scrap_qty
+  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS scrap_qty
 
 FROM prod
 

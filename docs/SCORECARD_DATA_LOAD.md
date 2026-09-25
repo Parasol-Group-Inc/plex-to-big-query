@@ -124,7 +124,7 @@ opportunities figure — all on the sign-off board.
 Sales, revenue, shipping, WIP, pipeline, on-hand inventory, and all three goal
 tiles — `scorecard_goals` carries 68 rows from the spreadsheet and
 `scorecard_goals_app` carries the 12 loaded revenue goals, resolved by
-`v2_scorecard_goals_resolved`.
+`scorecard_goals_resolved`.
 
 ---
 
@@ -147,3 +147,40 @@ Everything above is the `-test` jobs writing to `PlexTest`. The prod jobs email
 the team on every run, so don't fire them to fix a demo — let the scheduled run
 carry the change, then check with
 `./scripts/scorecard_status.ps1 -Dataset PlexProd`.
+
+## Proving a tile works
+
+Use the **scorecard sandbox**: `voxdatalake.ScorecardSandbox`, a full simulated
+year under every tile that nothing overwrites — see
+[`scripts/scorecard_sandbox/README.md`](../scripts/scorecard_sandbox/README.md).
+
+```bash
+python scripts/scorecard_sandbox/build.py          # full rebuild
+python scripts/scorecard_sandbox/build.py --verify # rows + month span per view
+```
+
+### The earlier injector was retired on 2026-09-24
+
+`scripts/scorecard_test_data.py` wrote marked rows straight into `PlexTest` to
+tell a broken tile apart from an empty one. The sandbox does that job properly
+— it clones real rows into a dataset nothing overwrites, rather than inventing
+"one part, one customer, $1.25" rows in the dataset people actually look at —
+so keeping both would have meant two ways to do one thing, with the weaker one
+easier to reach for.
+
+**It earned its keep before it went.** It is what exposed
+`part_cycle_count_report` as *unqueryable rather than empty*: the view cast an
+INT64 nanosecond date straight to TIMESTAMP, which BigQuery refuses, so it
+failed to parse and every query against it errored. That had been recorded for
+weeks as "0 rows, nothing counted yet" — a status check that reports row counts
+can never tell those two apart. The fix is in `reports/sql/`, and the lesson
+outlived the tool.
+
+**Its one real flaw, recorded because the claim is still tempting:** it told you
+its rows were "wiped nightly anyway". They were not. The nightly wipe clears the
+*Plex tenant*, not BigQuery, and the ETL's zero-row guard — "0 rows → existing
+table left untouched" — actively *preserves* injected rows when Plex returns
+nothing. Two days after that run, 56 injected cycle-count rows and a fake safety
+incident were still sitting in `PlexTest`, quietly feeding a tile. Anything that
+writes test rows has to be deleted deliberately; "it expires on its own" is a
+comforting thing to write and was simply false here.

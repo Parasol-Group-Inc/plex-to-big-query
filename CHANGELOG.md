@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev-label-design) - Plex Part URL and PO URL on the Monday push
+
+### Added
+- **Two Monday link columns from the Label Design push:** "Plex Part URL"
+  (`/Engineering/Part/ViewForm?…PartKey=&PartNo=&Revision=`) and "PO URL"
+  (`/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=`).
+  - `label_design_view.sql` now outputs `po_key`, `part_key`, `part_no`,
+    `part_revision`. The last two come from a new `raw_Part_v_Part` join.
+  - `Part_v_Part` is now extracted by `label_design` (prod + test configs,
+    13 extractions each). That keeps parts created the same morning
+    linkable, rather than waiting for the overnight `sales_orders` refresh.
+  - `push.py` builds the URLs, with the host taken from `PLEX_WEB_HOST`
+    (set to `vox.test.on.plex.com` on the test job; defaults to
+    `vox.on.plex.com` for `PlexProd` — unverified).
+  - The columns are matched by title and type `link`. They must be added
+    to "Plex Import" (18432111755) by hand; until then the push logs them
+    as missing and carries on.
+
 ## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
 
 ### Added

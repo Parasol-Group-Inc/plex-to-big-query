@@ -55,6 +55,12 @@ LCR. The Job Note is split in two: if it **starts with a digit 1–6**, that dig
 sets Reason Code and the rest becomes Memo; otherwise the whole note goes to
 Memo and Reason Code is left blank.
 
+Two links back into Plex are added too (since 2026-09-25): **Plex Part URL**
+opens the part (shown as part number + revision, e.g. `93001-00CGNUT-2 Rev 00`)
+and **PO URL** opens the sales order (shown as `SO <order #>`). Both need a
+*Link*-type column with exactly that title on the board; if the column isn't
+there, the job skips it and logs a warning. It doesn't fail.
+
 | First digit | Reason Code |
 |---|---|
 | 1 | Customer Initiated: Label Edit |

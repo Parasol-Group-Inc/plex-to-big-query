@@ -5539,6 +5539,10 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
           value = "New from Plex"
         }
         env {
+          name  = "PLEX_WEB_HOST"
+          value = "vox.test.on.plex.com"
+        }
+        env {
           name  = "SECRET_MONDAY_API_KEY"
           value = google_secret_manager_secret.monday_api_key.secret_id
         }

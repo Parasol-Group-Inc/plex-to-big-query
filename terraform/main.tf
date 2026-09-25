@@ -5,6 +5,11 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.40"
     }
+    # Only for the deploy guard below.
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.3"
+    }
   }
 
   # Shared remote state so any team member can safely run plan/apply --
@@ -21,6 +26,22 @@ terraform {
 provider "google" {
   project = var.gcp_project
   region  = var.gcp_region
+}
+
+# ── Deploy guard ─────────────────────────────────────────────────────────────
+# Runs scripts/tf_guard.py on EVERY plan and apply, and fails them unless this
+# is the primary folder, on `main`, clean, and equal to origin/main. Added
+# 2026-09-25 after an apply from dev-scorecard rolled back a Label Design fix
+# (CLAUDE.md, "Known friction"). Deploy with scripts/deploy.sh; a read-only
+# plan from elsewhere needs TF_GUARD_OVERRIDE="<reason>".
+data "external" "deploy_guard" {
+  program     = ["python", "${path.module}/../scripts/tf_guard.py"]
+  working_dir = path.module
+}
+
+output "deployed_from" {
+  description = "Branch and commit the last plan/apply ran from (the deploy guard's view)."
+  value       = data.external.deploy_guard.result
 }
 
 data "google_project" "current" {

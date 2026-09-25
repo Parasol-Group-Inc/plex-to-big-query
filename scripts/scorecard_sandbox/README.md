@@ -164,7 +164,7 @@ line for each one, so nobody designs against it believing production already
 behaves that way.
 
 They exist because without them the tiles they feed cannot be designed at
-all. Editing `reports/sql/` deploys to prod on the next `terraform apply`, and
+all. A change to `reports/sql/` reaches prod on the next `./scripts/deploy.sh` from `main`, and
 that call is Emilio's.
 
 **To retire one:** land the fix in `reports/sql/` (with its CHANGELOG entry

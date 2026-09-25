@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (label design) - Restored the part-attribute pivot fix that a scorecard apply rolled back
+
+### Fixed - `label_design_view.sql` in prod is the shipped version again
+- **What was lost:** `80c6431` added `NULLIF(TRIM(pa.Value), '')` on every
+  attribute, plus five new attribute columns. It was applied 2026-09-22 and
+  overwritten about an hour later by an apply from `dev-scorecard` (GCS
+  update 2026-09-23 00:18 UTC; see the 2026-09-24 (deploy) entry).
+- **Merge:** `dev-label-design` up to `588fd2b` into `main` as `7563821`. The
+  view is byte-identical to `588fd2b` and has all 10 `NULLIF` branches.
+- **Dry-run before the apply**, against PlexTest (6 rows, `part_allergen`
+  NULL rather than `''`) and PlexProd (0 rows):
+  - It compiles on both.
+  - Row counts match the live view and no column is dropped.
+  - It adds `part_bottle_material`, `part_california_pdp`,
+    `part_prop_65_requirement`, `part_trademark` and
+    `part_material_classification`.
+- **Plan:** 0 add / 1 change / 0 destroy, `label_design_view_sql` only.
+- **Not included:** `2eff172`. Its push-job terraform needs the Monday API
+  key secret version and a rebuilt image first.
+
 ## 2026-09-25 (deploy) - Scorecard view fixes applied and verified
 
 ### Deployed - `terraform apply` from `main` (`65eefcb`), 2026-09-25 01:10 UTC

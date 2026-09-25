@@ -39,11 +39,12 @@ PDP, Prop 65, trademark or material-classification columns.
 - **Checked before the apply:** the view compiles against both datasets, has
   the same row counts as the live one, drops no columns and adds the five
   attribute columns.
-- **`2eff172` (push service, test push job, BDM rep fields) is NOT on `main`
-  yet.** Its terraform creates a scheduled job that fails until the Monday API
-  key secret version exists and an image containing `label_design_service/`
-  is built. Merge it once both are in hand; the deploy order is in the
-  2026-09-24 section below it on `dev-label-design`.
+- **`2eff172` (push service, test push job, BDM rep fields) reached `main`
+  via PR #3 on 2026-09-25 but is NOT deployed.** The next `deploy.sh` would
+  create its test job and scheduler, which fail twice a day until the
+  `monday-api-key` secret version exists and an image containing
+  `label_design_service/` is built. Order: secret → Cloud Build → deploy.
+  Tracked as `docs/OPEN_ITEMS.md` L1 / D1.
 - **The lesson** is in CLAUDE.md "Known friction": apply only from `main`, and
   read the plan for files you didn't touch.
 ## UPDATE — 2026-09-24 (later): the push service EXISTS now

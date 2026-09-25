@@ -14,6 +14,34 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
+
+### Added
+- **`docs/OPEN_ITEMS.md`:** every open item across Deploy, Scorecard and
+  Label Design, with owner and next step. Linked from the README and
+  CLAUDE.md. Items are deleted when they close; the history stays in this
+  file.
+
+### Fixed
+- **`scripts/deploy.sh` left `deploy.tfplan` / `deploy.plan.json` behind**
+  when it was stopped at the confirmation prompt. The tree then stayed dirty,
+  so the deploy guard refused every later plan (seen 2026-09-25, when a run
+  was declined).
+  - A `trap … EXIT` now removes both however the script ends.
+  - Both files are gitignored.
+  - Nothing had been applied by that run: no `deploy/` tag exists.
+
+### Found - what the next deploy proposes
+PR #3 brought `2eff172` into `main`, so a plan now shows **3 to add, 3 to
+change**:
+- **added:** the `monday-api-key` secret, plus the
+  `plex-etl-label-design-push-test` job and scheduler;
+- **changed:** `label_design_view.sql` (the BDM sales-rep fields), plus two
+  comment-only SQL files.
+
+The scheduled push job fails until its secret version and a new image
+exist. That decision is `docs/OPEN_ITEMS.md` D1 / L1.
+
 ## 2026-09-25 (dev) - Terraform lock file records the deploy guard's provider
 
 `terraform/.terraform.lock.hcl` gains `hashicorp/external` 2.4.2, the
@@ -84,6 +112,33 @@ empty log shows it is not re-running them.
 **Not diagnosed yet:** checking the retry schedulers and executions needs
 `gcloud`, which was behind the reauthentication wall. It's a real gap: the
 failure-retry safety net described in OPERATIONS may not be doing anything.
+## 2026-09-25 (label design) - Run the Label Design sync on demand from a web app
+
+### Added - `deploy/label_design_trigger/` (Apps Script web app)
+A one-button page that starts the Label Design Cloud Run job, so the team can
+refresh `label_design_report` without waiting for 09:30 / 13:30. It also
+shows the last five executions with log links, and who started what.
+
+- **Test job first.** `JOB_NAME=plex-etl-label-design-test`. Promoting to
+  prod is one Script Property change, and the page badge turns red.
+- **Runs as the deployer, gated by an `ALLOWED_EMAILS` allowlist.** Nobody
+  else needs GCP permissions; everyone else gets view-only.
+- **It refuses** while an execution is running, and within
+  `COOLDOWN_MINUTES` (default 10) of the last start. A script lock
+  serialises simultaneous clicks.
+- **Every start, refusal and error** is kept in `RUN_LOG` and shown on the
+  page.
+- **Checked against the live Cloud Run v2 API before commit:**
+  - The executions list returns `startTime` / `completionTime` /
+    `succeededCount`, as read.
+  - `POST …/jobs/plex-etl-label-design-test:run` returns the new execution
+    in `metadata.name` (`plex-etl-label-design-test-w5kvn`, an ordinary test
+    sync).
+- **It only starts the existing job.** Nothing Terraform-managed changes.
+  Setup and promotion steps are in its README.
+
+First feature built through the new flow: made in `ptbq-label-design` on
+`dev-label-design`, committed past the hooks, and merged to `main` by PR.
 
 ## 2026-09-25 (dev) - Locks: a folder per project, commit/push hooks, a deploy guard inside Terraform
 
@@ -441,6 +496,125 @@ tables with no real row to clone and how each was handled. Supersedes
 `scripts/scorecard_test_data.py` for design work (the build strips that
 injector's rows).
 
+## 2026-09-24 (label design) - Sales Rep from Plex's BDM fields; part number to "Item"
+
+### Changed - `label_design_view.sql`: three new columns, `bdm` feeds Monday
+All of Ashley's test orders arrived with a blank Sales Rep. The view read it
+from `Sales_v_Order_Salesperson`, which Plex barely uses (**one row in all of
+test**, and with `Sort_Order = 0`, which the view's `= 1` filter skips as
+well). The rep actually sits in Plex's "BDM" field group:
+- `sales_rep_inside` ← `Sales_v_PO.Inside_Sales` ("Inside Salesperson"),
+  set on every order she entered from SO 4 on.
+- `customer_account_rep` ← `Common_v_Customer.Assigned_To` ("Assigned To"),
+  set on 16 of 24 test customers, but not Meo Nutrition or Nature's Therapeia.
+- `bdm` = COALESCE(order, customer, `sales_rep_primary`).
+
+Both source columns come from tables the pipeline already extracts, so no
+new extraction is needed. All 6 of her rows now resolve (Janet Pacheco,
+Landen Epperson, Ashley Quintana). **The view was recreated directly in
+PlexTest for testing. Prod and the GCS copy update on `terraform apply`**
+(`label_design_view_sql`). Until then, a scheduled ETL run puts the old SQL
+back.
+
+### Changed - push: Sales Rep ← `bdm`; new mapping Item ← `customer_part_no`
+"Item" is the text column next to Design File, where Design & QA keeps the
+product. It is not the item name column, which there holds the team-assigned
+label code (`CL3822`, `s6191`). The 13 items already on `18432111755` were
+backfilled in place (Item on all 13; Sales Rep on Ashley's 6). A follow-up
+dry run showed 0 new rows.
+
+## 2026-09-24 (label design) - Plex → Monday push job, with tracked test data
+
+### Added - `label_design_service/push.py` + `monday.py`
+The standalone push decided on 2026-09-15, replacing the Sheet + Apps Script
+hop. It reads `label_design_report` and creates one Monday item per new order
++ part in a "New from Plex" group (created if missing). Items are named after
+the label SKU and fill Customer Name, Date, Description, Sales Order, Memo,
+Reason Code, Email, Phone Number, Sales Rep (status) and LCR. Columns are
+found by **title and type at runtime**, not id, so the same code works on any
+board shaped like Design & QA.
+- **Dedupe:** LCR = first 12 hex chars of SHA-256(`dedupe_key`), written
+  inside `create_item`, so a run that crashes right after creating an item
+  still leaves the mark behind. The audit table is checked too.
+- **Audit:** every attempt goes into `<dataset>.label_design_push_log` (created
+  on first run, written with DML so test rows are deletable at once).
+- **Alarm:** more than `MAX_NEW_ITEMS` (60) new rows means the keys broke.
+  Nothing is pushed and the job exits 2.
+- Reason Codes are written by **label text** (`REASON_CODE_LABELS`, added to
+  `reason_code.py`), not index, since index numbers are per-board.
+
+### Added - `scripts/label_design_test_data.py` (`--inject` / `--status` / `--delete`)
+Plex test has no release in Label Design, so the view is empty. This injects 7
+marked lines (6 orders; one per Reason Code, one note with no code, one order
+with two parts) into the PlexTest raw tables. The marks: keys in
+[991000000, 992000000), clear of the scorecard injector's 990000000 range, and
+order numbers starting `ZZTEST-LD-`. `--delete` removes the BigQuery rows, the
+Monday items (found by Sales Order text) and their audit rows. PlexTest only.
+
+### Verified
+Injected 7 lines → all 7 visible in `PlexTest.label_design_report` → push
+created 7 items on `18432111755`, read back column by column, with no new
+status labels created → **an immediate second run created 0** (7 already on
+the board). The test items are still on the board for Ashley.
+
+**Then on Ashley's own Plex-test orders**, entered 10:12–11:06 MT after the
+9:40 ETL: re-ran `plex-etl-label-design-test` and the view returned 6 rows
+(SO 9 ×2, SO 11 ×3, SO 13). The push created 6 items with the right Reason
+Code from each bare-digit note. Worth raising with her:
+- SO 11 has part 93005-04VOXNU-0 on 3 lines with notes 2/4/1. The view
+  collapses order + part to one row (`release_count = 3`), so only code 2
+  reached Monday.
+- SO 6 and SO 14 are Label Design releases on **Quote** orders, so the view
+  leaves them out.
+- None of her orders has a sales rep, and no test part has a description.
+- She also added a new release status, **Blanket** (3639), which the view
+  ignores.
+
+### Added - Terraform (plan: 3 to add, 0 to change) — NOT YET APPLIED
+`google_secret_manager_secret.monday_api_key`, Cloud Run job
+`plex-etl-label-design-push-test` (same image, `args = python -m
+label_design_service.push`, PlexTest → 18432111755, `max_retries = 0`) and
+scheduler `plex-label-design-push-sync-test` at 10:10 / 14:10, 30 min after
+the test ETL. No prod job yet: prod has no Label Design releases before the
+19 Oct cutover, and the prod target board isn't decided.
+`Dockerfile` now copies `label_design_service/`; the job was added to
+`_ALL_JOBS` in `deploy/cloudbuild.yaml`.
+
+### Found - Design & QA's "Waiting on Customer" is Monday's default slot
+Design Status uses index 5 for "Waiting on Customer". Index 5 is where Monday
+puts any new item with no status, so every item created without one (the
+push, CSV imports, hand-made items) starts as "Waiting on Customer". This is
+a board setting, not something the push writes.
+
+## 2026-09-24 (label design) - Design & QA history copied onto the new "Plex Import" board for Ashley
+
+### Added - `scripts/copy_monday_board.py`
+Copies a Monday board's columns, groups **and items** onto another board
+(`replicate_board_columns.py` copies structure only). `--wipe-target` clears
+the target first. Status labels keep their source index numbers so colours
+match; labels beyond Monday's ~20-per-`create_column` cap are added as items
+are written (`create_labels_if_missing`). Formula columns are recreated with
+their `{column_id}` references remapped. If one value makes Monday reject an
+item, the item is created bare and its values are set one column at a time,
+so only the bad value is lost.
+
+### Changed - board `18432111755` ("Plex Import", workspace "blank landing page")
+Wiped (5 placeholder items, 3 default columns, 2 default groups), then filled
+from Design & QA (`18395121955`): 59 columns, 16 groups, 183 items. Checked
+cell by cell against the source afterwards (~9,800 cells). Two gaps and one
+caveat:
+- **Files not copied**: 1,071 attachments (~3 GB) on 176 items. The API
+  can't copy files by value; they'd need to be downloaded and re-uploaded.
+- **One value lost**: CL3698's Sales Rep (Tanner Wach). Monday refuses to
+  assign that user, who is no longer visible to the account and is most
+  likely deactivated.
+- **Point-in-time copy**: Design & QA was being edited during the run
+  (CL2669, S3855 changed and s7209 deleted after the copy). Nothing syncs
+  the two boards.
+
+`MONDAY_API_KEY` (Jennette Boone) **can write to this board**, unlike the
+old Plex Import Board `18430735110`, which still 403s on a seat-type
+restriction. Added to `.env` as `MONDAY_BOARD_PLEX_IMPORT_V2`.
 ## 2026-09-22 (board) - the Migration Board rebuilt for someone who has never opened BigQuery
 
 ### Changed - the board is generated from `scripts/board/`, not hand-edited

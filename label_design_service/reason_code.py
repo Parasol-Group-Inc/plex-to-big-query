@@ -35,6 +35,20 @@ REASON_CODE_MAP = {
     "6": 4,
 }
 
+# The same six options by LABEL TEXT, exactly as spelled on the board. The
+# push service writes these ({"label": ...}), not the indices above: index
+# numbers are per-board (a board built from scratch numbers from 0), label
+# text is what a person actually sees. Spelling is not uniform on purpose —
+# "Customer initiated: Label review" really is lower-case on Monday.
+REASON_CODE_LABELS = {
+    105: "Customer Initiated: Label Edit",
+    0: "Customer initiated: Label review",
+    1: "New label design (Vox design)",
+    2: "New label review (Customer design)",
+    106: "Vox Initiated: Label Edit/Review",
+    4: "3D Rendering",
+}
+
 # One optional separator right after the digit, plus whatever whitespace
 # follows it — so "1 - text", "1: text", "1.text" and "1text" all produce
 # the same clean Memo, rather than leaking " - " or ": " into it.

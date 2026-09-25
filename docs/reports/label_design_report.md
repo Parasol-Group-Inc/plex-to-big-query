@@ -38,8 +38,41 @@ list would miss exactly the new orders it exists to surface.
 
 - **Pipeline:** `reports/label_design.yaml` → `label_design_report`
 - **SQL:** `reports/sql/label_design_view.sql`
-- **Downstream:** `deploy/label_design_sync/` — the Apps Script that decides
-  which rows are new, writes them to the sheet, and pushes them to Monday.
+- **Downstream (from 2026-09-24):** `label_design_service/push.py`, a Cloud Run
+  job (`plex-etl-label-design-push-test`) that runs 30 minutes after the ETL and
+  creates one Monday item per new order + part, straight from this view. No
+  sheet in between. It is test-only for now (PlexTest → the "Plex Import" board).
+- **Retired:** `deploy/label_design_sync/`, the Apps Script that used to decide
+  which rows were new, write them to a sheet, and push them to Monday.
+
+## What lands on Monday
+
+Each new row becomes an item in the **New from Plex** group, named after the
+label SKU. The job fills: Customer Name, Date (order date), Description, Sales
+Order ("Sales Order #…"), Email, Phone Number, **Item** (the Plex part number,
+in the text column next to Design File), **Sales Rep** (the BDM, see below) and
+LCR. The Job Note is split in two: if it **starts with a digit 1–6**, that digit
+sets Reason Code and the rest becomes Memo; otherwise the whole note goes to
+Memo and Reason Code is left blank.
+
+| First digit | Reason Code |
+|---|---|
+| 1 | Customer Initiated: Label Edit |
+| 2 | Customer initiated: Label review |
+| 3 | New label design (Vox design) |
+| 4 | New label review (Customer design) |
+| 5 | Vox Initiated: Label Edit/Review |
+| 6 | 3D Rendering |
+
+Everything else (Design Status, designer, files, dates further down the
+process) is left for the team to fill in. **One Monday quirk:** a new item
+with no Design Status set shows *Waiting on Customer*. That's the board's
+default label, not something the job writes.
+
+**No duplicates:** the LCR column holds a short code (e.g. `e0bd8c5e8e1b`)
+made from the order number + label SKU. An order + SKU whose code is already
+on the board is never pushed again. Every push is also recorded in the
+`label_design_push_log` table.
 
 ## Flags and open questions
 
@@ -90,9 +123,12 @@ list would miss exactly the new orders it exists to surface.
   has separately signalled that bottle/label size probably don't need a Monday
   column at all. Not wired to any Monday push yet either way.
 
-- **Two sales reps ship, not one.** Plex holds a primary and a secondary rep
-  and nobody has ever stated which one Vox calls the BDM, so both are exposed
-  and the consumer picks. Nothing here silently decides.
+- **Sales Rep = the BDM (2026-09-24).** Plex's "BDM" fields are the order's
+  **Inside Salesperson** (`Sales_v_PO.Inside_Sales`) and the customer's
+  **Assigned To** (`Common_v_Customer.Assigned_To`). The `bdm` column takes
+  the order's first, then the customer's. The older primary/secondary
+  salesperson table is only a last fallback, because Plex barely uses it: one
+  row in all of test. All three are still exposed separately.
 
 - **Two sheet columns cannot be filled from Plex.** *WO Number* (the work order
   is raised *after* the label is approved, so an order still in Label Design
@@ -117,12 +153,14 @@ list would miss exactly the new orders it exists to surface.
 - **The `historical` tab is read and never written.** Notes and reason codes are
   hand-edited there, and re-writing a row would destroy that work.
 
-- **Monday column IDs are still placeholders.** They are per-board and are not
-  the column titles, so the push cannot be finished until the holding board
-  exists.
+- **Superseded by the push job (2026-09-24):** the Sheet-era notes above
+  (holding board, `historical` tab, "Sales Order #" matching, placeholder
+  column IDs). The job finds columns by title and dedupes on LCR.
+- **Part attributes are not pushed yet:** the five `part_*` columns are in the
+  view, but which Monday column (if any) each one feeds is still open.
 
 ## More detail
 
 - [`deploy/label_design_sync/README.md`](../../deploy/label_design_sync/README.md)
   — the Apps Script half: dedupe rules, tabs, notifications, the Monday traps.
-- [`CHANGELOG.md`](../../CHANGELOG.md) — 2026-09-11 and 2026-09-12 entries.
+- [`CHANGELOG.md`](../../CHANGELOG.md) — 2026-09-11, 2026-09-12 and 2026-09-24 entries.

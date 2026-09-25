@@ -90,6 +90,7 @@ graph LR
 
 | You want to… | Go to |
 |---|---|
+| **See everything still open, all projects** | [docs/OPEN_ITEMS.md](docs/OPEN_ITEMS.md) |
 | Find a command | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) |
 | Learn the workflow: folders, hooks, commits, PRs, deploy | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Run it locally and get CSVs | [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md), then [docs/QUICKSTART.md](docs/QUICKSTART.md) |

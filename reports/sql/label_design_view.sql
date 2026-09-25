@@ -265,6 +265,20 @@ release_lines AS (
     up.user_name                                  AS sales_rep_primary,
     us.user_name                                  AS sales_rep_secondary,
 
+    -- The BDM (2026-09-24). Order_Salesperson above turned out to be nearly
+    -- empty in Plex: one row in all of test, with Sort_Order 0, which the = 1
+    -- filter misses too. Vox records the rep in two other places, both in
+    -- Plex's "BDM" field group:
+    --   Sales_v_PO.Inside_Sales        "Inside Salesperson" on the ORDER, set
+    --                                   on every order entered since SO 4.
+    --   Common_v_Customer.Assigned_To  "Assigned To" on the CUSTOMER, the
+    --                                   account owner. 16 of 24 test customers.
+    -- `bdm` takes the order first (the most specific), then the customer, then
+    -- the old salesperson table. This is what goes to Monday's Sales Rep.
+    ui.user_name                                  AS sales_rep_inside,
+    ua.user_name                                  AS customer_account_rep,
+    COALESCE(ui.user_name, ua.user_name, up.user_name) AS bdm,
+
     -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
     -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
     -- No new extractions: `Common_v_Customer` and `Part_v_Customer_Part` are
@@ -335,6 +349,8 @@ release_lines AS (
   LEFT JOIN rep_secondary AS rq ON rq.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
   LEFT JOIN users         AS up ON up.Plexus_User_No = rp.Plexus_User_No
   LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
+  LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
+  LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
 
   LEFT JOIN part_attributes_pivoted AS pap
     ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
@@ -369,6 +385,9 @@ SELECT
   job_note,
   sales_rep_primary,
   sales_rep_secondary,
+  sales_rep_inside,
+  customer_account_rep,
+  bdm,
   customer_email,
   customer_phone,
   customer_part_description,

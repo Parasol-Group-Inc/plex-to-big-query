@@ -1,5 +1,7 @@
 # Reference data and enrichment settings
 
+> **Being retired (2026-09-25).** This describes the Sheet-based flow, which the push service (`label_design_service/push.py`) replaces once it is scheduled in prod. It stays accurate for the Apps Script that is still live until then. Current status: [`label-design/STATUS.md`](../../label-design/STATUS.md).
+
 This file documents the config-driven enrichment layer added to the Label Design queue.
 
 ## Script properties

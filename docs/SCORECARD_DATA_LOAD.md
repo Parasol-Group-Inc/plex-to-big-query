@@ -148,70 +148,39 @@ the team on every run, so don't fire them to fix a demo — let the scheduled ru
 carry the change, then check with
 `./scripts/scorecard_status.ps1 -Dataset PlexProd`.
 
-## Proving a tile works: `scripts/scorecard_test_data.py`
+## Proving a tile works
 
-> **Designing tiles rather than spot-checking one?** Use the scorecard sandbox
-> instead: `voxdatalake.ScorecardSandbox`, a full year of realistic data that
-> nothing overwrites (`scripts/scorecard_sandbox/README.md`). This injector's
-> rows vanish with the next ETL run or the nightly wipe.
-
-A blank tile has two possible causes and they look identical from the
-dashboard: **the view is wrong**, or **the Plex test tenant has nothing of
-that kind**. This script settles it by putting rows underneath, so a tile that
-stays blank with data present is one we have to fix.
+Use the **scorecard sandbox**: `voxdatalake.ScorecardSandbox`, a full simulated
+year under every tile that nothing overwrites — see
+[`scripts/scorecard_sandbox/README.md`](../scripts/scorecard_sandbox/README.md).
 
 ```bash
-python scripts/scorecard_test_data.py --status     # what is injected right now
-python scripts/scorecard_test_data.py --inject     # all recipes, 14 days
-python scripts/scorecard_test_data.py --inject --recipes production,shipping
-python scripts/scorecard_test_data.py --delete     # remove every injected row
+python scripts/scorecard_sandbox/build.py          # full rebuild
+python scripts/scorecard_sandbox/build.py --verify # rows + month span per view
 ```
 
-**The rows are not realistic and are not meant to be.** They are shaped to
-satisfy the views (right columns, right types, right keys), so the figures will
-not resemble Vox's business and must never be read as if they did. The question
-being answered is "does anything arrive at all".
+### The earlier injector was retired on 2026-09-24
 
-### How removal is guaranteed
+`scripts/scorecard_test_data.py` wrote marked rows straight into `PlexTest` to
+tell a broken tile apart from an empty one. The sandbox does that job properly
+— it clones real rows into a dataset nothing overwrites, rather than inventing
+"one part, one customer, $1.25" rows in the dataset people actually look at —
+so keeping both would have meant two ways to do one thing, with the weaker one
+easier to reach for.
 
-Two independent mechanisms, because a cleanup that depends on a record of what
-was written fails exactly when you need it:
+**It earned its keep before it went.** It is what exposed
+`part_cycle_count_report` as *unqueryable rather than empty*: the view cast an
+INT64 nanosecond date straight to TIMESTAMP, which BigQuery refuses, so it
+failed to parse and every query against it errored. That had been recorded for
+weeks as "0 rows, nothing counted yet" — a status check that reports row counts
+can never tell those two apart. The fix is in `reports/sql/`, and the lesson
+outlived the tool.
 
-1. **Every row is marked** - synthetic integer keys start at `990000000`,
-   synthetic text keys start with `ZZTEST`. Nothing Plex generates comes near
-   either, so `--delete` runs exact predicates and works even from a machine
-   that has never run `--inject`.
-2. A manifest table `_scorecard_test_data` records each batch, for `--status`.
-
-`--delete` uses the predicates, not the manifest, so losing the manifest never
-strands data. The tenant is also **wiped nightly at midnight UTC**, a third net.
-
-**It refuses to run against `PlexProd`** - not a flag, not an override.
-
-### What it proved on 2026-09-22
-
-| Tile / view | Before | After |
-|---|---|---|
-| `shipping_daily_report` | 1 | **14** |
-| `shipping_revenue_report` | 5 | **19** |
-| `shipping_pending_revenue_report` | **0** | **4** |
-| `production_monthly_by_workcenter_group_report` | 1 | **9** |
-| `production_vs_goal_report` | 1 | **9** |
-| `quality_fpy_by_area_month_report` | 1 | **9** |
-| `inventory_avg_daily_usage_report` | **0** | **1** |
-| `part_cycle_count_report` | **ERROR** | **1** (9 locations, 82.1% accuracy) |
-
-That last row is the point of the exercise: `part_cycle_count_report` was not
-empty, it was **unqueryable**. It cast an INT64 nanosecond date straight to
-TIMESTAMP, which BigQuery rejects outright, so the view failed to parse. It had
-been recorded as "0 rows, nothing counted yet" - and a status check that
-reports row counts can never tell those two apart.
-
-### Deliberately not covered
-
-- **`inventory_valuation_total_report`** - needs `Part_v_Snapshot` plus two
-  cost-breakdown tables including a history table, and a fabricated cost is the
-  one number on this scorecard that would actively mislead rather than prove
-  anything.
-- **Quality** - already holds 22 real nonconformance records entered by Quality
-  themselves. Nothing to prove.
+**Its one real flaw, recorded because the claim is still tempting:** it told you
+its rows were "wiped nightly anyway". They were not. The nightly wipe clears the
+*Plex tenant*, not BigQuery, and the ETL's zero-row guard — "0 rows → existing
+table left untouched" — actively *preserves* injected rows when Plex returns
+nothing. Two days after that run, 56 injected cycle-count rows and a fake safety
+incident were still sitting in `PlexTest`, quietly feeding a tile. Anything that
+writes test rows has to be deleted deliberately; "it expires on its own" is a
+comforting thing to write and was simply false here.

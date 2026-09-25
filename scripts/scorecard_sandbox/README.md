@@ -199,6 +199,8 @@ the next fix found in the sandbox has somewhere to go first.
   `build.copy_base_tables(sb, [its tables])` re-copies just those from the
   snapshot.
 
-`scripts/scorecard_test_data.py`, the earlier per-tile injector, still exists
-for quick PlexTest spot checks. It writes the "one part, one customer, $1.25"
-rows this sandbox was built to replace, and the build strips them on copy.
+`scripts/scorecard_test_data.py`, the earlier per-tile injector, was **deleted
+on 2026-09-24** — this sandbox replaced it. The build still strips its leftover
+rows on copy (`build.STRIP`), because rows it wrote before then can outlive it:
+the ETL's zero-row guard preserves an existing table when Plex returns nothing,
+so they do not expire on their own.

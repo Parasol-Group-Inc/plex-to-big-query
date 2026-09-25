@@ -33,9 +33,9 @@ Monday.com item sat as a red conflict callout until it turned out the blend was
 by design.
 
 **Say what is real and what is not.** Every tile carries a `kind` — `real` for
-Vox's own data, `injected` for rows put there by
-`scripts/scorecard_test_data.py` to prove the wiring. A test figure presented
-as a business figure is worse than a blank tile.
+Vox's own data, `injected` for rows that came from the scorecard sandbox
+(`scripts/scorecard_sandbox/`) rather than from Vox. A test figure presented as
+a business figure is worse than a blank tile.
 
 **Plain English first.** The page is written for someone who has never opened
 BigQuery. Each tile leads with the question it answers, not the view that

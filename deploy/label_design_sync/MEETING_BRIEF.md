@@ -1,5 +1,7 @@
 # Label Design Sync — Meeting Brief
 
+> **Being retired (2026-09-25).** This describes the Sheet-based flow, which the push service (`label_design_service/push.py`) replaces once it is scheduled in prod. It stays accurate for the Apps Script that is still live until then. Current status: [`label-design/STATUS.md`](../../label-design/STATUS.md).
+
 ## Purpose
 
 This brief captures the current working flow, the decisions still open, the recommended long-term architecture, and the improvements we should discuss with the team before making the next change.

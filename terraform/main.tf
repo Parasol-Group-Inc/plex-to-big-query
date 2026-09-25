@@ -5482,3 +5482,98 @@ resource "google_cloud_scheduler_job" "etl_label_design_test_retry" {
     }
   }
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LABEL DESIGN → MONDAY PUSH — added 2026-09-24
+#
+# Replaces the Sheet + Apps Script hop (deploy/label_design_sync/). Same image
+# as the ETL, different command: `python -m label_design_service.push` reads
+# `label_design_report` and creates one Monday item per new order + part,
+# deduped on an LCR hash written into the item itself. Every attempt is
+# audited in `<dataset>.label_design_push_log` (created by the job).
+#
+# SCHEDULED 30 MINUTES AFTER THE ETL, not chained to it. The ETL's worst case
+# is two 600s attempts (max_retries = 1), so +30 min always reads a view this
+# cycle refreshed, and a failed ETL can't take the push down with it — the
+# push just re-reads the last good view, and dedupe makes that harmless.
+#
+# TEST ONLY FOR NOW: PlexTest → "Plex Import" (18432111755), Ashley's review
+# copy of Design & QA. There is deliberately no prod job yet — Plex prod has
+# no Label Design releases until the 19 Oct cutover, and which board prod
+# pushes to (Design & QA itself, or this one) hasn't been decided.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Value added by hand, never in state:
+#   printf '%s' "$TOKEN" | gcloud secrets versions add monday-api-key --data-file=- --project=voxdatalake
+resource "google_secret_manager_secret" "monday_api_key" {
+  secret_id = "monday-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_cloud_run_v2_job" "label_design_push_test" {
+  name     = "plex-etl-label-design-push-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        args  = ["python", "-m", "label_design_service.push"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "MONDAY_BOARD_ID"
+          value = "18432111755"
+        }
+        env {
+          name  = "MONDAY_GROUP_TITLE"
+          value = "New from Plex"
+        }
+        env {
+          name  = "SECRET_MONDAY_API_KEY"
+          value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+      }
+      # No retry: a half-finished run is safe to repeat (dedupe), but an
+      # immediate automatic repeat of a run that tripped the new-row alarm is
+      # exactly what the alarm is there to stop.
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "label_design_push_test" {
+  name        = "plex-label-design-push-sync-test"
+  description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
+  schedule    = "10 10,14 * * *" # 30 min after plex-label-design-sync-test (9:40 / 13:40)
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_push_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

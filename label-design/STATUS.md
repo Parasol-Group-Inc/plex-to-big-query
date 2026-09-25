@@ -1,4 +1,6 @@
-# Sep 14 brief and pending items
+# Label Design — status
+
+*(This file began as the 2026-09-14 brief; newest updates first.)*
 
 > **⚠ READ THIS SECTION FIRST.** Everything below "## UPDATE — 2026-09-16" is
 > the original 2026-09-14 brief, kept for history. Large parts of it are
@@ -6,6 +8,19 @@
 > is a bigger pivot than anything the original pending-items list
 > anticipated. Do not resume work from the original plan without reading the
 > update first.
+
+---
+
+## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
+
+`deploy/label_design_trigger/` is a one-button Apps Script page that starts
+`plex-etl-label-design-test` and shows recent runs. It runs as the deployer,
+gated by an allowlist, refuses while a run is in progress, and has a
+cooldown. **Not deployed yet:** paste it into a new Apps Script project in
+`parasoldatalake` with the Cloud Run Admin API enabled, set `JOB_NAME` and
+`ALLOWED_EMAILS`, run `testSetup()`, then deploy as a web app (its README
+has the steps). It targets **test only**; prod is one property flip, once
+it has been used.
 
 ---
 
@@ -31,6 +46,29 @@ PDP, Prop 65, trademark or material-classification columns.
   2026-09-24 section below it on `dev-label-design`.
 - **The lesson** is in CLAUDE.md "Known friction": apply only from `main`, and
   read the plan for files you didn't touch.
+## UPDATE — 2026-09-24 (later): the push service EXISTS now
+
+`label_design_service/push.py` (see its docstring) is built and verified end
+to end against PlexTest → `18432111755`, using tracked test data from
+`scripts/label_design_test_data.py`. 7 `ZZTEST-LD-` items are on the board
+for Ashley; `--delete` removes them. Terraform for a scheduled **test** job is
+written and planned (3 to add) but **not applied**. Deploy order: `terraform
+apply` → add the secret version → Cloud Build (the new job needs an image that
+contains `label_design_service/`; tfvars' `image_url` is stale). Still open:
+prod job + prod target board, part-attribute → Monday column mapping,
+pre-cutover dedupe fallback, and whether the push should set a starting Design
+Status. See CHANGELOG 2026-09-24.
+
+## UPDATE — 2026-09-24: new board for Ashley, with real history on it
+
+**"Plex Import" `18432111755`** (workspace "blank landing page") now holds a
+full copy of Design & QA: 59 columns, 16 groups, 183 items, checked cell by
+cell. It was made with `scripts/copy_monday_board.py --wipe-target`. Files
+(1,071, ~3 GB) were **not** copied. **Jennette's `MONDAY_API_KEY` can write
+here**, so this board, not `18430735110`, is the realistic target for the push
+service. It's a point-in-time copy; nothing keeps it in sync with Design & QA.
+**Re-running the copy script with `--wipe-target` deletes anything added to the
+board since, test data included.** See CHANGELOG 2026-09-24.
 
 ---
 

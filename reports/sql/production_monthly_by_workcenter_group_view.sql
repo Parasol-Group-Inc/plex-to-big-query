@@ -34,11 +34,12 @@
 -- immune to that whole class of bug. Workcenter_Key is on Part_v_Production
 -- directly.
 --
--- BOOLEAN CONVENTION: Part_v_Production.Rejected uses -1 = true, the
--- convention confirmed live on the Part_v_* family (Part_v_Container.Active,
--- Container_Status.OK_Status). Do NOT copy the 1 = true convention confirmed
--- on the Sales_v_Shipper_Status / Sales_v_PO_Status tables used by the
--- sibling revenue views — this pipeline genuinely has both.
+-- BOOLEAN CONVENTION: Part_v_Production.Rejected is 1 on a rejected record
+-- (checked 2026-09-24 against the only real one, Bottling Line 1, 500 units).
+-- It used to be tested as -1 on a family "convention" the container flags
+-- had already disproved, which counted no scrap at all. Scrap is now
+-- `!= 0`, which holds whichever value Plex uses. Check real rows, never
+-- the family (docs/CHEATSHEET.md, Booleans).
 --
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml, same raw
 -- tables the 4 daily reports already use.
@@ -73,7 +74,7 @@ SELECT
 
   SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
          SAFE_CAST(prod.Quantity AS FLOAT64), 0))       AS actual_qty,
-  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = -1,
+  SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0,
          SAFE_CAST(prod.Quantity AS FLOAT64), 0))       AS scrap_qty,
   SUM(SAFE_CAST(prod.Quantity AS FLOAT64))              AS total_qty,
 
@@ -81,7 +82,7 @@ SELECT
   -- FPY figure in quality_fpy_by_area_month_report, which is computed on the
   -- same table at the same grain and should agree with this.
   SAFE_DIVIDE(
-    SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = -1,
+    SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0,
            SAFE_CAST(prod.Quantity AS FLOAT64), 0)),
     NULLIF(SUM(SAFE_CAST(prod.Quantity AS FLOAT64)), 0)
   )                                                     AS scrap_rate

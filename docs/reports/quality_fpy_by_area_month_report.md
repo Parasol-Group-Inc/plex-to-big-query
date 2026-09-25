@@ -21,6 +21,7 @@ DPMO is a provisional placeholder, decided 2026-09-01: the real formula needs an
 
 ## Flags and open questions
 
+- **⚠ Reversed 2026-09-24: scrap is `Rejected != 0`.** The 2026-08-23 change moved the test from `1` to `-1`; the only real rejected record in PlexTest (Bottling Line 1, 500 units, 2026-09-24) has `Rejected = 1`, so scrap read **0** from 2026-08-23 until this fix. `!= 0` counts either value. Found by the scorecard sandbox — see [`docs/SCORECARD_SANDBOX_FINDINGS.md`](../SCORECARD_SANDBOX_FINDINGS.md).
 - **DPMO is provisional** (Opportunities_Per_Unit = 1, a named constant in the SQL) — treat it as a placeholder, not a final number, until Quality Engineering gives a real per-process opportunity count.
 - **No Sigma column at all**, on purpose — see above.
 - **Fixed 2026-09-01, same day it was written.** The first version copied the Daily Reports' `Part_v_Production → Part_v_Job_Op → Part_v_Workcenter` join, but this view already reached `Workcenter_Group` via `Part_v_Production.Workcenter_Key` directly — the `Job_Op` join was unused and, as an `INNER JOIN`, silently dropped every row (this tenant's real `Job_Op_Key` values in `Part_v_Production` have since aged out of the current `Part_v_Job_Op` extract). Removed the join entirely; reverified with real output: Bottling and Pre-Weigh both show 100% FPY for August 2026 (3,000/3,000 and 429.185/429.185 good/total), DPMO 0.

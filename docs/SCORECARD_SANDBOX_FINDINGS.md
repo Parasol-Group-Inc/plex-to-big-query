@@ -15,7 +15,7 @@ it was written down.
 | Symbol | Meaning |
 |---|---|
 | ✅ | Works on the deployed SQL. |
-| 🔧 | Works only with a fix from `scripts/scorecard_sandbox/proposed_sql/`, which is **not deployed**. |
+| 🔧 | Was broken; **fixed in `reports/sql/` on branch `dev-sandbox` (2026-09-24), not yet deployed** — reaches prod on the next `terraform apply` after merge. |
 | 🏗 | The view needs rebuilding. |
 | ❓ | Needs a decision or data from someone outside this team. |
 | ⛔ | No Plex source, by design. |
@@ -58,9 +58,10 @@ it was written down.
 
 ## View bugs
 
-Proposed fixes for 1–3 are in `scripts/scorecard_sandbox/proposed_sql/`. The
-sandbox uses them; production does not. Editing `reports/sql/` deploys to prod
-on the next `terraform apply`, so that is Emilio's decision.
+**1–3 are fixed in `reports/sql/`** (branch `dev-sandbox`, 2026-09-24),
+verified in the sandbox and compiled against real PlexTest data. They reach
+production on the next `terraform apply` after merge — until then prod still
+runs the broken versions.
 
 **1. The sales rep comes from a table Vox doesn't use.**
 - **Affects:** `sales_mtd_by_status_change_view.sql` (rep1/rep2),
@@ -73,8 +74,8 @@ on the next `terraform apply`, so that is Emilio's decision.
   (`Sales_v_PO.Inside_Sales`) and on the customer (`Common_v_Customer.Assigned_To`,
   on 150 of 182 customers).
 - **Fix:** `label_design_view.sql` switched to those fields on 2026-09-24. The
-  proposed SQL does the same (order, then customer, then the old table) and
-  adds `sales_rep_source`.
+  three views now do the same (order, then customer, then the old table), and
+  the sales view adds `sales_rep_source`.
 - **Impact:** Sales by rep, % to goal by rep, and the pipeline and approval
   rep columns.
 

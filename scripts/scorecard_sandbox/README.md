@@ -171,14 +171,10 @@ that call is Emilio's.
 and `docs/reports/` update), then delete the override here. A stale override
 would hide a regression.
 
-| Override | Fixes |
-|---|---|
-| `sales_mtd_by_status_change_view.sql` | Rep from the order's `Inside_Sales`, then the customer's `Assigned_To`, then `Order_Salesperson`. Adds a `sales_rep_source` column. |
-| `pipeline_plex_value_view.sql` | The same rep resolution. |
-| `sales_orders_pending_accounting_approval_view.sql` | The same rep resolution, plus `LIKE 'DEPOSIT REVIEW%'`. |
-| `production_monthly_by_workcenter_group_view.sql`, `quality_fpy_by_area_month_view.sql`, `encap_` / `packaging_` / `labeling_daily_report_view.sql` | Scrap is `Rejected != 0`, not `= -1`. |
-
-Why each is needed is in the findings doc.
+**Empty right now.** The first three overrides (rep resolution, Deposit
+Review, scrap flag) were landed in `reports/sql/` on 2026-09-24 and deleted
+here, which is the lifecycle every override should follow. The folder stays so
+the next fix found in the sandbox has somewhere to go first.
 
 ## Using it for Looker Studio
 

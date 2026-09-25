@@ -14,6 +14,43 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-24 (scorecard) - Fixed: sales rep, scrap flag and Deposit Review in nine views
+
+### Fixed - found by the scorecard sandbox, verified against real Plex rows
+Each fix was proven in `ScorecardSandbox`, then compiled and run against real
+PlexTest data. None of them is deployed yet: they reach prod on the next
+`terraform apply` after `dev-sandbox` is merged.
+
+- **Sales rep.** Affects `sales_mtd_by_status_change_view.sql`,
+  `pipeline_plex_value_view.sql` and
+  `sales_orders_pending_accounting_approval_view.sql`.
+  - **Before:** they read the rep from `Sales_v_Order_Salesperson`, which Vox
+    barely uses (one row in all of test, none in prod), so every sale read
+    "(no rep assigned)".
+  - **Now:** the rep resolves order `Inside_Sales` → customer `Assigned_To` →
+    `Order_Salesperson`, the same as the Label Design view's `bdm`. The sales
+    view adds `sales_rep_source`.
+  - **In the sandbox:** 2,704 of 2,720 sale lines resolve a rep (2,559 from
+    the order, 145 from the customer).
+- **Scrap is `Rejected != 0`.** Affects the production monthly, FPY and encap,
+  packaging, labeling and blending daily views.
+  - **Before:** the views tested `= -1`, a change made 2026-08-23 on an
+    assumed convention. The only real rejected record has `Rejected = 1`, so
+    scrap, rejected quantity and DPMO read 0 from then until now. FPY was
+    unaffected.
+  - **Now:** `!= 0`, which holds for either value.
+  - `docs/CHEATSHEET.md`'s boolean table no longer lists any column as
+    confirmed `-1 = true`.
+- **Deposit Review.** Affects
+  `sales_orders_pending_accounting_approval_view.sql`.
+  - **Before:** it matched `= 'DEPOSIT REVIEW'`, but Plex now has two
+    "Deposit Review (…)" statuses (2587, 2656), so the tile was empty.
+  - **Now:** `LIKE 'DEPOSIT REVIEW%'`.
+
+Report docs updated for all nine views. The sandbox's `proposed_sql/`
+overrides for these fixes are deleted now that the fixes live in
+`reports/sql/`.
+
 ## 2026-09-24 (scorecard) - What the sandbox found: six view bugs and a stale-data trap
 
 ### Found - `docs/SCORECARD_SANDBOX_FINDINGS.md`

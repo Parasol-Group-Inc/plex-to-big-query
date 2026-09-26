@@ -67,7 +67,7 @@ BOARD_ID = os.environ["MONDAY_BOARD_ID"]
 GROUP_TITLE = os.environ.get("MONDAY_GROUP_TITLE", "New from Plex")
 MAX_NEW_ITEMS = int(os.environ.get("MAX_NEW_ITEMS", "60"))
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0", "false", "False")
-# The browser host, not the ODBC one. Prod is the test host minus ".test".
+# The browser host, not the ODBC one. Prod host confirmed by Emilio 2026-09-26.
 PLEX_WEB_HOST = os.environ.get("PLEX_WEB_HOST") or (
     "vox.on.plex.com" if BQ_DATASET == "PlexProd" else "vox.test.on.plex.com")
 

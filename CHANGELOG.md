@@ -37,6 +37,9 @@ don't need an entry.
   values are right, e.g. `93111-00VOXNU-1 Rev 00` →
   `…/ViewForm?…PartKey=10658234&PartNo=93111-00VOXNU-1&Revision=Rev%2000`.
 - **Open items:** D1 and L1 closed. L1 is now the review of these items.
+- **Prod web host confirmed: `vox.on.plex.com`** (Emilio). The 2026-09-25
+  entry below called it unverified; `push.py`'s `PlexProd` default was
+  already correct.
 
 ## 2026-09-25 (dev-label-design) - Deploying from a second machine
 

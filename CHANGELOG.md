@@ -40,6 +40,10 @@ don't need an entry.
 - **Prod web host confirmed: `vox.on.plex.com`** (Emilio). The 2026-09-25
   entry below called it unverified; `push.py`'s `PlexProd` default was
   already correct.
+- **Label Design decisions:** the team uses "Plex Import" permanently, so the
+  Design & QA board and Monday licence item are closed. The prod push will
+  target "Plex Import", with test repointed to a sandbox board before 19 Oct.
+  Part attributes won't be sent to Monday; they stay on the part in Plex.
 
 ## 2026-09-25 (dev-label-design) - Deploying from a second machine
 

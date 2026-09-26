@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-26 - Plex links deployed; Label Design test push live; review items on the board
+
+### Deployed
+- **`deploy/2026-09-26T2119Z`** (from `main` @ `e4436b9`, run from a Mac):
+  `0 to add, 4 to change, 0 to destroy`. Covered the prod and test
+  `label_design` configs, `label_design_view.sql`, and `PLEX_WEB_HOST` on
+  `plex-etl-label-design-push-test`.
+- **Image `etl:1b4e00e`** (Cloud Build `b4f28a13`, all 6 steps SUCCESS).
+- **Verified:** `Report 'label_design_test' loaded: 13 extraction(s)`, the
+  view recreated, and the push logged `13/13 mapped columns found`.
+
+### Changed
+- **`scripts/label_design_test_data.py`: test lines point at real Plex test
+  parts** (the newest 93… parts with a revision). The Plex Part URL now opens
+  a real page. `--delete` still matches only the 991… keys and the
+  `ZZTEST-LD-` order prefix, never `Part_Key`.
+
+### Test data
+- Replaced the 2026-09-24 `ZZTEST-LD-` Monday items, which had no links, with
+  7 new ones (13142802946 … 13142802950). Read back from Monday, the link
+  values are right, e.g. `93111-00VOXNU-1 Rev 00` →
+  `…/ViewForm?…PartKey=10658234&PartNo=93111-00VOXNU-1&Revision=Rev%2000`.
+- **Open items:** D1 and L1 closed. L1 is now the review of these items.
+
 ## 2026-09-25 (dev-label-design) - Deploying from a second machine
 
 ### Added

@@ -11,6 +11,46 @@
 
 ---
 
+## UPDATE — 2026-09-26: Plex links on every item; test push is LIVE; review items on the board
+
+- **The test push is deployed and scheduled** (10:10 and 14:10 Mountain,
+  30 min after the test ETL). The secret, job and image went in with
+  `deploy/2026-09-25T1307Z`; `deploy/2026-09-26T2119Z` added the links below.
+  Open items L1/D1 are closed.
+- **Two new Link columns, written by the push:** **Plex Part URL** (text
+  `<Part_No> <Revision>`) and **PO URL** (text `SO <order #>`). Both open Plex
+  test (`vox.test.on.plex.com`, from `PLEX_WEB_HOST` on the job). Emilio added
+  the columns to "Plex Import" by hand; the log line
+  `Board 'Plex Import': 13/13 mapped columns found` confirms the job sees them.
+  The view gained `po_key`, `part_key`, `part_no`, `part_revision` (new
+  `raw_Part_v_Part` join), and the pipeline extracts `Part_v_Part` itself
+  (13 extractions).
+- **7 fresh `ZZTEST-LD-` items for review** are in "New from Plex"
+  (13142802946 … 13142802950). The 2026-09-24 test items, made before the
+  links existed, were deleted with `--delete` (Monday keeps them in trash for
+  30 days) and re-created.
+  - **Part links open real Plex test parts.** The test lines now point at
+    real 93… finished goods.
+  - **PO links open nothing.** The test orders are fake (`POKey=991001xxx`) so
+    that `--delete` can always find them.
+  - **Clean up:** `python scripts/label_design_test_data.py --delete`, with
+    `MONDAY_API_KEY` set (`gcloud secrets versions access latest
+    --secret=monday-api-key --project=voxdatalake`).
+- **Why the view is empty without test data:** Plex test is wiped nightly. On
+  2026-09-26 it held 3 orders and 2 releases, none in Label Design.
+- **Deployed from a Mac for the first time.** tfvars came from the GCS backup
+  after it was checked against live state (CONTRIBUTING.md, "Deploying from
+  another machine"). That surfaced two repo bugs, both fixed through PRs #5
+  and #6: missing macOS lock checksums, and `deploy_preflight.sh` lacking its
+  executable bit.
+- **Still open:**
+  - **The prod host `vox.on.plex.com` is a guess.** Confirm it before a prod
+    push exists.
+  - Everything else in L3 (prod job and board, attribute mapping, dedupe
+    fallback, starting Design Status) still stands.
+
+---
+
 ## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
 
 `deploy/label_design_trigger/` is a one-button Apps Script page that starts

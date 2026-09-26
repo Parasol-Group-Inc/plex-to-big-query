@@ -25,6 +25,12 @@ HOW REMOVAL IS GUARANTEED — by marks, not by memory:
     finds the items again even with the audit table gone. Audit rows for those
     orders are deleted too.
 
+LINKS (2026-09-26). Each line points at a REAL Plex test part (a 93… finished
+good from raw_Part_v_Part), so the "Plex Part URL" column opens a real part
+page. That is safe for --delete, which matches Customer_Part_Key / PO_Line_Key,
+never Part_Key. The orders stay fake (PO_Key 991…), so "PO URL" opens an order
+that doesn't exist in Plex. The link's shape is right; the order is not real.
+
 The rows are NOT realistic business data — shaped to satisfy the view's joins
 and filters, nothing more. They also don't last: every Label Design / Sales
 Orders test ETL run (WRITE_TRUNCATE) and the nightly Plex-test wipe replace the
@@ -138,6 +144,13 @@ def inject(bq):
     label_design = status_key(bq, "raw_Sales_v_Release_Status", "Release_Status", "Label Design")
     today = dt.date.today()
     user_no = KEY_LO
+    parts = [int(r.k) for r in bq.query(
+        f"SELECT SAFE_CAST(Part_Key AS INT64) k FROM {fq('raw_Part_v_Part')} "
+        f"WHERE Part_No LIKE '93%' AND Revision IS NOT NULL "
+        f"ORDER BY k DESC LIMIT {len(ORDERS)}").result()]
+    if len(parts) < len(ORDERS):
+        raise SystemExit(f"raw_Part_v_Part has only {len(parts)} usable 93… part(s) in {DATASET} — "
+                         f"run the Label Design test ETL first")
 
     data = {t: [] for t in TABLES}
     data["raw_Plexus_Control_v_Plexus_User"].append(
@@ -159,11 +172,12 @@ def inject(bq):
             data["raw_Sales_v_Order_Salesperson"].append(dict(
                 PCN=pcn, PO_Key=po_key, Plexus_User_No=user_no, Sort_Order=1))
         key = KEY_LO + n
+        part_key = parts[n - 1]
         data["raw_Part_v_Customer_Part"].append(dict(
-            Customer_Part_Key=key, Part_Key=key, Customer_No=KEY_LO + cust, Customer_Part_No=part,
+            Customer_Part_Key=key, Part_Key=part_key, Customer_No=KEY_LO + cust, Customer_Part_No=part,
             Customer_Part_Description=DESCRIPTIONS[part], Active=1))
         data["raw_Sales_v_PO_Line"].append(dict(
-            PCN=pcn, PO_Line_Key=key, PO_Key=po_key, Part_Key=key, Customer_Part_Key=key,
+            PCN=pcn, PO_Line_Key=key, PO_Key=po_key, Part_Key=part_key, Customer_Part_Key=key,
             Line_No=str(n), Active=1))
         data["raw_Sales_v_Release"].append(dict(
             PCN=pcn, Release_Key=key, Release_No=f"ZZTEST-R{n}", PO_Line_Key=key,

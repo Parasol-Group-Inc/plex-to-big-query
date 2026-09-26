@@ -1,6 +1,6 @@
 # Open items — all projects
 
-*Last updated: 2026-09-25. Newest decisions first within each section. When
+*Last updated: 2026-09-26. Newest decisions first within each section. When
 an item closes, delete it here and record it in `CHANGELOG.md`; don't keep
 closed items.*
 
@@ -15,7 +15,6 @@ and `CHANGELOG.md`.
 
 | # | Item | Owner | Next step |
 |---|---|---|---|
-| D1 | **Next `./scripts/deploy.sh` proposes 3 add / 3 change.** It adds the Label Design push job's secret, test Cloud Run job and test scheduler (from `2eff172`, merged in PR #3). It changes `label_design_view.sql` (BDM sales-rep fields, also from `2eff172`) plus two comment-only SQL files. | Emilio | Decide before deploying. The scheduled test push job **fails twice a day** until (a) a version of secret `monday-api-key` exists and (b) an image containing `label_design_service/` is built with Cloud Build. Either do (a) and (b) first, then deploy all 6, or decline at the prompt. See L1. |
 | D2 | **The 9:45 PM retry has never produced a run.** `job_run_log` has 0 `run_mode='retry'` rows since 2026-07-21, despite 23 failed and 39 partial runs. | Claude, needs `gcloud` | `gcloud auth login`, then inspect the `*-retry` schedulers (state, last attempt) and a retry execution's logs. The retry's "today" is UTC while the schedules are Mountain; check that too. |
 | D3 | **ETL keeps yesterday's rows when Plex returns 0** (`main.py` `write_to_bigquery`). A table that genuinely empties shows stale data, silently. | Decision | Keep the guard against transient failures but mark staleness, e.g. log it in the run email or add a `last_nonempty_at`. Discuss before changing. |
 | D4 | **Every YAML's `sql_file` hard-codes `gs://voxdatalake-report-configs`.** That breaks a move to another project or bucket. | Low | Template the bucket if a move is ever planned. |
@@ -42,7 +41,7 @@ and `CHANGELOG.md`.
 
 | # | Item | Owner | Next step |
 |---|---|---|---|
-| L1 | **Push service is not live.** Code is merged and verified against the "Plex Import" board (`18432111755`). | Emilio | 1. Add a secret version: `echo -n "$KEY" \| gcloud secrets versions add monday-api-key --data-file=- --project=voxdatalake`. 2. Build an image with Cloud Build (preflight first). 3. `deploy.sh` (D1). 4. Run `plex-etl-label-design-push-test`, then check the board. |
+| L1 | **Review the Plex links on "Plex Import".** 7 `ZZTEST-LD-` items in "New from Plex" carry the new Plex Part URL / PO URL columns. Part links open real Plex test parts. PO links point at fake test orders, so they open nothing. | Emilio / Ashley | Look them over, then `python scripts/label_design_test_data.py --delete` (needs `MONDAY_API_KEY`). Before any prod push: confirm the prod web host (`vox.on.plex.com` is assumed). |
 | L2 | **On-demand trigger app** (`deploy/label_design_trigger/`) is in `main` but not set up in Apps Script. | Emilio | Follow its README: an Apps Script project in `parasoldatalake` with the Cloud Run Admin API enabled; set `JOB_NAME` and `ALLOWED_EMAILS`; run `testSetup()`; deploy as a web app. Targets the **test** job until promoted. |
 | L3 | **Still open from the design:** a prod push job and prod target board; the part-attribute → Monday column mapping (attributes sit on 7-parts, the queue carries 9-parts: BOM hop `93…→73…`); a pre-cutover dedupe fallback; whether the push sets a starting Design Status. | Emilio / Ashley | See `label-design/STATUS.md`. |
 | L4 | **Monday seat licence:** the account holds CRM, not Work Management. | Monday billing admin | It blocks writing to the real Design & QA board; "Plex Import" works meanwhile. |

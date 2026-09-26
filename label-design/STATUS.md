@@ -47,8 +47,13 @@
   - **Prod host confirmed:** Emilio confirmed `vox.on.plex.com` on
     2026-09-26. `push.py` already defaults to it for `PlexProd`; a prod job
     should still set `PLEX_WEB_HOST` explicitly, as the test job does.
-  - Everything else in L3 (prod job and board, attribute mapping, dedupe
-    fallback, starting Design Status) still stands.
+- **Decisions (Emilio, 2026-09-26):**
+  - **The team moves to "Plex Import" for good.** Nothing will push to the
+    old Design & QA board, so the Monday licence question is moot.
+  - **The prod push targets "Plex Import".** Before 19 Oct, the test push
+    moves to a sandbox board (e.g. Emilio's own).
+  - **Part attributes won't go to Monday.** They stay on the part in Plex.
+  - **The on-demand trigger app** (L2) is Emilio's to deploy.
 
 ---
 

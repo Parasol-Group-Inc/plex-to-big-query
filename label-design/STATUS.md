@@ -44,8 +44,9 @@
   and #6: missing macOS lock checksums, and `deploy_preflight.sh` lacking its
   executable bit.
 - **Still open:**
-  - **The prod host `vox.on.plex.com` is a guess.** Confirm it before a prod
-    push exists.
+  - **Prod host confirmed:** Emilio confirmed `vox.on.plex.com` on
+    2026-09-26. `push.py` already defaults to it for `PlexProd`; a prod job
+    should still set `PLEX_WEB_HOST` explicitly, as the test job does.
   - Everything else in L3 (prod job and board, attribute mapping, dedupe
     fallback, starting Design Status) still stands.
 

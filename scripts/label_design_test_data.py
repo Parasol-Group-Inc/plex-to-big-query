@@ -63,13 +63,17 @@ REASON_LABELS = {1: "Customer Initiated: Label Edit", 2: "Customer initiated: La
 # means the view must NOT return the order.
 #
 # Line fields: cp (customer part no, None = no customer part), part_no /
-# revision (None = no Part_v_Part row), notes [(Note_Type, Note)] oldest
-# first, due [days from today, one per release].
+# revision (REAL = a real PlexTest part, so the Part URL opens a real page;
+# a string = a fake part injected into Part_v_Part; None = no part master row),
+# notes [(Note_Type, Note)] oldest first, due [days from today, one per release].
 #
 # The Reason Code cases are the old label_design_service/test_reason_code.py
 # cases, moved here when the rule moved into the view — plus the ones a bare
 # "first character" rule gets wrong on real notes (quantities, decimals).
-def L(cp, note=None, notes=None, due=(21,), part_no="ZZTEST-P", revision="Rev 00", **exp):
+REAL = "REAL"  # part_no sentinel: point the line at a real PlexTest 93… part
+
+
+def L(cp, note=None, notes=None, due=(21,), part_no=REAL, revision=None, **exp):
     return dict(cp=cp, notes=notes if notes is not None else ([("Job_Note", note)] if note is not None else []),
                 due=list(due), part_no=part_no, revision=revision, exp=exp)
 
@@ -239,12 +243,28 @@ def resolve_reps(bq):
     return found
 
 
+def resolve_parts(bq):
+    """Real 93… finished goods, newest first, one per REAL line. Deterministic,
+    so --check picks the same parts --inject did. Never deleted: --delete
+    matches Part_Key only in the test key range."""
+    need = sum(1 for c in CASES for ln in c["lines"] if ln["part_no"] == REAL)
+    rows = [(int(r.k), r.no, r.rev) for r in bq.query(
+        f"SELECT SAFE_CAST(Part_Key AS INT64) k, Part_No no, Revision rev FROM {fq('raw_Part_v_Part')} "
+        f"WHERE Part_No LIKE '93%' AND Revision IS NOT NULL "
+        f"AND SAFE_CAST(Part_Key AS INT64) NOT BETWEEN {KEY_LO} AND {KEY_HI - 1} "
+        f"ORDER BY k DESC LIMIT {need}").result()]
+    if len(rows) < need:
+        raise SystemExit(f"raw_Part_v_Part has only {len(rows)} usable 93… part(s) in {DATASET}, need {need} — "
+                         f"run the Label Design test ETL first")
+    return rows
+
+
 def pcn_of(bq):
     rows = list(bq.query(f"SELECT ANY_VALUE(PCN) pcn FROM {fq('raw_Sales_v_PO')}").result())
     return int(rows[0].pcn) if rows and rows[0].pcn is not None else None
 
 
-def build(pcn, statuses, today, rep_nos):
+def build(pcn, statuses, today, rep_nos, real_parts):
     """Every row to insert, the expected view rows keyed by (order, part_key),
     and the orders the view must leave out. Keys are deterministic, so
     --check rebuilds the same expectations without storing anything."""
@@ -263,6 +283,7 @@ def build(pcn, statuses, today, rep_nos):
                 Assigned_To=rep_nos[assigned] if assigned else None))
         return customers[assigned]
 
+    real_parts = iter(real_parts)
     for table, col, key, value in statuses.values():
         if KEY_LO <= key < KEY_HI:
             data[table].append({f"{col}_Key": key, col: value})
@@ -290,14 +311,18 @@ def build(pcn, statuses, today, rep_nos):
         for line in case["lines"]:
             k += 1
             line_key, cp = k, line["cp"]
+            if line["part_no"] == REAL:
+                part_key, part_no, revision = next(real_parts)
+            else:
+                part_key, part_no, revision = line_key, line["part_no"], line["revision"]
+                if part_no is not None:
+                    data["raw_Part_v_Part"].append(dict(Part_Key=part_key, Part_No=part_no, Revision=revision))
             if cp is not None:
                 data["raw_Part_v_Customer_Part"].append(dict(
-                    Customer_Part_Key=line_key, Part_Key=line_key, Customer_No=cust_no, Customer_Part_No=cp,
+                    Customer_Part_Key=line_key, Part_Key=part_key, Customer_No=cust_no, Customer_Part_No=cp,
                     Customer_Part_Description=f"ZZTEST description {case['order']}", Active=1))
-            if line["part_no"] is not None:
-                data["raw_Part_v_Part"].append(dict(Part_Key=line_key, Part_No=line["part_no"], Revision=line["revision"]))
             data["raw_Sales_v_PO_Line"].append(dict(
-                PCN=pcn, PO_Line_Key=line_key, PO_Key=po_key, Part_Key=line_key,
+                PCN=pcn, PO_Line_Key=line_key, PO_Key=po_key, Part_Key=part_key,
                 Customer_Part_Key=line_key if cp is not None else None, Line_No=str(line_key - KEY_LO), Active=1))
             for d in line["due"]:
                 k += 1
@@ -313,13 +338,13 @@ def build(pcn, statuses, today, rep_nos):
                 continue
             e = dict(
                 customer_po=po_no, order_date=str(today - dt.timedelta(days=days)),
-                customer_part_no=cp, part_no=line["part_no"], part_revision=line["revision"], po_key=po_key,
+                customer_part_no=cp, part_no=part_no, part_revision=revision, po_key=po_key,
                 due_date=str(today + dt.timedelta(days=min(line["due"]))), release_count=len(line["due"]),
-                dedupe_key=f"{order}|{cp if cp is not None else f'PK{line_key}'}",
+                dedupe_key=f"{order}|{cp if cp is not None else f'PK{part_key}'}",
                 # quote(safe='') is an independent encoder, so this also checks the SQL's hand-rolled one
-                part_url=(f"{HOST}/Engineering/Part/ViewForm?__sk=5&__sak=2&FromPartMenu=True&PartKey={line_key}"
-                          f"&PartNo={quote(line['part_no'] or '', safe='')}"
-                          f"&Revision={quote(line['revision'] or '', safe='')}"),
+                part_url=(f"{HOST}/Engineering/Part/ViewForm?__sk=5&__sak=2&FromPartMenu=True&PartKey={part_key}"
+                          f"&PartNo={quote(part_no or '', safe='')}"
+                          f"&Revision={quote(revision or '', safe='')}"),
                 customer_po_url=f"{HOST}/SalesAndCRM/SalesOrders/PoFormView?OriginLocation=SalesOrders&POKey={po_key}",
                 sales_order_url=f"{HOST}/SalesAndCRM/OrderEntry/ViewOrderForm?POKey={po_key}",
                 sales_rep_inside=reps.get("inside"), customer_account_rep=reps.get("assigned"),
@@ -330,12 +355,12 @@ def build(pcn, statuses, today, rep_nos):
             if "reason_code" in line["exp"]:
                 e["reason_code_label"] = REASON_LABELS.get(line["exp"]["reason_code"])
             e.update(line["exp"])
-            expected[(order, line_key)] = e
+            expected[(order, part_key)] = e
     return data, expected, absent
 
 
 def inject(bq):
-    data, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq))
+    data, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq), resolve_parts(bq))
     for t, rows in data.items():
         if rows:
             print(f"  {t}: +{insert(bq, t, rows)}")
@@ -350,7 +375,7 @@ def check(bq):
         f"SELECT * FROM ({sql}) WHERE STARTS_WITH(order_number, '{ORDER_PREFIX}')").result()}
     if not got:
         raise SystemExit("No test rows returned. Run --inject first (any Label Design / Sales Orders test ETL run wipes them).")
-    _, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq))
+    _, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq), resolve_parts(bq))
     passed = failed = 0
     for key, e in expected.items():
         r = got.get(key)

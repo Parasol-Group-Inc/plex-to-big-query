@@ -65,9 +65,14 @@ to Memo and **nothing is written to Reason Code**. A note that only *starts
 with a number* is not read as a code: "12ct bottle" and "3.5 oz jar" go to
 Memo whole.
 
-Four more columns are sent from 2026-09-29, **once the board has them** (same
-title and type; until then the job skips them with a warning): **Customer PO**
-(text), and **Part URL**, **Customer PO URL** and **Sales Order URL** (link).
+Four more columns since 2026-09-29: **Customer PO** (text), and three links
+back into Plex: **Part URL** (shown as part number + revision, e.g.
+`93001-00CGNUT-2 Rev 00`), **Customer PO URL** (`PO <customer PO>`) and
+**Sales Order URL** (`SO <order #>`). The links are built in the view, so the
+report carries them too. Each needs a column with exactly that title and type
+on the board; a missing one is skipped with a warning, never a failure. They
+replace the 2026-09-25 "Plex Part URL" and "PO URL" columns, deleted from
+Plex Import on 2026-09-29.
 
 | First digit | Reason Code |
 |---|---|

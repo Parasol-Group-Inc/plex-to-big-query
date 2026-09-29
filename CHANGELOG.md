@@ -16,21 +16,27 @@ don't need an entry.
 
 ## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
 
-**Not deployed.** Needs the usual `./scripts/deploy.sh` from `main`, and the
-push job's image rebuilt, since `push.py` changed too.
+**Not deployed** (OPEN_ITEMS L5). Needs `./scripts/deploy.sh` from `main`
+and a rebuilt push image, since `push.py` changed too. Merged with the
+2026-09-25/26 entries below, which added the keys and `Part_v_Part` first.
 
 ### Added
-- **`label_design_report`:** `po_key`, `part_key`, `part_no`, `part_revision`
-  (new extraction `Part_v_Part`, in both prod and test YAML), `reason_code`,
+- **`label_design_report`:** `reason_code`,
   `reason_code_label`, `memo`, `part_url`, `customer_po_url` and
   `sales_order_url`. The links use `vox.on.plex.com` on PlexProd and
   `vox.test.on.plex.com` otherwise.
 - **Push:** Customer PO (text), Part URL, Customer PO URL and Sales Order URL
-  (link). They are skipped with a warning until the board has those columns.
+  (link), all from the view. They **replace** "Plex Part URL" / "PO URL"
+  (2026-09-25), whose columns Emilio deleted from Plex Import on 2026-09-29.
+  `PLEX_WEB_HOST` is removed from `push.py` and from the test job in
+  `terraform/main.tf`, because the view picks the host by dataset.
 - **`scripts/label_design_test_data.py --check`:** runs the LOCAL view SQL
   against PlexTest and grades 31 injected edge cases (Reason Code rules,
   release collapse, NULL customer parts, messy statuses, 14-day boundary,
-  URL encoding), PASS/FAIL each.
+  URL encoding), PASS/FAIL each. Later: five Sales Rep fallback cases using
+  real Plexus users (no fake user injected), and test lines point at real
+  93… parts again (as on 2026-09-26), except the URL-encoding case. 36/36
+  passed.
 
 ### Changed
 - **Reason Code / Memo rule moved into the view**, and is now the only copy of
@@ -43,6 +49,72 @@ push job's image rebuilt, since `push.py` changed too.
   and for `dedupe_key` (`ORDER|PK<key>`). Before, two such parts on one order
   were merged into one row. Rows that have a customer part number keep their
   old key, so nothing already on Monday is pushed again.
+## 2026-09-26 - Plex links deployed; Label Design test push live; review items on the board
+
+### Deployed
+- **`deploy/2026-09-26T2119Z`** (from `main` @ `e4436b9`, run from a Mac):
+  `0 to add, 4 to change, 0 to destroy`. Covered the prod and test
+  `label_design` configs, `label_design_view.sql`, and `PLEX_WEB_HOST` on
+  `plex-etl-label-design-push-test`.
+- **Image `etl:1b4e00e`** (Cloud Build `b4f28a13`, all 6 steps SUCCESS).
+- **Verified:** `Report 'label_design_test' loaded: 13 extraction(s)`, the
+  view recreated, and the push logged `13/13 mapped columns found`.
+
+### Changed
+- **`scripts/label_design_test_data.py`: test lines point at real Plex test
+  parts** (the newest 93… parts with a revision). The Plex Part URL now opens
+  a real page. `--delete` still matches only the 991… keys and the
+  `ZZTEST-LD-` order prefix, never `Part_Key`.
+
+### Test data
+- Replaced the 2026-09-24 `ZZTEST-LD-` Monday items, which had no links, with
+  7 new ones (13142802946 … 13142802950). Read back from Monday, the link
+  values are right, e.g. `93111-00VOXNU-1 Rev 00` →
+  `…/ViewForm?…PartKey=10658234&PartNo=93111-00VOXNU-1&Revision=Rev%2000`.
+- **Open items:** D1 and L1 closed. L1 is now the review of these items.
+- **Prod web host confirmed: `vox.on.plex.com`** (Emilio). The 2026-09-25
+  entry below called it unverified; `push.py`'s `PlexProd` default was
+  already correct.
+- **Label Design decisions:** the team uses "Plex Import" permanently, so the
+  Design & QA board and Monday licence item are closed. The prod push will
+  target "Plex Import", with test repointed to a sandbox board before 19 Oct.
+  Part attributes won't be sent to Monday; they stay on the part in Plex.
+
+## 2026-09-25 (dev-label-design) - Deploying from a second machine
+
+### Added
+- **macOS checksums in `terraform/.terraform.lock.hcl`** (`darwin_arm64`,
+  2 lines). The provider versions are unchanged. Without them a Mac's first
+  `terraform init` dirties the tree, and the deploy guard refuses.
+- **CONTRIBUTING.md / README: how to deploy from another machine.** Restore
+  tfvars from `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`,
+  check it isn't stale, and set up ADC and a `python` on `PATH` for the
+  guard. Done for the first time today: the backup (2026-09-22) matched
+  every value checked in the live state.
+
+### Fixed
+- **`scripts/deploy_preflight.sh` was committed without its executable bit**
+  (mode `100644`, probably from Windows, which has no such bit). On macOS and
+  Linux, `deploy.sh` stopped at `Permission denied`. It is now `100755`, like
+  the other scripts.
+
+## 2026-09-25 (dev-label-design) - Plex Part URL and PO URL on the Monday push
+
+### Added
+- **Two Monday link columns from the Label Design push:** "Plex Part URL"
+  (`/Engineering/Part/ViewForm?…PartKey=&PartNo=&Revision=`) and "PO URL"
+  (`/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=`).
+  - `label_design_view.sql` now outputs `po_key`, `part_key`, `part_no`,
+    `part_revision`. The last two come from a new `raw_Part_v_Part` join.
+  - `Part_v_Part` is now extracted by `label_design` (prod + test configs,
+    13 extractions each). That keeps parts created the same morning
+    linkable, rather than waiting for the overnight `sales_orders` refresh.
+  - `push.py` builds the URLs, with the host taken from `PLEX_WEB_HOST`
+    (set to `vox.test.on.plex.com` on the test job; defaults to
+    `vox.on.plex.com` for `PlexProd` — unverified).
+  - The columns are matched by title and type `link`. They must be added
+    to "Plex Import" (18432111755) by hand; until then the push logs them
+    as missing and carries on.
 
 ## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
 

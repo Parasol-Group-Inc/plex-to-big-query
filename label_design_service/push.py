@@ -126,7 +126,13 @@ def _label(field):
 
 
 def _link(field, text):
-    return lambda r: {"url": r[field], "text": text} if r.get(field) else None
+    """A Monday link value. The URL comes from the view; `text(r)` is what shows."""
+    return lambda r: {"url": r[field], "text": text(r)} if r.get(field) else None
+
+
+def _part_text(r):
+    # "93001-00CGNUT-2 Rev 00", or the key when the part master row is missing.
+    return " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(r.get("part_key"))
 
 
 COLUMNS = [
@@ -147,13 +153,13 @@ COLUMNS = [
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),
-    # Added 2026-09-29. Design & QA has none of these four columns yet; until
-    # someone adds them (same titles, same types) they are skipped with a
-    # warning, like any other missing title.
+    # Added 2026-09-29, replacing the 2026-09-25 "Plex Part URL" / "PO URL"
+    # columns (deleted from Plex Import that day). The URLs are built in the
+    # view, host by dataset, so the report and the board carry the same links.
     ("Customer PO", "text", _text("customer_po")),
-    ("Part URL", "link", _link("part_url", "Part in Plex")),
-    ("Customer PO URL", "link", _link("customer_po_url", "Customer PO in Plex")),
-    ("Sales Order URL", "link", _link("sales_order_url", "Sales Order in Plex")),
+    ("Part URL", "link", _link("part_url", _part_text)),
+    ("Customer PO URL", "link", _link("customer_po_url", lambda r: f"PO {r.get('customer_po') or r.get('po_key')}")),
+    ("Sales Order URL", "link", _link("sales_order_url", lambda r: f"SO {r.get('order_number') or r.get('po_key')}")),
     ("LCR", "text", _text("_lcr")),
 ]
 

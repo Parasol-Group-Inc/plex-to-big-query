@@ -260,6 +260,7 @@ release_lines AS (
     )                                             AS due_date_resolved,
     po.order_date_resolved                        AS order_date,
     jn.Job_Note                                   AS job_note,
+    NULLIF(TRIM(jn.Job_Note), '')                 AS _note,
 
     -- Addition 1: who to ask. Both, because "BDM" has never been pinned to one.
     up.user_name                                  AS sales_rep_primary,
@@ -300,9 +301,8 @@ release_lines AS (
     -- what the Apps Script reads.
     ps.PO_Status                                  AS order_status,
 
-    -- Added 2026-09-25 — the parts of the two Plex links the push writes to
-    -- Monday ("Plex Part URL", "PO URL"). Only the keys and part number come
-    -- from here; label_design_service/push.py adds the per-environment host.
+    -- Keys and the internal part number (2026-09-29), per Emilio's hand-checked
+    -- Plex version of this query. The keys are what a Plex deep link needs.
     SAFE_CAST(po.PO_Key AS INT64)                 AS po_key,
     SAFE_CAST(pol.Part_Key AS INT64)              AS part_key,
     part.Part_No                                  AS part_no,
@@ -366,8 +366,10 @@ release_lines AS (
   LEFT JOIN part_attributes_pivoted AS pap
     ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
 
-  WHERE rs.Release_Status = 'Label Design'
-    AND ps.PO_Status = 'Pending Fulfillment'
+  -- Trimmed and uppercased so stray whitespace or casing in Plex can't
+  -- silently empty the queue (2026-09-29, matching the Plex version).
+  WHERE UPPER(TRIM(rs.Release_Status)) = 'LABEL DESIGN'
+    AND UPPER(TRIM(ps.PO_Status)) = 'PENDING FULFILLMENT'
     -- Addition 3: a rolling window. 14 days per "keep this like within the last
     -- two weeks or something"; widen here rather than in the Apps Script, since
     -- the sheet's own dedupe stops a widened window re-adding old rows.
@@ -391,7 +393,7 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
-  MIN(due_date_resolved) OVER (PARTITION BY order_number, customer_part_no) AS due_date,
+  MIN(due_date_resolved) OVER (PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING))) AS due_date,
   order_date,
   job_note,
   sales_rep_primary,
@@ -417,15 +419,77 @@ SELECT
   part_prop_65_requirement,
   part_trademark,
   part_material_classification,
-  COUNT(*) OVER (PARTITION BY order_number, customer_part_no)               AS release_count,
-  CONCAT(CAST(order_number AS STRING), '|', IFNULL(customer_part_no, ''))   AS dedupe_key
+  COUNT(*) OVER (PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING)))               AS release_count,
+
+  -- ── Reason Code + Memo, split out of the Job Note (2026-09-29) ─────────────
+  -- Rule (Emilio): the note's FIRST character, if it is 1-6, is the Reason
+  -- Code; the rest is the Memo. Anything else -> no code, the whole note is
+  -- the Memo, and the push writes nothing to Monday's Reason Code.
+  --
+  -- Guarded so a note that merely STARTS WITH A NUMBER is not read as a code:
+  -- "12ct bottle" and "3.5 oz label" start with a digit but are quantities.
+  -- A code is a 1-6 followed by end-of-note, or by something that is not a
+  -- digit and not a decimal point/comma leading into a digit.
+  --
+  -- One optional separator after the digit is dropped ("1 - text", "1: text",
+  -- "1.text", "1text" all give Memo "text").
+  --
+  -- This is the ONLY place the rule lives. The push service reads these
+  -- columns and no longer parses the note itself.
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN SAFE_CAST(SUBSTR(_note, 1, 1) AS INT64) END                     AS reason_code,
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN CASE SUBSTR(_note, 1, 1)
+              -- Label text exactly as spelled on the Monday board, including
+              -- the lower-case "initiated" in code 2.
+              WHEN '1' THEN 'Customer Initiated: Label Edit'
+              WHEN '2' THEN 'Customer initiated: Label review'
+              WHEN '3' THEN 'New label design (Vox design)'
+              WHEN '4' THEN 'New label review (Customer design)'
+              WHEN '5' THEN 'Vox Initiated: Label Edit/Review'
+              WHEN '6' THEN '3D Rendering'
+            END END                                                         AS reason_code_label,
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN NULLIF(REGEXP_REPLACE(SUBSTR(_note, 2), r'^[\s\-:.]+', ''), '')
+       ELSE _note END                                                       AS memo,
+
+  -- ── Deep links into Plex (2026-09-29) ─────────────────────────────────────
+  -- Host follows the dataset: PlexProd -> vox.on.plex.com, else the test
+  -- tenant. `{dataset}` is replaced as plain text by main.py before this runs.
+  -- PartNo and Revision are URL-encoded by hand (BigQuery has no function
+  -- for it); '%' goes first so the escapes added after it aren't re-escaped.
+  IF(part_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/Engineering/Part/ViewForm?__sk=5&__sak=2&FromPartMenu=True&PartKey=', CAST(part_key AS STRING),
+    '&PartNo=', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+      IFNULL(part_no, ''), '%', '%25'), ' ', '%20'), '&', '%26'), '#', '%23'),
+      '+', '%2B'), '?', '%3F'), '/', '%2F'), '=', '%3D'),
+    '&Revision=', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+      IFNULL(part_revision, ''), '%', '%25'), ' ', '%20'), '&', '%26'), '#', '%23'),
+      '+', '%2B'), '?', '%3F'), '/', '%2F'), '=', '%3D')))                AS part_url,
+  IF(po_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/SalesAndCRM/SalesOrders/PoFormView?OriginLocation=SalesOrders&POKey=', CAST(po_key AS STRING)))
+                                                                            AS customer_po_url,
+  IF(po_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=', CAST(po_key AS STRING))) AS sales_order_url,
+
+  -- A NULL customer part number falls back to Part_Key here too (2026-09-29).
+  -- Without it, two such parts on one order got the same "ORDER|" key and the
+  -- push's dedupe kept only the first. Rows that HAVE a customer part number
+  -- are unchanged, so nothing already on Monday gets a new key.
+  CONCAT(CAST(order_number AS STRING), '|',
+         COALESCE(customer_part_no, CONCAT('PK', CAST(part_key AS STRING)), '')) AS dedupe_key
 
 FROM release_lines
 
 -- One row survives per order + part: the one with the earliest due date.
+-- A NULL customer part number falls back to Part_Key, so two different parts
+-- that both lack one are not collapsed into a single row.
 -- _tiebreak_line_key only matters when two releases share that exact date.
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY order_number, customer_part_no
+  PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING))
   ORDER BY due_date_resolved ASC, _tiebreak_line_key
 ) = 1
 

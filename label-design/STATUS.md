@@ -11,6 +11,29 @@
 
 ---
 
+## UPDATE — 2026-09-29: Reason Code, Memo and links move into the view; real reps in test data
+
+- **Built against Emilio's hand-checked Plex version of the query.** The view
+  now trims/uppercases the status filters and falls back to `Part_Key` when a
+  line has no customer part number (collapse and `dedupe_key` =
+  `ORDER|PK<key>`; rows with a customer part keep their old key).
+- **Reason Code / Memo now come from the view** (`reason_code`,
+  `reason_code_label`, `memo`). It's still the first character 1-6, but
+  "12ct…" and "3.5 oz…" are not codes. No code means nothing is written to
+  Monday's Reason Code. `reason_code.py` and its test are gone.
+- **Links come from the view too:** `part_url`, `customer_po_url`,
+  `sales_order_url`, with the host chosen by dataset. The push writes them to
+  **Part URL / Customer PO URL / Sales Order URL** plus **Customer PO**
+  (text). Emilio deleted the 09-26 "Plex Part URL"/"PO URL" columns from Plex
+  Import. `PLEX_WEB_HOST` is removed from the push and the test job.
+- **Test data:** `scripts/label_design_test_data.py` has 34 cases (Job Note
+  rules, release collapse, NULL customer parts, messy statuses, 14/15-day
+  boundary, URL encoding, Sales Rep fallback with real Plexus users), and
+  `--check` grades the LOCAL SQL: 36/36 passed. 33 items are on Plex Import
+  for Ashley (OPEN_ITEMS L1).
+- **Merged with the 09-25/26 Mac work** (PRs #4–#8). Not deployed yet: see
+  OPEN_ITEMS L5.
+
 ## UPDATE — 2026-09-26: Plex links on every item; test push is LIVE; review items on the board
 
 - **The test push is deployed and scheduled** (10:10 and 14:10 Mountain,
@@ -19,7 +42,8 @@
   Open items L1/D1 are closed.
 - **Two new Link columns, written by the push:** **Plex Part URL** (text
   `<Part_No> <Revision>`) and **PO URL** (text `SO <order #>`). Both open Plex
-  test (`vox.test.on.plex.com`, from `PLEX_WEB_HOST` on the job). Emilio added
+  test (`vox.test.on.plex.com`, from `PLEX_WEB_HOST` on the job; *superseded
+  2026-09-29, see above*). Emilio added
   the columns to "Plex Import" by hand; the log line
   `Board 'Plex Import': 13/13 mapped columns found` confirms the job sees them.
   The view gained `po_key`, `part_key`, `part_no`, `part_revision` (new
@@ -299,7 +323,7 @@ Mapping, fully disambiguated against Monday's real Reason Code dropdown
 | 5 | Vox Initiated: Label edit/review | `[106]` |
 | 6 | 3D Rendering | `[4]` |
 
-**Built**: `label_design_service/reason_code.py` + `test_reason_code.py` —
+**Built** *(removed 2026-09-29; the rule now lives in the view)*: `label_design_service/reason_code.py` + `test_reason_code.py` —
 21/21 checks pass, including a real confirmed example from Emilio:
 `"3 Update to current V code. Standard Label."` → *New label design (Vox
 design)* + memo `"Update to current V code. Standard Label."`. Checked all

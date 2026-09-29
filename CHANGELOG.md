@@ -14,6 +14,41 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
+
+**Not deployed** (OPEN_ITEMS L5). Needs `./scripts/deploy.sh` from `main`
+and a rebuilt push image, since `push.py` changed too. Merged with the
+2026-09-25/26 entries below, which added the keys and `Part_v_Part` first.
+
+### Added
+- **`label_design_report`:** `reason_code`,
+  `reason_code_label`, `memo`, `part_url`, `customer_po_url` and
+  `sales_order_url`. The links use `vox.on.plex.com` on PlexProd and
+  `vox.test.on.plex.com` otherwise.
+- **Push:** Customer PO (text), Part URL, Customer PO URL and Sales Order URL
+  (link), all from the view. They **replace** "Plex Part URL" / "PO URL"
+  (2026-09-25), whose columns Emilio deleted from Plex Import on 2026-09-29.
+  `PLEX_WEB_HOST` is removed from `push.py` and from the test job in
+  `terraform/main.tf`, because the view picks the host by dataset.
+- **`scripts/label_design_test_data.py --check`:** runs the LOCAL view SQL
+  against PlexTest and grades 31 injected edge cases (Reason Code rules,
+  release collapse, NULL customer parts, messy statuses, 14-day boundary,
+  URL encoding), PASS/FAIL each. Later: five Sales Rep fallback cases using
+  real Plexus users (no fake user injected), and test lines point at real
+  93… parts again (as on 2026-09-26), except the URL-encoding case. 36/36
+  passed.
+
+### Changed
+- **Reason Code / Memo rule moved into the view**, and is now the only copy of
+  it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
+  yields a code. `label_design_service/reason_code.py` and its test are
+  removed; their cases live in the injector now.
+- **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
+  version of the query.
+- **A NULL customer part number falls back to `Part_Key`** for the collapse
+  and for `dedupe_key` (`ORDER|PK<key>`). Before, two such parts on one order
+  were merged into one row. Rows that have a customer part number keep their
+  old key, so nothing already on Monday is pushed again.
 ## 2026-09-26 - Plex links deployed; Label Design test push live; review items on the board
 
 ### Deployed

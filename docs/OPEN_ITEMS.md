@@ -1,6 +1,6 @@
 # Open items — all projects
 
-*Last updated: 2026-09-26. Newest decisions first within each section. When
+*Last updated: 2026-09-29. Newest decisions first within each section. When
 an item closes, delete it here and record it in `CHANGELOG.md`; don't keep
 closed items.*
 
@@ -41,6 +41,7 @@ and `CHANGELOG.md`.
 
 | # | Item | Owner | Next step |
 |---|---|---|---|
-| L1 | **Review the Plex links on "Plex Import".** 7 `ZZTEST-LD-` items in "New from Plex" carry the new Plex Part URL / PO URL columns. Part links open real Plex test parts. PO links point at fake test orders, so they open nothing. | Emilio / Ashley | Look them over, then `python scripts/label_design_test_data.py --delete` (needs `MONDAY_API_KEY`). |
+| L1 | **Ashley reviews 33 `ZZTEST-LD-` items on "Plex Import"** (pushed 2026-09-29 from local code: Reason Code/Memo split, real rep names, Customer PO; those items' parts are fake, so Part URL opens nothing; later injections use real 93… parts). | Emilio / Ashley | After review: `python scripts/label_design_test_data.py --delete`. |
+| L5 | **Deploy the 2026-09-29 Label Design change** (view: Reason Code/Memo/links/status trim/dedupe fallback; push: new link columns). Until then the scheduled test push writes the deleted "Plex Part URL"/"PO URL" columns (skipped, warning) and splits notes the old way. | Emilio | Merge `dev-label-design` → `main`, `./scripts/deploy.sh`, then rebuild the push image (Cloud Build). Plan should show `label_design_view.sql`, both label_design YAMLs, and the push job env (`PLEX_WEB_HOST` removed). |
 | L2 | **On-demand trigger app** (`deploy/label_design_trigger/`) is in `main` but not set up in Apps Script. | Emilio | Follow its README: an Apps Script project in `parasoldatalake` with the Cloud Run Admin API enabled; set `JOB_NAME` and `ALLOWED_EMAILS`; run `testSetup()`; deploy as a web app. Targets the **test** job until promoted. |
-| L3 | **Before the 19 Oct cutover:** add a **prod** push job (PlexProd → "Plex Import" `18432111755`, the board the team will use; set `PLEX_WEB_HOST=vox.on.plex.com`), and **repoint the test push job to a sandbox board** (e.g. Emilio's own) so test data never lands on the team's board. Still open: a pre-cutover dedupe fallback, and whether the push sets a starting Design Status. | Emilio | Days before go-live. |
+| L3 | **Before the 19 Oct cutover:** add a **prod** push job (PlexProd → "Plex Import" `18432111755`, the board the team will use; the view picks `vox.on.plex.com` for PlexProd by itself), and **repoint the test push job to a sandbox board** (e.g. Emilio's own) so test data never lands on the team's board. Still open: a pre-cutover dedupe fallback (hand-typed items carry no hash LCR, so an order inside the 14-day window can be pushed twice; match Sales Order + Item text for the first 14 days), and whether the push sets a starting Design Status. | Emilio | Days before go-live. |

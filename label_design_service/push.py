@@ -33,7 +33,6 @@ Environment:
     GCP_PROJECT            voxdatalake
     BQ_DATASET             PlexTest | PlexProd
     MONDAY_BOARD_ID        target board
-    PLEX_WEB_HOST          Plex UI host for the part/PO links (default: by dataset)
     MONDAY_GROUP_TITLE     group new items land in (created if missing)   [New from Plex]
     MONDAY_API_KEY         token, direct (local runs) ...
     SECRET_MONDAY_API_KEY  ... or its Secret Manager name                 [monday-api-key]
@@ -46,17 +45,14 @@ import json
 import logging
 import os
 import sys
-import urllib.parse
 import uuid
 
 from google.cloud import bigquery
 
 try:  # `python -m label_design_service.push` (container) or run from this folder
     from .monday import Monday
-    from .reason_code import REASON_CODE_LABELS, parse_job_note
 except ImportError:
     from monday import Monday
-    from reason_code import REASON_CODE_LABELS, parse_job_note
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("label_design_push")
@@ -67,9 +63,6 @@ BOARD_ID = os.environ["MONDAY_BOARD_ID"]
 GROUP_TITLE = os.environ.get("MONDAY_GROUP_TITLE", "New from Plex")
 MAX_NEW_ITEMS = int(os.environ.get("MAX_NEW_ITEMS", "60"))
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0", "false", "False")
-# The browser host, not the ODBC one. Prod host confirmed by Emilio 2026-09-26.
-PLEX_WEB_HOST = os.environ.get("PLEX_WEB_HOST") or (
-    "vox.on.plex.com" if BQ_DATASET == "PlexProd" else "vox.test.on.plex.com")
 
 VIEW = "label_design_report"
 AUDIT_TABLE = "label_design_push_log"
@@ -132,32 +125,14 @@ def _label(field):
     return lambda r: {"label": str(r[field]).strip()} if (r.get(field) or "").strip() else None
 
 
-def _plex_part_url(r):
-    key = r.get("part_key")
-    if key is None:
-        return None
-    q = {"__sk": 5, "__sak": 2, "FromPartMenu": "True", "PartKey": key}
-    # Plex opens the part from PartKey alone; No/Revision are passed as the
-    # part menu itself does, when the part master row is there to supply them.
-    if r.get("part_no"):
-        q["PartNo"] = r["part_no"]
-        q["Revision"] = r.get("part_revision") or ""
-    url = f"https://{PLEX_WEB_HOST}/Engineering/Part/ViewForm?" + urllib.parse.urlencode(
-        q, quote_via=urllib.parse.quote)
-    text = " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(key)
-    return {"url": url, "text": text}
+def _link(field, text):
+    """A Monday link value. The URL comes from the view; `text(r)` is what shows."""
+    return lambda r: {"url": r[field], "text": text(r)} if r.get(field) else None
 
 
-def _plex_po_url(r):
-    key = r.get("po_key")
-    if key is None:
-        return None
-    url = f"https://{PLEX_WEB_HOST}/SalesAndCRM/OrderEntry/ViewOrderForm?POKey={key}"
-    return {"url": url, "text": f"SO {r.get('order_number') or key}"}
-
-
-def _reason_code(r):
-    return {"label": REASON_CODE_LABELS[r["_reason_index"]]} if r.get("_reason_index") is not None else None
+def _part_text(r):
+    # "93001-00CGNUT-2 Rev 00", or the key when the part master row is missing.
+    return " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(r.get("part_key"))
 
 
 COLUMNS = [
@@ -165,8 +140,11 @@ COLUMNS = [
     ("Date", "date", _date),
     ("Description", "text", _text("customer_part_description")),
     ("Sales Order", "text", _sales_order),
-    ("Memo", "text", _text("_memo")),
-    ("Reason Code", "status", _reason_code),
+    # Reason Code and Memo are split out of the Job Note by the VIEW (the one
+    # place that rule lives). No code -> reason_code_label is NULL -> nothing
+    # is written to Reason Code, and the whole note is the Memo.
+    ("Memo", "text", _text("memo")),
+    ("Reason Code", "status", _label("reason_code_label")),
     ("Email", "email", _email),
     ("Phone Number", "text", _text("customer_phone")),
     # `bdm`: the order's Inside Sales, else the customer's Assigned To, else
@@ -175,9 +153,14 @@ COLUMNS = [
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),
+    # Added 2026-09-29, replacing the 2026-09-25 "Plex Part URL" / "PO URL"
+    # columns (deleted from Plex Import that day). The URLs are built in the
+    # view, host by dataset, so the report and the board carry the same links.
+    ("Customer PO", "text", _text("customer_po")),
+    ("Part URL", "link", _link("part_url", _part_text)),
+    ("Customer PO URL", "link", _link("customer_po_url", lambda r: f"PO {r.get('customer_po') or r.get('po_key')}")),
+    ("Sales Order URL", "link", _link("sales_order_url", lambda r: f"SO {r.get('order_number') or r.get('po_key')}")),
     ("LCR", "text", _text("_lcr")),
-    ("Plex Part URL", "link", _plex_part_url),
-    ("PO URL", "link", _plex_po_url),
 ]
 
 
@@ -279,7 +262,6 @@ def main():
         r["_lcr"] = lcr_hash(r["dedupe_key"])
         if r["_lcr"] in on_board or r["_lcr"] in in_audit:
             continue
-        r["_reason_index"], r["_memo"] = parse_job_note(r.get("job_note"))
         fresh.append(r)
     log.info(f"{len(rows)} row(s) in the view, {len(rows) - len(fresh)} already on the board, "
              f"{len(fresh)} new")

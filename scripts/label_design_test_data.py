@@ -123,11 +123,25 @@ CASES = [
     # Part URL encoding, and a part with no Part_v_Part row
     dict(order="1401", lines=[L("ZZTEST-S1401", "1 special characters", part_no="ZZTEST 100&A/B#1+2=%", revision="Rev 00")]),
     dict(order="1402", lines=[L("ZZTEST-S1402", "1 no Part_v_Part row", part_no=None, revision=None)]),
+
+    # Sales Rep (`bdm`) = the order's Inside Salesperson, else the customer's
+    # Assigned To, else Order_Salesperson Sort_Order 1. Sort_Order 2 is exposed
+    # (sales_rep_secondary) but never becomes the bdm.
+    dict(order="1501", reps=dict(inside="Ashley Quintana", assigned="Tyler Hall", primary="Kami Butcher"),
+         lines=[L("ZZTEST-S1501", "1 order rep wins over customer and salesperson")]),
+    dict(order="1502", reps=dict(assigned="Tyler Hall", primary="Kami Butcher"),
+         lines=[L("ZZTEST-S1502", "1 no order rep -> customer's Assigned To")]),
+    dict(order="1503", reps=dict(primary="Kami Butcher"),
+         lines=[L("ZZTEST-S1503", "1 only the salesperson table")]),
+    dict(order="1504", reps={}, lines=[L("ZZTEST-S1504", "1 no rep anywhere -> Sales Rep left blank")]),
+    dict(order="1505", reps=dict(secondary="Julianni Pacheco"),
+         lines=[L("ZZTEST-S1505", "1 only a secondary salesperson -> still no Sales Rep")]),
 ]
 CUSTOMER = ("ZZTEST Sample Nutrition Co", "labels@example.com", "555-0101")
-# user_name in the view is CONCAT(First, ' ', Last) -> "Test " -> the push
-# strips it to "Test", which is a Sales Rep label the board already has.
-REP = ("Test", "")
+# REAL Plexus users, looked up by name at run time (never injected), so the
+# Monday Sales Rep column shows names the board already has. Cases without
+# `reps` get one of these as the order's Inside Salesperson, in rotation.
+REP_NAMES = ["Ashley Quintana", "Tyler Hall", "Kami Butcher", "Julianni Pacheco"]
 
 TABLES = {  # table -> key column the delete predicate uses
     "raw_Sales_v_PO": "PO_Key",
@@ -211,38 +225,65 @@ def resolve_statuses(bq):
     }
 
 
+def resolve_reps(bq):
+    """Rep name -> real Plexus_User_No, from PlexTest's own user table."""
+    rows = bq.query(
+        f"SELECT CONCAT(First_Name, ' ', Last_Name) name, ANY_VALUE(SAFE_CAST(Plexus_User_No AS INT64)) uno "
+        f"FROM {fq('raw_Plexus_Control_v_Plexus_User')} WHERE CONCAT(First_Name, ' ', Last_Name) IN UNNEST(@n) "
+        f"GROUP BY 1", job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ArrayQueryParameter("n", "STRING", REP_NAMES)])).result()
+    found = {r.name: r.uno for r in rows}
+    missing = [n for n in REP_NAMES if n not in found]
+    if missing:
+        raise SystemExit(f"Not in {DATASET} raw_Plexus_Control_v_Plexus_User: {missing} — edit REP_NAMES")
+    return found
+
+
 def pcn_of(bq):
     rows = list(bq.query(f"SELECT ANY_VALUE(PCN) pcn FROM {fq('raw_Sales_v_PO')}").result())
     return int(rows[0].pcn) if rows and rows[0].pcn is not None else None
 
 
-def build(pcn, statuses, today):
+def build(pcn, statuses, today, rep_nos):
     """Every row to insert, the expected view rows keyed by (order, part_key),
     and the orders the view must leave out. Keys are deterministic, so
     --check rebuilds the same expectations without storing anything."""
     data = {t: [] for t in TABLES}
     expected, absent = {}, []
-    user_no, cust_no = KEY_LO, KEY_LO + 1
-    data["raw_Plexus_Control_v_Plexus_User"].append(
-        dict(Plexus_User_No=user_no, First_Name=REP[0], Last_Name=REP[1], User_ID="zztest.ld.rep", Active=1))
-    data["raw_Common_v_Customer"].append(dict(
-        Customer_No=cust_no, Customer_Code="ZZTEST-LD-C0", Name=CUSTOMER[0], Email=CUSTOMER[1],
-        Phone=CUSTOMER[2], Customer_Status="Active"))
+    # One customer with no Assigned To, plus one per rep used as Assigned To.
+    customers = {}
+
+    def customer(assigned):
+        if assigned not in customers:
+            no = KEY_LO + 1 + len(customers)
+            customers[assigned] = no
+            data["raw_Common_v_Customer"].append(dict(
+                Customer_No=no, Customer_Code=f"ZZTEST-LD-C{len(customers) - 1}", Name=CUSTOMER[0],
+                Email=CUSTOMER[1], Phone=CUSTOMER[2], Customer_Status="Active",
+                Assigned_To=rep_nos[assigned] if assigned else None))
+        return customers[assigned]
+
     for table, col, key, value in statuses.values():
         if KEY_LO <= key < KEY_HI:
             data[table].append({f"{col}_Key": key, col: value})
 
     k = KEY_LO + 1000
-    for case in CASES:
+    for i, case in enumerate(CASES):
         order = f"{ORDER_PREFIX}{case['order']}"
         po_no = f"ZZTEST-PO-{case['order']}"
+        reps = case.get("reps", dict(inside=REP_NAMES[i % len(REP_NAMES)]))
+        cust_no = customer(reps.get("assigned"))
         k += 1
         po_key, days = k, case.get("days_ago", 1)
         data["raw_Sales_v_PO"].append(dict(
             PCN=pcn, PO_Key=po_key, Customer_No=cust_no, PO_No=po_no,
             PO_Status_Key=statuses["po_" + case.get("po_status", "real")][2],
-            PO_Date=ns(today - dt.timedelta(days=days)), Order_No=order))
-        data["raw_Sales_v_Order_Salesperson"].append(dict(PCN=pcn, PO_Key=po_key, Plexus_User_No=user_no, Sort_Order=1))
+            PO_Date=ns(today - dt.timedelta(days=days)), Order_No=order,
+            Inside_Sales=rep_nos[reps["inside"]] if "inside" in reps else None))
+        for sort_order, role in ((1, "primary"), (2, "secondary")):
+            if role in reps:
+                data["raw_Sales_v_Order_Salesperson"].append(dict(
+                    PCN=pcn, PO_Key=po_key, Plexus_User_No=rep_nos[reps[role]], Sort_Order=sort_order))
         excluded = "expect" in case and case["expect"] is None
         if excluded:
             absent.append(order)
@@ -280,7 +321,10 @@ def build(pcn, statuses, today):
                           f"&PartNo={quote(line['part_no'] or '', safe='')}"
                           f"&Revision={quote(line['revision'] or '', safe='')}"),
                 customer_po_url=f"{HOST}/SalesAndCRM/SalesOrders/PoFormView?OriginLocation=SalesOrders&POKey={po_key}",
-                sales_order_url=f"{HOST}/SalesAndCRM/OrderEntry/ViewOrderForm?POKey={po_key}")
+                sales_order_url=f"{HOST}/SalesAndCRM/OrderEntry/ViewOrderForm?POKey={po_key}",
+                sales_rep_inside=reps.get("inside"), customer_account_rep=reps.get("assigned"),
+                sales_rep_primary=reps.get("primary"), sales_rep_secondary=reps.get("secondary"),
+                bdm=reps.get("inside") or reps.get("assigned") or reps.get("primary"))
             # Only cases that state a reason_code grade the label; the structural
             # cases (1101+) test other things and leave their note's code alone.
             if "reason_code" in line["exp"]:
@@ -291,7 +335,7 @@ def build(pcn, statuses, today):
 
 
 def inject(bq):
-    data, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today())
+    data, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq))
     for t, rows in data.items():
         if rows:
             print(f"  {t}: +{insert(bq, t, rows)}")
@@ -306,7 +350,7 @@ def check(bq):
         f"SELECT * FROM ({sql}) WHERE STARTS_WITH(order_number, '{ORDER_PREFIX}')").result()}
     if not got:
         raise SystemExit("No test rows returned. Run --inject first (any Label Design / Sales Orders test ETL run wipes them).")
-    _, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today())
+    _, expected, absent = build(pcn_of(bq), resolve_statuses(bq), utc_today(), resolve_reps(bq))
     passed = failed = 0
     for key, e in expected.items():
         r = got.get(key)

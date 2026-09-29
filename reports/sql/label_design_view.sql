@@ -197,6 +197,37 @@ part_attributes_pivoted AS (
   GROUP BY SAFE_CAST(pa.Part_Key AS INT64)
 ),
 
+-- ── Bottle, through the BOM (2026-09-29, Ashley) ─────────────────────────────
+-- Monday's Bottle Material (HDPE / PET / Glass) is the CONTAINER, and Plex has
+-- no attribute for it on the finished good. It is in the name of the bottle
+-- component two levels down the bill of materials:
+--
+--   93001-00KAYAN-0  finished good (the order line's part)
+--   └─ 53001-00VOXNU-0  BB | Max Detox 60ct 175cc White Bottle/White Lid
+--      └─ 16115-01VOXNU-1  BOTTLE | 175cc White HDPE Packer Bottle 38-400
+--
+-- Flat_BOM lists every level against the top part, so no recursion is needed.
+-- The bottle is the component whose Name starts "BOTTLE". All 13 real Label
+-- Design lines on 2026-09-29 had exactly one. If a part ever has two, the
+-- shallowest one (then the lowest part number) wins, picked HERE, before the
+-- join, so a second bottle can never duplicate a queue row.
+--
+-- The material is read from that name and only ever one of the board's own
+-- three labels: of 104 bottle parts in PlexTest, 93 name HDPE, PET or Glass.
+-- The rest ("BOTTLE | 175cc Black") give NULL, not a guess, and the push then
+-- writes nothing.
+bottles AS (
+  SELECT
+    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+    ARRAY_AGG(STRUCT(c.Part_No AS part_no, c.Name AS name)
+              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS b
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'BOTTLE')
+  GROUP BY 1
+),
+
 -- ── Dates ──────────────────────────────────────────────────────────────────
 -- `PO_Date` and `Due_Date` land in BigQuery as **INT64 nanoseconds** since the
 -- epoch (1750118400000000000 = 2025-06-17), not as a TIMESTAMP: pandas holds
@@ -307,6 +338,9 @@ release_lines AS (
     SAFE_CAST(pol.Part_Key AS INT64)              AS part_key,
     part.Part_No                                  AS part_no,
     part.Revision                                 AS part_revision,
+    part.Name                                     AS part_name,
+    bt.b.part_no                                  AS bottle_part_no,
+    bt.b.name                                     AS bottle_name,
 
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
@@ -363,6 +397,9 @@ release_lines AS (
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
 
+  LEFT JOIN bottles AS bt
+    ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+
   LEFT JOIN part_attributes_pivoted AS pap
     ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
 
@@ -409,6 +446,21 @@ SELECT
   part_key,
   part_no,
   part_revision,
+  part_name,
+  -- The "part line" Ashley asked for (2026-09-29): what the Plex order screen
+  -- shows under the part, e.g. "93001-00KAYAN-0 Rev 00 | FG | Max Detox 60ct
+  -- 175cc White Bottle/White Lid +Standard Label (s3832)". Goes to Monday's
+  -- Description. ARRAY_TO_STRING skips a NULL half.
+  NULLIF(ARRAY_TO_STRING([
+    CONCAT(part_no, IF(NULLIF(TRIM(part_revision), '') IS NULL, '', CONCAT(' ', TRIM(part_revision)))),
+    NULLIF(TRIM(part_name), '')], ' | '), '')                               AS line_description,
+  bottle_part_no,
+  bottle_name,
+  CASE REGEXP_EXTRACT(UPPER(bottle_name), r'\b(HDPE|PET|GLASS)\b')
+    WHEN 'HDPE'  THEN 'HDPE'
+    WHEN 'PET'   THEN 'PET'
+    WHEN 'GLASS' THEN 'Glass'
+  END                                                                       AS bottle_material,
   part_size,
   part_allergen,
   part_hazardous,

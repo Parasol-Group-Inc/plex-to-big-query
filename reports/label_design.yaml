@@ -69,6 +69,14 @@ extractions:
     filter: ""
     date_col: ""
 
+  # Flat BOM — added 2026-09-29 for Bottle Material (the bottle component's
+  # name, two levels under the finished good). sales_orders pulls it overnight;
+  # pulled again here so a finished good set up this morning has its bottle.
+  - plex_view: Part_v_Flat_BOM
+    bq_table: raw_Part_v_Flat_BOM
+    filter: ""
+    date_col: ""
+
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""

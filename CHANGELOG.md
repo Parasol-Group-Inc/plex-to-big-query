@@ -14,6 +14,37 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-29 (label-design, later) - Part line in Description; Bottle Material from the BOM
+
+Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**
+(OPEN_ITEMS L5): `./scripts/deploy.sh`, then rebuild the push image.
+
+### Added
+- **`label_design_report`:** `part_name`, `line_description` ("93001-00KAYAN-0
+  Rev 00 | FG | Max Detox 60ct 175cc White Bottle/White Lid +Standard Label
+  (s3832)", the text under the part on the Plex order screen),
+  `bottle_part_no`, `bottle_name` and `bottle_material`.
+  - The bottle is the finished good's `BOTTLE | …` component in
+    `Part_v_Flat_BOM`, usually two levels down. It is picked once per part
+    before the join, so it can never duplicate a row.
+  - The material is read from the bottle's name: HDPE, PET or Glass only, the
+    board's own labels. Coverage: 93 of 104 bottle parts in PlexTest, and all
+    13 real queue lines (7 HDPE, 6 PET). A name with no material gives NULL.
+- **Extraction:** `Part_v_Flat_BOM` in both Label Design configs (14
+  extractions). Until now only the overnight `sales_orders` job pulled it.
+- **Push:** Description comes from `line_description`; it was
+  `customer_part_description`, which is empty in Plex. Bottle Material
+  (status) comes from `bottle_material`.
+- **Test data:** fake parts carry a Plex Name and an optional fake BOTTLE
+  component. New case 1403 is a bottle with no material in its name. Real
+  parts are graded on their real bottle; the material is re-derived in
+  Python, not copied from the SQL.
+
+### Not changed, answered from the data
+- **Customer phone** is already pulled (`Common_v_Customer.Phone`) and written
+  to Phone Number on every order.
+- **WO column:** the push never wrote it, so deleting it on the board is safe.
+
 ## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
 
 **Not deployed** (OPEN_ITEMS L5). Needs `./scripts/deploy.sh` from `main`

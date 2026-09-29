@@ -65,6 +65,13 @@ to Memo and **nothing is written to Reason Code**. A note that only *starts
 with a number* is not read as a code: "12ct bottle" and "3.5 oz jar" go to
 Memo whole.
 
+**Description** is the part line from the Plex order: part number, revision
+and the Plex part name, e.g. `93001-00KAYAN-0 Rev 00 | FG | Max Detox 60ct 175cc
+White Bottle/White Lid +Standard Label (s3832)`. **Bottle Material** (HDPE /
+PET / Glass) comes from the finished good's bottle component in the bill of
+materials, e.g. `BOTTLE | 175cc White HDPE Packer Bottle`. When a bottle's name
+doesn't say its material, the column is left blank rather than guessed.
+
 Four more columns since 2026-09-29: **Customer PO** (text), and three links
 back into Plex: **Part URL** (shown as part number + revision, e.g.
 `93001-00CGNUT-2 Rev 00`), **Customer PO URL** (`PO <customer PO>`) and

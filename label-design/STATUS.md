@@ -11,6 +11,26 @@
 
 ---
 
+## UPDATE — 2026-09-29 (later): Ashley's review — part line and Bottle Material
+
+- **First real Plex test orders** reached the board: #4 and #5 (entered by the
+  team), #6 and #7 (entered by Emilio). That's 13 items, one per order + part,
+  so an order with two parts gives two items. No duplicates.
+- **Ashley's four questions:**
+  1. **Bottle material** is now read from the BOM. Plex has no attribute for it
+     on finished goods (attributes are on the 73… label parts), but the bottle
+     component's name carries it: `BOTTLE | 175cc White HDPE Packer Bottle`.
+     `Part_v_Flat_BOM` is added to the extraction.
+  2. **Customer phone** was already there (Phone Number).
+  3. **WO column:** delete it on the board; the push never wrote it.
+  4. **Description** is now the part line: `part no + rev | Plex part name`.
+- **Label parts (73…)** sit one BOM level under each finished good on the
+  team's orders. Printing Material and Label Size live there, filled for 2 of
+  9. They are not exposed, per the 09-21 decision (attributes stay in Plex).
+  The view's attribute pivot also misses the new **Label Size** attribute.
+- **The board has two "Sales Rep" columns**, status (filled by the push) and
+  people (empty). Ashley to say which one the team uses.
+
 ## UPDATE — 2026-09-29: Reason Code, Memo and links move into the view; real reps in test data
 
 - **Built against Emilio's hand-checked Plex version of the query.** The view

@@ -31,7 +31,14 @@ orders placed in the **last 14 days**. Each row is joined to the customer, the
 customer part number and description, the job note, and the sales reps on the
 order.
 
-Seven of its ten source tables are already extracted by `sales_orders`. They
+Since 2026-09-29 it also carries the Plex part number and revision, the
+**Reason Code** and **Memo** split out of the job note (see below), and three
+links that open the record straight in Plex: `part_url`, `customer_po_url` and
+`sales_order_url`. They point at `vox.test.on.plex.com` on PlexTest and
+`vox.on.plex.com` on PlexProd. The status filters ignore stray spaces and
+capitals, so a status typed as " label design" still counts.
+
+Seven of its thirteen source tables are already extracted by `sales_orders`. They
 are extracted again here on purpose: this runs at midday, hours after that
 pipeline ran overnight, and a label-design queue built on a 14-hour-old order
 list would miss exactly the new orders it exists to surface.
@@ -51,9 +58,16 @@ Each new row becomes an item in the **New from Plex** group, named after the
 label SKU. The job fills: Customer Name, Date (order date), Description, Sales
 Order ("Sales Order #…"), Email, Phone Number, **Item** (the Plex part number,
 in the text column next to Design File), **Sales Rep** (the BDM, see below) and
-LCR. The Job Note is split in two: if it **starts with a digit 1–6**, that digit
-sets Reason Code and the rest becomes Memo; otherwise the whole note goes to
-Memo and Reason Code is left blank.
+LCR. The Job Note is split in two, in the view itself (`reason_code`,
+`reason_code_label`, `memo`): if its **first character is a digit 1–6**, that
+digit sets Reason Code and the rest becomes Memo; otherwise the whole note goes
+to Memo and **nothing is written to Reason Code**. A note that only *starts
+with a number* is not read as a code: "12ct bottle" and "3.5 oz jar" go to
+Memo whole.
+
+Four more columns are sent from 2026-09-29, **once the board has them** (same
+title and type; until then the job skips them with a warning): **Customer PO**
+(text), and **Part URL**, **Customer PO URL** and **Sales Order URL** (link).
 
 | First digit | Reason Code |
 |---|---|
@@ -156,11 +170,16 @@ on the board is never pushed again. Every push is also recorded in the
 - **Superseded by the push job (2026-09-24):** the Sheet-era notes above
   (holding board, `historical` tab, "Sales Order #" matching, placeholder
   column IDs). The job finds columns by title and dedupes on LCR.
-- **Part attributes are not pushed yet:** the five `part_*` columns are in the
+- **Orders with no customer part number (2026-09-29):** each part gets its own
+  row and its own LCR, keyed on the Plex `Part_Key`. Before, two such parts on
+  one order shared a key and only the first reached Monday.
+- **Part attributes are not pushed yet:** the ten `part_*` columns are in the
   view, but which Monday column (if any) each one feeds is still open.
 
 ## More detail
 
 - [`deploy/label_design_sync/README.md`](../../deploy/label_design_sync/README.md)
   — the Apps Script half: dedupe rules, tabs, notifications, the Monday traps.
-- [`CHANGELOG.md`](../../CHANGELOG.md) — 2026-09-11, 2026-09-12 and 2026-09-24 entries.
+- [`CHANGELOG.md`](../../CHANGELOG.md) — 2026-09-11, 2026-09-12, 2026-09-24 and 2026-09-29 entries.
+- Test cases: `python scripts/label_design_test_data.py --inject`, then
+  `--check` grades the local SQL against 31 edge cases (PASS/FAIL each).

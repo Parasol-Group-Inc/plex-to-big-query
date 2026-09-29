@@ -14,6 +14,36 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
+
+**Not deployed.** Needs the usual `./scripts/deploy.sh` from `main`, and the
+push job's image rebuilt, since `push.py` changed too.
+
+### Added
+- **`label_design_report`:** `po_key`, `part_key`, `part_no`, `part_revision`
+  (new extraction `Part_v_Part`, in both prod and test YAML), `reason_code`,
+  `reason_code_label`, `memo`, `part_url`, `customer_po_url` and
+  `sales_order_url`. The links use `vox.on.plex.com` on PlexProd and
+  `vox.test.on.plex.com` otherwise.
+- **Push:** Customer PO (text), Part URL, Customer PO URL and Sales Order URL
+  (link). They are skipped with a warning until the board has those columns.
+- **`scripts/label_design_test_data.py --check`:** runs the LOCAL view SQL
+  against PlexTest and grades 31 injected edge cases (Reason Code rules,
+  release collapse, NULL customer parts, messy statuses, 14-day boundary,
+  URL encoding), PASS/FAIL each.
+
+### Changed
+- **Reason Code / Memo rule moved into the view**, and is now the only copy of
+  it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
+  yields a code. `label_design_service/reason_code.py` and its test are
+  removed; their cases live in the injector now.
+- **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
+  version of the query.
+- **A NULL customer part number falls back to `Part_Key`** for the collapse
+  and for `dedupe_key` (`ORDER|PK<key>`). Before, two such parts on one order
+  were merged into one row. Rows that have a customer part number keep their
+  old key, so nothing already on Monday is pushed again.
+
 ## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
 
 ### Added

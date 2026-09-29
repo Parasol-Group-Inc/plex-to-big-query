@@ -51,10 +51,8 @@ from google.cloud import bigquery
 
 try:  # `python -m label_design_service.push` (container) or run from this folder
     from .monday import Monday
-    from .reason_code import REASON_CODE_LABELS, parse_job_note
 except ImportError:
     from monday import Monday
-    from reason_code import REASON_CODE_LABELS, parse_job_note
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("label_design_push")
@@ -127,8 +125,8 @@ def _label(field):
     return lambda r: {"label": str(r[field]).strip()} if (r.get(field) or "").strip() else None
 
 
-def _reason_code(r):
-    return {"label": REASON_CODE_LABELS[r["_reason_index"]]} if r.get("_reason_index") is not None else None
+def _link(field, text):
+    return lambda r: {"url": r[field], "text": text} if r.get(field) else None
 
 
 COLUMNS = [
@@ -136,8 +134,11 @@ COLUMNS = [
     ("Date", "date", _date),
     ("Description", "text", _text("customer_part_description")),
     ("Sales Order", "text", _sales_order),
-    ("Memo", "text", _text("_memo")),
-    ("Reason Code", "status", _reason_code),
+    # Reason Code and Memo are split out of the Job Note by the VIEW (the one
+    # place that rule lives). No code -> reason_code_label is NULL -> nothing
+    # is written to Reason Code, and the whole note is the Memo.
+    ("Memo", "text", _text("memo")),
+    ("Reason Code", "status", _label("reason_code_label")),
     ("Email", "email", _email),
     ("Phone Number", "text", _text("customer_phone")),
     # `bdm`: the order's Inside Sales, else the customer's Assigned To, else
@@ -146,6 +147,13 @@ COLUMNS = [
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),
+    # Added 2026-09-29. Design & QA has none of these four columns yet; until
+    # someone adds them (same titles, same types) they are skipped with a
+    # warning, like any other missing title.
+    ("Customer PO", "text", _text("customer_po")),
+    ("Part URL", "link", _link("part_url", "Part in Plex")),
+    ("Customer PO URL", "link", _link("customer_po_url", "Customer PO in Plex")),
+    ("Sales Order URL", "link", _link("sales_order_url", "Sales Order in Plex")),
     ("LCR", "text", _text("_lcr")),
 ]
 
@@ -248,7 +256,6 @@ def main():
         r["_lcr"] = lcr_hash(r["dedupe_key"])
         if r["_lcr"] in on_board or r["_lcr"] in in_audit:
             continue
-        r["_reason_index"], r["_memo"] = parse_job_note(r.get("job_note"))
         fresh.append(r)
     log.info(f"{len(rows)} row(s) in the view, {len(rows) - len(fresh)} already on the board, "
              f"{len(fresh)} new")

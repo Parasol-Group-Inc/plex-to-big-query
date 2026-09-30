@@ -66,7 +66,11 @@ else
     echo "# Written by scripts/dev_setup.sh on $(date -u +%Y-%m-%dT%H:%MZ). Gitignored; never commit or paste it."
     echo "# Values come from Secret Manager in ${PROJECT}. Targets the Plex TEST tenant."
     echo "PLEX_ACCESS_TOKEN=$(secret plex-access-token)"
-    echo "PLEX_ODBC_USER=$(secret plex-odbc-user)"
+    # The ODBC user is not a secret: it's plex_odbc_user in terraform.tfvars.
+    # The plex-odbc-user secret is an empty placeholder (username/password
+    # auth, never used), so read it from the tfvars backup.
+    echo "PLEX_ODBC_USER=$(gcloud storage cat "gs://${PROJECT}-terraform-state/plex-to-big-query/terraform.tfvars.backup" 2>/dev/null \
+      | sed -n 's/^[[:space:]]*plex_odbc_user[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
     echo "PLEX_HOST=vox.test.odbc.plex.com"
     echo "PLEX_PORT=19995"
     echo "PLEX_SERVER_DATASOURCE=ReportDataSource"
@@ -75,6 +79,7 @@ else
     echo "MONDAY_API_KEY=$(secret monday-api-key)"
   } > .env
   grep -q '^PLEX_ACCESS_TOKEN=.' .env || fail ".env written but the Plex token is empty: ask for secretAccessor on plex-access-token"
+  grep -q '^PLEX_ODBC_USER=.' .env || echo "  warn  PLEX_ODBC_USER is empty: can't read the tfvars backup (objectViewer on ${PROJECT}-terraform-state)" >&2
   ok ".env written ($(grep -c '=.' .env) values filled; nothing printed)"
 fi
 

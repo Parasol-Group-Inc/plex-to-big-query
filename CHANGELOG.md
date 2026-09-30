@@ -37,6 +37,15 @@ don't need an entry.
   upload. Emilio's call: the bucket is company-only. It sits in the same
   project, so it covers a destroyed secret version or a lost laptop, not a
   deleted project.
+  - Only **three of the six secrets hold values**: `plex-access-token`,
+    `sendgrid-api-key` and `monday-api-key`. `plex-odbc-user`,
+    `plex-odbc-password` and `plex-company-code` have **no versions**; they
+    are placeholders for username/password auth, which the pipeline never
+    uses (it authenticates with the token). The backup now says "unused
+    placeholder" for those, and "NOT READABLE" only for a real access
+    problem. Found on the first real backup, 2026-09-30.
+  - `dev_setup.sh` therefore reads `PLEX_ODBC_USER` from the tfvars backup
+    (`plex_odbc_user`, not a secret), not from the empty secret.
 - **`scripts/restore_secrets.sh`:** puts those values back into Secret
   Manager from the latest backup (or `--file`, `--project`). Dry run by
   default; it skips a secret whose value already matches. DR runbook step 5

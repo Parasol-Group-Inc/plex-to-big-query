@@ -14,6 +14,23 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-30 (dev) - New-developer setup, backup coverage, onboarding guide
+
+### Added
+- **`scripts/dev_setup.sh`:** one command from a fresh clone to a working
+  machine. It checks the tools and the Google login, downloads the licensed
+  ODBC driver from `gs://voxdatalake-build-assets`, writes `.env` from Secret
+  Manager (Plex token, ODBC user, Monday key; nothing is printed), and
+  installs the hooks. `--worktrees` creates the four project folders;
+  `--deploy-machine` restores `terraform.tfvars` from its bucket backup. It
+  never overwrites `.env` / tfvars without `--force`, and it names the
+  missing access when a step fails.
+
+### Changed
+- **`.env.example`** gains `PLEX_HOST` / `PLEX_PORT` / `PLEX_SERVER_DATASOURCE`
+  (the driver-direct settings the real `.env` has used for months) and
+  `MONDAY_API_KEY`.
+
 ## 2026-09-30 (label-design) - One Monday item per order line
 
 Ashley's rule: an order with several lines gives one item per line. **Not

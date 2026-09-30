@@ -27,6 +27,13 @@ don't need an entry.
   missing access when a step fails.
 
 ### Changed
+- **`scripts/backup_to_bucket.ps1`** also zips and uploads `driver/` (the
+  licensed ODBC driver) and `zipfiles/` (the vendor packages and licence
+  serials, which existed only on one laptop). Run it from the primary folder.
+- **`docs/DISASTER_RECOVERY.md`:** six secrets, not five (`monday-api-key`
+  was missing from the restore runbook). Also records the personal-token risk
+  on the Monday key and the stale local `terraform.tfstate` files in the
+  primary folder.
 - **`.env.example`** gains `PLEX_HOST` / `PLEX_PORT` / `PLEX_SERVER_DATASOURCE`
   (the driver-direct settings the real `.env` has used for months) and
   `MONDAY_API_KEY`.

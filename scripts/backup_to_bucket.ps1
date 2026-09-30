@@ -12,6 +12,11 @@
       .env                         the local docker-compose credentials
       assets/*.csv                 the sheet exports the Label Design mapping
                                    was derived from
+      driver/  zipfiles/           the licensed Plex ODBC driver and the vendor
+                                   packages + licence serials, zipped. driver/
+                                   is also in gs://voxdatalake-build-assets;
+                                   zipfiles/ exists nowhere else (added
+                                   2026-09-30, docs/DISASTER_RECOVERY.md).
       terraform/*.tfstate          only if a local state file is still present.
                                    Normally there is none: state lives in the
                                    `backend "gcs"` block in terraform/main.tf,
@@ -100,6 +105,29 @@ foreach ($f in $Absent) {
 }
 Write-Host ''
 
+# ── Folders that exist nowhere else (zipped) ───────────────────────────────
+# The licensed ODBC driver and the vendor packages with the licence serials.
+# Zipped so a folder is one object, and restorable with Expand-Archive/unzip.
+$Folders = @()
+foreach ($dir in @('driver', 'zipfiles')) {
+    $src = Join-Path $RepoRoot $dir
+    if (-not (Test-Path $src)) {
+        Write-Host ("  - {0,-42} NOT PRESENT" -f "$dir/") -ForegroundColor DarkGray
+        $Absent += "$dir/"
+        continue
+    }
+    $zip = Join-Path ([System.IO.Path]::GetTempPath()) "$dir-$Stamp.zip"
+    if ($PSCmdlet.ShouldProcess($zip, "zip $dir/")) {
+        Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zip -Force
+        Write-Host ("  + {0,-42} {1,10:N0} bytes (zipped)" -f "$dir/", (Get-Item $zip).Length)
+    } else {
+        Write-Host ("  + {0,-42} would be zipped" -f "$dir/")
+    }
+    $Folders += [pscustomobject]@{ Name = $dir; Zip = $zip }
+    $Present += "$dir/"
+}
+Write-Host ''
+
 # ── The repo archive ───────────────────────────────────────────────────────
 # `git archive HEAD` rather than zipping the working directory: it takes
 # exactly what is committed, so the archive can never smuggle in the very
@@ -151,10 +179,19 @@ function Send-ToBucket {
 }
 
 Write-Host 'Uploading:' -ForegroundColor Yellow
-foreach ($rel in $Present) {
+foreach ($rel in ($Present | Where-Object { $_ -notlike '*/' })) {   # folders go up as zips, below
     $flat = $rel -replace '[\\/]', '__'      # keep a flat, unambiguous object name
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Dest/$flat"
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Latest/$flat"
+}
+foreach ($f in $Folders) {
+    if (Test-Path $f.Zip) {
+        Send-ToBucket -Source $f.Zip -Target "$Dest/$($f.Name).zip"
+        Send-ToBucket -Source $f.Zip -Target "$Latest/$($f.Name).zip"
+        Remove-Item $f.Zip -Force -ErrorAction SilentlyContinue
+    } else {
+        Send-ToBucket -Source $f.Zip -Target "$Dest/$($f.Name).zip"   # -WhatIf: prints the would-upload line
+    }
 }
 if (Test-Path $ArchivePath) {
     Send-ToBucket -Source $ArchivePath -Target "$Dest/$ArchiveName"
@@ -181,6 +218,8 @@ $Manifest = @(
     "restore:"
     "  gcloud storage cp $Latest/terraform__terraform.tfvars terraform/terraform.tfvars"
     "  gcloud storage cp $Latest/.env .env"
+    "  gcloud storage cp $Latest/driver.zip . ; unzip driver.zip -d driver     # or Expand-Archive"
+    "  gcloud storage cp $Latest/zipfiles.zip . ; unzip zipfiles.zip -d zipfiles"
     "  cd terraform && terraform init   # state comes from the gcs backend"
 )
 

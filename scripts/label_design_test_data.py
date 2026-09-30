@@ -180,13 +180,24 @@ def fq(t):
 
 
 def monday_key():
+    """MONDAY_API_KEY from the environment, then .env, then Secret Manager
+    (`monday-api-key`, the one the push job uses), so nothing is exported or
+    pasted by hand."""
     if os.environ.get("MONDAY_API_KEY"):
         return os.environ["MONDAY_API_KEY"]
     env = os.path.join(os.path.dirname(__file__), "..", ".env")
-    for line in open(env, encoding="utf-8"):
-        if line.startswith("MONDAY_API_KEY="):
-            return line.split("=", 1)[1].strip().strip('"').strip("'")
-    raise SystemExit("MONDAY_API_KEY not set and not in .env")
+    if os.path.exists(env):
+        for line in open(env, encoding="utf-8"):
+            if line.startswith("MONDAY_API_KEY=") and line.split("=", 1)[1].strip():
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    try:
+        from google.cloud import secretmanager
+        name = f"projects/{PROJECT}/secrets/monday-api-key/versions/latest"
+        return secretmanager.SecretManagerServiceClient().access_secret_version(
+            request={"name": name}).payload.data.decode("utf-8").strip()
+    except Exception as e:
+        raise SystemExit(f"No Monday key: not in the environment, not in .env, and Secret Manager "
+                         f"said {type(e).__name__} (gcloud auth application-default login?)")
 
 
 def status_key(bq, table, col, name):

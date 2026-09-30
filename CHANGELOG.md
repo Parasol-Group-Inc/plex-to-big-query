@@ -35,6 +35,9 @@ deployed** (OPEN_ITEMS L5).
 - No prod items exist yet, so there is nothing to migrate there.
 
 ### Test data
+- `label_design_test_data.py` reads the Monday key from Secret Manager
+  (`monday-api-key`) when neither the environment nor `.env` has one, so no
+  more `export MONDAY_API_KEY=…` before `--delete` / `--status`.
 - New case 1104: the same customer part on two lines of one order gives two
   rows. `--check` matches rows by `(order, po_line_key)`.
 

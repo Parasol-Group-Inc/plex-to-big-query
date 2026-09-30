@@ -14,6 +14,48 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-30 (dev) - New-developer setup, backup coverage, onboarding guide
+
+### Added
+- **`scripts/dev_setup.sh`:** one command from a fresh clone to a working
+  machine. It checks the tools and the Google login, downloads the licensed
+  ODBC driver from `gs://voxdatalake-build-assets`, writes `.env` from Secret
+  Manager (Plex token, ODBC user, Monday key; nothing is printed), and
+  installs the hooks. `--worktrees` creates the four project folders;
+  `--deploy-machine` restores `terraform.tfvars` from its bucket backup. It
+  never overwrites `.env` / tfvars without `--force`, and it names the
+  missing access when a step fails.
+- **`docs/ONBOARDING.md`:** a new developer's first day. It covers the access
+  to ask for (read-only by default; deploy rights are a separate grant),
+  tools, setup, folders and branches, how a change goes live, where status
+  lives, known friction, and the never-dos.
+
+### Changed
+- **`scripts/backup_to_bucket.ps1`** also writes the six Secret Manager
+  **values** to `secrets.env` in each backup, read with `gcloud secrets
+  versions access`. Nothing is printed, and the temporary file is deleted after
+  upload. Emilio's call: the bucket is company-only. It sits in the same
+  project, so it covers a destroyed secret version or a lost laptop, not a
+  deleted project.
+- **`scripts/restore_secrets.sh`:** puts those values back into Secret
+  Manager from the latest backup (or `--file`, `--project`). Dry run by
+  default; it skips a secret whose value already matches. DR runbook step 5
+  now uses it instead of pasting values.
+- **`scripts/backup_to_bucket.ps1`** also zips and uploads `driver/` (the
+  licensed ODBC driver) and `zipfiles/` (the vendor packages and licence
+  serials, which existed only on one laptop). Run it from the primary folder.
+- **`docs/DISASTER_RECOVERY.md`:** six secrets, not five (`monday-api-key`
+  was missing from the restore runbook). Also records the personal-token risk
+  on the Monday key and the stale local `terraform.tfstate` files in the
+  primary folder.
+- **README:** a "The branches hold different files" section, with the live
+  numbers (dev-scorecard / dev-sandbox had 16 files differing from main),
+  how to check, and which gitignored files each folder needs. "First run"
+  now uses `dev_setup.sh`, and "Read next" starts with the onboarding guide.
+- **`.env.example`** gains `PLEX_HOST` / `PLEX_PORT` / `PLEX_SERVER_DATASOURCE`
+  (the driver-direct settings the real `.env` has used for months) and
+  `MONDAY_API_KEY`.
+
 ## 2026-09-30 (label-design) - One Monday item per order line
 
 Ashley's rule: an order with several lines gives one item per line. **Not

@@ -11,6 +11,17 @@
 
 ---
 
+## UPDATE — 2026-09-30: Ashley's answers — one item per order line; Sales Rep = status column
+
+- **One Monday item per order LINE**, even when two lines carry the same part.
+  The view now collapses per `po_line_key`, and the key is `<order>|L<line>`.
+  The 13 reference items were re-keyed in place (LCR plus added log rows); see
+  CHANGELOG 2026-09-30.
+- **Sales Rep:** the push keeps filling the **status** column. The team may
+  automate the people column from it on Monday's side.
+- **WO column:** deleting it on the board is the team's call; the push never
+  wrote it.
+
 ## UPDATE — 2026-09-29 (later): Ashley's review — part line and Bottle Material
 
 - **First real Plex test orders** reached the board: #4 and #5 (entered by the

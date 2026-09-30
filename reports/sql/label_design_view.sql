@@ -358,7 +358,14 @@ release_lines AS (
 
     -- Tie-breaker only — never surfaced. Keeps the QUALIFY below deterministic
     -- on the rare case where two releases for the same part share a Due_Date.
-    rel.PO_Line_Key                               AS _tiebreak_line_key
+    -- The unit of the queue (2026-09-30, Ashley): ONE ITEM PER ORDER LINE.
+    -- An order with five lines is five items, even if two lines carry the
+    -- same part; a line split into several releases is still one item.
+    SAFE_CAST(pol.PO_Line_Key AS INT64)           AS po_line_key,
+
+    -- Tie-breaker only, never surfaced: keeps the QUALIFY below deterministic
+    -- when two releases of one line share a Due_Date.
+    SAFE_CAST(rel.Release_Key AS INT64)           AS _tiebreak_release_key
 
   FROM dates AS po
 
@@ -430,7 +437,7 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
-  MIN(due_date_resolved) OVER (PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING))) AS due_date,
+  MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,
   sales_rep_primary,
@@ -443,6 +450,7 @@ SELECT
   customer_part_description,
   order_status,
   po_key,
+  po_line_key,
   part_key,
   part_no,
   part_revision,
@@ -471,7 +479,7 @@ SELECT
   part_prop_65_requirement,
   part_trademark,
   part_material_classification,
-  COUNT(*) OVER (PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING)))               AS release_count,
+  COUNT(*) OVER (PARTITION BY po_line_key)               AS release_count,
 
   -- ── Reason Code + Memo, split out of the Job Note (2026-09-29) ─────────────
   -- Rule (Emilio): the note's FIRST character, if it is 1-6, is the Reason
@@ -527,22 +535,21 @@ SELECT
     IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
     '/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=', CAST(po_key AS STRING))) AS sales_order_url,
 
-  -- A NULL customer part number falls back to Part_Key here too (2026-09-29).
-  -- Without it, two such parts on one order got the same "ORDER|" key and the
-  -- push's dedupe kept only the first. Rows that HAVE a customer part number
-  -- are unchanged, so nothing already on Monday gets a new key.
-  CONCAT(CAST(order_number AS STRING), '|',
-         COALESCE(customer_part_no, CONCAT('PK', CAST(part_key AS STRING)), '')) AS dedupe_key
+  -- One key per order LINE (2026-09-30): "<order>|L<PO_Line_Key>". Plex's
+  -- line key never changes when a line's part or quantity is edited, so an
+  -- edited line is not pushed again as a new item. It replaced
+  -- "<order>|<customer part>"; the items pushed under the old key had their
+  -- LCR rewritten the same day (see CHANGELOG), so none is pushed twice.
+  CONCAT(CAST(order_number AS STRING), '|L', CAST(po_line_key AS STRING))   AS dedupe_key
 
 FROM release_lines
 
--- One row survives per order + part: the one with the earliest due date.
--- A NULL customer part number falls back to Part_Key, so two different parts
--- that both lack one are not collapsed into a single row.
--- _tiebreak_line_key only matters when two releases share that exact date.
+-- One row survives per order LINE: its earliest release. Until 2026-09-30
+-- this was per order + customer part, which merged two lines carrying the same
+-- part into one item; Ashley settled it as one item per line.
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY order_number, COALESCE(customer_part_no, CAST(part_key AS STRING))
-  ORDER BY due_date_resolved ASC, _tiebreak_line_key
+  PARTITION BY po_line_key
+  ORDER BY due_date_resolved ASC, _tiebreak_release_key
 ) = 1
 
 ORDER BY order_date DESC, order_number, customer_part_no

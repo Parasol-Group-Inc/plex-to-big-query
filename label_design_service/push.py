@@ -10,7 +10,7 @@ the view:
 
 ONE ROW, ONE ITEM, ONCE. A row is "already on Monday" when the board holds an
 item whose LCR column equals the row's hash — SHA-256 of `dedupe_key`
-(order_number|customer_part_no), first 12 lowercase hex chars. No existing
+("<order>|L<PO_Line_Key>", one per order LINE since 2026-09-30), first 12 lowercase hex chars. No existing
 hand-typed LCR is lowercase hex, so a hash can never collide with an old
 value. The hash is written INSIDE create_item, so a run that dies straight
 after creating an item still leaves the mark that stops the next run

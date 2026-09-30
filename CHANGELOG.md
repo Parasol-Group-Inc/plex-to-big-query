@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-09-30 (label-design) - One Monday item per order line
+
+Ashley's rule: an order with several lines gives one item per line. **Not
+deployed** (OPEN_ITEMS L5).
+
+### Changed
+- **`label_design_report` collapses per order LINE** (`po_line_key`, new
+  column), not per order + customer part. Two lines carrying the same part
+  are now two items; a line split into several releases is still one.
+- **`dedupe_key` is `<order>|L<PO_Line_Key>`.** It was `<order>|<customer
+  part>`. The line key survives edits to a line's part or quantity.
+
+### Migration (done 2026-09-30, PlexTest / Plex Import)
+- The 13 items already on the board were re-keyed: the new hash was written
+  to their LCR, and a push-log row was ADDED for it (`run_id =
+  rekey-20260930`), keeping the old rows. The deployed code (old key) and
+  this code (new key) both report "13 already on the board, 0 new" (verified
+  with a dry run of each).
+- No prod items exist yet, so there is nothing to migrate there.
+
+### Test data
+- New case 1104: the same customer part on two lines of one order gives two
+  rows. `--check` matches rows by `(order, po_line_key)`.
+
 ## 2026-09-29 (label-design, later) - Part line in Description; Bottle Material from the BOM
 
 Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**

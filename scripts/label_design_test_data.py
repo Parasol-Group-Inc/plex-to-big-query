@@ -117,6 +117,8 @@ CASES = [
     dict(order="1102", lines=[L(None, "1 first part, no customer part"), L(None, "2 second part, no customer part")]),
     # Two different customer parts on one order -> two rows
     dict(order="1103", lines=[L("ZZTEST-S1103A", "1 part A"), L("ZZTEST-S1103B", "2 part B")]),
+    # The SAME customer part on two lines -> still two rows: one item per order LINE (2026-09-30)
+    dict(order="1104", lines=[L("ZZTEST-S1104", "1 same part, line one"), L("ZZTEST-S1104", "2 same part, line two")]),
 
     # Status filters: messy spacing/casing still counts; other statuses don't
     dict(order="1201", release_status="messy", lines=[L("ZZTEST-S1201", "1 messy release status")]),
@@ -290,7 +292,7 @@ def pcn_of(bq):
 
 
 def build(pcn, statuses, today, rep_nos, real_parts):
-    """Every row to insert, the expected view rows keyed by (order, part_key),
+    """Every row to insert, the expected view rows keyed by (order, po_line_key),
     and the orders the view must leave out. Keys are deterministic, so
     --check rebuilds the same expectations without storing anything."""
     data = {t: [] for t in TABLES}
@@ -373,7 +375,7 @@ def build(pcn, statuses, today, rep_nos, real_parts):
                 part_name=name, line_description=line_description(part_no, revision, name),
                 bottle_name=bottle, bottle_material=bottle_material(bottle),
                 due_date=str(today + dt.timedelta(days=min(line["due"]))), release_count=len(line["due"]),
-                dedupe_key=f"{order}|{cp if cp is not None else f'PK{part_key}'}",
+                po_line_key=line_key, dedupe_key=f"{order}|L{line_key}",
                 # quote(safe='') is an independent encoder, so this also checks the SQL's hand-rolled one
                 part_url=(f"{HOST}/Engineering/Part/ViewForm?__sk=5&__sak=2&FromPartMenu=True&PartKey={part_key}"
                           f"&PartNo={quote(part_no or '', safe='')}"
@@ -388,7 +390,7 @@ def build(pcn, statuses, today, rep_nos, real_parts):
             if "reason_code" in line["exp"]:
                 e["reason_code_label"] = REASON_LABELS.get(line["exp"]["reason_code"])
             e.update(line["exp"])
-            expected[(order, part_key)] = e
+            expected[(order, line_key)] = e
     return data, expected, absent
 
 
@@ -404,7 +406,7 @@ def inject(bq):
 def check(bq):
     """Run the LOCAL reports/sql/label_design_view.sql against PlexTest and grade every case."""
     sql = open(VIEW_SQL, encoding="utf-8").read().replace("{gcp_project}", PROJECT).replace("{dataset}", DATASET)
-    got = {(r["order_number"], r["part_key"]): dict(r) for r in bq.query(
+    got = {(r["order_number"], r["po_line_key"]): dict(r) for r in bq.query(
         f"SELECT * FROM ({sql}) WHERE STARTS_WITH(order_number, '{ORDER_PREFIX}')").result()}
     if not got:
         raise SystemExit("No test rows returned. Run --inject first (any Label Design / Sales Orders test ETL run wipes them).")

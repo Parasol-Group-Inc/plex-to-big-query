@@ -47,7 +47,7 @@ list would miss exactly the new orders it exists to surface.
 - **SQL:** `reports/sql/label_design_view.sql`
 - **Downstream (from 2026-09-24):** `label_design_service/push.py`, a Cloud Run
   job (`plex-etl-label-design-push-test`) that runs 30 minutes after the ETL and
-  creates one Monday item per new order + part, straight from this view. No
+  creates one Monday item per new order **line**, straight from this view. No
   sheet in between. It is test-only for now (PlexTest → the "Plex Import" board).
 - **Retired:** `deploy/label_design_sync/`, the Apps Script that used to decide
   which rows were new, write them to a sheet, and push them to Monday.
@@ -96,7 +96,8 @@ with no Design Status set shows *Waiting on Customer*. That's the board's
 default label, not something the job writes.
 
 **No duplicates:** the LCR column holds a short code (e.g. `e0bd8c5e8e1b`)
-made from the order number + label SKU. An order + SKU whose code is already
+made from the order number + the Plex order line (one item per line, so an order
+with five lines gives five items, even when two lines carry the same part). A line whose code is already
 on the board is never pushed again. Every push is also recorded in the
 `label_design_push_log` table.
 

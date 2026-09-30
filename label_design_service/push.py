@@ -138,7 +138,9 @@ def _part_text(r):
 COLUMNS = [
     ("Customer Name", "text", _text("customer_name")),
     ("Date", "date", _date),
-    ("Description", "text", _text("customer_part_description")),
+    # The part line: "<part no> <rev> | <Plex part name>" (2026-09-29, Ashley).
+    # The customer part description it used to read is empty in Plex.
+    ("Description", "text", _text("line_description")),
     ("Sales Order", "text", _sales_order),
     # Reason Code and Memo are split out of the Job Note by the VIEW (the one
     # place that rule lives). No code -> reason_code_label is NULL -> nothing
@@ -157,6 +159,9 @@ COLUMNS = [
     # columns (deleted from Plex Import that day). The URLs are built in the
     # view, host by dataset, so the report and the board carry the same links.
     ("Customer PO", "text", _text("customer_po")),
+    # The container (HDPE / PET / Glass), from the bottle component's name in
+    # the BOM. Only ever one of the board's existing labels, or nothing.
+    ("Bottle Material", "status", _label("bottle_material")),
     ("Part URL", "link", _link("part_url", _part_text)),
     ("Customer PO URL", "link", _link("customer_po_url", lambda r: f"PO {r.get('customer_po') or r.get('po_key')}")),
     ("Sales Order URL", "link", _link("sales_order_url", lambda r: f"SO {r.get('order_number') or r.get('po_key')}")),

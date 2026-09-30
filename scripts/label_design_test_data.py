@@ -37,6 +37,7 @@ REFUSES TO TOUCH PlexProd. Rows go in with INSERT DML, not streaming, so
 import argparse
 import datetime as dt
 import os
+import re
 import sys
 from urllib.parse import quote
 
@@ -73,9 +74,12 @@ REASON_LABELS = {1: "Customer Initiated: Label Edit", 2: "Customer initiated: La
 REAL = "REAL"  # part_no sentinel: point the line at a real PlexTest 93… part
 
 
-def L(cp, note=None, notes=None, due=(21,), part_no=REAL, revision=None, **exp):
+def L(cp, note=None, notes=None, due=(21,), part_no=REAL, revision=None, name=None, bottle=None, **exp):
+    """name: the fake part's Plex Name. bottle: the Name of a fake BOTTLE
+    component put under it in Flat_BOM (None = no bottle). Real parts bring
+    their own name and bottle from PlexTest."""
     return dict(cp=cp, notes=notes if notes is not None else ([("Job_Note", note)] if note is not None else []),
-                due=list(due), part_no=part_no, revision=revision, exp=exp)
+                due=list(due), part_no=part_no, revision=revision, name=name, bottle=bottle, exp=exp)
 
 
 def N(order, note, code, memo, **kw):
@@ -125,8 +129,12 @@ CASES = [
     dict(order="1302", days_ago=15, lines=[L("ZZTEST-S1302", "1 15 days old")], expect=None),
 
     # Part URL encoding, and a part with no Part_v_Part row
-    dict(order="1401", lines=[L("ZZTEST-S1401", "1 special characters", part_no="ZZTEST 100&A/B#1+2=%", revision="Rev 00")]),
+    dict(order="1401", lines=[L("ZZTEST-S1401", "1 special characters", part_no="ZZTEST 100&A/B#1+2=%", revision="Rev 00",
+                                name="FG | ZZTEST Glass jar", bottle="BOTTLE | 1oz Amber Glass Boston Round Bottle 20-400")]),
     dict(order="1402", lines=[L("ZZTEST-S1402", "1 no Part_v_Part row", part_no=None, revision=None)]),
+    # A bottle whose name carries no material -> Bottle Material blank, not guessed
+    dict(order="1403", lines=[L("ZZTEST-S1403", "1 bottle without material", part_no="ZZTEST-P1403", revision="Rev 00",
+                                name="FG | ZZTEST no-material bottle", bottle="BOTTLE | 175cc Black")]),
 
     # Sales Rep (`bdm`) = the order's Inside Salesperson, else the customer's
     # Assigned To, else Order_Salesperson Sort_Order 1. Sort_Order 2 is exposed
@@ -154,6 +162,7 @@ TABLES = {  # table -> key column the delete predicate uses
     "raw_Sales_v_PO_Line_Note": "PO_Line_Note_Key",
     "raw_Part_v_Customer_Part": "Customer_Part_Key",
     "raw_Part_v_Part": "Part_Key",
+    "raw_Part_v_Flat_BOM": "Flat_BOM_Key",
     "raw_Common_v_Customer": "Customer_No",
     "raw_Sales_v_Order_Salesperson": "PO_Key",
     "raw_Plexus_Control_v_Plexus_User": "Plexus_User_No",
@@ -248,15 +257,31 @@ def resolve_parts(bq):
     so --check picks the same parts --inject did. Never deleted: --delete
     matches Part_Key only in the test key range."""
     need = sum(1 for c in CASES for ln in c["lines"] if ln["part_no"] == REAL)
-    rows = [(int(r.k), r.no, r.rev) for r in bq.query(
-        f"SELECT SAFE_CAST(Part_Key AS INT64) k, Part_No no, Revision rev FROM {fq('raw_Part_v_Part')} "
-        f"WHERE Part_No LIKE '93%' AND Revision IS NOT NULL "
-        f"AND SAFE_CAST(Part_Key AS INT64) NOT BETWEEN {KEY_LO} AND {KEY_HI - 1} "
-        f"ORDER BY k DESC LIMIT {need}").result()]
+    # Each part's own bottle, shallowest then lowest part number, the way the
+    # view picks it. Only the NAME comes back; the material is read from it in
+    # Python (bottle_material below), so the SQL's CASE is checked, not copied.
+    rows = [(int(r.k), r.no, r.rev, r.name, r.bottle) for r in bq.query(f"""
+        WITH p AS (SELECT SAFE_CAST(Part_Key AS INT64) k, Part_No, Revision, Name FROM {fq('raw_Part_v_Part')})
+        SELECT p.k, p.Part_No no, p.Revision rev, p.Name name,
+          (SELECT c.Name FROM {fq('raw_Part_v_Flat_BOM')} fb JOIN p c ON c.k = SAFE_CAST(fb.Component_Part_Key AS INT64)
+           WHERE SAFE_CAST(fb.Part_Key AS INT64) = p.k AND STARTS_WITH(UPPER(TRIM(c.Name)), 'BOTTLE')
+           ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1) bottle
+        FROM p WHERE p.Part_No LIKE '93%' AND p.Revision IS NOT NULL AND p.k NOT BETWEEN {KEY_LO} AND {KEY_HI - 1}
+        ORDER BY p.k DESC LIMIT {need}""").result()]
     if len(rows) < need:
         raise SystemExit(f"raw_Part_v_Part has only {len(rows)} usable 93… part(s) in {DATASET}, need {need} — "
                          f"run the Label Design test ETL first")
     return rows
+
+
+def bottle_material(name):
+    m = re.search(r"\b(HDPE|PET|GLASS)\b", (name or "").upper())
+    return {"HDPE": "HDPE", "PET": "PET", "GLASS": "Glass"}[m.group(1)] if m else None
+
+
+def line_description(part_no, revision, name):
+    first = f"{part_no} {revision.strip()}" if part_no and (revision or "").strip() else part_no
+    return " | ".join(x for x in (first, (name or "").strip() or None) if x) or None
 
 
 def pcn_of(bq):
@@ -312,11 +337,17 @@ def build(pcn, statuses, today, rep_nos, real_parts):
             k += 1
             line_key, cp = k, line["cp"]
             if line["part_no"] == REAL:
-                part_key, part_no, revision = next(real_parts)
+                part_key, part_no, revision, name, bottle = next(real_parts)
             else:
-                part_key, part_no, revision = line_key, line["part_no"], line["revision"]
+                part_key, part_no, revision, name, bottle = (line_key, line["part_no"], line["revision"],
+                                                             line["name"], line["bottle"])
                 if part_no is not None:
-                    data["raw_Part_v_Part"].append(dict(Part_Key=part_key, Part_No=part_no, Revision=revision))
+                    data["raw_Part_v_Part"].append(dict(Part_Key=part_key, Part_No=part_no, Revision=revision, Name=name))
+                if bottle is not None:
+                    k += 1  # the fake bottle part and its Flat_BOM row share this key
+                    data["raw_Part_v_Part"].append(dict(Part_Key=k, Part_No=f"ZZTEST-B{k - KEY_LO}", Revision="Rev 00", Name=bottle))
+                    data["raw_Part_v_Flat_BOM"].append(dict(PCN=pcn, Flat_BOM_Key=k, Part_Key=part_key,
+                                                            Component_Part_Key=k, Quantity=1, BOM_Level=2))
             if cp is not None:
                 data["raw_Part_v_Customer_Part"].append(dict(
                     Customer_Part_Key=line_key, Part_Key=part_key, Customer_No=cust_no, Customer_Part_No=cp,
@@ -339,6 +370,8 @@ def build(pcn, statuses, today, rep_nos, real_parts):
             e = dict(
                 customer_po=po_no, order_date=str(today - dt.timedelta(days=days)),
                 customer_part_no=cp, part_no=part_no, part_revision=revision, po_key=po_key,
+                part_name=name, line_description=line_description(part_no, revision, name),
+                bottle_name=bottle, bottle_material=bottle_material(bottle),
                 due_date=str(today + dt.timedelta(days=min(line["due"]))), release_count=len(line["due"]),
                 dedupe_key=f"{order}|{cp if cp is not None else f'PK{part_key}'}",
                 # quote(safe='') is an independent encoder, so this also checks the SQL's hand-rolled one

@@ -130,15 +130,12 @@ terraform init
 cd ..
 ./scripts/deploy.sh    # Cloud Run jobs fail "image not found" until step 6 — expected
 
-# 5. Restore ALL SIX secret VALUES (from your backed-up copies, not from
-# GCP -- they're gone). Missing any one of these will make its owning job(s)
-# fail credential fetch.
-echo -n 'PLEX_TOKEN'      | gcloud secrets versions add plex-access-token  --data-file=- --project=NEW-PROJECT-ID
-echo -n 'SENDGRID_KEY'    | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=NEW-PROJECT-ID
-echo -n 'ODBC_USER'       | gcloud secrets versions add plex-odbc-user     --data-file=- --project=NEW-PROJECT-ID
-echo -n 'ODBC_PASSWORD'   | gcloud secrets versions add plex-odbc-password --data-file=- --project=NEW-PROJECT-ID
-echo -n 'COMPANY_CODE'    | gcloud secrets versions add plex-company-code  --data-file=- --project=NEW-PROJECT-ID
-echo -n 'MONDAY_TOKEN'    | gcloud secrets versions add monday-api-key     --data-file=- --project=NEW-PROJECT-ID
+# 5. Restore ALL SIX secret VALUES. Since 2026-09-30 every backup holds them
+# (secrets.env, written by scripts/backup_to_bucket.ps1), so no pasting:
+./scripts/restore_secrets.sh --project NEW-PROJECT-ID              # dry run
+./scripts/restore_secrets.sh --project NEW-PROJECT-ID --apply
+# If the old bucket is gone too, download secrets.env from wherever the
+# backup was copied and pass it with --file secrets.env.
 
 # 6. Build and push the image (driver must be in driver/ locally, from
 # the build-assets bucket restored in step 3). Tag with a commit SHA, never

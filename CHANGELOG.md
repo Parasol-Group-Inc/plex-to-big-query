@@ -31,6 +31,16 @@ don't need an entry.
   lives, known friction, and the never-dos.
 
 ### Changed
+- **`scripts/backup_to_bucket.ps1`** also writes the six Secret Manager
+  **values** to `secrets.env` in each backup, read with `gcloud secrets
+  versions access`. Nothing is printed, and the temporary file is deleted after
+  upload. Emilio's call: the bucket is company-only. It sits in the same
+  project, so it covers a destroyed secret version or a lost laptop, not a
+  deleted project.
+- **`scripts/restore_secrets.sh`:** puts those values back into Secret
+  Manager from the latest backup (or `--file`, `--project`). Dry run by
+  default; it skips a secret whose value already matches. DR runbook step 5
+  now uses it instead of pasting values.
 - **`scripts/backup_to_bucket.ps1`** also zips and uploads `driver/` (the
   licensed ODBC driver) and `zipfiles/` (the vendor packages and licence
   serials, which existed only on one laptop). Run it from the primary folder.

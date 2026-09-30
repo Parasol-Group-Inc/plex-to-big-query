@@ -17,6 +17,11 @@
                                    is also in gs://voxdatalake-build-assets;
                                    zipfiles/ exists nowhere else (added
                                    2026-09-30, docs/DISASTER_RECOVERY.md).
+      secrets.env                  the six Secret Manager VALUES, read with
+                                   `gcloud secrets versions access` (added
+                                   2026-09-30). Restore with
+                                   scripts/restore_secrets.sh. Anyone who can
+                                   read the backup can read these.
       terraform/*.tfstate          only if a local state file is still present.
                                    Normally there is none: state lives in the
                                    `backend "gcs"` block in terraform/main.tf,
@@ -128,6 +133,35 @@ foreach ($dir in @('driver', 'zipfiles')) {
 }
 Write-Host ''
 
+# ── Secret values ──────────────────────────────────────────────────────────
+# Read straight from Secret Manager into a temp file, uploaded, then deleted,
+# so no value is ever shown or pasted. The names match terraform/main.tf.
+$SecretNames = @('plex-access-token', 'plex-odbc-user', 'plex-odbc-password',
+                 'plex-company-code', 'sendgrid-api-key', 'monday-api-key')
+$SecretsPath = Join-Path ([System.IO.Path]::GetTempPath()) "secrets-$Stamp.env"
+Write-Host 'Secret values (Secret Manager -> secrets.env, never printed):' -ForegroundColor Yellow
+if ($PSCmdlet.ShouldProcess($SecretsPath, 'read six secret values')) {
+    $lines = @("# plex-to-big-query secret values, $Stamp UTC. Restore: scripts/restore_secrets.sh")
+    foreach ($name in $SecretNames) {
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try { $value = (& gcloud secrets versions access latest --secret=$name --project=voxdatalake 2>$null) -join "`n" }
+        finally { $ErrorActionPreference = $prev }
+        if ($LASTEXITCODE -ne 0 -or -not $value) {
+            Write-Host ("  - {0,-42} NOT READABLE (no version, or no access)" -f $name) -ForegroundColor DarkYellow
+            continue
+        }
+        $lines += "$name=$value"
+        Write-Host ("  + {0,-42} {1,10} chars" -f $name, $value.Length)
+    }
+    # UTF-8 without BOM: restore_secrets.sh reads it with bash.
+    [System.IO.File]::WriteAllLines($SecretsPath, $lines, (New-Object System.Text.UTF8Encoding $false))
+    $Present += 'secrets.env'
+} else {
+    foreach ($name in $SecretNames) { Write-Host "  would read  $name" }
+}
+Write-Host ''
+
 # ── The repo archive ───────────────────────────────────────────────────────
 # `git archive HEAD` rather than zipping the working directory: it takes
 # exactly what is committed, so the archive can never smuggle in the very
@@ -179,10 +213,18 @@ function Send-ToBucket {
 }
 
 Write-Host 'Uploading:' -ForegroundColor Yellow
-foreach ($rel in ($Present | Where-Object { $_ -notlike '*/' })) {   # folders go up as zips, below
+foreach ($rel in ($Present | Where-Object { $_ -notlike '*/' -and $_ -ne 'secrets.env' })) {   # folders and secrets go up separately
     $flat = $rel -replace '[\\/]', '__'      # keep a flat, unambiguous object name
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Dest/$flat"
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Latest/$flat"
+}
+if (Test-Path $SecretsPath) {
+    try {
+        Send-ToBucket -Source $SecretsPath -Target "$Dest/secrets.env"
+        Send-ToBucket -Source $SecretsPath -Target "$Latest/secrets.env"
+    } finally {
+        Remove-Item $SecretsPath -Force -ErrorAction SilentlyContinue   # never leave values on disk
+    }
 }
 foreach ($f in $Folders) {
     if (Test-Path $f.Zip) {
@@ -218,6 +260,7 @@ $Manifest = @(
     "restore:"
     "  gcloud storage cp $Latest/terraform__terraform.tfvars terraform/terraform.tfvars"
     "  gcloud storage cp $Latest/.env .env"
+    "  ./scripts/restore_secrets.sh                        # secret values back into Secret Manager"
     "  gcloud storage cp $Latest/driver.zip . ; unzip driver.zip -d driver     # or Expand-Archive"
     "  gcloud storage cp $Latest/zipfiles.zip . ; unzip zipfiles.zip -d zipfiles"
     "  cd terraform && terraform init   # state comes from the gcs backend"

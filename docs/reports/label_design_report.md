@@ -1,6 +1,6 @@
 # Label Design Queue
 
-> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** 9:30 AM and 1:30 PM Mountain, every day
+> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** hourly, 7 AM - 6 PM Mountain, every day (only does real work when something changed)
 
 ## What this tells you
 
@@ -20,8 +20,17 @@ Replaces Jennilyn's Plex stored procedure "Label Design Report"
 around it, agreed on the 2026-09-11 call.
 
 This is **not** a scorecard tile. It is an operational queue, which is why it
-runs midday and twice a day rather than riding the overnight `sales_orders`
+runs through the working day rather than riding the overnight `sales_orders`
 pipeline.
+
+**Since 2026-10-01 it runs every hour**, so an order that reaches Label Design
+at 10:20 is on the board by 10:35 instead of waiting for the afternoon run.
+Most of those hourly runs do almost nothing: the job first asks Plex which
+order lines are sitting on the Label Design status, and if that list is exactly
+what it was last time, it stops there — no extraction, no board update, no
+email. The same is true of the push: it checks in BigQuery whether anything is
+new before it opens Monday at all. A quiet hour costs seconds; an hour with a
+new order does the full job.
 
 ## How it's built (high level)
 

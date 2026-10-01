@@ -208,6 +208,33 @@ def existing_lcrs(api, lcr_col):
 
 # ── BigQuery ───────────────────────────────────────────────────────────────
 
+def pending_count(bq):
+    """How many view rows carry an LCR the audit table has never recorded.
+
+    `lcr_hash()` done in SQL, so the hourly run can decide whether there is any
+    work before it pages the whole Monday board. A hand-typed item has no audit
+    row, so this can over-count and never under-count — the board scan below
+    still has the last word on what gets created.
+    """
+    q = f"""
+        SELECT COUNT(*) AS n
+        FROM (
+          SELECT SUBSTR(TO_HEX(SHA256(v.dedupe_key)), 1, 12) AS lcr
+          FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}` AS v
+        ) AS candidate
+        LEFT JOIN (
+          SELECT DISTINCT a.lcr
+          FROM `{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}` AS a
+          WHERE a.board_id = @b AND a.outcome IN ('created', 'partial')
+        ) AS seen
+          ON seen.lcr = candidate.lcr
+        WHERE seen.lcr IS NULL
+    """
+    job = bq.query(q, job_config=bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("b", "STRING", BOARD_ID)]))
+    return list(job.result())[0].n
+
+
 def ensure_audit_table(bq):
     table = bigquery.Table(f"{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}", schema=AUDIT_SCHEMA)
     bq.create_table(table, exists_ok=True)
@@ -245,6 +272,22 @@ def main():
     log.info(f"Label Design push {run_id}: {GCP_PROJECT}.{BQ_DATASET}.{VIEW} -> board {BOARD_ID}"
              f"{' (DRY RUN)' if DRY_RUN else ''}")
     bq = bigquery.Client(project=GCP_PROJECT)
+
+    # Cheap gate, ahead of the Secret Manager read and the board scan: on most
+    # hourly runs the view holds nothing the audit table hasn't seen, and this
+    # exits without a single Monday API call. DRY_RUN deliberately skips the
+    # gate so a dry run always shows the full picture.
+    if not DRY_RUN:
+        ensure_audit_table(bq)
+        try:
+            pending = pending_count(bq)
+        except Exception as e:
+            log.info(f"Pending check skipped ({type(e).__name__}: {e}) — doing the full pass")
+            pending = None
+        if pending == 0:
+            log.info("Nothing in the view that the audit table hasn't seen — nothing to push.")
+            return
+
     api = Monday(get_api_key())
 
     board_name, col_ids, missing, group_id = resolve_board(api)
@@ -253,8 +296,6 @@ def main():
         log.warning(f"Board has no column {m} — that field will not be written")
 
     rows = [dict(r) for r in bq.query(f"SELECT * FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}`").result()]
-    if not DRY_RUN:
-        ensure_audit_table(bq)
     on_board = existing_lcrs(api, col_ids["LCR"])
     try:
         in_audit = audited_lcrs(bq)

@@ -5287,12 +5287,13 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
 
 # HOURLY since 2026-10-01, which is only affordable because of the change
 # probe in reports/label_design.yaml: a run whose probe fingerprint matches
-# the last clean run's skips all 14 extractions in seconds. 7 AM - 6 PM
-# Mountain, the hours orders actually reach Label Design.
+# the last clean run's skips all 14 extractions in seconds. 5 AM - 5 PM
+# Mountain (Jennilyn, 2026-10-01 — the team starts at 5). The days are NOT
+# settled: it still runs weekends, pending an answer (OPEN_ITEMS L9).
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
-  schedule    = "0 7-18 * * *" # every hour 7 AM - 6 PM Mountain — see scheduler_time_zone
+  schedule    = "0 5-17 * * *" # every hour 5 AM - 5 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5447,7 +5448,7 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
 resource "google_cloud_scheduler_job" "etl_label_design_test" {
   name        = "plex-label-design-sync-test"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (test, hourly, probe-gated)"
-  schedule    = "5 7-18 * * *" # every hour at :05, 7 AM - 6 PM Mountain — see scheduler_time_zone
+  schedule    = "5 5-17 * * *" # every hour at :05, 5 AM - 5 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5547,7 +5548,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
 resource "google_cloud_scheduler_job" "label_design_push_test" {
   name        = "plex-label-design-push-sync-test"
   description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
-  schedule    = "35 7-18 * * *" # 30 min after plex-label-design-sync-test (:05)
+  schedule    = "35 5-17 * * *" # 30 min after plex-label-design-sync-test (:05); last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 

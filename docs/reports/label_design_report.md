@@ -1,6 +1,6 @@
 # Label Design Queue
 
-> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** hourly, 7 AM - 6 PM Mountain, every day (only does real work when something changed)
+> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** hourly, 5 AM - 5 PM Mountain, every day (only does real work when something changed)
 
 ## What this tells you
 
@@ -23,8 +23,10 @@ This is **not** a scorecard tile. It is an operational queue, which is why it
 runs through the working day rather than riding the overnight `sales_orders`
 pipeline.
 
-**Since 2026-10-01 it runs every hour**, so an order that reaches Label Design
-at 10:20 is on the board by 10:35 instead of waiting for the afternoon run.
+**Since 2026-10-01 it runs every hour, 5 AM - 5 PM Mountain**, so an order that
+reaches Label Design at 10:20 is on the board by 10:35 instead of waiting for
+the afternoon run. The 5 AM start is the team's own: they are working the queue
+before most of the office. The last board update of the day is 5:35 PM.
 Most of those hourly runs do almost nothing: the job first asks Plex which
 order lines are sitting on the Label Design status, and if that list is exactly
 what it was last time, it stops there — no extraction, no board update, no

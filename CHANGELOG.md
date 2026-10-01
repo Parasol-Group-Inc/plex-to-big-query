@@ -14,6 +14,27 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-01 (label-design, later) - The hourly window moves to 5 AM - 5 PM
+
+Jennilyn: the labeling team starts at 5 AM. The window shipped this morning
+(7 AM - 6 PM) missed their first two hours entirely — an order sitting in Label
+Design at 5 AM waited until 7:35 to reach the board.
+
+### Changed
+- **`plex-label-design-sync` `0 5-17`, `-sync-test` `5 5-17`,
+  `plex-label-design-push-sync-test` `35 5-17`** (Mountain). Two hours earlier,
+  one hour shorter at the end; 13 runs a day instead of 12. Last board update
+  of the day is 5:35 PM — the push keeps its 30-minute offset behind the ETL,
+  so "ends at 5 PM" means the 5 PM cycle still completes.
+- `docs/reports/label_design_report.md` says 5 AM - 5 PM.
+
+Still **seven days a week** — nobody has said yet whether the queue is worked
+at weekends (OPEN_ITEMS L9). Cheap to leave running: a weekend probe that finds
+nothing costs seconds and no Monday API calls.
+
+Schedule-only. No code change, so **no image rebuild** — `./scripts/deploy.sh`
+is the whole deploy.
+
 ## 2026-10-01 (label-design) - Hourly, behind a change probe
 
 The queue now refreshes within the hour instead of at 9:30 and 1:30, without

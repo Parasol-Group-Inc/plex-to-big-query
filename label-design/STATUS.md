@@ -39,7 +39,7 @@ that look like success:
 SELECT * FROM `voxdatalake.PlexTest.probe_log` ORDER BY probed_at DESC LIMIT 20
 ```
 
-Not deployed yet; it ships with the L5 batch. See CHANGELOG 2026-10-01.
+Not deployed yet — OPEN_ITEMS L8. See CHANGELOG 2026-10-01.
 
 ## UPDATE — 2026-09-30: Ashley's answers — one item per order line; Sales Rep = status column
 

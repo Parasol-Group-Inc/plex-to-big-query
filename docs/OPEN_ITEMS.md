@@ -1,6 +1,6 @@
 # Open items — all projects
 
-*Last updated: 2026-09-29. Newest decisions first within each section. When
+*Last updated: 2026-10-01. Newest decisions first within each section. When
 an item closes, delete it here and record it in `CHANGELOG.md`; don't keep
 closed items.*
 
@@ -20,6 +20,8 @@ and `CHANGELOG.md`.
 | D4 | **Every YAML's `sql_file` hard-codes `gs://voxdatalake-report-configs`.** That breaks a move to another project or bucket. | Low | Template the bucket if a move is ever planned. |
 | D5 | **The sandbox snapshot expires after 2026-09-30.** BigQuery time travel only reaches 7 days back. | whoever rebuilds | Before rebuilding: `python scripts/scorecard_sandbox/snapshot_check.py "<instant>" now`, pick an instant where every relation joins, and set `build.SNAPSHOT`. |
 | D6 | `docs/CLICKUP_TEAM_GUIDE.md` is partly stale (counts, pipelines). | Low | Regenerate with the `team-guide` skill. |
+| D7 | **Developer access as code is undecided.** A `terraform/developer_access.tf` (read access to secrets, driver/state buckets, BigQuery, logs for everyone in `developer_members`) was drafted 2026-09-30 and blocked by Claude Code's permission classifier. Until then an Owner grants the roles in `docs/ONBOARDING.md` by hand. | Emilio | Write or approve the file, or keep granting by hand. |
+| D8 | **Backups live in the same GCP project.** `secrets.env`, tfvars, driver and zipfiles are in `gs://voxdatalake-terraform-state/…/backups/`, so a deleted project takes them too. Accepted for now (company-only bucket). | Emilio | Optional: copy `backups/latest/` somewhere outside GCP. |
 
 ## Vox Scorecard
 
@@ -42,6 +44,8 @@ and `CHANGELOG.md`.
 | # | Item | Owner | Next step |
 |---|---|---|---|
 | L1 | **Reference board: 13 items in "New from Plex" on "Plex Import"** from the real Plex test orders #4–#7, with the part line and Bottle Material. Re-keyed per order line 2026-09-30. Ashley settled one item per line and the status Sales Rep column. | Emilio / Ashley | Team: delete the **WO** column; optionally automate the people "Sales Rep" from the status one. |
-| L5 | **Deploy the 2026-09-29 Label Design change** (view: Reason Code/Memo/links/status trim/dedupe fallback; push: new link columns). Until then the scheduled test push writes the deleted "Plex Part URL"/"PO URL" columns (skipped, warning) and splits notes the old way. | Emilio | Merge `dev-label-design` → `main`, `./scripts/deploy.sh`, then rebuild the push image (Cloud Build). Plan should show `label_design_view.sql`, both label_design YAMLs, and the push job env (`PLEX_WEB_HOST` removed). |
+| L5 | **Confirm the 09-30 Label Design deploy end to end.** `deploy/2026-09-30T1551Z` carried the part line, Bottle Material and the per-line key (`88907c4`). Check that the push image was rebuilt after it, and that a scheduled push logs `16/16 mapped columns` and `13 already on the board, 0 new` (the 13 reference items were re-keyed in place). | Emilio | Cloud Run logs for `plex-etl-label-design-push-test`. If it says 13 new, pause `plex-label-design-push-sync-test` and check the push log. |
+| L6 | **Chain the push onto the ETL.** The on-demand button (L2) runs only the ETL, so Monday waits for the 10:10/14:10 push. Options: A, the ETL job runs the push as its last step (recommended); B, the button waits for the ETL, then starts the push; C, a Cloud Workflow runs both. | Emilio | Pick A/B/C. |
+| L7 | **Ashley's open board points:** delete the WO column; optionally automate the people "Sales Rep" from the status one (the push fills status). Email and phone are the customer's company-level contact; switching to the order line's contact person is possible if asked. | Ashley | On the board. |
 | L2 | **On-demand trigger app** (`deploy/label_design_trigger/`) is in `main` but not set up in Apps Script. | Emilio | Follow its README: an Apps Script project in `parasoldatalake` with the Cloud Run Admin API enabled; set `JOB_NAME` and `ALLOWED_EMAILS`; run `testSetup()`; deploy as a web app. Targets the **test** job until promoted. |
 | L3 | **Before the 19 Oct cutover:** add a **prod** push job (PlexProd → "Plex Import" `18432111755`, the board the team will use; the view picks `vox.on.plex.com` for PlexProd by itself), and **repoint the test push job to a sandbox board** (e.g. Emilio's own) so test data never lands on the team's board. Still open: a pre-cutover dedupe fallback (hand-typed items carry no hash LCR, so an order inside the 14-day window can be pushed twice; match Sales Order + Item text for the first 14 days), and whether the push sets a starting Design Status. | Emilio | Days before go-live. |

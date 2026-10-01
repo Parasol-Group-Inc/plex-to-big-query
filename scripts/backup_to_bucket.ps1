@@ -148,7 +148,17 @@ if ($PSCmdlet.ShouldProcess($SecretsPath, 'read six secret values')) {
         try { $value = (& gcloud secrets versions access latest --secret=$name --project=voxdatalake 2>$null) -join "`n" }
         finally { $ErrorActionPreference = $prev }
         if ($LASTEXITCODE -ne 0 -or -not $value) {
-            Write-Host ("  - {0,-42} NOT READABLE (no version, or no access)" -f $name) -ForegroundColor DarkYellow
+            # An empty placeholder (plex-odbc-user / -password / company-code:
+            # username/password auth, never used) is normal; no access is not.
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { $versions = (& gcloud secrets versions list $name --project=voxdatalake --format='value(name)' 2>$null) }
+            finally { $ErrorActionPreference = $prev }
+            if ($LASTEXITCODE -eq 0 -and -not $versions) {
+                Write-Host ("  . {0,-42} no versions (unused placeholder), nothing to back up" -f $name) -ForegroundColor DarkGray
+            } else {
+                Write-Host ("  - {0,-42} NOT READABLE: check your access" -f $name) -ForegroundColor Yellow
+            }
             continue
         }
         $lines += "$name=$value"

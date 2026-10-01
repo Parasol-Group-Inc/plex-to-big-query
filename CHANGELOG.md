@@ -18,7 +18,10 @@ don't need an entry.
 
 The queue now refreshes within the hour instead of at 9:30 and 1:30, without
 costing 6x the Plex load: each run first asks Plex one small question and stops
-if the answer hasn't moved. **Not deployed** (OPEN_ITEMS L8).
+if the answer hasn't moved. **Deployed 2026-10-01** (image `etl:6ef09f5`,
+`./scripts/deploy.sh`). Verified in `PlexTest.probe_log`: one `applied` on
+the first run, then `skipped` on every hourly run since, same fingerprint,
+no `inconclusive` rows.
 
 ### Added
 - **A `probe:` block in a report config** (`main.py`: `run_probe`,
@@ -142,8 +145,8 @@ deployed** (OPEN_ITEMS L5).
 
 ## 2026-09-29 (label-design, later) - Part line in Description; Bottle Material from the BOM
 
-Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**
-(OPEN_ITEMS L5): `./scripts/deploy.sh`, then rebuild the push image.
+Ashley's review of the first real Plex test orders (#4-#7). **Deployed**
+2026-09-30 (`deploy/2026-09-30T1551Z`); end-to-end confirmation is OPEN_ITEMS L5.
 
 ### Added
 - **`label_design_report`:** `part_name`, `line_description` ("93001-00KAYAN-0
@@ -173,9 +176,10 @@ Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**
 
 ## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
 
-**Not deployed** (OPEN_ITEMS L5). Needs `./scripts/deploy.sh` from `main`
-and a rebuilt push image, since `push.py` changed too. Merged with the
-2026-09-25/26 entries below, which added the keys and `Part_v_Part` first.
+**Deployed** 2026-09-30 (`deploy/2026-09-30T1551Z`), with a rebuilt push image
+since `push.py` changed too; end-to-end confirmation is OPEN_ITEMS L5. Merged
+with the 2026-09-25/26 entries below, which added the keys and `Part_v_Part`
+first.
 
 ### Added
 - **`label_design_report`:** `reason_code`,

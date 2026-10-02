@@ -46,8 +46,29 @@ gaps actually are. Here's what's recoverable vs. not, as of 2026-07-20:
 | All application code, Terraform config, docs | ✅ Yes | git (GitHub) |
 | Terraform state | ⚠ Partially | Was in `gs://voxdatalake-terraform-state` — gone if the project is deleted. But the state file mainly records *what exists*, not secret values, so losing it just means re-`import`-ing or re-`apply`-ing into a fresh project (see Step 3 below) |
 | `terraform.tfvars` (real values: emails, view names, etc.) | ⚠ Partially | Gitignored by design (correct — never commit it). The **only** other copy is on Emilio's machine. **Gap: back this up somewhere durable** (password manager, encrypted note) since it's not secret material but is needed to reconstruct config quickly |
-| Plex IAM access token, ODBC password, company code, SendGrid API key (actual secret **values**) | ❌ Not from GCP | Only in Secret Manager, gone with the project. The Plex token can be regenerated from the Plex portal if Plex account access still exists. SendGrid key can be regenerated from the SendGrid account. **Gap: no backup of the current values outside GCP** |
+| Plex IAM access token, ODBC user/password, company code, SendGrid API key, **Monday API key** (the six secret **values**) | ❌ Not from GCP | Only in Secret Manager, gone with the project. The Plex token can be regenerated from the Plex portal if Plex account access still exists. SendGrid key can be regenerated from the SendGrid account. **Gap: no backup of the current values outside GCP** |
 | Plex ODBC driver + applied license (`OAODBC64.LIC`) | ⚠ Partially | Currently in `gs://voxdatalake-build-assets` (gone with the project) AND locally in Emilio's `driver/`+`zipfiles/` folders (gitignored, this machine only). **Gap: no off-GCP, off-laptop backup** of the licensed driver or the original vendor packages. Re-obtaining requires re-running the full `docs/archive/APPLY_DRIVER_LICENSE.md` process from a fresh Plex-support-provided driver package plus the license serial/key (`004193623`/`35057920` — also only recorded in this repo's docs and Emilio's local `zipfiles/`) |
+
+### Update 2026-09-30 — what changed since the table above
+
+- **Six secrets, not five.** `monday-api-key` (Label Design push) was added
+  on 2026-09-25. It is **Jennette Boone's personal Monday token**: if she
+  resets it or leaves, the push fails at credential fetch. A dedicated
+  Monday account/token before the prod push goes live removes that risk.
+- **`zipfiles/` and `driver/` are now in the backup.**
+  `scripts/backup_to_bucket.ps1` zips both. Run it from the **primary
+  folder** (`plex-to-big-query`), the only one that has them, along with
+  `.env` and tfvars. The backup still lives in this same GCP project, so it
+  protects against losing the laptop, not the project. Gap 2 below still
+  stands for that.
+- **Local state files are leftovers.** The primary folder still holds
+  `terraform/terraform.tfstate` (0 bytes) and `.tfstate.backup` from
+  2026-07-20, from before the move to the `gcs` backend. The real state is in
+  the bucket. They are safe to delete once the bucket's state is confirmed
+  (`terraform state list` from the primary folder).
+- **New developers** get the secret values and the driver through
+  `scripts/dev_setup.sh`, once an Owner has granted the read access listed in
+  `docs/ONBOARDING.md`.
 
 ### Closing the gaps (recommended, doesn't require an emergency to do now)
 
@@ -109,14 +130,12 @@ terraform init
 cd ..
 ./scripts/deploy.sh    # Cloud Run jobs fail "image not found" until step 6 — expected
 
-# 5. Restore ALL FIVE secret VALUES (from your backed-up copies, not from
-# GCP -- they're gone). Missing any one of these will make its owning job(s)
-# fail credential fetch.
-echo -n 'PLEX_TOKEN'      | gcloud secrets versions add plex-access-token  --data-file=- --project=NEW-PROJECT-ID
-echo -n 'SENDGRID_KEY'    | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=NEW-PROJECT-ID
-echo -n 'ODBC_USER'       | gcloud secrets versions add plex-odbc-user     --data-file=- --project=NEW-PROJECT-ID
-echo -n 'ODBC_PASSWORD'   | gcloud secrets versions add plex-odbc-password --data-file=- --project=NEW-PROJECT-ID
-echo -n 'COMPANY_CODE'    | gcloud secrets versions add plex-company-code  --data-file=- --project=NEW-PROJECT-ID
+# 5. Restore ALL SIX secret VALUES. Since 2026-09-30 every backup holds them
+# (secrets.env, written by scripts/backup_to_bucket.ps1), so no pasting:
+./scripts/restore_secrets.sh --project NEW-PROJECT-ID              # dry run
+./scripts/restore_secrets.sh --project NEW-PROJECT-ID --apply
+# If the old bucket is gone too, download secrets.env from wherever the
+# backup was copied and pass it with --file secrets.env.
 
 # 6. Build and push the image (driver must be in driver/ locally, from
 # the build-assets bucket restored in step 3). Tag with a commit SHA, never

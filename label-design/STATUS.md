@@ -11,6 +11,139 @@
 
 ---
 
+## UPDATE — 2026-10-01: hourly, behind a change probe
+
+The queue refreshes within the hour now, not at 9:30 and 1:30. Running the
+existing job 12x a day would have meant 12 x 14 full Plex table pulls, so each
+run starts with a cheap question instead:
+
+- **ETL**: two small `SELECT`s — which release status is "Label Design", and
+  which release lines sit on it — fingerprinted as a SET. Same set as the last
+  clean run? The job stops there, logs `skipped` to `probe_log`, and pulls
+  nothing. Typical day: ~10 probes of a few seconds, 1-3 real runs.
+- **Push**: one BigQuery count of view rows whose LCR the audit table has never
+  seen. Zero means it returns before reading the Monday key or paging the
+  board, so a quiet hour costs no Monday API calls at all.
+- **No retry trigger any more.** The fingerprint only advances after a clean
+  run, so a failed or partial run is picked up by the next hourly probe — a
+  retry within the hour rather than at 9:45 PM.
+- **No email on a clean run** (`EMAIL_MODE=on_error`). Failures and partials
+  still mail. Everything else is in `job_run_log` and `probe_log`.
+
+Fail-open: anything that stops the probe being evaluated (the status renamed,
+a query erroring) logs `inconclusive` and runs the full extraction. Worth
+checking occasionally — a permanently inconclusive probe is 12 full runs a day
+that look like success:
+
+```sql
+SELECT * FROM `voxdatalake.PlexTest.probe_log` ORDER BY probed_at DESC LIMIT 20
+```
+
+Deployed 2026-10-01 and confirmed live: `probe_log` shows one `applied` run
+followed by `skipped` on every hourly run since, on the same fingerprint.
+See CHANGELOG 2026-10-01.
+
+## UPDATE — 2026-09-30: Ashley's answers — one item per order line; Sales Rep = status column
+
+- **One Monday item per order LINE**, even when two lines carry the same part.
+  The view now collapses per `po_line_key`, and the key is `<order>|L<line>`.
+  The 13 reference items were re-keyed in place (LCR plus added log rows); see
+  CHANGELOG 2026-09-30.
+- **Sales Rep:** the push keeps filling the **status** column. The team may
+  automate the people column from it on Monday's side.
+- **WO column:** deleting it on the board is the team's call; the push never
+  wrote it.
+
+## UPDATE — 2026-09-29 (later): Ashley's review — part line and Bottle Material
+
+- **First real Plex test orders** reached the board: #4 and #5 (entered by the
+  team), #6 and #7 (entered by Emilio). That's 13 items, one per order + part,
+  so an order with two parts gives two items. No duplicates.
+- **Ashley's four questions:**
+  1. **Bottle material** is now read from the BOM. Plex has no attribute for it
+     on finished goods (attributes are on the 73… label parts), but the bottle
+     component's name carries it: `BOTTLE | 175cc White HDPE Packer Bottle`.
+     `Part_v_Flat_BOM` is added to the extraction.
+  2. **Customer phone** was already there (Phone Number).
+  3. **WO column:** delete it on the board; the push never wrote it.
+  4. **Description** is now the part line: `part no + rev | Plex part name`.
+- **Label parts (73…)** sit one BOM level under each finished good on the
+  team's orders. Printing Material and Label Size live there, filled for 2 of
+  9. They are not exposed, per the 09-21 decision (attributes stay in Plex).
+  The view's attribute pivot also misses the new **Label Size** attribute.
+- **The board has two "Sales Rep" columns**, status (filled by the push) and
+  people (empty). Ashley to say which one the team uses.
+
+## UPDATE — 2026-09-29: Reason Code, Memo and links move into the view; real reps in test data
+
+- **Built against Emilio's hand-checked Plex version of the query.** The view
+  now trims/uppercases the status filters and falls back to `Part_Key` when a
+  line has no customer part number (collapse and `dedupe_key` =
+  `ORDER|PK<key>`; rows with a customer part keep their old key).
+- **Reason Code / Memo now come from the view** (`reason_code`,
+  `reason_code_label`, `memo`). It's still the first character 1-6, but
+  "12ct…" and "3.5 oz…" are not codes. No code means nothing is written to
+  Monday's Reason Code. `reason_code.py` and its test are gone.
+- **Links come from the view too:** `part_url`, `customer_po_url`,
+  `sales_order_url`, with the host chosen by dataset. The push writes them to
+  **Part URL / Customer PO URL / Sales Order URL** plus **Customer PO**
+  (text). Emilio deleted the 09-26 "Plex Part URL"/"PO URL" columns from Plex
+  Import. `PLEX_WEB_HOST` is removed from the push and the test job.
+- **Test data:** `scripts/label_design_test_data.py` has 34 cases (Job Note
+  rules, release collapse, NULL customer parts, messy statuses, 14/15-day
+  boundary, URL encoding, Sales Rep fallback with real Plexus users), and
+  `--check` grades the LOCAL SQL: 36/36 passed. 33 items are on Plex Import
+  for Ashley (OPEN_ITEMS L1).
+- **Merged with the 09-25/26 Mac work** (PRs #4–#8). Not deployed yet: see
+  OPEN_ITEMS L5.
+
+## UPDATE — 2026-09-26: Plex links on every item; test push is LIVE; review items on the board
+
+- **The test push is deployed and scheduled** (10:10 and 14:10 Mountain,
+  30 min after the test ETL). The secret, job and image went in with
+  `deploy/2026-09-25T1307Z`; `deploy/2026-09-26T2119Z` added the links below.
+  Open items L1/D1 are closed.
+- **Two new Link columns, written by the push:** **Plex Part URL** (text
+  `<Part_No> <Revision>`) and **PO URL** (text `SO <order #>`). Both open Plex
+  test (`vox.test.on.plex.com`, from `PLEX_WEB_HOST` on the job; *superseded
+  2026-09-29, see above*). Emilio added
+  the columns to "Plex Import" by hand; the log line
+  `Board 'Plex Import': 13/13 mapped columns found` confirms the job sees them.
+  The view gained `po_key`, `part_key`, `part_no`, `part_revision` (new
+  `raw_Part_v_Part` join), and the pipeline extracts `Part_v_Part` itself
+  (13 extractions).
+- **7 fresh `ZZTEST-LD-` items for review** are in "New from Plex"
+  (13142802946 … 13142802950). The 2026-09-24 test items, made before the
+  links existed, were deleted with `--delete` (Monday keeps them in trash for
+  30 days) and re-created.
+  - **Part links open real Plex test parts.** The test lines now point at
+    real 93… finished goods.
+  - **PO links open nothing.** The test orders are fake (`POKey=991001xxx`) so
+    that `--delete` can always find them.
+  - **Clean up:** `python scripts/label_design_test_data.py --delete`, with
+    `MONDAY_API_KEY` set (`gcloud secrets versions access latest
+    --secret=monday-api-key --project=voxdatalake`).
+- **Why the view is empty without test data:** Plex test is wiped nightly. On
+  2026-09-26 it held 3 orders and 2 releases, none in Label Design.
+- **Deployed from a Mac for the first time.** tfvars came from the GCS backup
+  after it was checked against live state (CONTRIBUTING.md, "Deploying from
+  another machine"). That surfaced two repo bugs, both fixed through PRs #5
+  and #6: missing macOS lock checksums, and `deploy_preflight.sh` lacking its
+  executable bit.
+- **Still open:**
+  - **Prod host confirmed:** Emilio confirmed `vox.on.plex.com` on
+    2026-09-26. `push.py` already defaults to it for `PlexProd`; a prod job
+    should still set `PLEX_WEB_HOST` explicitly, as the test job does.
+- **Decisions (Emilio, 2026-09-26):**
+  - **The team moves to "Plex Import" for good.** Nothing will push to the
+    old Design & QA board, so the Monday licence question is moot.
+  - **The prod push targets "Plex Import".** Before 19 Oct, the test push
+    moves to a sandbox board (e.g. Emilio's own).
+  - **Part attributes won't go to Monday.** They stay on the part in Plex.
+  - **The on-demand trigger app** (L2) is Emilio's to deploy.
+
+---
+
 ## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
 
 `deploy/label_design_trigger/` is a one-button Apps Script page that starts
@@ -253,7 +386,7 @@ Mapping, fully disambiguated against Monday's real Reason Code dropdown
 | 5 | Vox Initiated: Label edit/review | `[106]` |
 | 6 | 3D Rendering | `[4]` |
 
-**Built**: `label_design_service/reason_code.py` + `test_reason_code.py` —
+**Built** *(removed 2026-09-29; the rule now lives in the view)*: `label_design_service/reason_code.py` + `test_reason_code.py` —
 21/21 checks pass, including a real confirmed example from Emilio:
 `"3 Update to current V code. Standard Label."` → *New label design (Vox
 design)* + memo `"Update to current V code. Standard Label."`. Checked all

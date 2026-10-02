@@ -85,6 +85,33 @@ resource "google_project_iam_member" "etl_roles" {
   member  = "serviceAccount:${google_service_account.etl.email}"
 }
 
+# ── The retry schedulers need a permission run.invoker does not grant ────────
+#
+# Every *-retry scheduler POSTs to the job's :run endpoint with an `overrides`
+# body, to set RUN_MODE=retry. Cloud Run gates a request carrying overrides on
+# `run.jobs.runWithOverrides`, a SEPARATE permission from the `run.jobs.run`
+# that roles/run.invoker grants. The daily schedulers send a bare `{}` and so
+# never needed it; the retries did, never had it, and were rejected with
+# PERMISSION_DENIED (code=7) on every firing. The schedulers report ENABLED
+# throughout — the refusal shows only in `status` — which is why this went
+# unnoticed through 23 failed and 39 partial runs. See OPEN_ITEMS D2.
+#
+# roles/run.developer carries this permission but also allows deploying and
+# modifying Cloud Run services, which the ETL account has no business doing,
+# so this is a custom role holding that one permission and nothing else.
+resource "google_project_iam_custom_role" "run_with_overrides" {
+  role_id     = "plexEtlRunWithOverrides"
+  title       = "Plex ETL - run jobs with overrides"
+  description = "Lets the retry schedulers invoke a Cloud Run job with an overrides body; roles/run.invoker alone cannot."
+  permissions = ["run.jobs.runWithOverrides"]
+}
+
+resource "google_project_iam_member" "etl_run_with_overrides" {
+  project = var.gcp_project
+  role    = google_project_iam_custom_role.run_with_overrides.id
+  member  = "serviceAccount:${google_service_account.etl.email}"
+}
+
 resource "google_service_account_iam_member" "scheduler_token_creator" {
   service_account_id = google_service_account.etl.name
   role               = "roles/iam.serviceAccountTokenCreator"
@@ -5218,6 +5245,14 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           name  = "REPORT_CONFIG_GCS_PATH"
           value = "gs://${var.report_configs_bucket}/reports/label_design.yaml"
         }
+        # Hourly behind the change probe (reports/label_design.yaml): a mail on
+        # every run that found something would be noise. A partial or failed
+        # run still mails; a clean one is recorded in `job_run_log` and
+        # `probe_log` instead. See EMAIL_MODE in main.py.
+        env {
+          name  = "EMAIL_MODE"
+          value = "on_error"
+        }
         env {
           name  = "PLEX_VIEW"
           value = var.plex_view
@@ -5277,10 +5312,15 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
   }
 }
 
+# HOURLY since 2026-10-01, which is only affordable because of the change
+# probe in reports/label_design.yaml: a run whose probe fingerprint matches
+# the last clean run's skips all 14 extractions in seconds. 5 AM - 5 PM
+# Mountain (Jennilyn, 2026-10-01 — the team starts at 5). The days are NOT
+# settled: it still runs weekends, pending an answer (OPEN_ITEMS L9).
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
-  description = "Triggers Plex to BigQuery Label Design queue ETL job"
-  schedule    = "30 9,13 * * *" # 9:30 AM and 1:30 PM Mountain, every day — see scheduler_time_zone
+  description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
+  schedule    = "0 5-17 * * *" # every hour 5 AM - 5 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5295,29 +5335,12 @@ resource "google_cloud_scheduler_job" "etl_label_design" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_label_design_retry" {
-  name        = "plex-label-design-sync-retry"
-  description = "Retries the Label Design queue ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
+# NO RETRY TRIGGER for Label Design (both were removed 2026-10-01). The probe
+# replaced it: a fingerprint is stored as 'applied' only after a clean run, so
+# a failed or partial run leaves the reference where it was and the next hourly
+# probe sees a difference and runs again — within the hour, instead of at 9:45
+# PM. (The retry trigger had never produced a single run anyway — OPEN_ITEMS
+# D2.) Every other pipeline keeps its `-retry` scheduler and RUN_MODE=retry.
 
 # ── Label Design queue — test (PlexTest, 9:40 AM & 1:40 PM Mountain, daily) ─
 
@@ -5382,6 +5405,14 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
           name  = "REPORT_CONFIG_GCS_PATH"
           value = "gs://${var.report_configs_bucket}/test/label_design.yaml"
         }
+        # Hourly behind the change probe (reports/label_design.yaml): a mail on
+        # every run that found something would be noise. A partial or failed
+        # run still mails; a clean one is recorded in `job_run_log` and
+        # `probe_log` instead. See EMAIL_MODE in main.py.
+        env {
+          name  = "EMAIL_MODE"
+          value = "on_error"
+        }
         env {
           name  = "PLEX_VIEW"
           value = var.plex_view
@@ -5443,8 +5474,8 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
 
 resource "google_cloud_scheduler_job" "etl_label_design_test" {
   name        = "plex-label-design-sync-test"
-  description = "Triggers Plex to BigQuery Label Design queue ETL job (test)"
-  schedule    = "40 9,13 * * *" # 9:40 AM and 1:40 PM Mountain, every day — see scheduler_time_zone
+  description = "Triggers Plex to BigQuery Label Design queue ETL job (test, hourly, probe-gated)"
+  schedule    = "5 5-17 * * *" # every hour at :05, 5 AM - 5 PM Mountain — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5452,30 +5483,6 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_label_design_test_retry" {
-  name        = "plex-label-design-sync-test-retry"
-  description = "Retries the Label Design queue ETL job (test) if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_label_design_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -5496,6 +5503,11 @@ resource "google_cloud_scheduler_job" "etl_label_design_test_retry" {
 # is two 600s attempts (max_retries = 1), so +30 min always reads a view this
 # cycle refreshed, and a failed ETL can't take the push down with it — the
 # push just re-reads the last good view, and dedupe makes that harmless.
+#
+# HOURLY since 2026-10-01, behind its own gate: push.py counts the view rows
+# whose LCR the audit table has never seen and returns before reading the
+# Monday API key or paging the board when that count is 0. So an hour with no
+# new orders costs one small BigQuery query and no Monday calls at all.
 #
 # TEST ONLY FOR NOW: PlexTest → "Plex Import" (18432111755), Ashley's review
 # copy of Design & QA. There is deliberately no prod job yet — Plex prod has
@@ -5563,7 +5575,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
 resource "google_cloud_scheduler_job" "label_design_push_test" {
   name        = "plex-label-design-push-sync-test"
   description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
-  schedule    = "10 10,14 * * *" # 30 min after plex-label-design-sync-test (9:40 / 13:40)
+  schedule    = "35 5-17 * * *" # 30 min after plex-label-design-sync-test (:05); last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 

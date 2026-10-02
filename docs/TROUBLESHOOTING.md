@@ -512,12 +512,14 @@ docker push us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA
 # apply won't touch the image; see "Full rebuild procedure" above)
 ./scripts/deploy.sh
 
-# 5. Re-populate ALL FIVE secrets in the new project
+# 5. Re-populate ALL SIX secrets in the new project — or, from a backup,
+#    ./scripts/restore_secrets.sh --project new-project-id --apply
 echo -n 'TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=new-project-id
 echo -n 'SG.key'   | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=new-project-id
 echo -n 'USER'     | gcloud secrets versions add plex-odbc-user     --data-file=- --project=new-project-id
 echo -n 'PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=new-project-id
 echo -n 'CODE'     | gcloud secrets versions add plex-company-code  --data-file=- --project=new-project-id
+echo -n 'MONDAY'   | gcloud secrets versions add monday-api-key     --data-file=- --project=new-project-id
 
 # 6. Nothing to upload by hand: every reports/ YAML and SQL file is a Terraform-managed
 #    GCS object, created in step 3. BUT every YAML's sql_file is a hardcoded

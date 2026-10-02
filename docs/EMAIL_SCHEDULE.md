@@ -7,9 +7,27 @@ what it's actually made of, and who hears about it. Built 2026-08-13 while
 standardizing report naming across the whole pipeline (see
 [OPERATIONS.md](OPERATIONS.md) for the retry mechanism this depends on).
 The schedule table below is derived from the `google_cloud_scheduler_job`
-resources in `terraform/main.tf` (Sales Orders' two times come from
-`scheduler_cron`/`scheduler_cron_test` in `terraform.tfvars`) — if they
-disagree, `main.tf` wins; fix this page.
+resources in `terraform/main.tf` — if they disagree, `main.tf` wins; fix this
+page.
+
+> **Three of these times are not in git.** 25 of the 27 daily schedules are
+> hardcoded in `main.tf` and can be checked from any folder. The exceptions are
+> **Sales Orders** (`scheduler_cron` / `scheduler_cron_test`) and **every
+> retry** (`retry_scheduler_cron`), which read `terraform.tfvars` — a
+> gitignored file that exists only in the primary folder. Sales Orders is the
+> odd one out because it was the only pipeline when the repo was built; the
+> twelve added since are hardcoded like normal.
+>
+> **Don't read the `variables.tf` defaults instead — they are wrong.** They say
+> `0 2 * * *` and `0 6 * * *`; the live values are 7:00 PM and 9:45 PM
+> Mountain. To check the real values from any folder, read the backup:
+>
+> ```bash
+> gcloud storage cat >   gs://voxdatalake-terraform-state/plex-to-big-query/backups/latest/terraform__terraform.tfvars >   | grep cron
+> ```
+>
+> That backup is written by `scripts/backup_to_bucket.ps1`, so it is only as
+> fresh as the last backup — but these three values change about once a year.
 
 ## The short version
 

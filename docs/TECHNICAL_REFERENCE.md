@@ -150,9 +150,58 @@ bq_view:                         # a single mapping, OR a list of mappings (see 
 
 ---
 
+## Change probe (`probe:`) — skipping a run that has nothing to do
+
+Added 2026-10-01 so a pipeline can run hourly without paying for a full extraction every hour. **Opt-in per report: a config with no `probe:` block behaves exactly as it always did.** Today only `label_design` uses it.
+
+A `probe:` block sits above `extractions:` and names one or more tiny queries whose combined result is fingerprinted:
+
+```yaml
+probe:
+  queries:
+    - plex_view: Sales_v_Release_Status
+      columns: [Release_Status_Key]
+      filter: "WHERE t.Release_Status = 'Label Design'"
+      bind: status_keys            # expose this query's single column to later filters
+
+    - plex_view: Sales_v_Release
+      columns: [Release_Key, PO_Line_Key]
+      filter: "WHERE t.Release_Status_Key IN ({status_keys})"
+```
+
+`run_probe()` in `main.py` builds `SELECT t.<col>, ... FROM <view> AS t <filter>` for each query (always aliased — the repo's Plex SQL rule), **sorts the returned row tuples** so the fingerprint describes the SET and not the order Plex happened to return, and hashes the lot: `sha256(...)[:32]`. A `bind:` query must return exactly one column; its values are interpolated into a later query's `{name}` placeholder as a comma-separated list of integers, and `_PROBE_BIND_RE` rejects anything that isn't digits.
+
+Then, before the extraction loop and only when `OUTPUT_MODE=bigquery`:
+
+1. The fingerprint is compared with the last one stored as `applied` for this report.
+2. **Equal** → log a `skipped` row to `probe_log`, close the ODBC connection and return. No extractions, no views, no email.
+3. **Different, or nothing stored yet** → the run proceeds normally.
+4. In `run_and_report()`, after `log_job_run`, the fingerprint is stored as `applied` **only if the run finished `success`** — otherwise `failed`.
+
+**Point 4 is why Label Design has no retry trigger.** A failed or partial run leaves the stored reference where it was, so the next hourly probe sees a difference and runs again. The probe *is* the retry — but only at hourly cadence. A nightly pipeline must keep its `-retry` scheduler.
+
+### Fail-open
+
+Anything that stops the probe being evaluated — a query erroring, a renamed status, a `bind:` resolving to no rows — raises `ProbeInconclusive`, logs an `inconclusive` row, and **runs the full extraction**. A probe may cost time; it may never be the reason a change is missed. The cost of that safety is that a permanently broken probe is invisible: every run succeeds, it just does the full work. Check now and then:
+
+```sql
+SELECT * FROM `voxdatalake.PlexTest.probe_log`
+WHERE outcome = 'inconclusive' ORDER BY probed_at DESC
+```
+
+### `probe_log`
+
+Created on first use in the pipeline's own dataset (`PROBE_LOG_TABLE`, default `probe_log`). One row per probe: `report_name`, `job_name`, `probed_at TIMESTAMP`, `fingerprint STRING`, `outcome STRING` (`skipped` | `applied` | `failed` | `inconclusive`), `detail STRING`.
+
+### What it does NOT cover
+
+The probe runs *before* view creation, so a deploy that changes only a view's SQL does not reach BigQuery until the probe's data changes. For Label Design that is acceptable — the queue moves daily — but after a view-only deploy, trigger the job by hand rather than waiting.
+
+---
+
 ## Retry mechanism
 
-Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job.
+Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job **except Label Design and its push job**, which have none — see "Change probe" above for why.
 
 The retry trigger runs with `RUN_MODE=retry`. On every run, `run_and_report()`:
 1. Calls `get_todays_run_status(bq, job_identity)` — `job_identity` is `CLOUD_RUN_JOB` (auto-set by Cloud Run) or the report's `report_name` as a local-run fallback
@@ -360,6 +409,8 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `METADATA_TABLE` | `sync_metadata` | apply | Sync state tracking table |
 | `JOB_RUN_LOG_TABLE` | `job_run_log` | apply | Retry-tracking table — see "Retry mechanism" |
 | `RUN_MODE` | `""` | — | Set to `retry` by the 9:45 PM Mountain scheduler trigger; anything else runs as a normal scheduled execution |
+| `EMAIL_MODE` | `always` | apply | `on_error` sends mail only on a `partial` or `failed` run — set on both Label Design ETL jobs, which run hourly and would otherwise mail 26 times a day. A clean run is still recorded in `job_run_log` and `probe_log` |
+| `PROBE_LOG_TABLE` | `probe_log` | apply | Change-probe outcome table — see "Change probe" |
 | `REPORT_CONFIG_GCS_PATH` | `""` | — (edit the YAML instead) | GCS path to the multi-report YAML. Empty = legacy single-view mode using the vars below |
 | `PLEX_HOST` | `""` | apply | Plex ODBC hostname |
 | `PLEX_PORT` | `19995` | apply | Plex ODBC port |

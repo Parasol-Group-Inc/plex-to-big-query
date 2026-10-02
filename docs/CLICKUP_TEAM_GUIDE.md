@@ -39,18 +39,47 @@ Console: https://console.cloud.google.com/home/dashboard?project=voxdatalake
 | Run logs | Cloud Run → job → Executions → Logs | via Cloud Run Jobs link above |
 | **Terraform state (shared)** | Cloud Storage → `voxdatalake-terraform-state` | [GCS bucket](https://console.cloud.google.com/storage/browser/voxdatalake-terraform-state?project=voxdatalake) |
 
-### The four pipelines
+### The 13 pipelines
 
-Note: this table predates several newer Cloud Run jobs added since 2026-07-20 (purchasing, part obsolescence, inventory activity/snapshot, quality nonconformance, part on-hand inventory) — see docs/EMAIL_SCHEDULE.md for the complete current picture of all 27 jobs.
+Each pipeline is one YAML config in `reports/`, and each runs as **two** Cloud
+Run jobs — `plex-etl-<pipeline>` writing `PlexProd`, and
+`plex-etl-<pipeline>-test` writing `PlexTest` ten minutes later. 27 jobs in all
+(the extra one pushes Label Design to Monday.com).
 
-| Job | What | Writes to | Schedule (Mountain) |
-|---|---|---|---|
-| `plex-etl-sales-orders` | Sales Orders — **production** | `PlexProd` | 7:00 PM daily |
-| `plex-etl-sales-orders-test` | Sales Orders — test | `PlexTest` | 7:10 PM daily |
-| `plex-etl-work-orders` | Work Orders — **production** | `PlexProd` | 7:20 PM daily |
-| `plex-etl-work-orders-test` | Work Orders — test | `PlexTest` | 7:30 PM daily |
+| Category | Pipeline | Reports it produces |
+|---|---|---|
+| **Sales** | `sales_orders` | 27 |
+| **Sales** | `label_design` | 1 — the Monday.com Label Design queue |
+| **Sales** | `sales_quotes` | 1 |
+| **Sales** | `sales_returns` | 1 |
+| **Production** | `work_orders` | 19 |
+| **Quality** | `quality_nonconformance` | 5 |
+| **Supply Chain** | `part_on_hand_inventory` | 5 |
+| **Supply Chain** | `inventory_activity` | 2 |
+| **Supply Chain** | `purchasing_open_orders` | 2 |
+| **Supply Chain** | `part_obsolescence` | 1 |
+| **Supply Chain** | `purchasing_pending_requisitions` | 1 |
+| **Supply Chain** | `quality_supplier_returns` | 1 |
+| **Inventory** | `inventory_snapshot` | 3 |
+
+Twelve of them run once a night, staggered between 7:00 PM and 10:50 PM
+Mountain. **Label Design is the exception** — it runs hourly, 5 AM to 5 PM,
+because it feeds a queue people work from during the day rather than a report
+they read in the morning.
+
+**Exact times for every job: [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).**
+That file is maintained against `terraform/main.tf` and is the one to trust;
+this table is a map, not a schedule.
 
 ### The report views (what analysts should query)
+
+68 views across the 13 pipelines, all in `voxdatalake.PlexProd` (and
+`voxdatalake.PlexTest` for the test copies). Every one has a plain-English,
+business-facing page in **[docs/reports/](reports/)** — what it tells you,
+who asked for it, and what each column means.
+**[docs/reports/REPORT_CATALOG.md](reports/REPORT_CATALOG.md) is the index.**
+
+The two most-queried:
 
 | View | Contents |
 |---|---|

@@ -193,12 +193,17 @@ docker push us-central1-docker.pkg.dev/your-new-project-id/plex-pipeline/etl:$SH
 # deploy/cloudbuild.yaml (after ./scripts/deploy_preflight.sh) — this step won't work again.
 ./scripts/deploy.sh
 
-# Add ALL FIVE secrets to the new project's Secret Manager
+# Add ALL SIX secrets to the new project's Secret Manager. Easier: if you have
+# a backup, ./scripts/restore_secrets.sh --project your-new-project-id --apply
+# puts every value back from it without any copy and paste.
 echo -n 'YOUR_PLEX_TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=your-new-project-id
 echo -n 'YOUR_SENDGRID_KEY'  | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=your-new-project-id
 echo -n 'YOUR_ODBC_USER'     | gcloud secrets versions add plex-odbc-user     --data-file=- --project=your-new-project-id
 echo -n 'YOUR_ODBC_PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=your-new-project-id
 echo -n 'YOUR_COMPANY_CODE'  | gcloud secrets versions add plex-company-code  --data-file=- --project=your-new-project-id
+# Label Design's Monday push. A company token, not a personal one — without it
+# plex-etl-label-design-push-test starts and fails on the first Monday call.
+echo -n 'YOUR_MONDAY_TOKEN'  | gcloud secrets versions add monday-api-key     --data-file=- --project=your-new-project-id
 
 # No manual config upload: the deploy above already created every reports/
 # YAML and SQL file as a Terraform-managed GCS object.

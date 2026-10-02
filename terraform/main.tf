@@ -85,6 +85,33 @@ resource "google_project_iam_member" "etl_roles" {
   member  = "serviceAccount:${google_service_account.etl.email}"
 }
 
+# ── The retry schedulers need a permission run.invoker does not grant ────────
+#
+# Every *-retry scheduler POSTs to the job's :run endpoint with an `overrides`
+# body, to set RUN_MODE=retry. Cloud Run gates a request carrying overrides on
+# `run.jobs.runWithOverrides`, a SEPARATE permission from the `run.jobs.run`
+# that roles/run.invoker grants. The daily schedulers send a bare `{}` and so
+# never needed it; the retries did, never had it, and were rejected with
+# PERMISSION_DENIED (code=7) on every firing. The schedulers report ENABLED
+# throughout — the refusal shows only in `status` — which is why this went
+# unnoticed through 23 failed and 39 partial runs. See OPEN_ITEMS D2.
+#
+# roles/run.developer carries this permission but also allows deploying and
+# modifying Cloud Run services, which the ETL account has no business doing,
+# so this is a custom role holding that one permission and nothing else.
+resource "google_project_iam_custom_role" "run_with_overrides" {
+  role_id     = "plexEtlRunWithOverrides"
+  title       = "Plex ETL - run jobs with overrides"
+  description = "Lets the retry schedulers invoke a Cloud Run job with an overrides body; roles/run.invoker alone cannot."
+  permissions = ["run.jobs.runWithOverrides"]
+}
+
+resource "google_project_iam_member" "etl_run_with_overrides" {
+  project = var.gcp_project
+  role    = google_project_iam_custom_role.run_with_overrides.id
+  member  = "serviceAccount:${google_service_account.etl.email}"
+}
+
 resource "google_service_account_iam_member" "scheduler_token_creator" {
   service_account_id = google_service_account.etl.name
   role               = "roles/iam.serviceAccountTokenCreator"

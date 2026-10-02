@@ -14,6 +14,29 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-01 (dev) - The retry schedulers could never have run
+
+### Fixed
+- **Every `*-retry` scheduler has been rejected with `PERMISSION_DENIED`
+  (code=7) on every firing since the retries were introduced** — none has ever
+  started a job. The retry schedulers POST to the job's `:run` endpoint with an
+  `overrides` body (to set `RUN_MODE=retry`), and Cloud Run gates a request
+  carrying overrides on **`run.jobs.runWithOverrides`**, a separate permission
+  from the `run.jobs.run` that `roles/run.invoker` grants. The daily schedulers
+  send a bare `{}`, so they never needed it and always worked. The schedulers
+  report `ENABLED` the whole time — the refusal shows only in their `status` —
+  which is why this went unnoticed through 23 failed and 39 partial runs
+  (`job_run_log` has 0 `run_mode='retry'` rows since 2026-07-21).
+- **The fix** (`terraform/main.tf`): a custom project role
+  `plexEtlRunWithOverrides` holding `run.jobs.runWithOverrides` and nothing
+  else, bound to the ETL service account. `roles/run.developer` also carries
+  the permission but allows deploying and modifying Cloud Run services, which
+  the ETL account has no business doing. `roles/run.invoker` stays — this is
+  additive.
+- **Not yet deployed, and applying cleanly is not evidence it works.** The
+  first post-deploy retry must be checked for an actual `run_mode='retry'` row
+  in `job_run_log` (OPEN_ITEMS D2).
+
 ## 2026-09-30 (dev) - New-developer setup, backup coverage, onboarding guide
 
 ### Added

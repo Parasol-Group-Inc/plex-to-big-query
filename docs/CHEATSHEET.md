@@ -422,7 +422,7 @@ plex-to-big-query/
     scorecard_status.ps1   # does every scorecard tile have data behind it?
     distill_glossary.py    # builds docs/PLEX_GLOSSARY.md
     backup_to_bucket.ps1   # backs repo + local-only files up to GCS
-    build_logo_gs.py       # email logo assets
+    build_logo.py          # email logo asset (assets/vox-logo.png)
     pull_monday_board_snapshot.py, replicate_board_columns.py  # Monday.com helpers
   .githooks/                 # hooks.py (every lock + project file map), pre-commit, pre-push
   *.code-workspace           # 5 VS Code workspaces, one per folder (table above)
@@ -430,7 +430,7 @@ plex-to-big-query/
     cloudbuild.yaml        # image build + update all 27 jobs (_ALL_JOBS)
     setup.sh               # DEPRECATED bootstrap script, kept for reference (use terraform/)
     manual_data_app/       # [Scorecard] goals + safety-incident web app (Apps Script)
-    label_design_sync/     # [Label Design] BigQuery → Sheet → Monday sync (Apps Script)
+    archive/               # retired, kept for the record - label_design_sync/ (Apps Script)
     label_design_trigger/  # [Label Design] run-the-sync-on-demand web app (on dev-label-design)
   label-design/              # [Label Design] STATUS.md (read first), Monday board docs
   label_design_service/      # [Label Design] push service (reason-code parser + tests)

@@ -14,6 +14,43 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-02 (label-design) - The Sheet-based Apps Script is archived
+
+### Removed
+
+- **`deploy/label_design_sync/` moves to `deploy/archive/label_design_sync/`.**
+  The Sheet -> Monday Apps Script was superseded by `label_design_service/push.py`
+  on 2026-09-24 and has been marked "being retired" since 2026-09-25.
+
+  **It was safe to retire because its triggers could not reach Monday.com.**
+  `installTriggers()` only ever scheduled `checkForNewOrdersAuto` (reads
+  BigQuery, appends to the sheet's MONDAY tab, never touches Monday.com) and
+  `sendDailySummary`. The push, `pushToMondayAndArchiveManual`, was menu-only
+  by design. So unlike `deploy/goals_sheet_to_bigquery.gs` - deleted while its
+  trigger kept truncating a table - a forgotten trigger here could only have
+  refreshed a spreadsheet and sent email. No `[Label Design] Summary` email has
+  reached the recipient list since the changeover, so the triggers are gone.
+
+- **`scripts/build_logo_gs.py` -> `scripts/build_logo.py`**, and its `build_gs()`
+  half is removed. It wrote two things: `assets/vox-logo.png`, still attached
+  inline by `email_utils.py`, and `label_design_sync/Logo.gs`, the same bytes
+  as base64 for Apps Script. The second consumer is archived, so the frozen
+  `Logo.gs` in the archive is the last generated copy and nothing regenerates
+  it. The PNG half is untouched.
+
+### Changed
+
+- References re-pointed at the new path across `.githooks/hooks.py` (the
+  project-ownership regex), `.gitignore`, `CONTRIBUTING.md`, `README.md`,
+  `docs/CHEATSHEET.md`, `docs/reports/label_design_report.md`,
+  `label-design/README.md`, `label-design/monday_board_catalog.md`,
+  `label_design_service/push.py` and `terraform/main.tf`. The archived
+  documents' own banners now say archived rather than "being retired", and
+  their links out are corrected for the extra directory level.
+
+- New `deploy/archive/README.md`, modelled on `docs/archive/README.md`, with
+  the warning that archiving deployed code does not switch it off.
+
 ## 2026-10-02 (label-design) - Label Design runs Monday to Friday
 
 ### Changed

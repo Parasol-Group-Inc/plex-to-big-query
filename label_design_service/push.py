@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Label Design push — `label_design_report` (BigQuery) -> Monday board.
 
-Replaces the Google Sheet + Apps Script hop (deploy/label_design_sync/). Runs
+Replaces the Google Sheet + Apps Script hop (deploy/archive/label_design_sync/). Runs
 as its own Cloud Run job, scheduled after the Label Design ETL has refreshed
 the view:
 

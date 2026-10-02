@@ -26,7 +26,7 @@ def git(*args):
 # Anything not listed is SHARED (the ETL engine, reports/sql used by both,
 # terraform, CHANGELOG, docs) and may be committed from any branch.
 LABEL_DESIGN = re.compile(
-    r"^(label-design/|label_design_service/|deploy/label_design_sync/|deploy/label_design_trigger/"
+    r"^(label-design/|label_design_service/|deploy/archive/label_design_sync/|deploy/label_design_trigger/"
     r"|reports/(test/)?label_design\.yaml$|reports/sql/label_design_view\.sql$"
     r"|docs/reports/label_design_report\.md$|scripts/(copy_monday_board|label_design_test_data)\.py$"
     r"|meetings-reference/label-design/)")

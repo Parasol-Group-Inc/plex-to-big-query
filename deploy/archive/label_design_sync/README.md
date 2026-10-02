@@ -1,6 +1,6 @@
 # Label Design sync — BigQuery → Sheet → Monday
 
-> **Being retired (2026-09-25).** This describes the Sheet-based flow, which the push service (`label_design_service/push.py`) replaces once it is scheduled in prod. It stays accurate for the Apps Script that is still live until then. Current status: [`label-design/STATUS.md`](../../label-design/STATUS.md).
+> **Archived 2026-10-02 — kept for the record, not for use.** The Sheet-based Apps Script this describes is retired; the push service (`label_design_service/push.py`) replaced it. Nothing here runs: its Apps Script triggers only ever refreshed the sheet (`checkForNewOrdersAuto`) and emailed a summary — the Monday push was always menu-only — and no summary email has arrived since the changeover, so the triggers are gone. Don't follow this as instructions. Live information: [`label-design/STATUS.md`](../../../label-design/STATUS.md).
 
 > **Looking for the plain-English "how do I use the two buttons" guide
 > instead?** See [TEAM_GUIDE.md](./TEAM_GUIDE.md). This document is the

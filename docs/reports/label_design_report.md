@@ -66,7 +66,7 @@ list would miss exactly the new orders it exists to surface.
   job (`plex-etl-label-design-push-test`) that runs 30 minutes after the ETL and
   creates one Monday item per new order **line**, straight from this view. No
   sheet in between. It is test-only for now (PlexTest → the "Plex Import" board).
-- **Retired:** `deploy/label_design_sync/`, the Apps Script that used to decide
+- **Retired:** `deploy/archive/label_design_sync/`, the Apps Script that used to decide
   which rows were new, write them to a sheet, and push them to Monday.
 
 ## What lands on Monday
@@ -208,7 +208,7 @@ on the board is never pushed again. Every push is also recorded in the
 
 ## More detail
 
-- [`deploy/label_design_sync/README.md`](../../deploy/label_design_sync/README.md)
+- [`deploy/archive/label_design_sync/README.md`](../../deploy/archive/label_design_sync/README.md)
   — the Apps Script half: dedupe rules, tabs, notifications, the Monday traps.
 - [`CHANGELOG.md`](../../CHANGELOG.md) — 2026-09-11, 2026-09-12, 2026-09-24 and 2026-09-29 entries.
 - Test cases: `python scripts/label_design_test_data.py --inject`, then

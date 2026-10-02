@@ -5468,7 +5468,7 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
 # ═══════════════════════════════════════════════════════════════════════════
 # LABEL DESIGN → MONDAY PUSH — added 2026-09-24
 #
-# Replaces the Sheet + Apps Script hop (deploy/label_design_sync/). Same image
+# Replaces the Sheet + Apps Script hop (deploy/archive/label_design_sync/). Same image
 # as the ETL, different command: `python -m label_design_service.push` reads
 # `label_design_report` and creates one Monday item per new order + part,
 # deduped on an LCR hash written into the item itself. Every attempt is

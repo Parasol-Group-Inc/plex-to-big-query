@@ -49,9 +49,10 @@ links that open the record straight in Plex: `part_url`, `customer_po_url` and
 `vox.on.plex.com` on PlexProd. The status filters ignore stray spaces and
 capitals, so a status typed as " label design" still counts.
 
-Seven of its thirteen source tables are already extracted by `sales_orders`. They
-are extracted again here on purpose: this runs at midday, hours after that
-pipeline ran overnight, and a label-design queue built on a 14-hour-old order
+Nine of its fourteen source tables are already extracted by `sales_orders`.
+They are extracted again here on purpose: this runs through the working day,
+hours after that pipeline ran overnight, and a label-design queue built on a
+14-hour-old order
 list would miss exactly the new orders it exists to surface.
 
 - **Pipeline:** `reports/label_design.yaml` → `label_design_report`

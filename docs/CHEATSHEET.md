@@ -20,11 +20,11 @@ This pipeline **copies Plex ERP data into BigQuery** so the data team can query 
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report YAML/SQL the jobs read at run time. Terraform writes those objects from `reports/` on `main` (via `./scripts/deploy.sh`), so a YAML/SQL change needs **no image rebuild — but it does need a deploy**
 
-**13 pipelines** (`reports/*.yaml`) → **26 Cloud Run jobs** (prod + test each) →
-**52 schedulers** (each job has a `-retry` twin) → **68 BigQuery views**. The
+**13 pipelines** (`reports/*.yaml`) → **27 Cloud Run jobs** (prod + test each, plus the Label Design push job) →
+**51 schedulers** (every job but Label Design and its push has a `-retry` twin) → **68 BigQuery views**. The
 nightly cascade runs **7:00 PM → 10:50 PM Mountain** (`America/Denver`), 10
-minutes apart; Label Design runs twice a day at **9:30 AM and 1:30 PM**
-(test +10 min). Full schedule and run history:
+minutes apart; Label Design runs **hourly, 5 AM - 5 PM Mountain**
+(test at :05, push at :35). Full schedule and run history:
 [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be run by hand.
 
 ---
@@ -154,7 +154,7 @@ gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
 
 `SHORT_SHA` is **not** automatic on a local submit — only on a git-triggered
 build. The build pushes `etl:<sha>` + `etl:latest`, updates every job in
-`_ALL_JOBS` (all 26 — keep it in sync with `terraform/main.tf`), and
+`_ALL_JOBS` (all 27 — keep it in sync with `terraform/main.tf`), and
 smoke-tests `plex-etl-sales-orders-test` only; prod is never executed
 automatically. Terraform never moves images (`lifecycle.ignore_changes` on
 `image`). Manual build/push/update loop:
@@ -287,7 +287,7 @@ graph TB
 ```
 
 *Shown: the Sales Orders pipeline as a worked example — the same shape repeats
-for all 13 pipelines (26 jobs).*
+for all 13 pipelines.*
 
 ---
 
@@ -324,7 +324,7 @@ graph LR
 ```
 
 - **YAML is per-environment** (`reports/` vs `test/` in GCS, from `reports/*.yaml` vs `reports/test/*.yaml` in git — two hand-kept files, change both). **SQL is shared** (`sql/`).
-- **Failure retry:** each of the 26 jobs has a `-retry` scheduler at **9:45 PM Mountain** that re-runs the job only if today's scheduled run genuinely FAILED (not PARTIAL), checked against `job_run_log`. See [OPERATIONS.md → Failure Retry](OPERATIONS.md#failure-retry-945-pm-mountain).
+- **Failure retry:** each of the 24 non-Label-Design jobs has a `-retry` scheduler at **9:45 PM Mountain** that re-runs the job only if today's scheduled run genuinely FAILED (not PARTIAL), checked against `job_run_log`. See [OPERATIONS.md → Failure Retry](OPERATIONS.md#failure-retry-945-pm-mountain).
 - **Naming:** jobs `plex-etl-<pipeline>[-test]`; schedulers `plex-<pipeline>-sync[-test][-retry]`. Names are immutable — a rename is a destroy/recreate (CLAUDE.md → *Job naming*).
 
 ## Active Reports
@@ -343,7 +343,7 @@ graph LR
 | `sales_quotes` | `plex-etl-sales-quotes` | 10:00 / 10:10 PM | 2 | 1 | `sales_quotes_open_report` |
 | `sales_returns` | `plex-etl-sales-returns` | 10:20 / 10:30 PM | 2 | 1 | `sales_returns_open_report` |
 | `quality_supplier_returns` | `plex-etl-quality-supplier-returns` | 10:40 / 10:50 PM | 3 | 1 | `quality_supplier_returns_pending_report` |
-| `label_design` | `plex-etl-label-design` | 9:30 AM + 1:30 PM / 9:40 AM + 1:40 PM | 12 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
+| `label_design` | `plex-etl-label-design` | hourly 5 AM - 5 PM / hourly :05 | 14 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
 
 Counts are `grep -c -E '^\s*-\s*plex_view:'` and the `bq_view` entries per
 YAML; `scorecard_goals_resolved` is listed in both `sales_orders` and
@@ -427,7 +427,7 @@ plex-to-big-query/
   .githooks/                 # hooks.py (every lock + project file map), pre-commit, pre-push
   *.code-workspace           # 5 VS Code workspaces, one per folder (table above)
   deploy/
-    cloudbuild.yaml        # image build + update all 26 jobs (_ALL_JOBS)
+    cloudbuild.yaml        # image build + update all 27 jobs (_ALL_JOBS)
     setup.sh               # DEPRECATED bootstrap script, kept for reference (use terraform/)
     manual_data_app/       # [Scorecard] goals + safety-incident web app (Apps Script)
     label_design_sync/     # [Label Design] BigQuery → Sheet → Monday sync (Apps Script)
@@ -610,8 +610,8 @@ To discover view names: open **Plex SQL Dev** → expand the database tree → r
 
 | GCP Service | What it is (in general) | What it does in this pipeline |
 |---|---|---|
-| **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery (26 jobs, one shared image) |
-| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers each job (the nightly cascade, Label Design twice a day, and a 9:45 PM `-retry` per job — see Active Reports) |
+| **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery (27 jobs, one shared image) |
+| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers each job (the nightly cascade, Label Design hourly 5 AM - 5 PM, and a 9:45 PM `-retry` per job except Label Design — see Active Reports) |
 | **BigQuery** | Serverless data warehouse — query terabytes with SQL, pay per query | Stores the raw Plex tables + the views the data team queries (`PlexProd`, `PlexTest`, `ScorecardSandbox`) |
 | **Cloud Storage (GCS)** | Object storage — like S3, stores files | `voxdatalake-report-configs`: YAML configs and view SQL (written by Terraform); `voxdatalake-terraform-state`: Terraform state |
 | **Secret Manager** | Encrypted secret store | Stores the Plex IAM token and SendGrid API key |

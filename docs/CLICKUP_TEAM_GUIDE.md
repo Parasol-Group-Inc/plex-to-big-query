@@ -41,7 +41,7 @@ Console: https://console.cloud.google.com/home/dashboard?project=voxdatalake
 
 ### The four pipelines
 
-Note: this table predates several newer Cloud Run jobs added since 2026-07-20 (purchasing, part obsolescence, inventory activity/snapshot, quality nonconformance, part on-hand inventory) — see docs/EMAIL_SCHEDULE.md for the complete current picture of all 16 jobs.
+Note: this table predates several newer Cloud Run jobs added since 2026-07-20 (purchasing, part obsolescence, inventory activity/snapshot, quality nonconformance, part on-hand inventory) — see docs/EMAIL_SCHEDULE.md for the complete current picture of all 27 jobs.
 
 | Job | What | Writes to | Schedule (Mountain) |
 |---|---|---|---|

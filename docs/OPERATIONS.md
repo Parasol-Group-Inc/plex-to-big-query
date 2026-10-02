@@ -29,8 +29,8 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-13 pipelines, 26 Cloud Run jobs (prod + test), 68 BigQuery views. Schedule
-for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
+13 pipelines, 27 Cloud Run jobs (prod + test, plus the Label Design push
+job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
@@ -206,7 +206,7 @@ FROM `{gcp_project}.{dataset}.raw_Purchasing_v_PO` po
 
 **Use `SAFE_CAST` for all numeric JOIN keys and aggregated columns:**
 
-BigQuery autodetects schema when tables first populate. Empty tables get all-STRING schema; populated tables get proper types (INT64, FLOAT64). If one table populates before another, a JOIN on uncast columns throws a type error.
+BigQuery autodetects schema from the row values when a table populates, so populated tables get proper types (INT64, FLOAT64). Since 2026-08-23 an empty table is typed from Plex's real ODBC column types (`cursor.description`) instead of all-STRING, but a populated column can still land as a different type than you assumed (e.g. a nullable int arriving as FLOAT64) and a JOIN on uncast columns then throws a type error.
 
 ```sql
 -- Joining on a key that might be STRING in one table and INT64 in another:
@@ -313,7 +313,7 @@ never in the subject — check the body for those.
 | Cloud Run jobs (13 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
 | Schedulers | `plex-<pipeline>-sync` | `plex-<pipeline>-sync-test` |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
-| Failure retry (all 26 jobs) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
+| Failure retry (24 jobs — every one but Label Design and its push) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report config (YAML) | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -365,7 +365,7 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 
 ## Failure Retry (9:45 PM Mountain)
 
-All 26 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
+24 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
 `America/Denver`** (handles the MST/MDT switch automatically — no manual
 adjustment needed). The naming is uniform — `plex-<pipeline>-sync-retry`
 retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
@@ -376,7 +376,12 @@ retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
 | `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (prod) |
 | `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (test) |
 | `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
-| … one pair per pipeline, 52 schedulers in all | |
+| … one pair per pipeline except Label Design, 51 schedulers in all | |
+
+**Label Design has no retry trigger** (both were removed 2026-10-01). It runs
+hourly behind a change probe, and a failed or partial run leaves the stored
+fingerprint where it was, so the next hourly probe sees a difference and runs
+again — the probe is the retry.
 
 **How it decides whether to actually do anything:** the retry trigger
 re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution
@@ -398,9 +403,8 @@ treated as "the run needs to happen again."
 > **Caution — "today" is the UTC date, and some jobs run after the retry.**
 > `run_date` and the check both use UTC. A job scheduled *after* 9:45 PM
 > Mountain (sales quotes, sales returns, quality supplier returns, and
-> `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM), or one whose
-> scheduled runs land on the previous UTC day (Label Design, 9:30 AM / 1:30 PM),
-> has no "scheduled run today" when its retry fires — so, reading the code, the
+> `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM) has no
+> "scheduled run today" when its retry fires — so, reading the code, the
 > retry does a full run and sends an email every night. Confirm against
 > `job_run_log` (query below, `run_mode = 'retry'`) before relying on the
 > retry for those pipelines.
@@ -427,7 +431,7 @@ gcloud scheduler jobs resume plex-sales-orders-sync-retry --location=us-central1
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /
 `retry_time_zone` in `terraform.tfvars` (live values: `"45 21 * * *"` /
 `"America/Denver"`; the `variables.tf` defaults are `"0 6 * * *"` /
-`"America/Denver"`) — applies to all 26 retry schedulers at once — back up
+`"America/Denver"`) — applies to all 24 retry schedulers at once — back up
 `terraform.tfvars` (its header has the command), then `./scripts/deploy.sh`
 from the primary folder. `terraform.tfvars` exists only there.
 

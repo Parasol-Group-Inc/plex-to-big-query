@@ -4,7 +4,7 @@ Last reviewed: 2026-09-25
 
 > **Scope check:** this walks through bootstrapping the pipeline **from
 > zero** in a **new GCP project**. One deploy creates the whole stack — 13
-> pipelines, 26 Cloud Run jobs, 52 schedulers — though the walkthrough follows
+> pipelines, 27 Cloud Run jobs, 51 schedulers — though the walkthrough follows
 > one job (`plex-etl-sales-orders`) as its example. It's the right doc for a
 > first-time setup (a new GCP project, disaster recovery) or for understanding
 > how the pieces fit together. **Don't run it against the existing
@@ -55,7 +55,7 @@ If you're coming from frontend, here's a mental model for each service this pipe
 |---|---|---|
 | **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
 | **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
-| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — this deployment's evening cascade runs 12 pipelines between 7:00 PM and 10:50 PM America/Denver (Mountain), plus Label Design at 9:30 AM / 1:30 PM and a 9:45 PM retry for every job; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — this deployment's evening cascade runs 12 pipelines between 7:00 PM and 10:50 PM America/Denver (Mountain), plus Label Design hourly 5 AM - 5 PM and a 9:45 PM retry for every job except Label Design; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
 | **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
 | **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
 | **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |
@@ -110,8 +110,6 @@ plex_odbc_user = "edominguez.parasol"
 image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
 ```
 
-> **Fix the Sales Orders job names.** `terraform.tfvars.example` still sets `cloud_run_job`, `cloud_run_job_test`, `scheduler_job` and `scheduler_job_test` to the names retired on 2026-09-04 (`plex-etl`, `plex-etl-test`, `plex-daily-sync`, `plex-daily-sync-test`). Delete those four lines so the `variables.tf` defaults apply (`plex-etl-sales-orders`, `plex-etl-sales-orders-test`, `plex-sales-orders-sync`, `plex-sales-orders-sync-test`) — every command in this guide uses those.
-
 > **`image_url` before pushing:** Set it to the correct format now even though the image doesn't exist yet. Terraform creates the Cloud Run job definition and you'll push the actual image in Step 2. The job will show an error if triggered before then, which is expected.
 
 ### 1.2 Initialize and deploy
@@ -135,10 +133,10 @@ slowest part.
 - A service account (`plex-etl-sa`) with permissions to read secrets, write to BigQuery, and pull from Artifact Registry
 - `PlexProd` and `PlexTest` datasets, each with a `sync_metadata` table (`job_run_log` is created by the job on its first run)
 - An Artifact Registry repo to store your Docker image
-- Five Secret Manager secret containers (empty for now — you'll fill them in 1.3)
+- Six Secret Manager secret containers (empty for now — you'll fill them in 1.3)
 - The report-configs bucket and every `reports/` YAML and SQL file in it
-- 26 Cloud Run job definitions (13 pipelines × prod/test) pointing at your image
-- 52 Cloud Scheduler jobs (a daily trigger and a 9:45 PM Mountain retry per job)
+- 27 Cloud Run job definitions (13 pipelines × prod/test, plus the Label Design push job) pointing at your image
+- 51 Cloud Scheduler jobs (a daily trigger per job, a 9:45 PM Mountain retry on every job except Label Design and its push)
 
 > **If the deploy fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `./scripts/deploy.sh`.
 
@@ -147,7 +145,7 @@ slowest part.
 **Verify in GCP Console:**
 - Console → **IAM & Admin → Service Accounts** → you should see `plex-etl-sa@voxdatalake.iam.gserviceaccount.com`
 - Console → **BigQuery** → `voxdatalake` → `PlexTest` dataset
-- Console → **Secret Manager** → five secrets: `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code` (all with 0 versions — empty containers)
+- Console → **Secret Manager** → six secrets: `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `monday-api-key` (all with 0 versions — empty containers)
 
 ### 1.3 Store the IAM token in Secret Manager
 
@@ -233,7 +231,7 @@ The ODBC driver is **not in git** — it must be present in `driver/` on your ma
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 26 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 27 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
 
 You only need to rebuild when **code or files inside the image change**:
 - `main.py`, `email_utils.py`, `templates/report.html` — Python logic or email design
@@ -341,7 +339,7 @@ gcloud scheduler jobs run plex-sales-orders-sync --location=us-central1 --projec
 
 ## Step 6 — CI/CD with Cloud Build (optional)
 
-`deploy/cloudbuild.yaml` builds the image, pushes it, moves all 26 jobs onto it (`deploy-all`), and smoke-tests `plex-etl-sales-orders-test`. This project runs it **by hand**, from the primary folder on an up-to-date `main`, after the preflight:
+`deploy/cloudbuild.yaml` builds the image, pushes it, moves all 27 jobs onto it (`deploy-all`), and smoke-tests `plex-etl-sales-orders-test`. This project runs it **by hand**, from the primary folder on an up-to-date `main`, after the preflight:
 
 ```bash
 ./scripts/deploy_preflight.sh
@@ -367,7 +365,7 @@ gcloud storage cp -r driver/* gs://voxdatalake-build-assets/plex-odbc-driver/
 - Configuration: **Cloud Build configuration file** → `deploy/cloudbuild.yaml`
 - Click **Create**
 
-With a trigger, every `git push origin main` rebuilds and redeploys the image to all 26 jobs — which is only safe because nothing reaches `main` except reviewed merges (`CONTRIBUTING.md`).
+With a trigger, every `git push origin main` rebuilds and redeploys the image to all 27 jobs — which is only safe because nothing reaches `main` except reviewed merges (`CONTRIBUTING.md`).
 
 ---
 
@@ -477,7 +475,7 @@ Then update `terraform.tfvars` to match so the next `./scripts/deploy.sh` doesn'
 **Tear down all infrastructure** (move to a different GCP project):
 See [TEARDOWN.md](TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 13 pipelines (26 Cloud Run jobs, prod+test, 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 13 pipelines (27 Cloud Run jobs — prod+test for each, plus the Label Design push job — and 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
 - **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
 - **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
 - **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

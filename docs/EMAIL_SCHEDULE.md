@@ -33,7 +33,7 @@ page.
 
 - **13 pipelines, 27 Cloud Run Jobs** (prod + test, plus the Label Design push
   job), 68 BigQuery views. Twelve pipelines run once a day in an evening
-  cascade; **Label Design runs hourly, 5 AM - 5 PM Mountain** (prod at :00,
+  cascade; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
   test at :05, push at :35).
 - **Every evening-cascade run sends one email** — so a normal day is **24
   scheduled emails**, plus whatever the 9:45 PM retries send (see the caution
@@ -61,7 +61,7 @@ but see the caution below the table.
 
 | Category | Pipeline | Reports produced (email body lists each by this name) | Prod job | Prod time | Test job | Test time |
 |---|---|---|---|---|---|---|
-| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | hourly 5 AM - 5 PM | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM |
+| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | hourly 5 AM - 5 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
 | **Sales** | `sales_orders` | 27 reports — see `bq_view` in `reports/sales_orders.yaml` | `plex-etl-sales-orders` | 7:00 PM | `plex-etl-sales-orders-test` | 7:10 PM |
 | **Production** | `work_orders` | 19 reports — see `bq_view` in `reports/work_orders.yaml` | `plex-etl-work-orders` | 7:20 PM | `plex-etl-work-orders-test` | 7:30 PM |
 | **Supply Chain** | `purchasing_open_orders` | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 7:40 PM | `plex-etl-purchasing-open-orders-test` | 7:50 PM |

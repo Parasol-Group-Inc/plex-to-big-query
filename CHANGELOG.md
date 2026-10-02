@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-02 (label-design) - Label Design runs Monday to Friday
+
+### Changed
+
+- **The three Label Design schedules narrow to weekdays** (`* * 1-5`):
+  `plex-label-design-sync` (:00), `plex-label-design-sync-test` (:05) and
+  `plex-label-design-push-sync-test` (:35), all still hourly 5 AM - 5 PM
+  Mountain. Closes OPEN_ITEMS L9, which had been half-answered since
+  2026-10-01 - Jennilyn gave the hours, not the days.
+
+  The block comment above these resources used to argue the opposite, that
+  Saturday and Sunday had to be included or the team would find a two-day-stale
+  queue on Monday morning. The 5 AM start retired that argument: Monday's first
+  run sweeps up the weekend before anyone arrives. Weekend orders now reach the
+  board Monday at 5 AM, which is intended while nobody works the queue then.
+
+  Schedule-only - no image rebuild. Ships with `./scripts/deploy.sh`.
+
 ## 2026-10-01 (label-design, later) - The hourly window moves to 5 AM - 5 PM
 
 Jennilyn: the labeling team starts at 5 AM. The window shipped this morning

@@ -11,6 +11,21 @@
 
 ---
 
+## UPDATE — 2026-10-02: weekdays only
+
+The three Label Design schedules now run Monday to Friday (`* * 1-5`), still
+hourly 5 AM - 5 PM Mountain. This closes the last open question from the
+2026-10-01 change: Jennilyn gave the hours that day but not the days, so it
+had been running Saturday and Sunday in the meantime.
+
+The original rationale for seven days was that orders are entered over the
+weekend and a weekday-only refresh would hand the team a stale queue on Monday
+morning. The 5 AM start answers that — Monday's first run sweeps up the weekend
+before the team arrives. If anyone starts working the queue at weekends, all
+three schedules have to move back together.
+
+---
+
 ## UPDATE — 2026-10-01: hourly, behind a change probe
 
 The queue refreshes within the hour now, not at 9:30 and 1:30. Running the

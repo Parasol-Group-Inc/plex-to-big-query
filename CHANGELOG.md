@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-01 (scorecard) - Manual Data app: the "already saved" panel stacked
+
+### Fixed
+- **The "what is already saved" panel was added again on every render.** It
+  sits above `#form` rather than inside it, so `renderForm()`'s
+  `form.innerHTML = ''` never cleared it, while `wireCurrentView()` inserted a
+  fresh copy each time. Every tab click, Save and Clear therefore left another
+  copy behind — most visible on **Safety incidents**, where re-clicking the
+  tab piled up "No incidents logged yet…" messages (and duplicate
+  `#currentview` ids with them). `wireCurrentView()` now removes the previous
+  panel before inserting its own.
+- **Out-of-order lookups could paint a stale answer.** `getCurrentValue` and
+  `getRepGoalSum` fire on every driver-field change and `google.script.run`
+  gives no ordering guarantee, so changing the month twice quickly could leave
+  the first answer on screen. Both now carry a sequence token and only the
+  newest response paints.
+
+### Changed
+- **Tabs are now real tabs.** The tab bar already used `role="tablist"` /
+  `role="tab"` without the rest of the pattern: the card is now the
+  `role="tabpanel"` it labels, tabs carry `aria-controls` plus a roving
+  `tabindex`, and ←/→ move between them.
+- `wireCurrentView()` resolves the card by `#panel` instead of
+  `querySelector('.card')` — the setup screen renders a `.card` of its own.
+- `say()` no longer emits `class="msg "` with a trailing space for the
+  neutral "Saving…" state.
+
 ## 2026-10-01 (dev) - The retry schedulers could never have run
 
 ### Fixed

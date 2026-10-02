@@ -14,6 +14,49 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-02 (sandbox) - Goal tables seeded so every goal tile has a number
+
+Found by querying both datasets rather than trusting the Migration Board:
+**`PlexProd` held no manual data at all** — 0 goals in either table, 0
+turnaround standards — and `PlexProd.safety_incidents` **did not exist**.
+In `PlexTest`, the 12 revenue goals the board still advertises were gone
+(the app table is `WRITE_TRUNCATE` from its sheet, and the 2026-09-24
+legacy import rebuilt it with sales rows only).
+
+### Added
+- **The 68 real sales goals copied `PlexTest` -> `PlexProd`**
+  (`scorecard_goals`), provenance columns preserved.
+- **Reference placeholders, clearly labelled**, so the tiles render a number
+  before the real targets are negotiated:
+  - revenue, 12 months of 2026, both datasets - a copy of the company-wide
+    sales goal (12 rows each);
+  - production, 12 months x `Encapsulating` / `Bottling` / `Labeling`, both
+    datasets - the live scorecard board's 100M / 1.5M / 700K (36 rows each);
+  - `PlexProd.turnaround_standards` - the same three labelled placeholder
+    rows `PlexTest` already had.
+  - Every placeholder row carries `updated_by = 'PLACEHOLDER (not a real
+    goal)'` and a `note` saying so, which is what the Manual Data app shows
+    above the entry fields.
+- **`PlexProd.safety_incidents` created** with `PlexTest`'s schema. Open item
+  S2 (pointing the app at `PlexProd`) would have failed without it.
+
+**They are in the legacy `scorecard_goals` table on purpose, not
+`scorecard_goals_app`.** `scorecard_goals_resolved` prefers the app, so a
+real goal entered in the form overrides its placeholder automatically, and
+the app's truncate-and-push cannot wipe them meanwhile.
+
+### Verified
+Through the views, not the tables: `PlexProd.scorecard_goals_resolved` now
+returns 68 sales / 12 revenue / 36 production; `production_vs_goal_report`
+36 rows and `sales_vs_goal_report` 68 in test; 28 nonconformances now match
+a turnaround standard instead of `none set`.
+
+**`revenue_vs_goal_report` is still 0 rows, and the fill cannot change
+that** - it is driven `FROM actual LEFT JOIN goal`, and
+`sales_revenue_summary_report` has 0 rows in *both* datasets. A month with a
+goal and no revenue does not appear at all. Worth deciding whether that
+should be a FULL JOIN, so a missed month reads 0% rather than vanishing.
+
 ## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
 
 ### Added

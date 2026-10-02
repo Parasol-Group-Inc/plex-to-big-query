@@ -27,15 +27,16 @@ and `CHANGELOG.md`.
 | # | Item | Owner | Next step |
 |---|---|---|---|
 | S1 | **Disable the old goals Apps Script project** (the one that pushed `deploy/goals_sheet_to_bigquery.gs`). Its trigger can still truncate `scorecard_goals`. | Emilio | Apps Script → that project → Triggers → delete; or archive the project. |
-| S2 | **Point the manual-data app at PlexProd** once goals are confirmed. | Emilio | Set Script Property `BQ_DATASET=PlexProd`, then run `pushAll()`. `importLegacyGoals()` is **not** needed for prod: `PlexProd.scorecard_goals` is empty and the legacy goals were already imported through the shared sheet. |
-| S3 | **Revenue goal** is a copy of the company sales goal. | Jennilyn | Confirm there is a separate revenue target, or keep the copy. |
-| S4 | **Production goals are empty** in the app. The sandbox uses the live board's 100M / 1.5M / 700K. | Jennilyn | Enter the real monthly goals for Encapsulating, Bottling and Labeling, and say whether other areas have goals. |
+| S2 | **Point the manual-data app at PlexProd** once goals are confirmed. `PlexProd.safety_incidents` was missing and was created 2026-10-02; without it the incidents push would have failed. | Emilio | Set Script Property `BQ_DATASET=PlexProd`, then run `pushAll()`. `importLegacyGoals()` is **not** needed for prod: `PlexProd.scorecard_goals` is empty and the legacy goals were already imported through the shared sheet. |
+| S3 | **Revenue goal** is a copy of the company sales goal. Seeded 2026-10-02 as a labelled placeholder in both datasets, so the tile has a number. | Jennilyn | Confirm there is a separate revenue target, or keep the copy. Enter the real figures in the app's Revenue tab — they override the placeholder automatically. |
+| S4 | **Production goals are placeholders.** 2026-10-02: the live board's 100M / 1.5M / 700K seeded for all 12 months of 2026 in both datasets, labelled as not real. | Jennilyn | Enter the real monthly goals for Encapsulating, Bottling and Labeling in the app's Production tab, and say whether other areas have goals. |
 | S5 | **A goal scoped "Sales Representative"** matches no person. | Jennilyn | Reassign or delete it. |
 | S6 | **Safety incidents**: nothing logged since the 7/23 recordable. | Jennilyn | Name who logs them. An empty log reads as a clean record. |
-| S7 | **TAT standards** are placeholders, and it's unclear which grouping applies: the old sheet's bottle types or Plex stock types. | Jennilyn / Quality | Supply the real Performance/Bonus days and the grouping. |
+| S7 | **TAT standards** are placeholders in **both** datasets now (prod seeded 2026-10-02; 28 records match a standard instead of reading `none set`), and it's unclear which grouping applies: the old sheet's bottle types or Plex stock types. | Jennilyn / Quality | Supply the real Performance/Bonus days and the grouping; edit `turnaround_standards` directly in BigQuery. |
 | S8 | **Destruction $ / Rework $**: Quality types the amounts into NC descriptions, so `Cost` is 0.00. | Quality | Use Plex's Cost field. The views' missing-cost flag now surfaces it. |
 | S9 | **No home for:** the lab TAT target, the DPMO opportunities per unit (currently 1), and the pipeline stage probabilities. | Jennilyn | Decide each. |
 | S10 | **Inventory value has no month-end trend.** `Part_v_Snapshot` has no quantity, so only the current snapshot is valued. | Decision | Store a daily on-hand copy, or find a Plex inventory-history source. The interim answer is NetSuite. |
+| S12 | **`revenue_vs_goal_report` drops a month that has a goal but no revenue** — it is built `FROM actual LEFT JOIN goal`, and revenue actuals are 0 rows in both datasets, so the tile is empty even now that 12 goals resolve. | Decision | Decide whether a goal month with no revenue should read 0%: that is a FULL JOIN, matching how `production_vs_goal_report` behaves. |
 | S11 | **Looker Studio report** to be built against `voxdatalake.ScorecardSandbox`. | Emilio | The tile-by-tile build list is in the findings doc. |
 
 ## Label Design

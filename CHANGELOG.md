@@ -37,6 +37,78 @@ don't need an entry.
   first post-deploy retry must be checked for an actual `run_mode='retry'` row
   in `job_run_log` (OPEN_ITEMS D2).
 
+## 2026-10-01 (label-design, later) - The hourly window moves to 5 AM - 5 PM
+
+Jennilyn: the labeling team starts at 5 AM. The window shipped this morning
+(7 AM - 6 PM) missed their first two hours entirely — an order sitting in Label
+Design at 5 AM waited until 7:35 to reach the board.
+
+### Changed
+- **`plex-label-design-sync` `0 5-17`, `-sync-test` `5 5-17`,
+  `plex-label-design-push-sync-test` `35 5-17`** (Mountain). Two hours earlier,
+  one hour shorter at the end; 13 runs a day instead of 12. Last board update
+  of the day is 5:35 PM — the push keeps its 30-minute offset behind the ETL,
+  so "ends at 5 PM" means the 5 PM cycle still completes.
+- `docs/reports/label_design_report.md` says 5 AM - 5 PM.
+
+Still **seven days a week** — nobody has said yet whether the queue is worked
+at weekends (OPEN_ITEMS L9). Cheap to leave running: a weekend probe that finds
+nothing costs seconds and no Monday API calls.
+
+Schedule-only. No code change, so **no image rebuild** — `./scripts/deploy.sh`
+is the whole deploy.
+
+## 2026-10-01 (label-design) - Hourly, behind a change probe
+
+The queue now refreshes within the hour instead of at 9:30 and 1:30, without
+costing 6x the Plex load: each run first asks Plex one small question and stops
+if the answer hasn't moved. **Deployed 2026-10-01** (image `etl:6ef09f5`,
+`./scripts/deploy.sh`). Verified in `PlexTest.probe_log`: one `applied` on
+the first run, then `skipped` on every hourly run since, same fingerprint,
+no `inconclusive` rows.
+
+### Added
+- **A `probe:` block in a report config** (`main.py`: `run_probe`,
+  `validate_probe_query`, `probe_log`). Tiny aliased `SELECT`s whose combined
+  result is fingerprinted; when the fingerprint matches the last clean run's,
+  the whole extraction is skipped. A query may `bind:` its single column into a
+  later query's filter as a comma-separated list of integers. Opt-in per
+  report — a config without a `probe:` block behaves exactly as before.
+- **`<dataset>.probe_log`** (created on first run): one row per probe —
+  `skipped`, `applied`, `failed` or `inconclusive`, with the fingerprint.
+- **Label Design's probe**: the set of `Sales_v_Release` lines sitting on the
+  `Label Design` release status — the only thing that can produce a new Monday
+  item, since the push only ever creates items and never updates them. The key
+  SET, not a count (a count misses one-in-one-out) and not `Update_Date`
+  (nothing guarantees Plex stamps it on a status change).
+- **A BigQuery gate in the push** (`push.py`: `pending_count`). Counts the view
+  rows whose LCR the audit table has never recorded — `lcr_hash()` as SQL — and
+  returns before reading the Monday API key or paging the board when that is 0.
+  It can over-count (a hand-typed item has no audit row), never under-count.
+- **`EMAIL_MODE=on_error`** (`main.py`), set on both Label Design ETL jobs: a
+  clean run is recorded in `job_run_log` / `probe_log` and sends no mail. A
+  partial or failed run still mails.
+
+### Changed
+- **Hourly schedules, 7 AM - 6 PM Mountain**: `plex-label-design-sync` at :00,
+  `-test` at :05, `plex-label-design-push-sync-test` at :35 (the push keeps its
+  30-minute offset — the ETL's worst case is two 600s attempts).
+
+### Removed
+- **`plex-label-design-sync-retry` and `plex-label-design-sync-test-retry`.**
+  The fingerprint is stored as `applied` only after a clean run, so a failed or
+  partial run leaves the reference untouched and the next hourly probe sees a
+  difference and re-runs — a retry within the hour instead of at 9:45 PM, and
+  one that also covers a run that never started. (That trigger had never
+  produced a run: OPEN_ITEMS D2.) Every other pipeline keeps its `-retry`
+  scheduler and the `RUN_MODE=retry` path, which is untouched.
+
+### Fail-open, by design
+A probe that can't be evaluated — the status renamed, a query erroring, a bind
+resolving to nothing — logs `inconclusive` and runs the full extraction. A
+probe may slow things down; it may never be the reason a change is missed.
+Worth a look now and then:
+`SELECT * FROM PlexTest.probe_log WHERE outcome = 'inconclusive' ORDER BY probed_at DESC`
 ## 2026-09-30 (dev) - New-developer setup, backup coverage, onboarding guide
 
 ### Added
@@ -109,13 +181,16 @@ deployed** (OPEN_ITEMS L5).
 - No prod items exist yet, so there is nothing to migrate there.
 
 ### Test data
+- `label_design_test_data.py` reads the Monday key from Secret Manager
+  (`monday-api-key`) when neither the environment nor `.env` has one, so no
+  more `export MONDAY_API_KEY=…` before `--delete` / `--status`.
 - New case 1104: the same customer part on two lines of one order gives two
   rows. `--check` matches rows by `(order, po_line_key)`.
 
 ## 2026-09-29 (label-design, later) - Part line in Description; Bottle Material from the BOM
 
-Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**
-(OPEN_ITEMS L5): `./scripts/deploy.sh`, then rebuild the push image.
+Ashley's review of the first real Plex test orders (#4-#7). **Deployed**
+2026-09-30 (`deploy/2026-09-30T1551Z`); end-to-end confirmation is OPEN_ITEMS L5.
 
 ### Added
 - **`label_design_report`:** `part_name`, `line_description` ("93001-00KAYAN-0
@@ -145,9 +220,10 @@ Ashley's review of the first real Plex test orders (#4-#7). **Not deployed**
 
 ## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
 
-**Not deployed** (OPEN_ITEMS L5). Needs `./scripts/deploy.sh` from `main`
-and a rebuilt push image, since `push.py` changed too. Merged with the
-2026-09-25/26 entries below, which added the keys and `Part_v_Part` first.
+**Deployed** 2026-09-30 (`deploy/2026-09-30T1551Z`), with a rebuilt push image
+since `push.py` changed too; end-to-end confirmation is OPEN_ITEMS L5. Merged
+with the 2026-09-25/26 entries below, which added the keys and `Part_v_Part`
+first.
 
 ### Added
 - **`label_design_report`:** `reason_code`,

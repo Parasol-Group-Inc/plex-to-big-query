@@ -11,6 +11,38 @@
 
 ---
 
+## UPDATE — 2026-10-01: hourly, behind a change probe
+
+The queue refreshes within the hour now, not at 9:30 and 1:30. Running the
+existing job 12x a day would have meant 12 x 14 full Plex table pulls, so each
+run starts with a cheap question instead:
+
+- **ETL**: two small `SELECT`s — which release status is "Label Design", and
+  which release lines sit on it — fingerprinted as a SET. Same set as the last
+  clean run? The job stops there, logs `skipped` to `probe_log`, and pulls
+  nothing. Typical day: ~10 probes of a few seconds, 1-3 real runs.
+- **Push**: one BigQuery count of view rows whose LCR the audit table has never
+  seen. Zero means it returns before reading the Monday key or paging the
+  board, so a quiet hour costs no Monday API calls at all.
+- **No retry trigger any more.** The fingerprint only advances after a clean
+  run, so a failed or partial run is picked up by the next hourly probe — a
+  retry within the hour rather than at 9:45 PM.
+- **No email on a clean run** (`EMAIL_MODE=on_error`). Failures and partials
+  still mail. Everything else is in `job_run_log` and `probe_log`.
+
+Fail-open: anything that stops the probe being evaluated (the status renamed,
+a query erroring) logs `inconclusive` and runs the full extraction. Worth
+checking occasionally — a permanently inconclusive probe is 12 full runs a day
+that look like success:
+
+```sql
+SELECT * FROM `voxdatalake.PlexTest.probe_log` ORDER BY probed_at DESC LIMIT 20
+```
+
+Deployed 2026-10-01 and confirmed live: `probe_log` shows one `applied` run
+followed by `skipped` on every hourly run since, on the same fingerprint.
+See CHANGELOG 2026-10-01.
+
 ## UPDATE — 2026-09-30: Ashley's answers — one item per order line; Sales Rep = status column
 
 - **One Monday item per order LINE**, even when two lines carry the same part.

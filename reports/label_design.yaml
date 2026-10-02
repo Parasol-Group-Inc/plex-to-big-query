@@ -20,6 +20,39 @@ description: "VOX | Label Design queue for the Monday holding board — prod (Pl
 # miss exactly the new orders it exists to surface.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CHANGE PROBE — added 2026-10-01, so this pipeline can run HOURLY.
+#
+# Two tiny queries that fingerprint the only thing that can produce a new
+# Monday item: the set of release lines sitting on the 'Label Design' release
+# status. When the fingerprint matches the last clean run's, main.py skips all
+# 14 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
+#
+# Why the key SET and not a count or a MAX(Update_Date): a count misses
+# one-in-one-out, and nothing guarantees Plex stamps Update_Date on a status
+# change. A line entering the set changes the fingerprint; a line leaving it
+# changes it too, which costs one needless run and no correctness.
+#
+# Why probing the release status is enough: the push only ever CREATES Monday
+# items, never updates them, so a note or part attribute edited after an order
+# was pushed could not reach the board anyway.
+#
+# The status label is matched exactly. If Plex ever renames it, the bind
+# resolves to nothing, the probe is INCONCLUSIVE, and the full extraction runs
+# — the probe can slow things down, never drop a change. Watch for that with:
+#   SELECT * FROM <dataset>.probe_log WHERE outcome = 'inconclusive'
+# ─────────────────────────────────────────────────────────────────────────────
+probe:
+  queries:
+    - plex_view: Sales_v_Release_Status
+      columns: [Release_Status_Key]
+      filter: "WHERE t.Release_Status = 'Label Design'"
+      bind: status_keys
+
+    - plex_view: Sales_v_Release
+      columns: [Release_Key, PO_Line_Key]
+      filter: "WHERE t.Release_Status_Key IN ({status_keys})"
+
 extractions:
   - plex_view: Sales_v_PO
     bq_table: raw_Sales_v_PO

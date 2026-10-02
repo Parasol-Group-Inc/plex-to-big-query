@@ -1,6 +1,7 @@
 import os
 import re
 import decimal
+import hashlib
 import logging
 from datetime import date, datetime, time, timezone
 from typing import Optional
@@ -51,6 +52,12 @@ REPORT_CONFIG_GCS_PATH = os.environ.get("REPORT_CONFIG_GCS_PATH", "")
 # of running the full ETL again. See docs/OPERATIONS.md for the design.
 RUN_MODE          = os.environ.get("RUN_MODE", "scheduled")
 JOB_RUN_LOG_TABLE = os.environ.get("JOB_RUN_LOG_TABLE", "job_run_log")
+
+# "always" (default) or "on_error" — a pipeline that runs hourly behind a
+# change probe (see below) would otherwise mail on every run that found
+# something. With "on_error" the run email is sent only for a partial or
+# failed run; a clean run is recorded in `job_run_log` / `probe_log` instead.
+EMAIL_MODE        = os.environ.get("EMAIL_MODE", "always").lower()
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -183,6 +190,165 @@ def validate_bq_view(view_cfg) -> str:
     if not sql and not sql_file:
         return f"bq_view '{name}' has neither 'sql' nor 'sql_file'"
     return ""
+
+
+# ── Change probe ──────────────────────────────────────────────────────────────
+# A report may declare a `probe:` block — a handful of tiny Plex queries whose
+# combined result fingerprints the set of rows this report could possibly turn
+# into output. When that fingerprint matches the one stored by the last run
+# that actually applied, the extraction is skipped whole: nothing in Plex that
+# this report cares about has moved. That is what lets label_design run hourly
+# without pulling 14 full tables every hour — see reports/label_design.yaml.
+#
+# FAIL OPEN. Any trouble evaluating the probe — bad config, a query that
+# errors, a bind that resolves to nothing — runs the full extraction. A probe
+# may never be the reason a real change is missed.
+#
+# THE FINGERPRINT IS STORED ONLY AFTER A CLEAN RUN (in run_and_report). A
+# failed or partial run leaves the last applied fingerprint untouched, so the
+# next scheduled probe still sees a difference and runs again: the probe IS
+# the retry, which is why a probe-driven pipeline needs no `-retry` scheduler.
+PROBE_LOG_TABLE = os.environ.get("PROBE_LOG_TABLE", "probe_log")
+_PROBE_BIND_RE  = re.compile(r"^\d+$")
+
+
+class ProbeInconclusive(Exception):
+    """The probe could not be evaluated — run the full extraction."""
+
+
+def validate_probe_query(q) -> str:
+    """Validate one `probe.queries` entry. Returns an error message, or ""."""
+    if not isinstance(q, dict):
+        return f"probe query is not a mapping: {q!r}"
+    view = q.get("plex_view", "") or ""
+    cols = q.get("columns", [])
+    filt = q.get("filter", "") or ""
+    bind = q.get("bind", "") or ""
+    if not _PLEX_IDENTIFIER_RE.match(view):
+        return f"probe plex_view '{view}' is not a valid identifier (letters/digits/_ only)"
+    if not cols or not isinstance(cols, list):
+        return f"probe query for '{view}' needs a non-empty 'columns' list"
+    for c in cols:
+        if not isinstance(c, str) or not _PLEX_IDENTIFIER_RE.match(c):
+            return f"probe column '{c}' for '{view}' is not a valid identifier"
+    if bind and (not _PLEX_IDENTIFIER_RE.match(bind) or len(cols) != 1):
+        return f"probe query for '{view}' has 'bind: {bind}' but not exactly one column"
+    if any(tok in filt for tok in (";", "--", "/*")):
+        return f"probe filter for '{view}' contains a forbidden token (; -- /*): {filt}"
+    return ""
+
+
+def run_probe(conn, config: dict) -> str:
+    """Fingerprint everything this report's probe can see, or raise.
+
+    Each query is `SELECT <columns> FROM <view> AS t <filter>` — aliased even
+    for a single table, per the Plex SQL convention used across this repo. A
+    query carrying `bind: name` exposes its single column to later filters as
+    `{name}`, a comma-separated list of integers. The Label Design probe opens
+    with exactly that: resolve the 'Label Design' release status key, then list
+    the releases sitting on it.
+    """
+    queries = (config.get("probe") or {}).get("queries", [])
+    if not queries:
+        raise ProbeInconclusive("no probe queries configured")
+    binds, parts = {}, []
+    for q in queries:
+        problem = validate_probe_query(q)
+        if problem:
+            raise ProbeInconclusive(problem)
+        view = q["plex_view"]
+        cols = q["columns"]
+        filt = (q.get("filter", "") or "").strip()
+        if filt:
+            try:
+                filt = filt.format(**binds)
+            except KeyError as exc:
+                raise ProbeInconclusive(f"probe filter for '{view}' uses an unknown bind {exc}")
+        select = ", ".join(f"t.{c}" for c in cols)
+        sql = f"SELECT {select} FROM {view} AS t" + (f" {filt}" if filt else "")
+        log.info(f"Probe: {sql}")
+        cursor = conn.cursor()
+        try:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+        except Exception as exc:
+            raise ProbeInconclusive(f"probe query on '{view}' failed: {exc}")
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        # Sorted, so the fingerprint is about the SET of keys and not the order
+        # Plex happened to return them in. A line entering that set changes the
+        # fingerprint; so does one leaving it, which costs one needless run and
+        # no correctness.
+        values = sorted("|".join("" if v is None else str(v).strip() for v in row) for row in rows)
+        parts.append(f"{view}({','.join(cols)}):{len(values)}:" + ";".join(values))
+        if q.get("bind"):
+            keys = [v for v in values if _PROBE_BIND_RE.match(v)]
+            if not keys or len(keys) != len(values):
+                raise ProbeInconclusive(
+                    f"probe bind '{q['bind']}' on '{view}' resolved to {len(values)} value(s) of "
+                    f"which {len(keys)} are integers — refusing to build a filter from that"
+                )
+            binds[q["bind"]] = ",".join(keys)
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:32]
+
+
+def ensure_probe_log_table(bq: bigquery.Client):
+    """Create the probe log table if it doesn't exist yet. One row per probe:
+    what it saw, and whether the run behind it was allowed to advance it."""
+    table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{PROBE_LOG_TABLE}"
+    schema = [
+        bigquery.SchemaField("report_name", "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("job_name",    "STRING"),
+        bigquery.SchemaField("probed_at",   "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("fingerprint", "STRING",    mode="REQUIRED"),
+        # skipped — fingerprint unchanged, no extraction ran
+        # applied — a clean run followed; this is now the reference
+        # failed  — a run followed and did not finish clean; NOT the reference
+        bigquery.SchemaField("outcome",     "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("detail",      "STRING"),
+    ]
+    try:
+        bq.get_table(table_ref)
+    except gcp_exceptions.NotFound:
+        bq.create_table(bigquery.Table(table_ref, schema=schema))
+
+
+def last_applied_fingerprint(bq: bigquery.Client, report_name: str) -> Optional[str]:
+    """The fingerprint of the last run for this report that finished clean."""
+    query = f"""
+        SELECT fingerprint
+        FROM `{GCP_PROJECT}.{BQ_DATASET}.{PROBE_LOG_TABLE}`
+        WHERE report_name = @report_name
+          AND outcome = 'applied'
+        ORDER BY probed_at DESC
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("report_name", "STRING", report_name)]
+    )
+    rows = list(bq.query(query, job_config=job_config).result())
+    return rows[0].fingerprint if rows else None
+
+
+def log_probe(bq: bigquery.Client, report_name: str, job_name: str,
+              fingerprint: str, outcome: str, detail: str = ""):
+    """Record what this probe saw. Never fatal — a lost row only means the next
+    run can't match the fingerprint and extracts again, which is the safe way
+    to be wrong."""
+    row = [{
+        "report_name": report_name,
+        "job_name":    job_name,
+        "probed_at":   datetime.now(timezone.utc).isoformat(),
+        "fingerprint": fingerprint,
+        "outcome":     outcome,
+        "detail":      detail or None,
+    }]
+    errors = bq.insert_rows_json(f"{GCP_PROJECT}.{BQ_DATASET}.{PROBE_LOG_TABLE}", row)
+    if errors:
+        log.warning(f"Failed to log probe result: {errors}")
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -471,6 +637,7 @@ def main():
     partial_errors = []   # extraction-level failures (not fatal, but flagged in email)
     rows_fetched   = 0
     rows_written   = 0
+    probe_fingerprint = ""   # set by the change probe, stored by run_and_report
     report_name      = _default_report_name()
     report_category   = ""
     email_plex_view   = PLEX_VIEW
@@ -592,6 +759,64 @@ def main():
         except Exception as exc:
             log.exception("Failed to establish ODBC connection to Plex.")
             raise RuntimeError(f"ODBC connection failed: {exc}") from exc
+
+        # ── Change probe ──────────────────────────────────────────────────
+        # Cheap enough to run every hour; the 14 full-table extractions below
+        # are not. Skips the whole run when nothing this report cares about
+        # has moved since the last clean one. Fails open — see run_probe.
+        if OUTPUT_MODE == "bigquery" and config.get("probe"):
+            try:
+                ensure_probe_log_table(bq)
+                probe_fingerprint = run_probe(conn, config)
+                previous = last_applied_fingerprint(bq, report_name)
+                if previous and previous == probe_fingerprint:
+                    log.info(
+                        f"Probe unchanged for {report_name} (fingerprint "
+                        f"{probe_fingerprint}) — skipping the extraction."
+                    )
+                    log_probe(bq, report_name, job_identity, probe_fingerprint, "skipped")
+                    try:
+                        conn.close()
+                    except Exception:
+                        log.warning("Failed to close ODBC connection cleanly.")
+                    return {
+                        "rows_fetched":           0,
+                        "rows_written":           0,
+                        "events":                 [f"Probe unchanged ({probe_fingerprint}) — extraction skipped"],
+                        "partial_errors":         [],
+                        "gcp_project":            GCP_PROJECT,
+                        "bq_dataset":             BQ_DATASET,
+                        "bq_table":               email_bq_table,
+                        "report_name":            report_name,
+                        "report_category":        report_category,
+                        "reports_detail":         email_reports_detail,
+                        "plex_view":              email_plex_view,
+                        "plex_filter":            email_plex_filter,
+                        "plex_host":              PLEX_HOST,
+                        "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
+                        "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
+                        "job_identity":           job_identity,
+                        "probe_fingerprint":      "",   # nothing ran; nothing to advance
+                        "skipped":                True,
+                    }
+                log.info(
+                    f"Probe changed for {report_name}: {previous or 'no previous run'} "
+                    f"-> {probe_fingerprint} — running the full extraction."
+                )
+                events.append(f"Probe changed ({previous or 'first run'} -> {probe_fingerprint})")
+            except ProbeInconclusive as exc:
+                log.warning(f"Probe inconclusive ({exc}) — running the full extraction.")
+                events.append(f"Probe inconclusive: {exc} — ran the full extraction")
+                probe_fingerprint = ""
+                # Logged, because a probe that is quietly inconclusive every
+                # hour costs 12 full extractions a day and looks like success:
+                #   SELECT * FROM <dataset>.probe_log
+                #   WHERE outcome = 'inconclusive' ORDER BY probed_at DESC
+                try:
+                    log_probe(bq, report_name, job_identity, "(inconclusive)",
+                              "inconclusive", detail=str(exc)[:1000])
+                except Exception:
+                    log.exception("Failed to log inconclusive probe.")
 
         try:
             for extraction in extractions:
@@ -809,6 +1034,7 @@ def main():
         "plex_host":              PLEX_HOST,
         "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
         "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        "probe_fingerprint":      probe_fingerprint,
     }
 
 
@@ -863,6 +1089,25 @@ def run_and_report():
         except Exception:
             log.exception("Failed to log job run status.")
 
+    # The probe fingerprint becomes the reference ONLY after a clean run. A
+    # partial or failed run logs it as 'failed' and leaves the reference where
+    # it was, so the next scheduled probe sees a difference and runs again —
+    # the retry, without a retry trigger. An exception before main() returned
+    # carries no fingerprint at all, which has the same effect.
+    fingerprint = result.get("probe_fingerprint", "") if isinstance(result, dict) else ""
+    if OUTPUT_MODE == "bigquery" and fingerprint:
+        try:
+            log_probe(
+                bigquery.Client(project=GCP_PROJECT),
+                result.get("report_name", _default_report_name()),
+                job_identity,
+                fingerprint,
+                "applied" if status == "success" else "failed",
+                detail="; ".join(errors)[:1000] if errors else "",
+            )
+        except Exception:
+            log.exception("Failed to log probe result.")
+
     end_time = datetime.now(timezone.utc)
     report = {
         "status":           status,
@@ -886,7 +1131,8 @@ def run_and_report():
     }
 
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))
-    if OUTPUT_MODE == "bigquery" and (status == "success" or task_attempt == 0):
+    email_wanted = EMAIL_MODE != "on_error" or status != "success"
+    if OUTPUT_MODE == "bigquery" and email_wanted and (status == "success" or task_attempt == 0):
         try:
             send_report(report)
         except Exception:

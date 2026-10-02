@@ -129,6 +129,55 @@ don't need an entry.
   board Monday at 5 AM, which is intended while nobody works the queue then.
 
   Schedule-only - no image rebuild. Ships with `./scripts/deploy.sh`.
+## 2026-10-01 (scorecard) - Manual Data app: the "already saved" panel stacked
+
+### Fixed
+- **The "what is already saved" panel was added again on every render.** It
+  sits above `#form` rather than inside it, so `renderForm()`'s
+  `form.innerHTML = ''` never cleared it, while `wireCurrentView()` inserted a
+  fresh copy each time. Every tab click, Save and Clear therefore left another
+  copy behind — most visible on **Safety incidents**, where re-clicking the
+  tab piled up "No incidents logged yet…" messages (and duplicate
+  `#currentview` ids with them). `wireCurrentView()` now removes the previous
+  panel before inserting its own.
+- **Out-of-order lookups could paint a stale answer.** `getCurrentValue` and
+  `getRepGoalSum` fire on every driver-field change and `google.script.run`
+  gives no ordering guarantee, so changing the month twice quickly could leave
+  the first answer on screen. Both now carry a sequence token and only the
+  newest response paints.
+
+### Changed
+- **Tabs are now real tabs.** The tab bar already used `role="tablist"` /
+  `role="tab"` without the rest of the pattern: the card is now the
+  `role="tabpanel"` it labels, tabs carry `aria-controls` plus a roving
+  `tabindex`, and ←/→ move between them.
+- `wireCurrentView()` resolves the card by `#panel` instead of
+  `querySelector('.card')` — the setup screen renders a `.card` of its own.
+- `say()` no longer emits `class="msg "` with a trailing space for the
+  neutral "Saving…" state.
+
+## 2026-10-01 (dev) - The retry schedulers could never have run
+
+### Fixed
+- **Every `*-retry` scheduler has been rejected with `PERMISSION_DENIED`
+  (code=7) on every firing since the retries were introduced** — none has ever
+  started a job. The retry schedulers POST to the job's `:run` endpoint with an
+  `overrides` body (to set `RUN_MODE=retry`), and Cloud Run gates a request
+  carrying overrides on **`run.jobs.runWithOverrides`**, a separate permission
+  from the `run.jobs.run` that `roles/run.invoker` grants. The daily schedulers
+  send a bare `{}`, so they never needed it and always worked. The schedulers
+  report `ENABLED` the whole time — the refusal shows only in their `status` —
+  which is why this went unnoticed through 23 failed and 39 partial runs
+  (`job_run_log` has 0 `run_mode='retry'` rows since 2026-07-21).
+- **The fix** (`terraform/main.tf`): a custom project role
+  `plexEtlRunWithOverrides` holding `run.jobs.runWithOverrides` and nothing
+  else, bound to the ETL service account. `roles/run.developer` also carries
+  the permission but allows deploying and modifying Cloud Run services, which
+  the ETL account has no business doing. `roles/run.invoker` stays — this is
+  additive.
+- **Not yet deployed, and applying cleanly is not evidence it works.** The
+  first post-deploy retry must be checked for an actual `run_mode='retry'` row
+  in `job_run_log` (OPEN_ITEMS D2).
 
 ## 2026-10-01 (label-design, later) - The hourly window moves to 5 AM - 5 PM
 

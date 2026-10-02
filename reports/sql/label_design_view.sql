@@ -157,14 +157,31 @@ job_notes AS (
 -- so that mapping finally has a real source. The rest is pending Jennilyn's
 -- internal team meeting.
 --
--- Values are currently ALL BLANK -- 28 assignments (14 parts x Allergen +
--- Hazardous), every one an EMPTY STRING, not NULL (verified against live
--- BigQuery 2026-09-21). Hence the NULLIF(TRIM(...), '') on every branch below:
--- without it these columns emit '' rather than NULL, which reads downstream as
--- "filled in, but blank" and would let the Monday push service overwrite a
--- hand-entered value with an empty one. Note the previously-documented
--- populated example (Allergen = "Yes" on Part_Key 11003458) is GONE -- that
--- part is no longer in the table at all, so the data has been reloaded since.
+-- ── These hang off the LABEL part, not the finished good (2026-10-02) ──────
+-- Until today this CTE was joined to the order line's part -- the finished
+-- good, 93001-00KAYAN-0 -- and every one of these columns read NULL. QA does
+-- not put attributes there. They put them on the LABEL part, 73001-00KAYAN-0,
+-- which reaches the order line only through the bill of materials. Hence the
+-- `labels` CTE below, and the join on lb.l.part_key rather than pol.Part_Key.
+--
+-- 40 assignments across 10 label parts, IDENTICAL in PlexTest and PlexProd
+-- (verified 2026-10-02), so this is verifiable on test. Four attributes carry
+-- values -- Label Size, Printing Material, Allergen, Trademark -- and the
+-- other four in the catalog are assigned to nothing yet.
+--
+-- The NULLIF(TRIM(...), '') on every branch stays regardless: Plex writes an
+-- EMPTY STRING, not NULL, for an assigned-but-unfilled attribute, and without
+-- this these columns emit '' rather than NULL. Downstream that reads as
+-- "filled in, but blank" and would let the Monday push overwrite a
+-- hand-entered value with an empty one.
+--
+-- THREE NAMES BELOW NO LONGER EXIST IN PLEX. The catalog on 2026-10-02 holds
+-- exactly eight attributes: Allergen, Certifications, Hazardous, Label Size,
+-- Material Classification, Printing Material, Size, Trademark. 'Bottle
+-- Material', 'California PDP' and 'Prop 65 Requirement' were all there on
+-- 2026-09-21 and are gone. Their columns are KEPT, emitting NULL, until
+-- Jennilyn says whether they were removed or renamed -- dropping a column
+-- that turns out to have been renamed loses the mapping work twice over.
 part_attribute_types AS (
   SELECT
     SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
@@ -181,6 +198,11 @@ part_attribute_types AS (
 part_attributes_pivoted AS (
   SELECT
     SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
+    -- 'Label Size' (key 7436) is where the values are: "2.4 x 6.8 in",
+    -- "Custom". Plain 'Size' (key 2383) still exists and is assigned to
+    -- nothing -- this CTE asked only for that one until 2026-10-02, so
+    -- part_size read NULL even for parts that had a size filled in.
+    MAX(CASE WHEN pt.Attribute_Name = 'Label Size'              THEN NULLIF(TRIM(pa.Value), '') END) AS part_label_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Size'                    THEN NULLIF(TRIM(pa.Value), '') END) AS part_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Allergen'                THEN NULLIF(TRIM(pa.Value), '') END) AS part_allergen,
     MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'               THEN NULLIF(TRIM(pa.Value), '') END) AS part_hazardous,
@@ -225,6 +247,38 @@ bottles AS (
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
     ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
   WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'BOTTLE')
+  GROUP BY 1
+),
+
+-- ── Label part, through the BOM (2026-10-02, Emilio) ────────────────────────
+-- Monday only ever received the PRODUCT part number, but QA records the label
+-- attributes against the LABEL part, which is a BOM component of it:
+--
+--   93001-00KAYAN-0  finished good (the order line's part)
+--   └─ 73001-00KAYAN-0  LABEL | Kaya Naturals - Max Detox 60ct (X003F6U4BR)
+--                       Standard Label        <- Label Size, Printing
+--                                                Material, Allergen, Trademark
+--
+-- Identical mechanics to `bottles` above, prefix 'LABEL' instead of 'BOTTLE'.
+-- Of the 169 parts with a BOM in PlexTest, 54 have a label component and NOT
+-- ONE has two (checked 2026-10-02), so the ARRAY_AGG tie-break is insurance
+-- rather than a real case. It still matters that the pick happens HERE,
+-- before the join: a second label would otherwise duplicate a queue row, and
+-- this view's whole contract is one row per order line.
+--
+-- A part with no label component gets NULLs. That is not a regression --
+-- every attribute column was NULL for every row before this existed.
+labels AS (
+  SELECT
+    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+    ARRAY_AGG(STRUCT(SAFE_CAST(c.Part_Key AS INT64) AS part_key,
+                     c.Part_No AS part_no,
+                     c.Name    AS name)
+              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS l
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'LABEL')
   GROUP BY 1
 ),
 
@@ -341,10 +395,14 @@ release_lines AS (
     part.Name                                     AS part_name,
     bt.b.part_no                                  AS bottle_part_no,
     bt.b.name                                     AS bottle_name,
+    lb.l.part_key                                 AS label_part_key,
+    lb.l.part_no                                  AS label_part_no,
+    lb.l.name                                     AS label_part_name,
 
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
     -- collapses together; no aggregation needed beyond the plain passthrough.
+    pap.part_label_size                            AS part_label_size,
     pap.part_size                                  AS part_size,
     pap.part_allergen                              AS part_allergen,
     pap.part_hazardous                             AS part_hazardous,
@@ -407,8 +465,14 @@ release_lines AS (
   LEFT JOIN bottles AS bt
     ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
 
+  LEFT JOIN labels AS lb
+    ON lb.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+
+  -- The LABEL part's attributes, not the finished good's (2026-10-02). See the
+  -- `labels` CTE. Joining this to pol.Part_Key, as it did until today, matched
+  -- nothing: all 40 populated assignments in Plex are on 73001-* label parts.
   LEFT JOIN part_attributes_pivoted AS pap
-    ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+    ON pap.Part_Key = lb.l.part_key
 
   -- Trimmed and uppercased so stray whitespace or casing in Plex can't
   -- silently empty the queue (2026-09-29, matching the Plex version).
@@ -464,11 +528,15 @@ SELECT
     NULLIF(TRIM(part_name), '')], ' | '), '')                               AS line_description,
   bottle_part_no,
   bottle_name,
+  label_part_key,
+  label_part_no,
+  label_part_name,
   CASE REGEXP_EXTRACT(UPPER(bottle_name), r'\b(HDPE|PET|GLASS)\b')
     WHEN 'HDPE'  THEN 'HDPE'
     WHEN 'PET'   THEN 'PET'
     WHEN 'GLASS' THEN 'Glass'
   END                                                                       AS bottle_material,
+  part_label_size,
   part_size,
   part_allergen,
   part_hazardous,

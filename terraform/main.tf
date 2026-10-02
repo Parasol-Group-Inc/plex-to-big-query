@@ -5146,19 +5146,21 @@ resource "google_storage_bucket_object" "production_vs_goal_view_sql" {
 # scheduler behind them, so `label_design_report` had never been created and
 # the job had never run at all. This block is the missing half.
 #
-# TWICE A DAY, EVERY DAY — not the single overnight run every other pipeline
-# uses. This is an operational queue the sales and design teams work from, and
-# it feeds `deploy/label_design_sync/Code.gs`, whose Apps Script triggers fire
-# in the 10:00 and 14:00 Mountain hours. The ETL is therefore scheduled 30
-# minutes AHEAD of each of those, so the Apps Script always reads a view
-# refreshed this cycle rather than the previous one. Moving either side means
-# moving both.
+# HOURLY ON WEEKDAYS — not the single overnight run every other pipeline uses.
+# This is an operational queue the labeling team works from, so it refreshes
+# every hour from 5 AM to 5 PM Mountain (Jennilyn, 2026-10-01 — the team
+# starts at 5). Each run is probe-gated: a cycle with nothing new in Plex
+# costs one small fingerprint query and stops, so the hourly cadence is cheap.
 #
-# Saturday and Sunday are included deliberately: orders are entered over the
-# weekend, and a weekday-only refresh would hand the team a two-day-stale
-# queue on Monday morning. The weekday-only part is the *summary email*, and
-# that lives in the Apps Script (SUMMARY_DAYS), not here — see
-# deploy/label_design_sync/README.md.
+# MONDAY TO FRIDAY (Emilio, 2026-10-02 — closes OPEN_ITEMS L9). An earlier
+# version of this block ran all seven days, reasoning that orders are entered
+# over the weekend and a weekday-only refresh would hand the team a two-day-
+# stale queue on Monday morning. The 5 AM start is what retired that argument:
+# Monday's first run sweeps up everything entered over the weekend before the
+# team arrives, so nobody waits on a stale queue. Weekend orders simply do not
+# reach the board until Monday 5 AM, which is the intended behaviour while
+# nobody works the queue at weekends. If that changes, change it back here —
+# all three schedules below must move together.
 # ═══════════════════════════════════════════════════════════════════════════
 
 resource "google_storage_bucket_object" "label_design_config_prod" {
@@ -5320,7 +5322,7 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
-  schedule    = "0 5-17 * * *" # every hour 5 AM - 5 PM Mountain — see scheduler_time_zone
+  schedule    = "0 5-17 * * 1-5" # hourly 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5475,7 +5477,7 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
 resource "google_cloud_scheduler_job" "etl_label_design_test" {
   name        = "plex-label-design-sync-test"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (test, hourly, probe-gated)"
-  schedule    = "5 5-17 * * *" # every hour at :05, 5 AM - 5 PM Mountain — see scheduler_time_zone
+  schedule    = "5 5-17 * * 1-5" # hourly at :05, 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5493,7 +5495,7 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
 # ═══════════════════════════════════════════════════════════════════════════
 # LABEL DESIGN → MONDAY PUSH — added 2026-09-24
 #
-# Replaces the Sheet + Apps Script hop (deploy/label_design_sync/). Same image
+# Replaces the Sheet + Apps Script hop (deploy/archive/label_design_sync/). Same image
 # as the ETL, different command: `python -m label_design_service.push` reads
 # `label_design_report` and creates one Monday item per new order + part,
 # deduped on an LCR hash written into the item itself. Every attempt is
@@ -5575,7 +5577,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
 resource "google_cloud_scheduler_job" "label_design_push_test" {
   name        = "plex-label-design-push-sync-test"
   description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
-  schedule    = "35 5-17 * * *" # 30 min after plex-label-design-sync-test (:05); last push 5:35 PM
+  schedule    = "35 5-17 * * 1-5" # 30 min after plex-label-design-sync-test (:05), Mon-Fri; last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 

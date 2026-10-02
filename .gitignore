@@ -45,7 +45,7 @@ meetings-reference/**/_otter_extract/
 # real names, emails and order history — and the same reasoning that keeps the
 # meeting audio out of a repo that gets shared applies to it.
 #
-# deploy/label_design_sync/test_logic.js uses it when present and skips the
+# deploy/archive/label_design_sync/test_logic.js used it when present and skipped the
 # archive-dependent checks when it is not, naming this entry so nobody thinks
 # the test is broken. To get it back:
 #

@@ -29,8 +29,8 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-13 pipelines, 26 Cloud Run jobs (prod + test), 68 BigQuery views. Schedule
-for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
+13 pipelines, 27 Cloud Run jobs (prod + test, plus the Label Design push
+job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
@@ -206,7 +206,7 @@ FROM `{gcp_project}.{dataset}.raw_Purchasing_v_PO` po
 
 **Use `SAFE_CAST` for all numeric JOIN keys and aggregated columns:**
 
-BigQuery autodetects schema when tables first populate. Empty tables get all-STRING schema; populated tables get proper types (INT64, FLOAT64). If one table populates before another, a JOIN on uncast columns throws a type error.
+BigQuery autodetects schema from the row values when a table populates, so populated tables get proper types (INT64, FLOAT64). Since 2026-08-23 an empty table is typed from Plex's real ODBC column types (`cursor.description`) instead of all-STRING, but a populated column can still land as a different type than you assumed (e.g. a nullable int arriving as FLOAT64) and a JOIN on uncast columns then throws a type error.
 
 ```sql
 -- Joining on a key that might be STRING in one table and INT64 in another:
@@ -313,7 +313,7 @@ never in the subject — check the body for those.
 | Cloud Run jobs (13 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
 | Schedulers | `plex-<pipeline>-sync` | `plex-<pipeline>-sync-test` |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
-| Failure retry (all 26 jobs) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
+| Failure retry (24 jobs — every one but Label Design and its push) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report config (YAML) | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -363,9 +363,71 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 
 ---
 
+## Change Probe (hourly pipelines only)
+
+Most pipelines run once a night, so there is always something new to pull.
+Label Design runs **hourly**, where that is not true — most hours nothing has
+moved. Since 2026-10-01 it starts each run with a cheap question instead of a
+full extraction.
+
+**What happens on an hourly run:**
+
+1. Two small `SELECT`s ask Plex which release lines are sitting on the
+   `Label Design` status. The answer is sorted and hashed into a 32-character
+   fingerprint.
+2. If that fingerprint matches the last clean run's, the job **stops there** —
+   no extractions, no view rebuild, no email — and writes a `skipped` row to
+   `probe_log`.
+3. If it differs, the run proceeds exactly as it always did.
+
+A typical day is ~10 probes costing seconds each and 1-3 real runs.
+
+**The fingerprint only advances after a `success` run.** A failed or partial
+run leaves the stored value alone, so the next hourly probe sees a difference
+and runs again. That is why Label Design has **no `-retry` scheduler** — the
+probe is its retry, and a faster one (within the hour, not at 9:45 PM). This
+only works hourly; a nightly pipeline must keep its retry trigger.
+
+**The push has its own gate.** `plex-etl-label-design-push-test` counts, in
+BigQuery, the view rows whose LCR the audit table has never recorded. If that
+is 0 it returns before reading the Monday API key or paging the board, so a
+quiet hour costs no Monday API calls at all. It can over-count (a hand-typed
+board item has no audit row) but never under-count, so the board scan stays the
+final authority.
+
+### Checking it is actually working
+
+The probe **fails open**: anything that stops it being evaluated runs the full
+extraction and logs `inconclusive`. That is the right default, but it means a
+permanently broken probe looks like success while doing the full work every
+hour. Two queries worth running occasionally:
+
+```sql
+-- Should be empty. Rows here mean the probe is not gating anything.
+SELECT * FROM `voxdatalake.PlexTest.probe_log`
+WHERE outcome = 'inconclusive' ORDER BY probed_at DESC LIMIT 20;
+
+-- A healthy day: a few `applied`, many `skipped`.
+SELECT outcome, COUNT(*) AS n
+FROM `voxdatalake.PlexTest.probe_log`
+WHERE DATE(probed_at) = CURRENT_DATE()
+GROUP BY outcome;
+```
+
+The most likely cause of `inconclusive` is the `Label Design` release status
+being renamed in Plex — the match is an exact string. Adding a probe to another
+pipeline is a YAML change only: see `docs/TECHNICAL_REFERENCE.md` §
+"Change probe".
+
+**One gap to know:** the probe runs before view creation, so a deploy that
+changes only a view's SQL will not reach BigQuery until the underlying data
+changes. After a view-only deploy, trigger the job by hand.
+
+---
+
 ## Failure Retry (9:45 PM Mountain)
 
-All 26 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
+24 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
 `America/Denver`** (handles the MST/MDT switch automatically — no manual
 adjustment needed). The naming is uniform — `plex-<pipeline>-sync-retry`
 retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
@@ -376,7 +438,12 @@ retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
 | `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (prod) |
 | `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (test) |
 | `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
-| … one pair per pipeline, 52 schedulers in all | |
+| … one pair per pipeline except Label Design, 51 schedulers in all | |
+
+**Label Design has no retry trigger** (both were removed 2026-10-01). It runs
+hourly behind a change probe, and a failed or partial run leaves the stored
+fingerprint where it was, so the next hourly probe sees a difference and runs
+again — the probe is the retry.
 
 **How it decides whether to actually do anything:** the retry trigger
 re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution
@@ -395,15 +462,38 @@ Only a genuine **FAILED** run triggers a retry — **PARTIAL** does not,
 since that's a different severity tier (some data got through) and isn't
 treated as "the run needs to happen again."
 
-> **Caution — "today" is the UTC date, and some jobs run after the retry.**
-> `run_date` and the check both use UTC. A job scheduled *after* 9:45 PM
-> Mountain (sales quotes, sales returns, quality supplier returns, and
-> `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM), or one whose
-> scheduled runs land on the previous UTC day (Label Design, 9:30 AM / 1:30 PM),
-> has no "scheduled run today" when its retry fires — so, reading the code, the
-> retry does a full run and sends an email every night. Confirm against
-> `job_run_log` (query below, `run_mode = 'retry'`) before relying on the
-> retry for those pipelines.
+> **Caution — the retry may not be running at all. Settled from the code,
+> 2026-10-01.** Two separate things were suspected here; the code answers both.
+>
+> **1. The UTC edge is real.** `run_date` and the check both use UTC, and 9:45
+> PM Mountain is already the next UTC day. A job scheduled *after* the retry
+> (sales quotes, sales returns, quality supplier returns, and
+> `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM) has no
+> "scheduled run today" when its retry fires. `main.py` then logs *"today's
+> status: not logged — proceeding with a full run"* and does the full run,
+> email included. So the code path the old caution described is genuine.
+>
+> **2. But it cannot be happening, because no retry is reaching the
+> container.** Every retry invocation writes exactly one `job_run_log` row with
+> `run_mode='retry'` — there is no path that returns without logging. A
+> no-op logs `status='skipped'`; a real run logs `success`/`partial`/`failed`.
+> `job_run_log` has **zero** `run_mode='retry'` rows since 2026-07-21, across
+> 23 failed and 39 partial runs (OPEN_ITEMS D2). Those two facts can only both
+> be true if the retry schedulers are not invoking the jobs, or the container
+> is dying before `run_and_report()` is entered.
+>
+> **So the thing to check is not `job_run_log` — it is Cloud Scheduler.** The
+> retry's own execution history says whether it fires and what the target
+> returns:
+>
+> ```bash
+> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+> ```
+>
+> Until that is answered, **do not rely on the retry for any pipeline.** The
+> nightly cascade currently has no working automatic retry — a failed run waits
+> for a human. (Label Design is the exception: it has no retry trigger by
+> design, because its hourly probe re-runs a failed cycle on its own.)
 
 **Checking what happened:**
 ```sql
@@ -427,7 +517,7 @@ gcloud scheduler jobs resume plex-sales-orders-sync-retry --location=us-central1
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /
 `retry_time_zone` in `terraform.tfvars` (live values: `"45 21 * * *"` /
 `"America/Denver"`; the `variables.tf` defaults are `"0 6 * * *"` /
-`"America/Denver"`) — applies to all 26 retry schedulers at once — back up
+`"America/Denver"`) — applies to all 24 retry schedulers at once — back up
 `terraform.tfvars` (its header has the command), then `./scripts/deploy.sh`
 from the primary folder. `terraform.tfvars` exists only there.
 
@@ -471,6 +561,15 @@ If incremental sync is implemented in the future, use BigQuery **query parameter
 ```yaml
 report_name: string           # required — identifier for logs and email reports
 description: string           # optional — human-readable description
+
+probe:                        # optional — hourly pipelines only; skips the whole
+                              # run when nothing changed. See "Change Probe" above.
+  queries:
+    - plex_view: string       # required — Plex ODBC view name
+      columns: [string]       # required — columns to fingerprint
+      filter: string          # optional — WHERE clause; alias every table as t
+      bind: string            # optional — expose this query's single column to a
+                              # later query's {name} placeholder (integers only)
 
 extractions:                  # required — list of Plex views to extract
   - plex_view: string         # required — Plex ODBC view name ({DB}_v_{View})

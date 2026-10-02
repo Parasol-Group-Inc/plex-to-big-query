@@ -11,6 +11,57 @@
 
 ---
 
+## UPDATE — 2026-10-02: the part attributes were on the wrong part
+
+Emilio spotted that QA puts the label attributes on the **label** part number,
+and only the **product** part number ever reached Monday. That was exactly
+right, and it explains a flag that had been sitting in the report doc for
+weeks as "nobody has filled anything in": the data was there all along, on a
+part the report never looked at.
+
+`93001-00KAYAN-0` is the order line's part. The attributes live on
+`73001-00KAYAN-0`, a component of it in the bill of materials. The fix is a
+`labels` CTE in `label_design_view.sql`, mechanically identical to the
+`bottles` CTE from 2026-09-29 — find the component whose name starts "LABEL",
+collapse to one row before the join, read the attributes off that key.
+
+Four Monday columns now carry it: **Label Part #**, **Label Size**,
+**Printing Material**, **Allergen**. Created on the board first, which was
+safe — the push skips a column it cannot find with a warning, never a
+failure.
+
+**Two things turned up on the way, both worth a word with Jennilyn:**
+
+- The pivot asked for an attribute called `Size`. The one with values in it is
+  `Label Size`. Both exist; `Size` is assigned to nothing.
+- `Bottle Material`, `California PDP` and `Prop 65 Requirement` were in the
+  Plex catalog on 2026-09-21 and are **not there now**. Their columns are kept
+  and blank rather than deleted, in case they were renamed rather than
+  removed.
+
+**Still open for Ashley:** the item name is still the customer part number.
+The team's own hand-made rows put the label code (`s7187`, `CL3776`) there
+instead. Changing it alters how every row on the board reads, so it is a
+decision, not a side effect — the label part number has its own column now so
+both can be compared first.
+
+---
+
+## UPDATE — 2026-10-02: weekdays only
+
+The three Label Design schedules now run Monday to Friday (`* * 1-5`), still
+hourly 5 AM - 5 PM Mountain. This closes the last open question from the
+2026-10-01 change: Jennilyn gave the hours that day but not the days, so it
+had been running Saturday and Sunday in the meantime.
+
+The original rationale for seven days was that orders are entered over the
+weekend and a weekday-only refresh would hand the team a stale queue on Monday
+morning. The 5 AM start answers that — Monday's first run sweeps up the weekend
+before the team arrives. If anyone starts working the queue at weekends, all
+three schedules have to move back together.
+
+---
+
 ## UPDATE — 2026-10-01: hourly, behind a change probe
 
 The queue refreshes within the hour now, not at 9:30 and 1:30. Running the

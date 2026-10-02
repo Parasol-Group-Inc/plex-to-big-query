@@ -14,6 +14,121 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-02 (label-design) - Part attributes come off the LABEL part
+
+### Fixed
+
+- **The ten `part_*` columns were looking at the wrong part, and every one of
+  them read NULL.** `part_attributes_pivoted` was joined to the order line's
+  part - the finished good, `93001-00KAYAN-0`. QA records label attributes
+  against the **label** part, `73001-00KAYAN-0`, which reaches the order line
+  only through the bill of materials. The two keys never met.
+
+  `reports/sql/label_design_view.sql` gains a `labels` CTE over
+  `raw_Part_v_Flat_BOM`, mechanically identical to the `bottles` CTE added
+  2026-09-29: the component whose `Name` starts "LABEL", collapsed to one row
+  **before** the join so a second label could never duplicate a queue row. Of
+  the 169 parts with a BOM in PlexTest, 54 have a label component and none has
+  two. The attribute pivot now joins on that key.
+
+  Verified end to end against PlexTest the same day: `93001-00KAYAN-0` now
+  resolves `Label Size = 2.4 x 6.8 in`, `Printing Material = White BOPP`,
+  `Allergen = Tree Nuts`, `Trademark = N/A`. A part with no label component
+  gets NULLs, which is what every row got before.
+
+- **The pivot asked for `'Size'`; the populated attribute is `'Label Size'`.**
+  Both exist in Plex - `Size` (key 2383) is assigned to nothing, `Label Size`
+  (key 7436) carries the values. A new `part_label_size` column reads the
+  latter; `part_size` is kept, still reading the former.
+
+### Added
+
+- **`label_part_key`, `label_part_no`, `label_part_name`** on
+  `label_design_report`, and `part_label_size`. 49 columns, up from 45.
+
+- **Four Monday columns in `label_design_service/push.py`:** `Label Part #`
+  (text), `Label Size` (text), `Printing Material` (status) and `Allergen`
+  (text), created on the Plex Import board ahead of this commit. Size and
+  Allergen are text on purpose - sizes multiply and allergens arrive as
+  combinations, either of which would fill a status column with one-off
+  labels. 20 mapped columns, up from 16.
+
+  The **item name is unchanged** (still `customer_part_no`). Whether it should
+  become the label code instead is Ashley's call, not a side effect of this
+  fix; the label part number gets its own column so both can be seen side by
+  side first.
+
+### Changed
+
+- **Three attribute names in the pivot no longer exist in Plex.** The catalog
+  on 2026-10-02 holds exactly eight attributes: Allergen, Certifications,
+  Hazardous, Label Size, Material Classification, Printing Material, Size,
+  Trademark. `Bottle Material`, `California PDP` and `Prop 65 Requirement`
+  were all present on 2026-09-21 and are gone. Their columns are **kept**,
+  emitting NULL, pending Jennilyn confirming whether they were removed or
+  renamed - dropping a column that turns out to have been renamed loses the
+  mapping work twice over. This is the same trap that caught the original
+  build, which guessed at two attribute names and got both wrong.
+
+- **PlexTest and PlexProd carry identical attribute data** (40 assignments
+  across 10 label parts, same values, verified 2026-10-02), so this is
+  verifiable on test rather than needing a prod run. The report doc's
+  "every value is currently blank" note was stale and is corrected.
+
+## 2026-10-02 (label-design) - The Sheet-based Apps Script is archived
+
+### Removed
+
+- **`deploy/label_design_sync/` moves to `deploy/archive/label_design_sync/`.**
+  The Sheet -> Monday Apps Script was superseded by `label_design_service/push.py`
+  on 2026-09-24 and has been marked "being retired" since 2026-09-25.
+
+  **It was safe to retire because its triggers could not reach Monday.com.**
+  `installTriggers()` only ever scheduled `checkForNewOrdersAuto` (reads
+  BigQuery, appends to the sheet's MONDAY tab, never touches Monday.com) and
+  `sendDailySummary`. The push, `pushToMondayAndArchiveManual`, was menu-only
+  by design. So unlike `deploy/goals_sheet_to_bigquery.gs` - deleted while its
+  trigger kept truncating a table - a forgotten trigger here could only have
+  refreshed a spreadsheet and sent email. No `[Label Design] Summary` email has
+  reached the recipient list since the changeover, so the triggers are gone.
+
+- **`scripts/build_logo_gs.py` -> `scripts/build_logo.py`**, and its `build_gs()`
+  half is removed. It wrote two things: `assets/vox-logo.png`, still attached
+  inline by `email_utils.py`, and `label_design_sync/Logo.gs`, the same bytes
+  as base64 for Apps Script. The second consumer is archived, so the frozen
+  `Logo.gs` in the archive is the last generated copy and nothing regenerates
+  it. The PNG half is untouched.
+
+### Changed
+
+- References re-pointed at the new path across `.githooks/hooks.py` (the
+  project-ownership regex), `.gitignore`, `CONTRIBUTING.md`, `README.md`,
+  `docs/CHEATSHEET.md`, `docs/reports/label_design_report.md`,
+  `label-design/README.md`, `label-design/monday_board_catalog.md`,
+  `label_design_service/push.py` and `terraform/main.tf`. The archived
+  documents' own banners now say archived rather than "being retired", and
+  their links out are corrected for the extra directory level.
+
+- New `deploy/archive/README.md`, modelled on `docs/archive/README.md`, with
+  the warning that archiving deployed code does not switch it off.
+
+## 2026-10-02 (label-design) - Label Design runs Monday to Friday
+
+### Changed
+
+- **The three Label Design schedules narrow to weekdays** (`* * 1-5`):
+  `plex-label-design-sync` (:00), `plex-label-design-sync-test` (:05) and
+  `plex-label-design-push-sync-test` (:35), all still hourly 5 AM - 5 PM
+  Mountain. Closes OPEN_ITEMS L9, which had been half-answered since
+  2026-10-01 - Jennilyn gave the hours, not the days.
+
+  The block comment above these resources used to argue the opposite, that
+  Saturday and Sunday had to be included or the team would find a two-day-stale
+  queue on Monday morning. The 5 AM start retired that argument: Monday's first
+  run sweeps up the weekend before anyone arrives. Weekend orders now reach the
+  board Monday at 5 AM, which is intended while nobody works the queue then.
+
+  Schedule-only - no image rebuild. Ships with `./scripts/deploy.sh`.
 ## 2026-10-01 (scorecard) - Manual Data app: the "already saved" panel stacked
 
 ### Fixed

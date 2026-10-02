@@ -24,8 +24,8 @@ There are two phases:
 > project**.
 >
 > **Reality check for Phase 2:** the first deploy doesn't create just one job —
-> `terraform/main.tf` defines all **26** Cloud Run jobs (13 pipelines ×
-> prod/test) and 52 schedulers with no conditional gating, so one deploy stands
+> `terraform/main.tf` defines all **27** Cloud Run jobs (13 pipelines ×
+> prod/test, plus the Label Design push job) and 51 schedulers with no conditional gating, so one deploy stands
 > up the entire stack at once. The job this guide walks through testing,
 > `plex-etl-sales-orders`, runs the **Sales Orders** pipeline
 > (`reports/sales_orders.yaml` — 27 Plex views) via `report_config_gcs_path`
@@ -247,15 +247,6 @@ image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:lates
 > you deliberately blank that out, `plex-etl-sales-orders` runs the Sales Orders
 > pipeline (27 Plex views) regardless of what `bq_table`/`plex_view` say.
 
-> **Fix the Sales Orders names the example still carries.**
-> `terraform.tfvars.example` sets `cloud_run_job = "plex-etl"`,
-> `cloud_run_job_test = "plex-etl-test"`, `scheduler_job = "plex-daily-sync"`
-> and `scheduler_job_test = "plex-daily-sync-test"` — the names retired on
-> 2026-09-04. Delete those four lines (the `variables.tf` defaults are the
-> current names: `plex-etl-sales-orders`, `plex-etl-sales-orders-test`,
-> `plex-sales-orders-sync`, `plex-sales-orders-sync-test`), or every command
-> below naming those jobs will fail with NOT_FOUND.
-
 ### Step 9 · Create the GCP infrastructure
 
 Still in the `terraform/` folder, initialise, then deploy from the repo root:
@@ -274,16 +265,16 @@ working tree, and `main` equal to `origin/main` — so what gets deployed is
 always what GitHub shows. A fresh clone of `main` passes. It needs `python` on
 your `PATH` and Git Bash to run `deploy.sh`.
 
-**This creates the entire 13-pipeline, 26-job stack in one pass** — `terraform/main.tf` defines all 26 `google_cloud_run_v2_job` resources with no conditional gating, not just `plex-etl-sales-orders`. Takes **2–5 minutes**. Among what it creates:
+**This creates the entire 13-pipeline, 27-job stack in one pass** — `terraform/main.tf` defines all 27 `google_cloud_run_v2_job` resources with no conditional gating, not just `plex-etl-sales-orders`. Takes **2–5 minutes**. Among what it creates:
 - A service account (the "identity" every Cloud Run job uses)
 - `PlexProd`/`PlexTest` BigQuery datasets and their `sync_metadata` tables (`job_run_log` is created by the job itself on its first run)
 - Every `reports/` YAML and SQL file, uploaded to the report-configs bucket
 - An Artifact Registry repository (where your Docker image lives)
-- **Five** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`
-- All 26 Cloud Run job definitions (13 pipelines × prod/test)
-- All 52 Cloud Scheduler jobs — one daily trigger + one 9:45 PM Mountain retry trigger per Cloud Run job
+- **Six** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `monday-api-key`
+- All 27 Cloud Run job definitions (13 pipelines × prod/test, plus the Label Design push job)
+- All 51 Cloud Scheduler jobs — one daily trigger per Cloud Run job + a 9:45 PM Mountain retry trigger on each except Label Design and its push
 
-**Check it worked:** In GCP Console → **Secret Manager**, you should see 5 secrets listed.
+**Check it worked:** In GCP Console → **Secret Manager**, you should see 6 secrets listed.
 
 > **If you see errors:** See [DEPLOYMENT_GUIDE.md Step 1.4](DEPLOYMENT_GUIDE.md#14-if-resources-already-exist-state-recovery) for how to recover from state issues. Cloud Run jobs failing with "image not found" is expected until Step 11.
 
@@ -320,7 +311,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
-Set `image_url` in `terraform.tfvars` to that `:$SHA` tag and deploy again — this is what actually creates `plex-etl-sales-orders` (and the other 25 jobs) on a real image:
+Set `image_url` in `terraform.tfvars` to that `:$SHA` tag and deploy again — this is what actually creates `plex-etl-sales-orders` (and the other 26 jobs) on a real image:
 
 ```bash
 ./scripts/deploy.sh

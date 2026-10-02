@@ -12,16 +12,16 @@ Last reviewed: 2026-09-25
 
 ## What gets deleted
 
-As of 2026-09-25 there are **26 Cloud Run jobs** (13 pipelines × prod/test), **52 Cloud Scheduler jobs** (one daily + one 9:45 PM Mountain retry trigger per Cloud Run job), **94** GCS objects (every file under `reports/`), **5** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (188 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
+As of 2026-10-01 there are **27 Cloud Run jobs** (13 pipelines × prod/test, plus the Label Design push job), **51 Cloud Scheduler jobs** (one daily per Cloud Run job + a 9:45 PM Mountain retry trigger on each except Label Design and its push), **94** GCS objects (every file under `reports/`), **6** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (189 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
 
 | Resource | Managed by | Deleted how |
 |---|---|---|
-| All 26 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
-| All 52 Cloud Scheduler jobs (26 daily + 26 retry) | Terraform | `terraform destroy` |
+| All 27 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
+| All 51 Cloud Scheduler jobs (27 daily + 24 retry) | Terraform | `terraform destroy` |
 | BigQuery datasets `PlexProd` + `PlexTest` + all tables/views in both | Terraform | `terraform destroy` (after unlocking — see Step 2) |
 | `report_configs` GCS bucket (`voxdatalake-report-configs`) and its 94 YAML/SQL objects | Terraform | `terraform destroy` |
 | Artifact Registry repo (`plex-pipeline`) | Terraform | `terraform destroy` (after clearing images) |
-| Secret Manager containers (5 secrets: access token, SendGrid key, ODBC user/password, company code) | Terraform | `terraform destroy` |
+| Secret Manager containers (6 secrets: access token, SendGrid key, ODBC user/password, company code, Monday API key) | Terraform | `terraform destroy` |
 | Secret versions (the actual token/key values) | Manual | Deleted with the container |
 | Service account (`plex-etl-sa`) | Terraform | `terraform destroy` |
 | IAM role bindings | Terraform | `terraform destroy` |
@@ -113,7 +113,7 @@ cd C:/F/Parasol/plex-to-big-query/terraform
 terraform destroy -var-file=terraform.tfvars
 ```
 
-Read the plan it prints, then type `yes`. This takes several minutes and removes everything Terraform created — **about 200 resources** as of 2026-09-25 (26 Cloud Run jobs + 52 Cloud Scheduler jobs + 94 GCS objects + 2 BigQuery datasets + 5 secrets + the report-configs bucket + IAM/service-account resources + more).
+Read the plan it prints, then type `yes`. This takes several minutes and removes everything Terraform created — **about 200 resources** as of 2026-10-01 (27 Cloud Run jobs + 51 Cloud Scheduler jobs + 94 GCS objects + 2 BigQuery datasets + 6 secrets + the report-configs bucket + IAM/service-account resources + more).
 
 **Expected output at the end:**
 ```
@@ -122,8 +122,8 @@ Destroy complete! Resources: N destroyed.
 (This number will drift as report families are added/removed — treat it as "roughly matches what `terraform state list | wc -l` showed before you started," not a literal constant.)
 
 **Verify in GCP Console:**
-- **Secret Manager** → all 5 secrets should be gone
-- **Cloud Run** → **Jobs** → all 26 jobs should be gone
+- **Secret Manager** → all 6 secrets should be gone
+- **Cloud Run** → **Jobs** → all 27 jobs should be gone
 - **BigQuery** → both `PlexProd` and `PlexTest` datasets should be gone
 - **Cloud Storage** → the `voxdatalake-report-configs` bucket should be gone
 - **Artifact Registry** → `plex-pipeline` repo should be gone
@@ -173,7 +173,7 @@ image_url   = "us-central1-docker.pkg.dev/your-new-project-id/plex-pipeline/etl:
 gcloud config set project your-new-project-id
 gcloud auth application-default login
 
-# Deploy infrastructure (creates all 26 jobs, referencing image_url above —
+# Deploy infrastructure (creates all 27 jobs, referencing image_url above —
 # they fail "image not found" until the image is pushed below; expected)
 cd terraform
 terraform init -reconfigure     # -reconfigure if the backend bucket changed
@@ -193,12 +193,17 @@ docker push us-central1-docker.pkg.dev/your-new-project-id/plex-pipeline/etl:$SH
 # deploy/cloudbuild.yaml (after ./scripts/deploy_preflight.sh) — this step won't work again.
 ./scripts/deploy.sh
 
-# Add ALL FIVE secrets to the new project's Secret Manager
+# Add ALL SIX secrets to the new project's Secret Manager. Easier: if you have
+# a backup, ./scripts/restore_secrets.sh --project your-new-project-id --apply
+# puts every value back from it without any copy and paste.
 echo -n 'YOUR_PLEX_TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=your-new-project-id
 echo -n 'YOUR_SENDGRID_KEY'  | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=your-new-project-id
 echo -n 'YOUR_ODBC_USER'     | gcloud secrets versions add plex-odbc-user     --data-file=- --project=your-new-project-id
 echo -n 'YOUR_ODBC_PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=your-new-project-id
 echo -n 'YOUR_COMPANY_CODE'  | gcloud secrets versions add plex-company-code  --data-file=- --project=your-new-project-id
+# Label Design's Monday push. A company token, not a personal one — without it
+# plex-etl-label-design-push-test starts and fails on the first Monday call.
+echo -n 'YOUR_MONDAY_TOKEN'  | gcloud secrets versions add monday-api-key     --data-file=- --project=your-new-project-id
 
 # No manual config upload: the deploy above already created every reports/
 # YAML and SQL file as a Terraform-managed GCS object.

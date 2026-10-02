@@ -4,8 +4,8 @@ Last reviewed: 2026-09-25
 
 > **Read this first if you're new:** the project started as one Cloud Run
 > job pulling one Plex view (`Part_v_Part`) into one BigQuery table — the
-> "legacy single-view mode" described below. It has since grown into **26
-> Cloud Run jobs** (13 pipelines × prod/test, 68 BigQuery views) running a **multi-report YAML config mode**, each
+> "legacy single-view mode" described below. It has since grown into **27
+> Cloud Run jobs** (13 pipelines × prod/test plus the Label Design push job, 68 BigQuery views) running a **multi-report YAML config mode**, each
 > producing one or more named BigQuery views from a shared set of raw
 > extractions. Both modes are real, live code paths in `main.py` — legacy
 > mode still works and is what you get by default if `REPORT_CONFIG_GCS_PATH`
@@ -150,9 +150,58 @@ bq_view:                         # a single mapping, OR a list of mappings (see 
 
 ---
 
+## Change probe (`probe:`) — skipping a run that has nothing to do
+
+Added 2026-10-01 so a pipeline can run hourly without paying for a full extraction every hour. **Opt-in per report: a config with no `probe:` block behaves exactly as it always did.** Today only `label_design` uses it.
+
+A `probe:` block sits above `extractions:` and names one or more tiny queries whose combined result is fingerprinted:
+
+```yaml
+probe:
+  queries:
+    - plex_view: Sales_v_Release_Status
+      columns: [Release_Status_Key]
+      filter: "WHERE t.Release_Status = 'Label Design'"
+      bind: status_keys            # expose this query's single column to later filters
+
+    - plex_view: Sales_v_Release
+      columns: [Release_Key, PO_Line_Key]
+      filter: "WHERE t.Release_Status_Key IN ({status_keys})"
+```
+
+`run_probe()` in `main.py` builds `SELECT t.<col>, ... FROM <view> AS t <filter>` for each query (always aliased — the repo's Plex SQL rule), **sorts the returned row tuples** so the fingerprint describes the SET and not the order Plex happened to return, and hashes the lot: `sha256(...)[:32]`. A `bind:` query must return exactly one column; its values are interpolated into a later query's `{name}` placeholder as a comma-separated list of integers, and `_PROBE_BIND_RE` rejects anything that isn't digits.
+
+Then, before the extraction loop and only when `OUTPUT_MODE=bigquery`:
+
+1. The fingerprint is compared with the last one stored as `applied` for this report.
+2. **Equal** → log a `skipped` row to `probe_log`, close the ODBC connection and return. No extractions, no views, no email.
+3. **Different, or nothing stored yet** → the run proceeds normally.
+4. In `run_and_report()`, after `log_job_run`, the fingerprint is stored as `applied` **only if the run finished `success`** — otherwise `failed`.
+
+**Point 4 is why Label Design has no retry trigger.** A failed or partial run leaves the stored reference where it was, so the next hourly probe sees a difference and runs again. The probe *is* the retry — but only at hourly cadence. A nightly pipeline must keep its `-retry` scheduler.
+
+### Fail-open
+
+Anything that stops the probe being evaluated — a query erroring, a renamed status, a `bind:` resolving to no rows — raises `ProbeInconclusive`, logs an `inconclusive` row, and **runs the full extraction**. A probe may cost time; it may never be the reason a change is missed. The cost of that safety is that a permanently broken probe is invisible: every run succeeds, it just does the full work. Check now and then:
+
+```sql
+SELECT * FROM `voxdatalake.PlexTest.probe_log`
+WHERE outcome = 'inconclusive' ORDER BY probed_at DESC
+```
+
+### `probe_log`
+
+Created on first use in the pipeline's own dataset (`PROBE_LOG_TABLE`, default `probe_log`). One row per probe: `report_name`, `job_name`, `probed_at TIMESTAMP`, `fingerprint STRING`, `outcome STRING` (`skipped` | `applied` | `failed` | `inconclusive`), `detail STRING`.
+
+### What it does NOT cover
+
+The probe runs *before* view creation, so a deploy that changes only a view's SQL does not reach BigQuery until the probe's data changes. For Label Design that is acceptable — the queue moves daily — but after a view-only deploy, trigger the job by hand rather than waiting.
+
+---
+
 ## Retry mechanism
 
-Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job.
+Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job **except Label Design and its push job**, which have none — see "Change probe" above for why.
 
 The retry trigger runs with `RUN_MODE=retry`. On every run, `run_and_report()`:
 1. Calls `get_todays_run_status(bq, job_identity)` — `job_identity` is `CLOUD_RUN_JOB` (auto-set by Cloud Run) or the report's `report_name` as a local-run fallback
@@ -267,7 +316,7 @@ When Plex releases a new driver version (e.g. from `ivoa27` to `ivoa28`):
    ```bash
    gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
    ```
-   or (after `./scripts/deploy_preflight.sh`) run `deploy/cloudbuild.yaml`, whose `deploy-all` step loops over all 26 jobs from one build.
+   or (after `./scripts/deploy_preflight.sh`) run `deploy/cloudbuild.yaml`, whose `deploy-all` step loops over all 27 jobs from one build.
 6. Run a `-test` job to verify connectivity before trusting prod on the new driver
 
 ### Driver license
@@ -343,7 +392,7 @@ echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
 
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 26 jobs from one build (see its `_ALL_JOBS` substitution) — run `./scripts/deploy_preflight.sh` first and pass `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)`. Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 27 jobs from one build (see its `_ALL_JOBS` substitution) — run `./scripts/deploy_preflight.sh` first and pass `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)`. Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
 
 ---
 
@@ -360,6 +409,8 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `METADATA_TABLE` | `sync_metadata` | apply | Sync state tracking table |
 | `JOB_RUN_LOG_TABLE` | `job_run_log` | apply | Retry-tracking table — see "Retry mechanism" |
 | `RUN_MODE` | `""` | — | Set to `retry` by the 9:45 PM Mountain scheduler trigger; anything else runs as a normal scheduled execution |
+| `EMAIL_MODE` | `always` | apply | `on_error` sends mail only on a `partial` or `failed` run — set on both Label Design ETL jobs, which run hourly and would otherwise mail 26 times a day. A clean run is still recorded in `job_run_log` and `probe_log` |
+| `PROBE_LOG_TABLE` | `probe_log` | apply | Change-probe outcome table — see "Change probe" |
 | `REPORT_CONFIG_GCS_PATH` | `""` | — (edit the YAML instead) | GCS path to the multi-report YAML. Empty = legacy single-view mode using the vars below |
 | `PLEX_HOST` | `""` | apply | Plex ODBC hostname |
 | `PLEX_PORT` | `19995` | apply | Plex ODBC port |
@@ -390,7 +441,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **13 pipelines × prod/test = 26 Cloud Run jobs** (68 BigQuery views). Twelve run once a day on a 10-minute-staggered 7:00 PM–10:50 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes; Label Design runs twice a day, 9:30 AM and 1:30 PM (test 9:40/1:40). Every job also has a retry trigger at 9:45 PM Mountain (52 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **13 pipelines × prod/test = 26 Cloud Run jobs, plus the Label Design push job = 27** (68 BigQuery views). Twelve run once a day on a 10-minute-staggered 7:00 PM–10:50 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes; Label Design runs hourly, 5 AM - 5 PM Mountain (prod at :00, test at :05, push at :35), gated by a change probe. Every job except Label Design and its push also has a retry trigger at 9:45 PM Mountain (51 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
 Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl-sales-orders`/`sales_orders.yaml`, since expanded to 27 extractions + 27 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 
@@ -420,9 +471,9 @@ the history is there if incremental sync is built. See `docs/OPERATIONS.md`
 
 ## BigQuery schema guidance
 
-**Current behavior:** `autodetect=True` infers schema from the DataFrame on each load.
+**Current behavior:** `autodetect=True` infers schema from the DataFrame on each load. A 0-row extraction is the exception: since 2026-08-23 `query_plex()` reads each column's ODBC type from `cursor.description` and `write_to_bigquery()` uses it to create the empty table with real types.
 
-**Risk:** A column with only nulls in one run gets inferred as `STRING`. When real values arrive later, the append fails with a schema mismatch — and separately, an empty table gets an all-`STRING` schema, so a `JOIN` on a numeric key between one populated table and one still-empty table throws a type error. Always wrap numeric JOIN keys and aggregated columns in `SAFE_CAST` in report SQL — see `reports/sql/work_orders_view.sql` for the pattern.
+**Risk:** A column with only nulls in one run gets inferred as `STRING`. When real values arrive later, the append fails with a schema mismatch — and a populated column can still land as a type the SQL didn't expect (a nullable int arriving as `FLOAT64`), so a `JOIN` on a numeric key between two tables can throw a type error. Always wrap numeric JOIN keys and aggregated columns in `SAFE_CAST` in report SQL — see `reports/sql/work_orders_view.sql` for the pattern.
 
 **Recommendation for production:** Define an explicit schema and set `autodetect=False` in `write_to_bigquery()` inside `main.py`. Not yet done — every table today is still autodetected.
 
@@ -445,7 +496,7 @@ Terraform state lives remotely in `gs://voxdatalake-terraform-state/plex-to-big-
 | `google_artifact_registry_repository.etl` | Docker image repository |
 | `google_secret_manager_secret.access_token` / `.sendgrid_api_key` / etc. | Plex IAM token, ODBC creds, SendGrid key |
 | `google_cloud_run_v2_job.etl*` (× 26, one per pipeline × prod/test) | Each job's `containers.image` has `lifecycle { ignore_changes = [image, client, client_version] }` — Terraform intentionally doesn't manage the deployed image; `deploy/cloudbuild.yaml` or a manual `gcloud run jobs update` does |
-| `google_cloud_scheduler_job.etl*` (× 26 scheduled + 26 retry = 52) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
+| `google_cloud_scheduler_job.etl*` (× 27 scheduled + 24 retry = 51) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
 
 ---
 
@@ -494,14 +545,14 @@ plex-to-big-query/
 ├── spreadsheets/                  Google Sheet → BigQuery mapping docs (MFG Job Schedule, etc.)
 │
 ├── terraform/
-│   ├── main.tf                    All GCP resources — 26 Cloud Run jobs, 52 schedulers, GCS objects, IAM, deploy guard
+│   ├── main.tf                    All GCP resources — 27 Cloud Run jobs, 51 schedulers, GCS objects, IAM, deploy guard
 │   ├── variables.tf                Input variable definitions
 │   ├── outputs.tf                  Post-apply copy-paste commands
 │   ├── terraform.tfvars.example    Template for your tfvars (tracked in git)
 │   └── terraform.tfvars            Your real values (gitignored — back up to GCS, see its header)
 │
 ├── deploy/
-│   └── cloudbuild.yaml             Cloud Build — builds once, deploys to all 26 jobs
+│   └── cloudbuild.yaml             Cloud Build — builds once, deploys to all 27 jobs
 │
 ├── docs/
 │   ├── QUICKSTART.md               Step-by-step from zero to deployed (original single-pipeline walkthrough)

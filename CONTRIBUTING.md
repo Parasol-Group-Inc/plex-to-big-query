@@ -18,7 +18,7 @@ would be "cleaner." Concretely:
 - Before reading a large file end-to-end "just to be safe," check whether a
   targeted `grep`/section read already answers the question.
 - Re-run only the smallest test/verification command that actually covers
-  the change (e.g. `node deploy/label_design_sync/test_logic.js` rather than
+  the change (e.g. `python -m pytest label_design_service/` rather than
   a full project rebuild) unless there's a specific reason to believe the
   blast radius is wider.
 
@@ -211,7 +211,7 @@ These files conflict routinely. Each has one right resolution:
 |---|---|---|
 | Report YAML/SQL, Cloud Run jobs, schedulers, IAM: **anything in `terraform/`** | `./scripts/deploy.sh` from the primary folder | Terraform deploy guard + plan review + typed confirmation. Tagged `deploy/<UTC>`. |
 | **Container image** (`main.py`, `email_utils.py`, `Dockerfile`, `label_design_service/`) | `./scripts/deploy_preflight.sh`, then `gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .` | Preflight only; nothing inside Cloud Build checks the branch. Run it from the primary folder. |
-| **Apps Script** (`deploy/manual_data_app/`, `deploy/label_design_sync/`, `deploy/label_design_trigger/`) | Paste from the repo into the Apps Script editor, then Deploy → Manage deployments → **New version** | None. The repo copy is the record; paste from `main`. Saving in the editor does not update a live web app. |
+| **Apps Script** (`deploy/manual_data_app/`, `deploy/label_design_trigger/`) | Paste from the repo into the Apps Script editor, then Deploy → Manage deployments → **New version** | None. The repo copy is the record; paste from `main`. Saving in the editor does not update a live web app. |
 | **Hand-kept BigQuery tables** (`scorecard_goals*`, `turnaround_standards`, `safety_incidents`) | The manual-data app, or DDL in `docs/reports/` | None. Never `CREATE OR REPLACE` them: they hold people's entries. |
 
 **Quick iteration** on a view is not a deploy:

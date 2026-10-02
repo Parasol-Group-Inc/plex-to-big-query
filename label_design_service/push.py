@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Label Design push — `label_design_report` (BigQuery) -> Monday board.
 
-Replaces the Google Sheet + Apps Script hop (deploy/label_design_sync/). Runs
+Replaces the Google Sheet + Apps Script hop (deploy/archive/label_design_sync/). Runs
 as its own Cloud Run job, scheduled after the Label Design ETL has refreshed
 the view:
 
@@ -165,6 +165,25 @@ COLUMNS = [
     ("Part URL", "link", _link("part_url", _part_text)),
     ("Customer PO URL", "link", _link("customer_po_url", lambda r: f"PO {r.get('customer_po') or r.get('po_key')}")),
     ("Sales Order URL", "link", _link("sales_order_url", lambda r: f"SO {r.get('order_number') or r.get('po_key')}")),
+    # ── The label part and its attributes (2026-10-02) ──────────────────────
+    # QA records these against the LABEL part (73001-*), which reaches the
+    # order line only through the BOM -- the view resolves it now, see the
+    # `labels` CTE in label_design_view.sql. Before 2026-10-02 the view looked
+    # them up on the finished good and every one of these was NULL.
+    #
+    # Label Size and Allergen are TEXT deliberately: sizes will multiply and
+    # allergens will arrive as combinations ("Tree Nuts, Soy"), either of which
+    # would fill a status column with one-off labels. Printing Material is a
+    # status -- a small closed vocabulary worth filtering on, same call as
+    # Bottle Material above. Its labels are created on first write by
+    # `create_labels_if_missing` on the mutation below.
+    #
+    # A board without these columns logs a warning and skips them; it does not
+    # fail. That is what let the columns be created ahead of this code.
+    ("Label Part #", "text", _text("label_part_no")),
+    ("Label Size", "text", _text("part_label_size")),
+    ("Printing Material", "status", _label("part_printing_material")),
+    ("Allergen", "text", _text("part_allergen")),
     ("LCR", "text", _text("_lcr")),
 ]
 

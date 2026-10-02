@@ -80,25 +80,31 @@ Prod/test pairs are staggered 10 minutes apart. `scorecard_goals_resolved` is
 built by both `sales_orders` and `work_orders`, which is why the per-pipeline
 view counts add up to 69 while there are 68 distinct views.
 
-> **Caution — the 9:45 PM retry predates the late slots.** The retry was set
-> 15 minutes after the *last* job back when the cascade ended at 9:30 PM. It
-> now fires before `plex-etl-purchasing-pending-requisitions-test` (9:50 PM)
-> and the six sales-quotes / sales-returns / quality-supplier-returns jobs
-> (10:00–10:50 PM). And "today" in the retry check is the **UTC** date
-> (`run_date` in `job_run_log`, `CURRENT_DATE()` in `main.py`): 9:45 PM
-> Mountain is already the next UTC day, and so are those seven later jobs —
-> but they have not run yet when the retry fires. Reading `main.py`, a retry
-> that finds no scheduled run "today" does a full run, so those seven jobs
-> likely get an extra full run (and email) every night. Not yet confirmed
-> against `job_run_log`; check before relying
-> on the retry for those pipelines:
+> **Caution — the 9:45 PM retry has produced no runs at all. Settled from
+> the code, 2026-10-01.** The retry was set 15 minutes after the *last* job
+> back when the cascade ended at 9:30 PM. It now fires before
+> `plex-etl-purchasing-pending-requisitions-test` (9:50 PM) and the six
+> sales-quotes / sales-returns / quality-supplier-returns jobs (10:00–10:50
+> PM). And "today" in the retry check is the **UTC** date (`run_date` in
+> `job_run_log`, `CURRENT_DATE()` in `main.py`), so when those seven jobs'
+> retries fire, no scheduled run exists for the current UTC date and
+> `main.py` proceeds with a full run and an email.
 >
-> ```sql
-> SELECT job_name, run_mode, status, logged_at
-> FROM `voxdatalake.PlexProd.job_run_log`
-> WHERE run_mode = 'retry' AND status != 'skipped'
-> ORDER BY logged_at DESC
+> **That code path is real, but it is not firing.** Every retry invocation
+> writes exactly one `job_run_log` row with `run_mode='retry'` — a no-op logs
+> `status='skipped'`, a real run logs its outcome, and no path returns without
+> logging. There are **zero** such rows since 2026-07-21 (OPEN_ITEMS D2), so
+> no retry is reaching the container. Check Cloud Scheduler's own execution
+> history, not `job_run_log`:
+>
+> ```bash
+> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
 > ```
+>
+> **Until that is answered, no pipeline has a working automatic retry** — a
+> failed nightly run waits for a human. Label Design is the exception by
+> design: no retry trigger, because its hourly probe re-runs a failed cycle
+> within the hour.
 
 **Changing a time:** Sales Orders' pair is `scheduler_cron`/`scheduler_cron_test`
 in `terraform.tfvars`; every other job's `schedule` is a literal in

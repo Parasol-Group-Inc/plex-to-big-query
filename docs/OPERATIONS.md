@@ -462,14 +462,38 @@ Only a genuine **FAILED** run triggers a retry — **PARTIAL** does not,
 since that's a different severity tier (some data got through) and isn't
 treated as "the run needs to happen again."
 
-> **Caution — "today" is the UTC date, and some jobs run after the retry.**
-> `run_date` and the check both use UTC. A job scheduled *after* 9:45 PM
-> Mountain (sales quotes, sales returns, quality supplier returns, and
+> **Caution — the retry may not be running at all. Settled from the code,
+> 2026-10-01.** Two separate things were suspected here; the code answers both.
+>
+> **1. The UTC edge is real.** `run_date` and the check both use UTC, and 9:45
+> PM Mountain is already the next UTC day. A job scheduled *after* the retry
+> (sales quotes, sales returns, quality supplier returns, and
 > `plex-etl-purchasing-pending-requisitions-test` at 9:50 PM) has no
-> "scheduled run today" when its retry fires — so, reading the code, the
-> retry does a full run and sends an email every night. Confirm against
-> `job_run_log` (query below, `run_mode = 'retry'`) before relying on the
-> retry for those pipelines.
+> "scheduled run today" when its retry fires. `main.py` then logs *"today's
+> status: not logged — proceeding with a full run"* and does the full run,
+> email included. So the code path the old caution described is genuine.
+>
+> **2. But it cannot be happening, because no retry is reaching the
+> container.** Every retry invocation writes exactly one `job_run_log` row with
+> `run_mode='retry'` — there is no path that returns without logging. A
+> no-op logs `status='skipped'`; a real run logs `success`/`partial`/`failed`.
+> `job_run_log` has **zero** `run_mode='retry'` rows since 2026-07-21, across
+> 23 failed and 39 partial runs (OPEN_ITEMS D2). Those two facts can only both
+> be true if the retry schedulers are not invoking the jobs, or the container
+> is dying before `run_and_report()` is entered.
+>
+> **So the thing to check is not `job_run_log` — it is Cloud Scheduler.** The
+> retry's own execution history says whether it fires and what the target
+> returns:
+>
+> ```bash
+> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+> ```
+>
+> Until that is answered, **do not rely on the retry for any pipeline.** The
+> nightly cascade currently has no working automatic retry — a failed run waits
+> for a human. (Label Design is the exception: it has no retry trigger by
+> design, because its hourly probe re-runs a failed cycle on its own.)
 
 **Checking what happened:**
 ```sql

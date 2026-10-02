@@ -14,6 +14,22 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-02 - The retry path is verified end to end (OPEN_ITEMS D2 closed)
+
+### Fixed
+- Deployed the `plexEtlRunWithOverrides` role (below) and **proved the retry
+  path works, rather than trusting the clean apply.** Before: the live
+  `plex-sales-orders-sync-test-retry` read `state: ENABLED` with
+  `status: {code: 7}` and `lastAttemptTime 2026-10-02T03:45:05Z` — tonight's
+  9:45 PM firing, rejected like every one before it. After a forced firing:
+  `status: {}`, execution `plex-etl-sales-orders-test-tlgnd` started and
+  carried `RUN_MODE=retry` in its container env, and `PlexTest.job_run_log`
+  gained its **first-ever `run_mode='retry'` row** (`skipped`, 05:43:42 — the
+  daily run had succeeded, so there was nothing to re-run, which is the
+  correct outcome). That table had 0 such rows since 2026-07-21.
+- The binding is project-level on the ETL service account, so prod inherits it;
+  tonight's 9:45 PM prod firing is the confirmation, with nothing left to change.
+
 ## 2026-10-01 (dev) - The retry schedulers could never have run
 
 ### Fixed

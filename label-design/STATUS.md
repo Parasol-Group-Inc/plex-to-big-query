@@ -11,6 +11,34 @@
 
 ---
 
+## UPDATE — 2026-10-02 (late): deployed and verified end to end
+
+`label_design_report` is live at **49 columns** on PlexTest, and the push
+reports **20/20 mapped columns found**. `93001-00KAYAN-0` resolves
+`73001-00KAYAN-0 | 2.4 x 6.8 in | White BOPP | Tree Nuts`.
+
+**The attributes will not appear on the 30 items already on the board.** The
+push only ever creates items, never rewrites one. They land on the next new
+order line. Backfilling the existing items would be a separate job, and may
+not be worth it given the queue turns over.
+
+**Two things this deploy taught, both now in `docs/OPEN_ITEMS.md`:**
+
+- **L10 — an unchanged change probe skips view creation, not just the
+  extraction.** The post-deploy job ran, exited 0, logged `skipped` and left
+  the old 45-column view in place. GCS had the new SQL the whole time. A
+  SQL-only change therefore cannot land while Plex is quiet. It only went
+  live after the last `applied` row in `probe_log` was retired by hand:
+  `UPDATE ... SET outcome='applied-superseded'`. The next run re-logged
+  `applied` on the same fingerprint, so the hourly skipping resumed with no
+  lasting effect. This affects every probe-driven pipeline.
+- **L9 — this contradicts a recorded decision.** The 2026-09-21 call said
+  part attributes stay in Plex and do not go to Monday. See
+  `SEP21_FAST_FOLLOW.md`, now marked challenged. Jennilyn has not been asked
+  again.
+
+---
+
 ## UPDATE — 2026-10-02: the part attributes were on the wrong part
 
 Emilio spotted that QA puts the label attributes on the **label** part number,

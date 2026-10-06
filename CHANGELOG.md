@@ -14,6 +14,66 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-06 (sandbox) - Scorecard ticket set, and two fixes confirmed on real data
+
+### Added
+- **`docs/SCORECARD_CLICKUP_TICKETS.md`** - one ClickUp-ready ticket per
+  scorecard element: 35 tile tickets (SC-00 .. SC-34) and 14 blocker tickets
+  (SC-B1 .. SC-B14) owned by people outside this team, each cross-referenced
+  to the tiles it blocks. Row counts in it are real, from the 2026-10-05
+  PlexTest refresh.
+
+### Confirmed
+A full PlexTest refresh (all six scorecard pipelines, 2026-10-05) verified two
+fixes that were deployed 2026-09-25 but had never been seen working on real
+data:
+- **Finding 1, sales rep resolution.** 7 of 8 October rows in
+  `sales_mtd_summary_report` now carry real rep names instead of every row
+  reading "(no rep assigned)". The one remaining unassigned row is a genuine
+  Plex gap.
+- **Finding 7, part group.** `sales_revenue_summary_report.part_group` resolves
+  to "Capsule" instead of a single "(no group)" bar. This needed the new
+  `raw_Part_v_Part_Group` extraction, so it could not be proven until this run.
+
+All 37 checked views exist - **0 missing, 2 empty**.
+
+### Found
+- **Cycle count accuracy is empty for an unidentified reason.**
+  `raw_Part_v_Cycle_Inventory` holds 17 records and **all 17 have a NULL
+  `Cycle_Inventory_Date`**, so the view's `IS NOT NULL` filter drops
+  everything. This is not the "counting is lumpy" case the view was designed
+  around. Warehouse owns it (SC-B12).
+- **Pre-Weigh is producing with no goal** - 250 units in October,
+  `production_without_goal = true`. It was never in the seeded placeholder set,
+  which covered only Encapsulating / Bottling / Labeling (SC-B6).
+- **Encapsulating has produced 0 units in any month** in PlexTest, so
+  `encap_daily_report` is legitimately empty despite 3 open cap jobs
+  (1,542,000 caps).
+- **`sales_revenue_run_rate_report` counts `days_elapsed` in UTC.** It returned
+  6 of 31 on 2026-10-05, because the job completed 00:07 UTC / 18:07 Mountain.
+  After ~6pm Mountain the denominator advances a day early and the projection
+  drops.
+- **`safety_incidents` holds one row dated 2026-10-02**, not the 7/23
+  recordable that `docs/OPEN_ITEMS.md` S6 describes. Safe Days would read ~4,
+  not ~75. Unconfirmed whether it is real or an app test entry (SC-B13).
+
+## 2026-10-05 (sandbox) - Tile status check was blind to five tiles
+
+### Fixed
+- **`scripts/scorecard_status.ps1` counted 30 of the 35 views the scorecard
+  reads.** Its list had drifted from `reports/*.yaml`, so a clean run
+  reported nothing at all about five tiles - and reported it as success,
+  which is the same failure mode the script exists to catch. Added:
+  - `sales_orders_pending_accounting_approval_report` (Sales | Orders
+    pending accounting approval) - the tile
+    `SCORECARD_SANDBOX_FINDINGS.md` finding 3 covers;
+  - `encap_daily_report`, `packaging_daily_report`,
+    `labeling_daily_report` (Production | Encap / Bottling / Labeling
+    daily);
+  - `safety_incidents` (Operations | Safe days). It has no view - Looker
+    computes Safe Days from the table's latest date - so it is counted
+    alongside the goal tables, like `scorecard_goals_app`.
+
 ## 2026-10-02 (sandbox) - Goal tables seeded so every goal tile has a number
 
 Found by querying both datasets rather than trusting the Migration Board:

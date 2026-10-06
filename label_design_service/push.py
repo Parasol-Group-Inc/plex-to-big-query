@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Label Design push — `label_design_report` (BigQuery) -> Monday board.
 
-Replaces the Google Sheet + Apps Script hop (deploy/label_design_sync/). Runs
+Replaces the Google Sheet + Apps Script hop (deploy/archive/label_design_sync/). Runs
 as its own Cloud Run job, scheduled after the Label Design ETL has refreshed
 the view:
 
@@ -10,7 +10,7 @@ the view:
 
 ONE ROW, ONE ITEM, ONCE. A row is "already on Monday" when the board holds an
 item whose LCR column equals the row's hash — SHA-256 of `dedupe_key`
-(order_number|customer_part_no), first 12 lowercase hex chars. No existing
+("<order>|L<PO_Line_Key>", one per order LINE since 2026-09-30), first 12 lowercase hex chars. No existing
 hand-typed LCR is lowercase hex, so a hash can never collide with an old
 value. The hash is written INSIDE create_item, so a run that dies straight
 after creating an item still leaves the mark that stops the next run
@@ -51,10 +51,8 @@ from google.cloud import bigquery
 
 try:  # `python -m label_design_service.push` (container) or run from this folder
     from .monday import Monday
-    from .reason_code import REASON_CODE_LABELS, parse_job_note
 except ImportError:
     from monday import Monday
-    from reason_code import REASON_CODE_LABELS, parse_job_note
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("label_design_push")
@@ -127,17 +125,28 @@ def _label(field):
     return lambda r: {"label": str(r[field]).strip()} if (r.get(field) or "").strip() else None
 
 
-def _reason_code(r):
-    return {"label": REASON_CODE_LABELS[r["_reason_index"]]} if r.get("_reason_index") is not None else None
+def _link(field, text):
+    """A Monday link value. The URL comes from the view; `text(r)` is what shows."""
+    return lambda r: {"url": r[field], "text": text(r)} if r.get(field) else None
+
+
+def _part_text(r):
+    # "93001-00CGNUT-2 Rev 00", or the key when the part master row is missing.
+    return " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(r.get("part_key"))
 
 
 COLUMNS = [
     ("Customer Name", "text", _text("customer_name")),
     ("Date", "date", _date),
-    ("Description", "text", _text("customer_part_description")),
+    # The part line: "<part no> <rev> | <Plex part name>" (2026-09-29, Ashley).
+    # The customer part description it used to read is empty in Plex.
+    ("Description", "text", _text("line_description")),
     ("Sales Order", "text", _sales_order),
-    ("Memo", "text", _text("_memo")),
-    ("Reason Code", "status", _reason_code),
+    # Reason Code and Memo are split out of the Job Note by the VIEW (the one
+    # place that rule lives). No code -> reason_code_label is NULL -> nothing
+    # is written to Reason Code, and the whole note is the Memo.
+    ("Memo", "text", _text("memo")),
+    ("Reason Code", "status", _label("reason_code_label")),
     ("Email", "email", _email),
     ("Phone Number", "text", _text("customer_phone")),
     # `bdm`: the order's Inside Sales, else the customer's Assigned To, else
@@ -146,6 +155,35 @@ COLUMNS = [
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),
+    # Added 2026-09-29, replacing the 2026-09-25 "Plex Part URL" / "PO URL"
+    # columns (deleted from Plex Import that day). The URLs are built in the
+    # view, host by dataset, so the report and the board carry the same links.
+    ("Customer PO", "text", _text("customer_po")),
+    # The container (HDPE / PET / Glass), from the bottle component's name in
+    # the BOM. Only ever one of the board's existing labels, or nothing.
+    ("Bottle Material", "status", _label("bottle_material")),
+    ("Part URL", "link", _link("part_url", _part_text)),
+    ("Customer PO URL", "link", _link("customer_po_url", lambda r: f"PO {r.get('customer_po') or r.get('po_key')}")),
+    ("Sales Order URL", "link", _link("sales_order_url", lambda r: f"SO {r.get('order_number') or r.get('po_key')}")),
+    # ── The label part and its attributes (2026-10-02) ──────────────────────
+    # QA records these against the LABEL part (73001-*), which reaches the
+    # order line only through the BOM -- the view resolves it now, see the
+    # `labels` CTE in label_design_view.sql. Before 2026-10-02 the view looked
+    # them up on the finished good and every one of these was NULL.
+    #
+    # Label Size and Allergen are TEXT deliberately: sizes will multiply and
+    # allergens will arrive as combinations ("Tree Nuts, Soy"), either of which
+    # would fill a status column with one-off labels. Printing Material is a
+    # status -- a small closed vocabulary worth filtering on, same call as
+    # Bottle Material above. Its labels are created on first write by
+    # `create_labels_if_missing` on the mutation below.
+    #
+    # A board without these columns logs a warning and skips them; it does not
+    # fail. That is what let the columns be created ahead of this code.
+    ("Label Part #", "text", _text("label_part_no")),
+    ("Label Size", "text", _text("part_label_size")),
+    ("Printing Material", "status", _label("part_printing_material")),
+    ("Allergen", "text", _text("part_allergen")),
     ("LCR", "text", _text("_lcr")),
 ]
 
@@ -189,6 +227,33 @@ def existing_lcrs(api, lcr_col):
 
 # ── BigQuery ───────────────────────────────────────────────────────────────
 
+def pending_count(bq):
+    """How many view rows carry an LCR the audit table has never recorded.
+
+    `lcr_hash()` done in SQL, so the hourly run can decide whether there is any
+    work before it pages the whole Monday board. A hand-typed item has no audit
+    row, so this can over-count and never under-count — the board scan below
+    still has the last word on what gets created.
+    """
+    q = f"""
+        SELECT COUNT(*) AS n
+        FROM (
+          SELECT SUBSTR(TO_HEX(SHA256(v.dedupe_key)), 1, 12) AS lcr
+          FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}` AS v
+        ) AS candidate
+        LEFT JOIN (
+          SELECT DISTINCT a.lcr
+          FROM `{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}` AS a
+          WHERE a.board_id = @b AND a.outcome IN ('created', 'partial')
+        ) AS seen
+          ON seen.lcr = candidate.lcr
+        WHERE seen.lcr IS NULL
+    """
+    job = bq.query(q, job_config=bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("b", "STRING", BOARD_ID)]))
+    return list(job.result())[0].n
+
+
 def ensure_audit_table(bq):
     table = bigquery.Table(f"{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}", schema=AUDIT_SCHEMA)
     bq.create_table(table, exists_ok=True)
@@ -226,6 +291,22 @@ def main():
     log.info(f"Label Design push {run_id}: {GCP_PROJECT}.{BQ_DATASET}.{VIEW} -> board {BOARD_ID}"
              f"{' (DRY RUN)' if DRY_RUN else ''}")
     bq = bigquery.Client(project=GCP_PROJECT)
+
+    # Cheap gate, ahead of the Secret Manager read and the board scan: on most
+    # hourly runs the view holds nothing the audit table hasn't seen, and this
+    # exits without a single Monday API call. DRY_RUN deliberately skips the
+    # gate so a dry run always shows the full picture.
+    if not DRY_RUN:
+        ensure_audit_table(bq)
+        try:
+            pending = pending_count(bq)
+        except Exception as e:
+            log.info(f"Pending check skipped ({type(e).__name__}: {e}) — doing the full pass")
+            pending = None
+        if pending == 0:
+            log.info("Nothing in the view that the audit table hasn't seen — nothing to push.")
+            return
+
     api = Monday(get_api_key())
 
     board_name, col_ids, missing, group_id = resolve_board(api)
@@ -234,8 +315,6 @@ def main():
         log.warning(f"Board has no column {m} — that field will not be written")
 
     rows = [dict(r) for r in bq.query(f"SELECT * FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}`").result()]
-    if not DRY_RUN:
-        ensure_audit_table(bq)
     on_board = existing_lcrs(api, col_ids["LCR"])
     try:
         in_audit = audited_lcrs(bq)
@@ -248,7 +327,6 @@ def main():
         r["_lcr"] = lcr_hash(r["dedupe_key"])
         if r["_lcr"] in on_board or r["_lcr"] in in_audit:
             continue
-        r["_reason_index"], r["_memo"] = parse_job_note(r.get("job_note"))
         fresh.append(r)
     log.info(f"{len(rows)} row(s) in the view, {len(rows) - len(fresh)} already on the board, "
              f"{len(fresh)} new")

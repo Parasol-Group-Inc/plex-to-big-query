@@ -116,6 +116,454 @@ that** - it is driven `FROM actual LEFT JOIN goal`, and
 `sales_revenue_summary_report` has 0 rows in *both* datasets. A month with a
 goal and no revenue does not appear at all. Worth deciding whether that
 should be a FULL JOIN, so a missed month reads 0% rather than vanishing.
+## 2026-10-02 (label-design) - Part attributes come off the LABEL part
+
+### Fixed
+
+- **The ten `part_*` columns were looking at the wrong part, and every one of
+  them read NULL.** `part_attributes_pivoted` was joined to the order line's
+  part - the finished good, `93001-00KAYAN-0`. QA records label attributes
+  against the **label** part, `73001-00KAYAN-0`, which reaches the order line
+  only through the bill of materials. The two keys never met.
+
+  `reports/sql/label_design_view.sql` gains a `labels` CTE over
+  `raw_Part_v_Flat_BOM`, mechanically identical to the `bottles` CTE added
+  2026-09-29: the component whose `Name` starts "LABEL", collapsed to one row
+  **before** the join so a second label could never duplicate a queue row. Of
+  the 169 parts with a BOM in PlexTest, 54 have a label component and none has
+  two. The attribute pivot now joins on that key.
+
+  Verified end to end against PlexTest the same day: `93001-00KAYAN-0` now
+  resolves `Label Size = 2.4 x 6.8 in`, `Printing Material = White BOPP`,
+  `Allergen = Tree Nuts`, `Trademark = N/A`. A part with no label component
+  gets NULLs, which is what every row got before.
+
+- **The pivot asked for `'Size'`; the populated attribute is `'Label Size'`.**
+  Both exist in Plex - `Size` (key 2383) is assigned to nothing, `Label Size`
+  (key 7436) carries the values. A new `part_label_size` column reads the
+  latter; `part_size` is kept, still reading the former.
+
+### Added
+
+- **`label_part_key`, `label_part_no`, `label_part_name`** on
+  `label_design_report`, and `part_label_size`. 49 columns, up from 45.
+
+- **Four Monday columns in `label_design_service/push.py`:** `Label Part #`
+  (text), `Label Size` (text), `Printing Material` (status) and `Allergen`
+  (text), created on the Plex Import board ahead of this commit. Size and
+  Allergen are text on purpose - sizes multiply and allergens arrive as
+  combinations, either of which would fill a status column with one-off
+  labels. 20 mapped columns, up from 16.
+
+  The **item name is unchanged** (still `customer_part_no`). Whether it should
+  become the label code instead is Ashley's call, not a side effect of this
+  fix; the label part number gets its own column so both can be seen side by
+  side first.
+
+### Changed
+
+- **Three attribute names in the pivot no longer exist in Plex.** The catalog
+  on 2026-10-02 holds exactly eight attributes: Allergen, Certifications,
+  Hazardous, Label Size, Material Classification, Printing Material, Size,
+  Trademark. `Bottle Material`, `California PDP` and `Prop 65 Requirement`
+  were all present on 2026-09-21 and are gone. Their columns are **kept**,
+  emitting NULL, pending Jennilyn confirming whether they were removed or
+  renamed - dropping a column that turns out to have been renamed loses the
+  mapping work twice over. This is the same trap that caught the original
+  build, which guessed at two attribute names and got both wrong.
+
+- **PlexTest and PlexProd carry identical attribute data** (40 assignments
+  across 10 label parts, same values, verified 2026-10-02), so this is
+  verifiable on test rather than needing a prod run. The report doc's
+  "every value is currently blank" note was stale and is corrected.
+
+## 2026-10-02 (label-design) - The Sheet-based Apps Script is archived
+
+### Removed
+
+- **`deploy/label_design_sync/` moves to `deploy/archive/label_design_sync/`.**
+  The Sheet -> Monday Apps Script was superseded by `label_design_service/push.py`
+  on 2026-09-24 and has been marked "being retired" since 2026-09-25.
+
+  **It was safe to retire because its triggers could not reach Monday.com.**
+  `installTriggers()` only ever scheduled `checkForNewOrdersAuto` (reads
+  BigQuery, appends to the sheet's MONDAY tab, never touches Monday.com) and
+  `sendDailySummary`. The push, `pushToMondayAndArchiveManual`, was menu-only
+  by design. So unlike `deploy/goals_sheet_to_bigquery.gs` - deleted while its
+  trigger kept truncating a table - a forgotten trigger here could only have
+  refreshed a spreadsheet and sent email. No `[Label Design] Summary` email has
+  reached the recipient list since the changeover, so the triggers are gone.
+
+- **`scripts/build_logo_gs.py` -> `scripts/build_logo.py`**, and its `build_gs()`
+  half is removed. It wrote two things: `assets/vox-logo.png`, still attached
+  inline by `email_utils.py`, and `label_design_sync/Logo.gs`, the same bytes
+  as base64 for Apps Script. The second consumer is archived, so the frozen
+  `Logo.gs` in the archive is the last generated copy and nothing regenerates
+  it. The PNG half is untouched.
+
+### Changed
+
+- References re-pointed at the new path across `.githooks/hooks.py` (the
+  project-ownership regex), `.gitignore`, `CONTRIBUTING.md`, `README.md`,
+  `docs/CHEATSHEET.md`, `docs/reports/label_design_report.md`,
+  `label-design/README.md`, `label-design/monday_board_catalog.md`,
+  `label_design_service/push.py` and `terraform/main.tf`. The archived
+  documents' own banners now say archived rather than "being retired", and
+  their links out are corrected for the extra directory level.
+
+- New `deploy/archive/README.md`, modelled on `docs/archive/README.md`, with
+  the warning that archiving deployed code does not switch it off.
+
+## 2026-10-02 (label-design) - Label Design runs Monday to Friday
+
+### Changed
+
+- **The three Label Design schedules narrow to weekdays** (`* * 1-5`):
+  `plex-label-design-sync` (:00), `plex-label-design-sync-test` (:05) and
+  `plex-label-design-push-sync-test` (:35), all still hourly 5 AM - 5 PM
+  Mountain. Closes OPEN_ITEMS L9, which had been half-answered since
+  2026-10-01 - Jennilyn gave the hours, not the days.
+
+  The block comment above these resources used to argue the opposite, that
+  Saturday and Sunday had to be included or the team would find a two-day-stale
+  queue on Monday morning. The 5 AM start retired that argument: Monday's first
+  run sweeps up the weekend before anyone arrives. Weekend orders now reach the
+  board Monday at 5 AM, which is intended while nobody works the queue then.
+
+  Schedule-only - no image rebuild. Ships with `./scripts/deploy.sh`.
+## 2026-10-01 (scorecard) - Manual Data app: the "already saved" panel stacked
+
+### Fixed
+- **The "what is already saved" panel was added again on every render.** It
+  sits above `#form` rather than inside it, so `renderForm()`'s
+  `form.innerHTML = ''` never cleared it, while `wireCurrentView()` inserted a
+  fresh copy each time. Every tab click, Save and Clear therefore left another
+  copy behind — most visible on **Safety incidents**, where re-clicking the
+  tab piled up "No incidents logged yet…" messages (and duplicate
+  `#currentview` ids with them). `wireCurrentView()` now removes the previous
+  panel before inserting its own.
+- **Out-of-order lookups could paint a stale answer.** `getCurrentValue` and
+  `getRepGoalSum` fire on every driver-field change and `google.script.run`
+  gives no ordering guarantee, so changing the month twice quickly could leave
+  the first answer on screen. Both now carry a sequence token and only the
+  newest response paints.
+
+### Changed
+- **Tabs are now real tabs.** The tab bar already used `role="tablist"` /
+  `role="tab"` without the rest of the pattern: the card is now the
+  `role="tabpanel"` it labels, tabs carry `aria-controls` plus a roving
+  `tabindex`, and ←/→ move between them.
+- `wireCurrentView()` resolves the card by `#panel` instead of
+  `querySelector('.card')` — the setup screen renders a `.card` of its own.
+- `say()` no longer emits `class="msg "` with a trailing space for the
+  neutral "Saving…" state.
+
+## 2026-10-01 (dev) - The retry schedulers could never have run
+
+### Fixed
+- **Every `*-retry` scheduler has been rejected with `PERMISSION_DENIED`
+  (code=7) on every firing since the retries were introduced** — none has ever
+  started a job. The retry schedulers POST to the job's `:run` endpoint with an
+  `overrides` body (to set `RUN_MODE=retry`), and Cloud Run gates a request
+  carrying overrides on **`run.jobs.runWithOverrides`**, a separate permission
+  from the `run.jobs.run` that `roles/run.invoker` grants. The daily schedulers
+  send a bare `{}`, so they never needed it and always worked. The schedulers
+  report `ENABLED` the whole time — the refusal shows only in their `status` —
+  which is why this went unnoticed through 23 failed and 39 partial runs
+  (`job_run_log` has 0 `run_mode='retry'` rows since 2026-07-21).
+- **The fix** (`terraform/main.tf`): a custom project role
+  `plexEtlRunWithOverrides` holding `run.jobs.runWithOverrides` and nothing
+  else, bound to the ETL service account. `roles/run.developer` also carries
+  the permission but allows deploying and modifying Cloud Run services, which
+  the ETL account has no business doing. `roles/run.invoker` stays — this is
+  additive.
+- **Not yet deployed, and applying cleanly is not evidence it works.** The
+  first post-deploy retry must be checked for an actual `run_mode='retry'` row
+  in `job_run_log` (OPEN_ITEMS D2).
+
+## 2026-10-01 (label-design, later) - The hourly window moves to 5 AM - 5 PM
+
+Jennilyn: the labeling team starts at 5 AM. The window shipped this morning
+(7 AM - 6 PM) missed their first two hours entirely — an order sitting in Label
+Design at 5 AM waited until 7:35 to reach the board.
+
+### Changed
+- **`plex-label-design-sync` `0 5-17`, `-sync-test` `5 5-17`,
+  `plex-label-design-push-sync-test` `35 5-17`** (Mountain). Two hours earlier,
+  one hour shorter at the end; 13 runs a day instead of 12. Last board update
+  of the day is 5:35 PM — the push keeps its 30-minute offset behind the ETL,
+  so "ends at 5 PM" means the 5 PM cycle still completes.
+- `docs/reports/label_design_report.md` says 5 AM - 5 PM.
+
+Still **seven days a week** — nobody has said yet whether the queue is worked
+at weekends (OPEN_ITEMS L9). Cheap to leave running: a weekend probe that finds
+nothing costs seconds and no Monday API calls.
+
+Schedule-only. No code change, so **no image rebuild** — `./scripts/deploy.sh`
+is the whole deploy.
+
+## 2026-10-01 (label-design) - Hourly, behind a change probe
+
+The queue now refreshes within the hour instead of at 9:30 and 1:30, without
+costing 6x the Plex load: each run first asks Plex one small question and stops
+if the answer hasn't moved. **Deployed 2026-10-01** (image `etl:6ef09f5`,
+`./scripts/deploy.sh`). Verified in `PlexTest.probe_log`: one `applied` on
+the first run, then `skipped` on every hourly run since, same fingerprint,
+no `inconclusive` rows.
+
+### Added
+- **A `probe:` block in a report config** (`main.py`: `run_probe`,
+  `validate_probe_query`, `probe_log`). Tiny aliased `SELECT`s whose combined
+  result is fingerprinted; when the fingerprint matches the last clean run's,
+  the whole extraction is skipped. A query may `bind:` its single column into a
+  later query's filter as a comma-separated list of integers. Opt-in per
+  report — a config without a `probe:` block behaves exactly as before.
+- **`<dataset>.probe_log`** (created on first run): one row per probe —
+  `skipped`, `applied`, `failed` or `inconclusive`, with the fingerprint.
+- **Label Design's probe**: the set of `Sales_v_Release` lines sitting on the
+  `Label Design` release status — the only thing that can produce a new Monday
+  item, since the push only ever creates items and never updates them. The key
+  SET, not a count (a count misses one-in-one-out) and not `Update_Date`
+  (nothing guarantees Plex stamps it on a status change).
+- **A BigQuery gate in the push** (`push.py`: `pending_count`). Counts the view
+  rows whose LCR the audit table has never recorded — `lcr_hash()` as SQL — and
+  returns before reading the Monday API key or paging the board when that is 0.
+  It can over-count (a hand-typed item has no audit row), never under-count.
+- **`EMAIL_MODE=on_error`** (`main.py`), set on both Label Design ETL jobs: a
+  clean run is recorded in `job_run_log` / `probe_log` and sends no mail. A
+  partial or failed run still mails.
+
+### Changed
+- **Hourly schedules, 7 AM - 6 PM Mountain**: `plex-label-design-sync` at :00,
+  `-test` at :05, `plex-label-design-push-sync-test` at :35 (the push keeps its
+  30-minute offset — the ETL's worst case is two 600s attempts).
+
+### Removed
+- **`plex-label-design-sync-retry` and `plex-label-design-sync-test-retry`.**
+  The fingerprint is stored as `applied` only after a clean run, so a failed or
+  partial run leaves the reference untouched and the next hourly probe sees a
+  difference and re-runs — a retry within the hour instead of at 9:45 PM, and
+  one that also covers a run that never started. (That trigger had never
+  produced a run: OPEN_ITEMS D2.) Every other pipeline keeps its `-retry`
+  scheduler and the `RUN_MODE=retry` path, which is untouched.
+
+### Fail-open, by design
+A probe that can't be evaluated — the status renamed, a query erroring, a bind
+resolving to nothing — logs `inconclusive` and runs the full extraction. A
+probe may slow things down; it may never be the reason a change is missed.
+Worth a look now and then:
+`SELECT * FROM PlexTest.probe_log WHERE outcome = 'inconclusive' ORDER BY probed_at DESC`
+## 2026-09-30 (dev) - New-developer setup, backup coverage, onboarding guide
+
+### Added
+- **`scripts/dev_setup.sh`:** one command from a fresh clone to a working
+  machine. It checks the tools and the Google login, downloads the licensed
+  ODBC driver from `gs://voxdatalake-build-assets`, writes `.env` from Secret
+  Manager (Plex token, ODBC user, Monday key; nothing is printed), and
+  installs the hooks. `--worktrees` creates the four project folders;
+  `--deploy-machine` restores `terraform.tfvars` from its bucket backup. It
+  never overwrites `.env` / tfvars without `--force`, and it names the
+  missing access when a step fails.
+- **`docs/ONBOARDING.md`:** a new developer's first day. It covers the access
+  to ask for (read-only by default; deploy rights are a separate grant),
+  tools, setup, folders and branches, how a change goes live, where status
+  lives, known friction, and the never-dos.
+
+### Changed
+- **`scripts/backup_to_bucket.ps1`** also writes the six Secret Manager
+  **values** to `secrets.env` in each backup, read with `gcloud secrets
+  versions access`. Nothing is printed, and the temporary file is deleted after
+  upload. Emilio's call: the bucket is company-only. It sits in the same
+  project, so it covers a destroyed secret version or a lost laptop, not a
+  deleted project.
+  - Only **three of the six secrets hold values**: `plex-access-token`,
+    `sendgrid-api-key` and `monday-api-key`. `plex-odbc-user`,
+    `plex-odbc-password` and `plex-company-code` have **no versions**; they
+    are placeholders for username/password auth, which the pipeline never
+    uses (it authenticates with the token). The backup now says "unused
+    placeholder" for those, and "NOT READABLE" only for a real access
+    problem. Found on the first real backup, 2026-09-30.
+  - `dev_setup.sh` therefore reads `PLEX_ODBC_USER` from the tfvars backup
+    (`plex_odbc_user`, not a secret), not from the empty secret.
+- **`scripts/restore_secrets.sh`:** puts those values back into Secret
+  Manager from the latest backup (or `--file`, `--project`). Dry run by
+  default; it skips a secret whose value already matches. DR runbook step 5
+  now uses it instead of pasting values.
+- **`scripts/backup_to_bucket.ps1`** also zips and uploads `driver/` (the
+  licensed ODBC driver) and `zipfiles/` (the vendor packages and licence
+  serials, which existed only on one laptop). Run it from the primary folder.
+- **`docs/DISASTER_RECOVERY.md`:** six secrets, not five (`monday-api-key`
+  was missing from the restore runbook). Also records the personal-token risk
+  on the Monday key and the stale local `terraform.tfstate` files in the
+  primary folder.
+- **README:** a "The branches hold different files" section, with the live
+  numbers (dev-scorecard / dev-sandbox had 16 files differing from main),
+  how to check, and which gitignored files each folder needs. "First run"
+  now uses `dev_setup.sh`, and "Read next" starts with the onboarding guide.
+- **`.env.example`** gains `PLEX_HOST` / `PLEX_PORT` / `PLEX_SERVER_DATASOURCE`
+  (the driver-direct settings the real `.env` has used for months) and
+  `MONDAY_API_KEY`.
+
+## 2026-09-30 (label-design) - One Monday item per order line
+
+Ashley's rule: an order with several lines gives one item per line. **Not
+deployed** (OPEN_ITEMS L5).
+
+### Changed
+- **`label_design_report` collapses per order LINE** (`po_line_key`, new
+  column), not per order + customer part. Two lines carrying the same part
+  are now two items; a line split into several releases is still one.
+- **`dedupe_key` is `<order>|L<PO_Line_Key>`.** It was `<order>|<customer
+  part>`. The line key survives edits to a line's part or quantity.
+
+### Migration (done 2026-09-30, PlexTest / Plex Import)
+- The 13 items already on the board were re-keyed: the new hash was written
+  to their LCR, and a push-log row was ADDED for it (`run_id =
+  rekey-20260930`), keeping the old rows. The deployed code (old key) and
+  this code (new key) both report "13 already on the board, 0 new" (verified
+  with a dry run of each).
+- No prod items exist yet, so there is nothing to migrate there.
+
+### Test data
+- `label_design_test_data.py` reads the Monday key from Secret Manager
+  (`monday-api-key`) when neither the environment nor `.env` has one, so no
+  more `export MONDAY_API_KEY=…` before `--delete` / `--status`.
+- New case 1104: the same customer part on two lines of one order gives two
+  rows. `--check` matches rows by `(order, po_line_key)`.
+
+## 2026-09-29 (label-design, later) - Part line in Description; Bottle Material from the BOM
+
+Ashley's review of the first real Plex test orders (#4-#7). **Deployed**
+2026-09-30 (`deploy/2026-09-30T1551Z`); end-to-end confirmation is OPEN_ITEMS L5.
+
+### Added
+- **`label_design_report`:** `part_name`, `line_description` ("93001-00KAYAN-0
+  Rev 00 | FG | Max Detox 60ct 175cc White Bottle/White Lid +Standard Label
+  (s3832)", the text under the part on the Plex order screen),
+  `bottle_part_no`, `bottle_name` and `bottle_material`.
+  - The bottle is the finished good's `BOTTLE | …` component in
+    `Part_v_Flat_BOM`, usually two levels down. It is picked once per part
+    before the join, so it can never duplicate a row.
+  - The material is read from the bottle's name: HDPE, PET or Glass only, the
+    board's own labels. Coverage: 93 of 104 bottle parts in PlexTest, and all
+    13 real queue lines (7 HDPE, 6 PET). A name with no material gives NULL.
+- **Extraction:** `Part_v_Flat_BOM` in both Label Design configs (14
+  extractions). Until now only the overnight `sales_orders` job pulled it.
+- **Push:** Description comes from `line_description`; it was
+  `customer_part_description`, which is empty in Plex. Bottle Material
+  (status) comes from `bottle_material`.
+- **Test data:** fake parts carry a Plex Name and an optional fake BOTTLE
+  component. New case 1403 is a bottle with no material in its name. Real
+  parts are graded on their real bottle; the material is re-derived in
+  Python, not copied from the SQL.
+
+### Not changed, answered from the data
+- **Customer phone** is already pulled (`Common_v_Customer.Phone`) and written
+  to Phone Number on every order.
+- **WO column:** the push never wrote it, so deleting it on the board is safe.
+
+## 2026-09-29 (label-design) - Reason Code, Memo and Plex links in the view; edge-case test data
+
+**Deployed** 2026-09-30 (`deploy/2026-09-30T1551Z`), with a rebuilt push image
+since `push.py` changed too; end-to-end confirmation is OPEN_ITEMS L5. Merged
+with the 2026-09-25/26 entries below, which added the keys and `Part_v_Part`
+first.
+
+### Added
+- **`label_design_report`:** `reason_code`,
+  `reason_code_label`, `memo`, `part_url`, `customer_po_url` and
+  `sales_order_url`. The links use `vox.on.plex.com` on PlexProd and
+  `vox.test.on.plex.com` otherwise.
+- **Push:** Customer PO (text), Part URL, Customer PO URL and Sales Order URL
+  (link), all from the view. They **replace** "Plex Part URL" / "PO URL"
+  (2026-09-25), whose columns Emilio deleted from Plex Import on 2026-09-29.
+  `PLEX_WEB_HOST` is removed from `push.py` and from the test job in
+  `terraform/main.tf`, because the view picks the host by dataset.
+- **`scripts/label_design_test_data.py --check`:** runs the LOCAL view SQL
+  against PlexTest and grades 31 injected edge cases (Reason Code rules,
+  release collapse, NULL customer parts, messy statuses, 14-day boundary,
+  URL encoding), PASS/FAIL each. Later: five Sales Rep fallback cases using
+  real Plexus users (no fake user injected), and test lines point at real
+  93… parts again (as on 2026-09-26), except the URL-encoding case. 36/36
+  passed.
+
+### Changed
+- **Reason Code / Memo rule moved into the view**, and is now the only copy of
+  it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
+  yields a code. `label_design_service/reason_code.py` and its test are
+  removed; their cases live in the injector now.
+- **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
+  version of the query.
+- **A NULL customer part number falls back to `Part_Key`** for the collapse
+  and for `dedupe_key` (`ORDER|PK<key>`). Before, two such parts on one order
+  were merged into one row. Rows that have a customer part number keep their
+  old key, so nothing already on Monday is pushed again.
+## 2026-09-26 - Plex links deployed; Label Design test push live; review items on the board
+
+### Deployed
+- **`deploy/2026-09-26T2119Z`** (from `main` @ `e4436b9`, run from a Mac):
+  `0 to add, 4 to change, 0 to destroy`. Covered the prod and test
+  `label_design` configs, `label_design_view.sql`, and `PLEX_WEB_HOST` on
+  `plex-etl-label-design-push-test`.
+- **Image `etl:1b4e00e`** (Cloud Build `b4f28a13`, all 6 steps SUCCESS).
+- **Verified:** `Report 'label_design_test' loaded: 13 extraction(s)`, the
+  view recreated, and the push logged `13/13 mapped columns found`.
+
+### Changed
+- **`scripts/label_design_test_data.py`: test lines point at real Plex test
+  parts** (the newest 93… parts with a revision). The Plex Part URL now opens
+  a real page. `--delete` still matches only the 991… keys and the
+  `ZZTEST-LD-` order prefix, never `Part_Key`.
+
+### Test data
+- Replaced the 2026-09-24 `ZZTEST-LD-` Monday items, which had no links, with
+  7 new ones (13142802946 … 13142802950). Read back from Monday, the link
+  values are right, e.g. `93111-00VOXNU-1 Rev 00` →
+  `…/ViewForm?…PartKey=10658234&PartNo=93111-00VOXNU-1&Revision=Rev%2000`.
+- **Open items:** D1 and L1 closed. L1 is now the review of these items.
+- **Prod web host confirmed: `vox.on.plex.com`** (Emilio). The 2026-09-25
+  entry below called it unverified; `push.py`'s `PlexProd` default was
+  already correct.
+- **Label Design decisions:** the team uses "Plex Import" permanently, so the
+  Design & QA board and Monday licence item are closed. The prod push will
+  target "Plex Import", with test repointed to a sandbox board before 19 Oct.
+  Part attributes won't be sent to Monday; they stay on the part in Plex.
+
+## 2026-09-25 (dev-label-design) - Deploying from a second machine
+
+### Added
+- **macOS checksums in `terraform/.terraform.lock.hcl`** (`darwin_arm64`,
+  2 lines). The provider versions are unchanged. Without them a Mac's first
+  `terraform init` dirties the tree, and the deploy guard refuses.
+- **CONTRIBUTING.md / README: how to deploy from another machine.** Restore
+  tfvars from `gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`,
+  check it isn't stale, and set up ADC and a `python` on `PATH` for the
+  guard. Done for the first time today: the backup (2026-09-22) matched
+  every value checked in the live state.
+
+### Fixed
+- **`scripts/deploy_preflight.sh` was committed without its executable bit**
+  (mode `100644`, probably from Windows, which has no such bit). On macOS and
+  Linux, `deploy.sh` stopped at `Permission denied`. It is now `100755`, like
+  the other scripts.
+
+## 2026-09-25 (dev-label-design) - Plex Part URL and PO URL on the Monday push
+
+### Added
+- **Two Monday link columns from the Label Design push:** "Plex Part URL"
+  (`/Engineering/Part/ViewForm?…PartKey=&PartNo=&Revision=`) and "PO URL"
+  (`/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=`).
+  - `label_design_view.sql` now outputs `po_key`, `part_key`, `part_no`,
+    `part_revision`. The last two come from a new `raw_Part_v_Part` join.
+  - `Part_v_Part` is now extracted by `label_design` (prod + test configs,
+    13 extractions each). That keeps parts created the same morning
+    linkable, rather than waiting for the overnight `sales_orders` refresh.
+  - `push.py` builds the URLs, with the host taken from `PLEX_WEB_HOST`
+    (set to `vox.test.on.plex.com` on the test job; defaults to
+    `vox.on.plex.com` for `PlexProd` — unverified).
+  - The columns are matched by title and type `link`. They must be added
+    to "Plex Import" (18432111755) by hand; until then the push logs them
+    as missing and carries on.
 
 ## 2026-09-25 (dev) - One open-items list; deploy.sh cleans up after itself
 

@@ -157,14 +157,31 @@ job_notes AS (
 -- so that mapping finally has a real source. The rest is pending Jennilyn's
 -- internal team meeting.
 --
--- Values are currently ALL BLANK -- 28 assignments (14 parts x Allergen +
--- Hazardous), every one an EMPTY STRING, not NULL (verified against live
--- BigQuery 2026-09-21). Hence the NULLIF(TRIM(...), '') on every branch below:
--- without it these columns emit '' rather than NULL, which reads downstream as
--- "filled in, but blank" and would let the Monday push service overwrite a
--- hand-entered value with an empty one. Note the previously-documented
--- populated example (Allergen = "Yes" on Part_Key 11003458) is GONE -- that
--- part is no longer in the table at all, so the data has been reloaded since.
+-- ── These hang off the LABEL part, not the finished good (2026-10-02) ──────
+-- Until today this CTE was joined to the order line's part -- the finished
+-- good, 93001-00KAYAN-0 -- and every one of these columns read NULL. QA does
+-- not put attributes there. They put them on the LABEL part, 73001-00KAYAN-0,
+-- which reaches the order line only through the bill of materials. Hence the
+-- `labels` CTE below, and the join on lb.l.part_key rather than pol.Part_Key.
+--
+-- 40 assignments across 10 label parts, IDENTICAL in PlexTest and PlexProd
+-- (verified 2026-10-02), so this is verifiable on test. Four attributes carry
+-- values -- Label Size, Printing Material, Allergen, Trademark -- and the
+-- other four in the catalog are assigned to nothing yet.
+--
+-- The NULLIF(TRIM(...), '') on every branch stays regardless: Plex writes an
+-- EMPTY STRING, not NULL, for an assigned-but-unfilled attribute, and without
+-- this these columns emit '' rather than NULL. Downstream that reads as
+-- "filled in, but blank" and would let the Monday push overwrite a
+-- hand-entered value with an empty one.
+--
+-- THREE NAMES BELOW NO LONGER EXIST IN PLEX. The catalog on 2026-10-02 holds
+-- exactly eight attributes: Allergen, Certifications, Hazardous, Label Size,
+-- Material Classification, Printing Material, Size, Trademark. 'Bottle
+-- Material', 'California PDP' and 'Prop 65 Requirement' were all there on
+-- 2026-09-21 and are gone. Their columns are KEPT, emitting NULL, until
+-- Jennilyn says whether they were removed or renamed -- dropping a column
+-- that turns out to have been renamed loses the mapping work twice over.
 part_attribute_types AS (
   SELECT
     SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
@@ -181,6 +198,11 @@ part_attribute_types AS (
 part_attributes_pivoted AS (
   SELECT
     SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
+    -- 'Label Size' (key 7436) is where the values are: "2.4 x 6.8 in",
+    -- "Custom". Plain 'Size' (key 2383) still exists and is assigned to
+    -- nothing -- this CTE asked only for that one until 2026-10-02, so
+    -- part_size read NULL even for parts that had a size filled in.
+    MAX(CASE WHEN pt.Attribute_Name = 'Label Size'              THEN NULLIF(TRIM(pa.Value), '') END) AS part_label_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Size'                    THEN NULLIF(TRIM(pa.Value), '') END) AS part_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Allergen'                THEN NULLIF(TRIM(pa.Value), '') END) AS part_allergen,
     MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'               THEN NULLIF(TRIM(pa.Value), '') END) AS part_hazardous,
@@ -195,6 +217,69 @@ part_attributes_pivoted AS (
   JOIN part_attribute_types AS pt
     ON pt.Attribute_Key = SAFE_CAST(pa.Attribute_Key AS INT64)
   GROUP BY SAFE_CAST(pa.Part_Key AS INT64)
+),
+
+-- ── Bottle, through the BOM (2026-09-29, Ashley) ─────────────────────────────
+-- Monday's Bottle Material (HDPE / PET / Glass) is the CONTAINER, and Plex has
+-- no attribute for it on the finished good. It is in the name of the bottle
+-- component two levels down the bill of materials:
+--
+--   93001-00KAYAN-0  finished good (the order line's part)
+--   └─ 53001-00VOXNU-0  BB | Max Detox 60ct 175cc White Bottle/White Lid
+--      └─ 16115-01VOXNU-1  BOTTLE | 175cc White HDPE Packer Bottle 38-400
+--
+-- Flat_BOM lists every level against the top part, so no recursion is needed.
+-- The bottle is the component whose Name starts "BOTTLE". All 13 real Label
+-- Design lines on 2026-09-29 had exactly one. If a part ever has two, the
+-- shallowest one (then the lowest part number) wins, picked HERE, before the
+-- join, so a second bottle can never duplicate a queue row.
+--
+-- The material is read from that name and only ever one of the board's own
+-- three labels: of 104 bottle parts in PlexTest, 93 name HDPE, PET or Glass.
+-- The rest ("BOTTLE | 175cc Black") give NULL, not a guess, and the push then
+-- writes nothing.
+bottles AS (
+  SELECT
+    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+    ARRAY_AGG(STRUCT(c.Part_No AS part_no, c.Name AS name)
+              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS b
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'BOTTLE')
+  GROUP BY 1
+),
+
+-- ── Label part, through the BOM (2026-10-02, Emilio) ────────────────────────
+-- Monday only ever received the PRODUCT part number, but QA records the label
+-- attributes against the LABEL part, which is a BOM component of it:
+--
+--   93001-00KAYAN-0  finished good (the order line's part)
+--   └─ 73001-00KAYAN-0  LABEL | Kaya Naturals - Max Detox 60ct (X003F6U4BR)
+--                       Standard Label        <- Label Size, Printing
+--                                                Material, Allergen, Trademark
+--
+-- Identical mechanics to `bottles` above, prefix 'LABEL' instead of 'BOTTLE'.
+-- Of the 169 parts with a BOM in PlexTest, 54 have a label component and NOT
+-- ONE has two (checked 2026-10-02), so the ARRAY_AGG tie-break is insurance
+-- rather than a real case. It still matters that the pick happens HERE,
+-- before the join: a second label would otherwise duplicate a queue row, and
+-- this view's whole contract is one row per order line.
+--
+-- A part with no label component gets NULLs. That is not a regression --
+-- every attribute column was NULL for every row before this existed.
+labels AS (
+  SELECT
+    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+    ARRAY_AGG(STRUCT(SAFE_CAST(c.Part_Key AS INT64) AS part_key,
+                     c.Part_No AS part_no,
+                     c.Name    AS name)
+              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS l
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'LABEL')
+  GROUP BY 1
 ),
 
 -- ── Dates ──────────────────────────────────────────────────────────────────
@@ -260,6 +345,7 @@ release_lines AS (
     )                                             AS due_date_resolved,
     po.order_date_resolved                        AS order_date,
     jn.Job_Note                                   AS job_note,
+    NULLIF(TRIM(jn.Job_Note), '')                 AS _note,
 
     -- Addition 1: who to ask. Both, because "BDM" has never been pinned to one.
     up.user_name                                  AS sales_rep_primary,
@@ -300,9 +386,23 @@ release_lines AS (
     -- what the Apps Script reads.
     ps.PO_Status                                  AS order_status,
 
+    -- Keys and the internal part number (2026-09-29), per Emilio's hand-checked
+    -- Plex version of this query. The keys are what a Plex deep link needs.
+    SAFE_CAST(po.PO_Key AS INT64)                 AS po_key,
+    SAFE_CAST(pol.Part_Key AS INT64)              AS part_key,
+    part.Part_No                                  AS part_no,
+    part.Revision                                 AS part_revision,
+    part.Name                                     AS part_name,
+    bt.b.part_no                                  AS bottle_part_no,
+    bt.b.name                                     AS bottle_name,
+    lb.l.part_key                                 AS label_part_key,
+    lb.l.part_no                                  AS label_part_no,
+    lb.l.name                                     AS label_part_name,
+
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
     -- collapses together; no aggregation needed beyond the plain passthrough.
+    pap.part_label_size                            AS part_label_size,
     pap.part_size                                  AS part_size,
     pap.part_allergen                              AS part_allergen,
     pap.part_hazardous                             AS part_hazardous,
@@ -316,7 +416,14 @@ release_lines AS (
 
     -- Tie-breaker only — never surfaced. Keeps the QUALIFY below deterministic
     -- on the rare case where two releases for the same part share a Due_Date.
-    rel.PO_Line_Key                               AS _tiebreak_line_key
+    -- The unit of the queue (2026-09-30, Ashley): ONE ITEM PER ORDER LINE.
+    -- An order with five lines is five items, even if two lines carry the
+    -- same part; a line split into several releases is still one item.
+    SAFE_CAST(pol.PO_Line_Key AS INT64)           AS po_line_key,
+
+    -- Tie-breaker only, never surfaced: keeps the QUALIFY below deterministic
+    -- when two releases of one line share a Due_Date.
+    SAFE_CAST(rel.Release_Key AS INT64)           AS _tiebreak_release_key
 
   FROM dates AS po
 
@@ -342,6 +449,9 @@ release_lines AS (
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Customer_Part` AS cp
     ON SAFE_CAST(cp.Customer_Part_Key AS INT64) = SAFE_CAST(pol.Customer_Part_Key AS INT64)
 
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS part
+    ON SAFE_CAST(part.Part_Key AS INT64) = SAFE_CAST(pol.Part_Key AS INT64)
+
   LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
     ON SAFE_CAST(cust.Customer_No AS INT64) = SAFE_CAST(po.Customer_No AS INT64)
 
@@ -352,11 +462,22 @@ release_lines AS (
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
 
-  LEFT JOIN part_attributes_pivoted AS pap
-    ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+  LEFT JOIN bottles AS bt
+    ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
 
-  WHERE rs.Release_Status = 'Label Design'
-    AND ps.PO_Status = 'Pending Fulfillment'
+  LEFT JOIN labels AS lb
+    ON lb.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+
+  -- The LABEL part's attributes, not the finished good's (2026-10-02). See the
+  -- `labels` CTE. Joining this to pol.Part_Key, as it did until today, matched
+  -- nothing: all 40 populated assignments in Plex are on 73001-* label parts.
+  LEFT JOIN part_attributes_pivoted AS pap
+    ON pap.Part_Key = lb.l.part_key
+
+  -- Trimmed and uppercased so stray whitespace or casing in Plex can't
+  -- silently empty the queue (2026-09-29, matching the Plex version).
+  WHERE UPPER(TRIM(rs.Release_Status)) = 'LABEL DESIGN'
+    AND UPPER(TRIM(ps.PO_Status)) = 'PENDING FULFILLMENT'
     -- Addition 3: a rolling window. 14 days per "keep this like within the last
     -- two weeks or something"; widen here rather than in the Apps Script, since
     -- the sheet's own dedupe stops a widened window re-adding old rows.
@@ -380,7 +501,7 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
-  MIN(due_date_resolved) OVER (PARTITION BY order_number, customer_part_no) AS due_date,
+  MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,
   sales_rep_primary,
@@ -392,6 +513,30 @@ SELECT
   customer_phone,
   customer_part_description,
   order_status,
+  po_key,
+  po_line_key,
+  part_key,
+  part_no,
+  part_revision,
+  part_name,
+  -- The "part line" Ashley asked for (2026-09-29): what the Plex order screen
+  -- shows under the part, e.g. "93001-00KAYAN-0 Rev 00 | FG | Max Detox 60ct
+  -- 175cc White Bottle/White Lid +Standard Label (s3832)". Goes to Monday's
+  -- Description. ARRAY_TO_STRING skips a NULL half.
+  NULLIF(ARRAY_TO_STRING([
+    CONCAT(part_no, IF(NULLIF(TRIM(part_revision), '') IS NULL, '', CONCAT(' ', TRIM(part_revision)))),
+    NULLIF(TRIM(part_name), '')], ' | '), '')                               AS line_description,
+  bottle_part_no,
+  bottle_name,
+  label_part_key,
+  label_part_no,
+  label_part_name,
+  CASE REGEXP_EXTRACT(UPPER(bottle_name), r'\b(HDPE|PET|GLASS)\b')
+    WHEN 'HDPE'  THEN 'HDPE'
+    WHEN 'PET'   THEN 'PET'
+    WHEN 'GLASS' THEN 'Glass'
+  END                                                                       AS bottle_material,
+  part_label_size,
   part_size,
   part_allergen,
   part_hazardous,
@@ -402,16 +547,77 @@ SELECT
   part_prop_65_requirement,
   part_trademark,
   part_material_classification,
-  COUNT(*) OVER (PARTITION BY order_number, customer_part_no)               AS release_count,
-  CONCAT(CAST(order_number AS STRING), '|', IFNULL(customer_part_no, ''))   AS dedupe_key
+  COUNT(*) OVER (PARTITION BY po_line_key)               AS release_count,
+
+  -- ── Reason Code + Memo, split out of the Job Note (2026-09-29) ─────────────
+  -- Rule (Emilio): the note's FIRST character, if it is 1-6, is the Reason
+  -- Code; the rest is the Memo. Anything else -> no code, the whole note is
+  -- the Memo, and the push writes nothing to Monday's Reason Code.
+  --
+  -- Guarded so a note that merely STARTS WITH A NUMBER is not read as a code:
+  -- "12ct bottle" and "3.5 oz label" start with a digit but are quantities.
+  -- A code is a 1-6 followed by end-of-note, or by something that is not a
+  -- digit and not a decimal point/comma leading into a digit.
+  --
+  -- One optional separator after the digit is dropped ("1 - text", "1: text",
+  -- "1.text", "1text" all give Memo "text").
+  --
+  -- This is the ONLY place the rule lives. The push service reads these
+  -- columns and no longer parses the note itself.
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN SAFE_CAST(SUBSTR(_note, 1, 1) AS INT64) END                     AS reason_code,
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN CASE SUBSTR(_note, 1, 1)
+              -- Label text exactly as spelled on the Monday board, including
+              -- the lower-case "initiated" in code 2.
+              WHEN '1' THEN 'Customer Initiated: Label Edit'
+              WHEN '2' THEN 'Customer initiated: Label review'
+              WHEN '3' THEN 'New label design (Vox design)'
+              WHEN '4' THEN 'New label review (Customer design)'
+              WHEN '5' THEN 'Vox Initiated: Label Edit/Review'
+              WHEN '6' THEN '3D Rendering'
+            END END                                                         AS reason_code_label,
+  CASE WHEN REGEXP_CONTAINS(_note, r'^[1-6]($|[^0-9.,]|[.,]($|[^0-9]))')
+       THEN NULLIF(REGEXP_REPLACE(SUBSTR(_note, 2), r'^[\s\-:.]+', ''), '')
+       ELSE _note END                                                       AS memo,
+
+  -- ── Deep links into Plex (2026-09-29) ─────────────────────────────────────
+  -- Host follows the dataset: PlexProd -> vox.on.plex.com, else the test
+  -- tenant. `{dataset}` is replaced as plain text by main.py before this runs.
+  -- PartNo and Revision are URL-encoded by hand (BigQuery has no function
+  -- for it); '%' goes first so the escapes added after it aren't re-escaped.
+  IF(part_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/Engineering/Part/ViewForm?__sk=5&__sak=2&FromPartMenu=True&PartKey=', CAST(part_key AS STRING),
+    '&PartNo=', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+      IFNULL(part_no, ''), '%', '%25'), ' ', '%20'), '&', '%26'), '#', '%23'),
+      '+', '%2B'), '?', '%3F'), '/', '%2F'), '=', '%3D'),
+    '&Revision=', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+      IFNULL(part_revision, ''), '%', '%25'), ' ', '%20'), '&', '%26'), '#', '%23'),
+      '+', '%2B'), '?', '%3F'), '/', '%2F'), '=', '%3D')))                AS part_url,
+  IF(po_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/SalesAndCRM/SalesOrders/PoFormView?OriginLocation=SalesOrders&POKey=', CAST(po_key AS STRING)))
+                                                                            AS customer_po_url,
+  IF(po_key IS NULL, NULL, CONCAT(
+    IF('{dataset}' = 'PlexProd', 'https://vox.on.plex.com', 'https://vox.test.on.plex.com'),
+    '/SalesAndCRM/OrderEntry/ViewOrderForm?POKey=', CAST(po_key AS STRING))) AS sales_order_url,
+
+  -- One key per order LINE (2026-09-30): "<order>|L<PO_Line_Key>". Plex's
+  -- line key never changes when a line's part or quantity is edited, so an
+  -- edited line is not pushed again as a new item. It replaced
+  -- "<order>|<customer part>"; the items pushed under the old key had their
+  -- LCR rewritten the same day (see CHANGELOG), so none is pushed twice.
+  CONCAT(CAST(order_number AS STRING), '|L', CAST(po_line_key AS STRING))   AS dedupe_key
 
 FROM release_lines
 
--- One row survives per order + part: the one with the earliest due date.
--- _tiebreak_line_key only matters when two releases share that exact date.
+-- One row survives per order LINE: its earliest release. Until 2026-09-30
+-- this was per order + customer part, which merged two lines carrying the same
+-- part into one item; Ashley settled it as one item per line.
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY order_number, customer_part_no
-  ORDER BY due_date_resolved ASC, _tiebreak_line_key
+  PARTITION BY po_line_key
+  ORDER BY due_date_resolved ASC, _tiebreak_release_key
 ) = 1
 
 ORDER BY order_date DESC, order_number, customer_part_no

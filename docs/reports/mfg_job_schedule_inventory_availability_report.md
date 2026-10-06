@@ -1,6 +1,6 @@
 # MFG Job Schedule - Inventory Availability (partial)
 
-> **Status:** ✅ Built and deployed 2026-08-26, verified live (0 rows, benign) · **Category:** Production · **Runs:** rides the Part On-Hand Inventory pipeline, 4 PM / 5 PM UTC (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-26, verified live (0 rows, benign) · **Category:** Production · **Runs:** rides the Part On-Hand Inventory pipeline, 9:20 PM / 9:30 PM Mountain (prod/test)
 
 ## What this tells you
 

@@ -43,6 +43,28 @@ edit in the project's folder ─► commit on its dev branch ─► PR / merge i
           (git merge main)                                         (primary folder only)
 ```
 
+### The branches hold different files, so open the right folder
+
+A project's work lives on its branch until it is merged into `main`, so the
+same path can hold **different content in different folders**. On 2026-09-30
+`dev-scorecard` and `dev-sandbox` each had 4 commits that `main` didn't, and 16
+files differed from `main`. A `reports/sql/…` file opened in `ptbq-scorecard`
+was not the one that was deployed.
+
+- **`main` is what's deployed.** A dev branch is that project's work in
+  progress.
+- **Check before you trust a file:**
+  `git fetch && git diff --stat origin/main origin/<branch>`.
+- **Never `git switch` a folder to another branch.** Open that branch's
+  folder. The pre-commit hook refuses commits from the wrong folder.
+- **Gitignored files are per folder:** `.env`, `driver/`, `output/`,
+  `terraform/terraform.tfvars`. Worktrees don't share them, and tfvars exists
+  in the primary folder only.
+- **Work also happens from a second machine,** so `git fetch` first. GitHub
+  can be ahead of your folder.
+- **After a merge into `main`,** re-sync each dev branch (`git merge main` in
+  its folder) so the next PR starts from what is deployed.
+
 - **Setup, every lock and its override, PRs, conflicts:**
   [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Every command on one page:** [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
@@ -90,6 +112,7 @@ graph LR
 
 | You want to… | Go to |
 |---|---|
+| **Start here if you are new: access, setup, first day** | [docs/ONBOARDING.md](docs/ONBOARDING.md) |
 | **See everything still open, all projects** | [docs/OPEN_ITEMS.md](docs/OPEN_ITEMS.md) |
 | Find a command | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) |
 | Learn the workflow: folders, hooks, commits, PRs, deploy | [CONTRIBUTING.md](CONTRIBUTING.md) |
@@ -122,7 +145,7 @@ graph LR
 | `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
 | `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
 | `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |
-| `label-design/`, `label_design_service/`, `deploy/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, sheet sync, on-demand app | Label Design |
+| `label-design/`, `label_design_service/`, `deploy/archive/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, retired sheet sync, on-demand app | Label Design |
 | `docs/` | Guides; `docs/reports/` holds the business docs; `docs/archive/` holds finished history | shared |
 | `reports-list/`, `spreadsheets/` | Company report inventory and the Google Sheets being mapped, with status per row | shared |
 | `catalog/`, `mapping/` | Plex ODBC schema catalogs; NetSuite ↔ Plex mapping | shared |
@@ -134,15 +157,17 @@ graph LR
 ```bash
 git clone https://github.com/Parasol-Group-Inc/plex-to-big-query.git C:/F/Parasol/plex-to-big-query
 cd C:/F/Parasol/plex-to-big-query
-./scripts/install_hooks.sh                       # once per clone
-git worktree add ../ptbq-scorecard dev-scorecard  # one folder per project
-git worktree add ../ptbq-sandbox dev-sandbox
-git worktree add ../ptbq-label-design dev-label-design
-git worktree add ../ptbq-dev dev
-cp .env.example .env && docker compose build && docker compose up   # local, read-only health check
+./scripts/dev_setup.sh --worktrees   # driver, .env from Secret Manager, hooks, one folder per project
+docker compose build && docker compose up   # local, read-only health check
 ```
 
+`dev_setup.sh` needs read access to the secrets and the driver bucket; the
+list to ask an Owner for is in [docs/ONBOARDING.md](docs/ONBOARDING.md). Add
+`--deploy-machine` on the machine that deploys.
+
 `terraform/terraform.tfvars` goes in the primary folder only; that is
-where deploys happen. Full local setup:
+where deploys happen. A versioned copy is kept in
+`gs://voxdatalake-terraform-state/plex-to-big-query/terraform.tfvars.backup`.
+To deploy from a new machine, see CONTRIBUTING.md. Full local setup:
 [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md). GCP from zero:
 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md).

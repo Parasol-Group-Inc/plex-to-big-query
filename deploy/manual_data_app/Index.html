@@ -98,8 +98,10 @@
   <div id="boot" class="loading">Loading…</div>
 
   <div id="app" hidden>
-    <div class="tabs" id="tabs" role="tablist"></div>
-    <div class="card">
+    <div class="tabs" id="tabs" role="tablist" aria-label="What to enter"></div>
+    <!-- id rather than .card: the setup screen renders a .card of its own, so
+         querySelector('.card') is not reliably this one. -->
+    <div class="card" id="panel" role="tabpanel" tabindex="0">
       <p class="blurb" id="blurb"></p>
       <form id="form" autocomplete="off"></form>
       <div class="actions">
@@ -197,13 +199,29 @@ function renderTabs(){
       ? ds.uiTabs.map(function(t){ return { key: k + '|' + t.key, label: t.label }; })
       : [{ key: k, label: ds.label }];
     tabs.forEach(function(t){
-      var b = el('button', { type:'button', role:'tab', text: t.label });
+      var b = el('button', { type:'button', role:'tab', text: t.label,
+                             id: tabId(t.key), 'aria-controls':'panel' });
       b.setAttribute('aria-selected', 'false');
+      b.tabIndex = -1;                       // roving: only the selected tab is tabbable
       b.onclick = function(){ select(t.key); };
+      b.onkeydown = function(e){ moveTab(b, e); };
       b.dataset.key = t.key;
       bar.appendChild(b);
     });
   });
+}
+
+function tabId(key){ return 'tab_' + String(key).replace(/[^A-Za-z0-9]+/g, '_'); }
+
+// role="tab" promises arrow-key navigation; without this the promise is a lie
+// to anyone on a keyboard or a screen reader.
+function moveTab(btn, e){
+  var step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+  if (!step) return;
+  e.preventDefault();
+  var all = Array.prototype.slice.call(document.querySelectorAll('#tabs button'));
+  var next = all[(all.indexOf(btn) + step + all.length) % all.length];
+  if (next){ next.focus(); select(next.dataset.key); }
 }
 
 function select(key){
@@ -214,8 +232,11 @@ function select(key){
   pinned = uiTab ? { field: ds.pinnedBy, value: uiTab.key } : null;
 
   Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
-    b.setAttribute('aria-selected', String(b.dataset.key === key));
+    var on = b.dataset.key === key;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
   });
+  document.getElementById('panel').setAttribute('aria-labelledby', tabId(key));
   document.getElementById('blurb').textContent = (uiTab && uiTab.blurb) || ds.blurb;
   document.getElementById('msg').innerHTML = '';
   renderForm();
@@ -344,7 +365,12 @@ function wireLiveCheck(){
   box.hidden = true;
   form.appendChild(box);
 
+  // Same out-of-order guard as wireCurrentView: the month can change twice
+  // before the first total comes back.
+  var seq = 0;
+
   function update(){
+    var mine = ++seq;
     var metric = valueOf('metric');
     var month = valueOf('period_month');
     if (metric !== 'sales' || !month){ box.hidden = true; return; }
@@ -352,6 +378,7 @@ function wireLiveCheck(){
     box.textContent = 'Checking rep totals…';
     google.script.run
       .withSuccessHandler(function(r){
+        if (mine !== seq) return;
         var typed = Number((document.querySelector('[name="goal_value"]')||{}).value || 0);
         var gap = r.companyTotal - r.repTotal;
         box.innerHTML =
@@ -361,7 +388,7 @@ function wireLiveCheck(){
           '.<br>They are allowed to differ; this is here so the gap is visible now rather than in a report later.' +
           (typed ? ' Your entry is not counted until saved.' : '');
       })
-      .withFailureHandler(function(){ box.hidden = true; })
+      .withFailureHandler(function(){ if (mine === seq) box.hidden = true; })
       .getRepGoalSum(month + '-01');
   }
 
@@ -386,18 +413,33 @@ function wireLiveCheck(){
  */
 function wireCurrentView(){
   var which = DATA.datasets[active].currentView;
-  var card = document.querySelector('.card');
+  var card = document.getElementById('panel');
+
+  // This panel lives OUTSIDE #form, so renderForm()'s innerHTML reset does not
+  // clear it. renderForm() runs on every tab switch, Save and Clear, so the
+  // previous render's panel has to be removed by hand — otherwise each click
+  // leaves another copy stacked above the form (and another duplicate
+  // #currentview id with it). Reported 2026-10-01 on the Safety incidents tab.
+  var stale = document.getElementById('currentview');
+  if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+
   var box = el('div', { class:'check', id:'currentview' });
   box.hidden = true;
   card.insertBefore(box, document.getElementById('form'));
 
+  // update() fires on every driver-field change and the answers can come back
+  // out of order, so only the newest lookup is allowed to paint.
+  var seq = 0;
+
   function show(html){ box.innerHTML = html; box.hidden = false; }
 
   function update(){
+    var mine = ++seq;
     box.hidden = false;
     box.textContent = 'Checking what is already saved…';
     google.script.run
       .withSuccessHandler(function(r){
+        if (mine !== seq) return;
         if (!r || r.state === 'none' || r.state === 'incomplete'){ box.hidden = true; return; }
         if (r.state === 'error'){ box.hidden = true; return; }
 
@@ -427,7 +469,7 @@ function wireCurrentView(){
                (r.description ? '<br>' + r.description : ''));
         }
       })
-      .withFailureHandler(function(){ box.hidden = true; })
+      .withFailureHandler(function(){ if (mine === seq) box.hidden = true; })
       .getCurrentValue(which, which === 'currentGoal'
         ? { metric: valueOf('metric'), period_month: valueOf('period_month'), scope: valueOf('scope') }
         : {});
@@ -469,7 +511,7 @@ function collect(){
 
 function say(cls, text){
   document.getElementById('msg').innerHTML =
-    '<div class="msg ' + cls + '">' + text + '</div>';
+    '<div class="' + ('msg ' + (cls || '')).trim() + '">' + text + '</div>';
 }
 
 document.getElementById('save').onclick = function(){

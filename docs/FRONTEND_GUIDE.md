@@ -41,7 +41,7 @@ graph TD
 **Every arrow is a network call.** The Cloud Run job is a single Python script that makes all of them in sequence.
 
 **This diagram is one report family (Sales Orders / `plex-etl-sales-orders`) as a
-worked example** — the same shape repeats 13 times (26 jobs total, prod +
+worked example** — the same shape repeats 13 times (27 jobs total, prod +
 test), each with its own schedule and its own `Cloud Run Job` box reading
 its own YAML from the same `voxdatalake-report-configs` bucket. Not
 pictured: the daily scheduler shown here has a sibling 9:45 PM Mountain retry
@@ -201,11 +201,11 @@ gs://voxdatalake-report-configs/
     └── sales_orders_view.sql  ← BigQuery JOIN view — ONE copy, read by prod and test
 ```
 
-Sales Orders is one of **13 pipelines** (26 Cloud Run jobs total, prod+test) — used here as the running example because it's the original pipeline, not because it's the only one.
+Sales Orders is one of **13 pipelines** (27 Cloud Run jobs total, prod+test plus the Label Design push job) — used here as the running example because it's the original pipeline, not because it's the only one.
 
 The Cloud Run job reads the YAML at startup on every execution. To change a query: edit the YAML in the repo (both the prod and the `test/` copy), merge to `main`, run `./scripts/deploy.sh`. No container rebuild.
 
-**The `REPORT_CONFIG_GCS_PATH` env var** tells the container which YAML to load — pointing a different job at a different YAML is how 26 jobs share one Docker image. It's not the *only* difference between a prod and test job, though (see the diagram below — `PLEX_HOST` and the BigQuery dataset differ too); it's the one that decides *what gets extracted*, which is this section's point.
+**The `REPORT_CONFIG_GCS_PATH` env var** tells the container which YAML to load — pointing a different job at a different YAML is how 27 jobs share one Docker image. It's not the *only* difference between a prod and test job, though (see the diagram below — `PLEX_HOST` and the BigQuery dataset differ too); it's the one that decides *what gets extracted*, which is this section's point.
 
 ---
 
@@ -350,7 +350,7 @@ The image only moves when something explicitly says so:
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
 or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which loops this over
-all 26 jobs from one build. Always tag with the commit SHA, never
+all 27 jobs from one build. Always tag with the commit SHA, never
 `:latest` — `:latest` is still pushed for manual `docker pull`
 convenience, but nothing deployed ever reads it.
 
@@ -443,7 +443,7 @@ gcloud run jobs execute plex-etl-sales-orders-test \
 ```
 
 This walks through just `plex-etl-sales-orders`/`sales_orders` — a real from-scratch
-deploy creates all 26 jobs at once in step 3 (no per-job gating in
+deploy creates all 27 jobs at once in step 3 (no per-job gating in
 `terraform/main.tf`), so you'd repeat step 7 for the other 12 pipelines'
 `-test` jobs too before trusting the whole stack.
 
@@ -496,8 +496,8 @@ Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container exec
 
 | GCP Service | What it does in this pipeline |
 |---|---|
-| **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 26 jobs total (13 pipelines × prod/test), all sharing one image |
-| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl-sales-orders` at 7:00 PM Mountain (prod) / 7:10 PM Mountain (test) as the running example, staggered 10 minutes apart through 10:50 PM Mountain across 12 pipelines, Label Design at 9:30 AM / 1:30 PM, each job also with its own retry trigger firing together at 9:45 PM Mountain (52 scheduler jobs total) |
+| **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 27 jobs total (13 pipelines × prod/test, plus the Label Design push job), all sharing one image |
+| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — `plex-etl-sales-orders` at 7:00 PM Mountain (prod) / 7:10 PM Mountain (test) as the running example, staggered 10 minutes apart through 10:50 PM Mountain across 12 pipelines, Label Design hourly 5 AM - 5 PM, each job but Label Design also with its own retry trigger firing together at 9:45 PM Mountain (51 scheduler jobs total) |
 | **BigQuery** | Stores dozens of raw Plex tables across `PlexProd`/`PlexTest` + one or more named JOIN views per report family (`sales_orders_report` + `sales_orders_open_report` for this one) |
 | **Cloud Storage** | Holds YAML report configs and SQL view definitions — read at runtime, uploaded by Terraform |
 | **Secret Manager** | Stores the Plex IAM token and SendGrid API key |

@@ -15,8 +15,9 @@ together.
 >   for a Monday API key secret version and a rebuilt image.
 > - **Refreshing on demand:** `deploy/label_design_trigger/` is a one-button
 >   web app that runs the ETL (test job first).
-> - **Still in use until the push service ships:** the Sheet-based Apps
->   Script (`deploy/label_design_sync/`).
+> - **Retired 2026-10-02:** the Sheet-based Apps Script, archived to
+>   `deploy/archive/label_design_sync/`. Its triggers never pushed to Monday
+>   (check-only); the push service replaced it.
 >
 > For what's built, verified and blocked, read [`STATUS.md`](STATUS.md) first.
 
@@ -29,11 +30,11 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 | If you want... | Go to |
 |---|---|
 | **Current status, what's pending, what's blocked** | [`STATUS.md`](STATUS.md) |
-| The plain-English "how do I use it" guide (Sheet-based flow, being retired) | [`deploy/label_design_sync/TEAM_GUIDE.md`](../deploy/label_design_sync/TEAM_GUIDE.md) |
+| The plain-English "how do I use it" guide (Sheet-based flow, **retired**) | [`deploy/archive/label_design_sync/TEAM_GUIDE.md`](../deploy/archive/label_design_sync/TEAM_GUIDE.md) |
 | What the Monday board's columns mean | [`monday_board_guide.md`](monday_board_guide.md) |
 | The board's real column ids + full option lists | [`monday_board_catalog.md`](monday_board_catalog.md) |
 | The business-facing report doc | [`docs/reports/label_design_report.md`](../docs/reports/label_design_report.md) |
-| The technical design of the Sheet-based Apps Script (being retired) | [`deploy/label_design_sync/README.md`](../deploy/label_design_sync/README.md) |
+| The technical design of the Sheet-based Apps Script (**retired**) | [`deploy/archive/label_design_sync/README.md`](../deploy/archive/label_design_sync/README.md) |
 | The Plex → Monday push service (replacing the Sheet) | [`label_design_service/push.py`](../label_design_service/push.py) docstring |
 | Run the ETL on demand (web app) | [`deploy/label_design_trigger/README.md`](../deploy/label_design_trigger/README.md) |
 | How to work on this project: its folder, branch, hooks, deploy | [`CONTRIBUTING.md`](../CONTRIBUTING.md): folder `ptbq-label-design`, branch `dev-label-design` |
@@ -61,11 +62,12 @@ BigQuery — label_design_report view
 - Terraform resources: search `terraform/main.tf` for `label_design` (job,
   schedulers, GCS objects — added 2026-09-12, see `CHANGELOG.md`)
 
-**Sheet → Monday (Apps Script)** — all in [`deploy/label_design_sync/`](../deploy/label_design_sync/)
+**Sheet → Monday (Apps Script) — RETIRED 2026-10-02**, archived in
+[`deploy/archive/label_design_sync/`](../deploy/archive/label_design_sync/). Kept for the
+record only; nothing runs it.
 - `Code.gs` — the logic: dedupe, sheet writes, the Monday push
 - `Logo.gs` — the Vox wordmark, base64 (Apps Script can't read a repo file)
-- `test_logic.js` — `node deploy/label_design_sync/test_logic.js`, run after
-  any change to the sheet-column mapping or the dedupe keys
+- `test_logic.js` — its test harness, frozen with the rest
 - `README.md` — technical design/reference
 - `TEAM_GUIDE.md` — plain-English, for the team
 - `MEETING_BRIEF.md` — open decisions and the recommended longer-term shape

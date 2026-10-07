@@ -14,6 +14,57 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-07b (sandbox) - Sandbox rebuilt; seven live views found pricing off a dead table
+
+### Found — affects PRODUCTION, not just the sandbox
+
+- **The 2026-09-04 switch to the order-line price was only ever applied to
+  three of the ten sales views.** `sales_mtd_by_status_change`,
+  `sales_order_value_by_status` and `pipeline_plex_value` use
+  `COALESCE(lp.Price, bp.Price)` and price 80–90% of their rows. The other
+  seven — `sales_orders`, `_open`, `_aging`, `_over_10k`,
+  `_pending_accounting_approval`, `_pending_approval`, `_rush_open` — still
+  price solely off `base_price` (`Part_v_Customer_Part_Price`). Since that
+  table froze, **every `price_ea` and `price_total` in those seven views is
+  NULL in PlexTest**, and `sales_orders_over_10k_report` returns **0 rows**
+  purely because nothing can exceed $10k when every value is null.
+- Extending the existing CTE to all seven, measured against live PlexTest:
+  `sales_orders` 0 → **22/33** priced ($190,775), `_open` 0 → **21/31**
+  ($189,010), `_over_10k` 0 rows → **7 rows** ($163,122).
+  `_pending_accounting_approval` stays 0/5 — those five orders have no
+  `Sales_v_Price` row either, which is missing data rather than a bug.
+- **Not deployed.** The seven live in `scripts/scorecard_sandbox/proposed_sql/`
+  per the sandbox convention. Only the `_pending_accounting_approval` one is
+  exercised by the build (the other six are not scorecard tiles); all seven
+  were verified by querying PlexTest directly.
+
+### Changed
+
+- **The sandbox prices through the same path production does.**
+  `sales.py` seeded from `Part_v_Customer_Part_Price` and aborted once that
+  table went stale. It now takes customer parts unpriced and assigns each a
+  real `Sales_v_Price` value (21 distinct, $2.32–$59.00), chosen
+  deterministically from the key so rebuilds are stable. The generator
+  already wrote `raw_Sales_v_Price` rows, so nothing else changed. The frozen
+  table held only **2** distinct prices, so this is better data as well.
+
+### Fixed
+
+- **Two Labeling lines are renamed in Plex, not missing.**
+  `production.py` matched work centres by exact name and died on
+  `Labeling Line 3` / `Labeling Line 5`; Plex now calls them
+  `Labeling Line 3 (End of Bottling Line 3)` and `... (End of Bottling
+  Line 4)`. The lookup falls back to a `"<name> ("` prefix match, and only
+  when exactly one candidate matches, so a real rename still fails loudly.
+
+### Result
+
+- **`ScorecardSandbox` is rebuilt — 35 views, a full year under every tile.**
+  Revenue $45.2M over 11 months, WIP $4.5M, pipeline $966K. Tiles that are
+  empty in PlexTest now carry a year of data: `encap_daily_report` 1,434
+  rows, `part_cycle_count_report` 9 months, `labeling_daily_report` 1,081.
+  SC-00 is cleared; the Looker build can start.
+
 ## 2026-10-07 (sandbox) - Sandbox snapshot re-pinned; rebuild blocked on a frozen price table
 
 ### Fixed

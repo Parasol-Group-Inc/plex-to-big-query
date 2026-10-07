@@ -65,23 +65,40 @@ def generate(sb):
     customers = sb.query(
         "SELECT Customer_No, Name, SAFE_CAST(Assigned_To AS INT64) AS rep "
         "FROM `{ds}.raw_Common_v_Customer` ORDER BY Customer_No")
+    # Price comes from the ORDER LINE (Sales_v_Price) — the source production
+    # has used since 2026-09-04 ("it needs to be the line item price") — and no
+    # longer from Part_v_Customer_Part_Price. Plex has returned 0 rows for that
+    # view since the 2026-09-24 tenant cut-back, so the ETL's
+    # keep-yesterday-on-zero-rows guard left it frozen at its 2026-10-02
+    # contents, whose Customer_Part_Keys join 0/2,119 to the 6,179 current
+    # customer parts (OPEN_ITEMS S14). Seeding from it aborted the build
+    # outright, and it carries only 2 distinct prices in any case.
+    #
+    # Every price below is a REAL Sales_v_Price value copied from PlexTest
+    # (21 distinct, $2.32–$59.00). Only WHICH customer part each one lands on
+    # is decided here, and it is decided deterministically from the key, so a
+    # rebuild prices every part exactly as the last one did. The generator
+    # already writes these out as raw_Sales_v_Price rows further down, so the
+    # sandbox prices orders through the same path production does.
+    price_pool = [r["p"] for r in sb.query(
+        "SELECT DISTINCT SAFE_CAST(Price AS FLOAT64) p FROM `{ds}.raw_Sales_v_Price` "
+        "WHERE SAFE_CAST(Price AS FLOAT64) > 0 ORDER BY p")]
+    if not price_pool:
+        raise RuntimeError("raw_Sales_v_Price holds no positive price — there is "
+                           "nothing real left to price the sandbox from")
     cparts = sb.query("""
-        WITH bp AS (
-          SELECT Customer_Part_Key, Price,
-                 ROW_NUMBER() OVER (PARTITION BY Customer_Part_Key
-                                    ORDER BY SAFE_CAST(Breakpoint_Quantity AS FLOAT64)) rn
-          FROM `{ds}.raw_Part_v_Customer_Part_Price`)
-        SELECT cp.Customer_No, cp.Customer_Part_Key, cp.Part_Key,
-               SAFE_CAST(bp.Price AS FLOAT64) AS price
+        SELECT cp.Customer_No, cp.Customer_Part_Key, cp.Part_Key
         FROM `{ds}.raw_Part_v_Customer_Part` cp
-        JOIN bp ON SAFE_CAST(bp.Customer_Part_Key AS INT64) = SAFE_CAST(cp.Customer_Part_Key AS INT64)
-               AND bp.rn = 1
-        JOIN `{ds}.raw_Part_v_Part` p ON SAFE_CAST(p.Part_Key AS INT64) = SAFE_CAST(cp.Part_Key AS INT64)
-        WHERE SAFE_CAST(bp.Price AS FLOAT64) > 0 AND COALESCE(SAFE_CAST(cp.Active AS INT64), 1) = 1
+        JOIN `{ds}.raw_Part_v_Part` p
+          ON SAFE_CAST(p.Part_Key AS INT64) = SAFE_CAST(cp.Part_Key AS INT64)
+        WHERE COALESCE(SAFE_CAST(cp.Active AS INT64), 1) = 1
+        ORDER BY SAFE_CAST(cp.Customer_Part_Key AS INT64)
     """)
     if not cparts:
-        raise RuntimeError("no priced customer parts that join to a real part — "
+        raise RuntimeError("no customer parts that join to a real part — "
                            "the raw tables are out of step; re-extract PlexTest first")
+    for cp in cparts:
+        cp["price"] = price_pool[int(cp["Customer_Part_Key"]) % len(price_pool)]
     parts_of = {}
     for cp in cparts:
         parts_of.setdefault(cp["Customer_No"], []).append(cp)

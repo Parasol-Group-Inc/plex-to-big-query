@@ -143,10 +143,24 @@ def _reference(sb):
     lines = {}
     for g, names in LINES.items():
         found = {r["Name"]: r["Workcenter_Key"] for r in wc if r["Workcenter_Group"] == g}
-        missing = [n for n in names if n not in found]
+        resolved, missing = [], []
+        for n in names:
+            if n in found:
+                resolved.append((n, found[n]))
+                continue
+            # Plex appends an explanatory suffix to some line names, e.g.
+            # "Labeling Line 3 (End of Bottling Line 3)". It is the same work
+            # centre, so match on the declared name plus " (" — but only when
+            # exactly one candidate matches, so a genuine rename still fails
+            # loudly instead of silently binding to the wrong line.
+            alt = [(k, v) for k, v in found.items() if k.startswith(n + " (")]
+            if len(alt) == 1:
+                resolved.append(alt[0])
+            else:
+                missing.append(n)
         if missing:
             raise RuntimeError(f"{g}: work centre(s) not in Plex: {missing}")
-        lines[g] = [(n, found[n]) for n in names]
+        lines[g] = resolved
 
     status = {r["Job_Status"]: r["Job_Status_Key"] for r in sb.query(
         "SELECT Job_Status, Job_Status_Key FROM `{ds}.raw_Part_v_Job_Status`")}

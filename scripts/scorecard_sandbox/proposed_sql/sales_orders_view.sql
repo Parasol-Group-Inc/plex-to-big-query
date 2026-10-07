@@ -1,0 +1,237 @@
+-- sales_orders_report — 16-field Vox Nutrition sales orders report
+--
+-- HOW TO EDIT (no deployment required):
+--   Edit this file in Google Cloud Storage Console or with gcloud:
+--     gcloud storage cp reports/sql/sales_orders_view.sql gs://voxdatalake-report-configs/sql/
+--   The next pipeline run will recreate the view with the updated SQL.
+--   You can also edit the BigQuery view directly in the BigQuery Console —
+--   your changes persist until the next pipeline run overwrites them.
+--
+-- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime by the
+-- container using the GCP_PROJECT and BQ_DATASET environment variables.
+-- Do NOT hardcode project or dataset names here.
+--
+-- GRAIN: one row per sales order line item / release.
+-- A single sales order (PO_No) will appear multiple times if it has multiple
+-- line items or release schedules.
+--
+-- KEY JOINS (confirmed against live Plex data):
+--   Sales_v_PO            → header (one row per order)
+--   Sales_v_PO_Line       → line items (Part_Key, Customer_Part_Key per line)
+--   Sales_v_Release       → qty per line item (via PO_Line_Key)
+--   Sales_v_PO_Change     → status history (MIN where status = 2073 = date approved)
+--   Sales_v_Order_Salesperson → reps (Sort_Order 1 = primary, 2 = secondary)
+--   Plexus_Control_v_Plexus_User → rep names (via Plexus_User_No)
+--   Common_v_Customer     → customer name (via Customer_No)
+--   Part_v_Customer_Part_Price → price per Customer_Part_Key + Breakpoint_Quantity
+--   Part_v_Part           → part master (Part_No, Name, product classification keys)
+--   Part_v_Part_Product_Type  → product type name
+--   Part_v_Part_Group     → part group name (Capsule, Label, ...), shown as product_group
+
+WITH
+
+-- Date Approved: the first time each order reached status "Pending Fulfillment" (key 2073).
+--
+-- DATE CONVERSION PATTERN (used for every date column in this file):
+-- Raw date columns can arrive as INT64 nanoseconds (pyodbc datetime → pandas →
+-- BQ int64), TIMESTAMP (legacy date_col conversion), or STRING (empty-table
+-- autodetect). Every branch routes through CAST(col AS STRING) first because
+-- that cast is legal from ANY type — a direct SAFE_CAST(INT64 AS DATE) is an
+-- invalid cast pair and fails at view-query compile time, not at runtime.
+--   branch 1: INT64 ns  → µs → DATE   (NULLIF 0 = Plex "no date" sentinel)
+--   branch 2: date-formatted string   → DATE
+--   branch 3: timestamp / timestamp-formatted string → DATE
+-- 1970-01-01 results are the epoch sentinel → NULL.
+date_approved AS (
+  SELECT
+    PO_Key,
+    MIN(
+      COALESCE(
+        DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(Change_Date AS STRING) AS INT64), 0), 1000))),
+        NULLIF(SAFE_CAST(CAST(Change_Date AS STRING) AS DATE), DATE '1970-01-01'),
+        NULLIF(DATE(SAFE_CAST(CAST(Change_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+      )
+    ) AS date_approved
+  FROM `{gcp_project}.{dataset}.raw_Sales_v_PO_Change`
+  WHERE PO_Status_Key = 2073
+  GROUP BY PO_Key
+),
+
+-- Primary sales rep (Sort_Order = 1)
+rep1 AS (
+  SELECT
+    SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
+    SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
+  FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
+  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
+),
+
+-- Secondary sales rep (Sort_Order = 2)
+rep2 AS (
+  SELECT
+    SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
+    SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
+  FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
+  WHERE SAFE_CAST(Sort_Order AS INT64) = 2
+),
+
+-- Base price per customer part (lowest Breakpoint_Quantity tier).
+-- NOTE: Part_v_Customer_Part_Price has one row per quantity tier.
+-- This picks the base price (minimum breakpoint). Adjust if your pricing
+-- logic uses a different tier selection.
+-- PROPOSED (sandbox only, 2026-10-07): the order-line price.
+-- This view priced solely off base_price (Part_v_Customer_Part_Price). Plex
+-- has returned 0 rows for that view since the 2026-09-24 tenant cut-back, so
+-- the table is frozen with keys that join 0/2,119 to current customer parts
+-- and every price_ea/price_total in PlexTest is NULL. The same CTE already
+-- lives in sales_mtd_by_status_change / sales_order_value_by_status /
+-- pipeline_plex_value, where it prices 80-90% of rows; the 2026-09-04 switch
+-- to the line item price was simply never applied here.
+-- TIER RULE: prefer Primary_Price, then the lowest Breakpoint_Quantity, then
+-- the most recent Effective_Date. Inactive rows are dropped.
+line_price AS (
+  SELECT
+    PO_Line_Key,
+    Price
+  FROM (
+    SELECT
+      SAFE_CAST(PO_Line_Key AS INT64)             AS PO_Line_Key,
+      SAFE_CAST(Price AS FLOAT64)                 AS Price,
+      ROW_NUMBER() OVER (
+        PARTITION BY SAFE_CAST(PO_Line_Key AS INT64)
+        ORDER BY
+          COALESCE(SAFE_CAST(Primary_Price AS INT64), 0) DESC,
+          SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC,
+          SAFE_CAST(CAST(Effective_Date AS STRING) AS STRING) DESC
+      ) AS rn
+    FROM `{gcp_project}.{dataset}.raw_Sales_v_Price`
+    WHERE COALESCE(SAFE_CAST(Active AS INT64), 1) != 0
+  )
+  WHERE rn = 1
+),
+
+base_price AS (
+  SELECT
+    SAFE_CAST(Customer_Part_Key AS INT64)      AS Customer_Part_Key,
+    SAFE_CAST(Price AS FLOAT64)                AS Price,
+    SAFE_CAST(Breakpoint_Quantity AS FLOAT64)  AS Breakpoint_Quantity,
+    Effective_Date,
+    Expiration_Date
+  FROM (
+    SELECT
+      *,
+      ROW_NUMBER() OVER (
+        PARTITION BY Customer_Part_Key
+        ORDER BY SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC
+      ) AS rn
+    FROM `{gcp_project}.{dataset}.raw_Part_v_Customer_Part_Price`
+  )
+  WHERE rn = 1
+)
+
+SELECT
+
+  -- ── Document info ──────────────────────────────────────────────────────────
+  po.PO_No                                              AS document_so,
+  -- See DATE CONVERSION PATTERN comment on the date_approved CTE above.
+  COALESCE(
+    DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS INT64), 0), 1000))),
+    NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS DATE), DATE '1970-01-01'),
+    NULLIF(DATE(SAFE_CAST(CAST(po.PO_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
+  )                                                     AS date_created,
+  da.date_approved,
+  typ.PO_Type                                           AS order_type,
+
+  -- From-quote flag: non-null From_PO_Key means order originated from a quote
+  (po.From_PO_Key IS NOT NULL)                          AS from_quote,
+
+  -- ── Status ─────────────────────────────────────────────────────────────────
+  -- Vox workflow: 2585 Pending Sales Approval → 2587 Deposit Review →
+  --   2586 Released → 2073 Pending Fulfillment → 2638 Pending Payment Review →
+  --   2639 Pending Shipment → 2074 Closed / 2076 Cancelled
+  po.PO_Status_Key                                      AS status_key,
+  sts.PO_Status                                         AS status,
+
+  -- ── Customer ───────────────────────────────────────────────────────────────
+  po.Customer_No,
+  cust.Name                                             AS customer_name,
+
+  -- ── Sales reps ─────────────────────────────────────────────────────────────
+  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep_1,
+  CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
+
+  -- ── Line item / part ───────────────────────────────────────────────────────
+  p.Part_No                                             AS part_number,
+  p.Name                                                AS part_name,
+
+  -- ── Quantity ───────────────────────────────────────────────────────────────
+  -- NOTE: Sales_v_Release join key (PO_Line_Key) follows standard Plex schema.
+  -- Confirm column name if query returns no rows.
+  rel.Quantity                                          AS qty_ordered,
+  rel.Quantity_Unit                                     AS qty_unit,
+
+  -- ── Pricing ────────────────────────────────────────────────────────────────
+  COALESCE(lp.Price, bp.Price)                                              AS price_ea,
+  bp.Breakpoint_Quantity                                AS price_breakpoint_qty,
+  (COALESCE(lp.Price, bp.Price) * rel.Quantity)                             AS price_total,
+  po.Master_Price                                       AS order_total,
+
+  -- ── Product classification ─────────────────────────────────────────────────
+  -- NOTE: Part_Product_Type_Key / Part_Product_Group_Key column names on
+  -- Part_v_Part are assumed from standard Plex schema. Adjust if needed.
+  ptype.Product_Type                                    AS product_type,
+  pgrp.Part_Group                                       AS product_group
+
+FROM `{gcp_project}.{dataset}.raw_Sales_v_PO` po
+
+-- Date approved from status history
+LEFT JOIN date_approved da
+  ON po.PO_Key = da.PO_Key
+
+-- Order type lookup
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Type` typ
+  ON po.PO_Type_Key = typ.PO_Type_Key
+
+-- Status lookup
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Status` sts
+  ON po.PO_Status_Key = sts.PO_Status_Key
+
+-- Customer name
+LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
+  ON po.Customer_No = cust.Customer_No
+
+-- Sales reps
+LEFT JOIN rep1 ON po.PO_Key = rep1.PO_Key
+LEFT JOIN rep2 ON po.PO_Key = rep2.PO_Key
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u1
+  ON rep1.Plexus_User_No = u1.Plexus_User_No
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u2
+  ON rep2.Plexus_User_No = u2.Plexus_User_No
+
+-- Line items
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Line` pol
+  ON po.PO_Key = pol.PO_Key
+
+-- Quantity per line (via PO_Line_Key — standard Plex join)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release` rel
+  ON pol.PO_Line_Key = rel.PO_Line_Key
+
+-- Part master
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
+  ON pol.Part_Key = p.Part_Key
+
+-- Customer part price (base tier)
+LEFT JOIN base_price bp
+  ON pol.Customer_Part_Key = bp.Customer_Part_Key
+
+LEFT JOIN line_price lp
+  ON SAFE_CAST(pol.PO_Line_Key AS INT64) = lp.PO_Line_Key
+
+-- Product type and group
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` ptype
+  ON p.Product_Type_Key = ptype.Product_Type_Key
+-- product_group is Plex's Part GROUP: Part_v_Part.Part_Group_Key belongs to
+-- Part_v_Part_Group. Until 2026-09-24 this joined Part_v_Part_Product_Group,
+-- which is empty on this tenant, so product_group was always NULL.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
+  ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)

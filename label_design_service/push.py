@@ -152,6 +152,13 @@ COLUMNS = [
     # `bdm`: the order's Inside Sales, else the customer's Assigned To, else
     # Order_Salesperson — see label_design_view.sql.
     ("Sales Rep", "status", _label("bdm")),
+    # The line's Priority (2026-10-07), from Sales_v_Release.Priority_Key via
+    # Sales_v_Priority — the Priority dropdown (`PriorityKey`) on every
+    # sales-order line. Plex's five options are RUSH / High / Medium / Low /
+    # Blanket; the board's Priority column should carry those same five labels.
+    # Pushed verbatim; create_labels_if_missing is a safety net if a label is
+    # missing, but the colours/order come out right only if the board has them.
+    ("Priority", "status", _label("priority")),
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
     ("Item", "text", _text("customer_part_no")),

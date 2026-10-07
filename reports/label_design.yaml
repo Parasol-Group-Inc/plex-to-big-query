@@ -26,7 +26,7 @@ description: "VOX | Label Design queue for the Monday holding board — prod (Pl
 # Two tiny queries that fingerprint the only thing that can produce a new
 # Monday item: the set of release lines sitting on the 'Label Design' release
 # status. When the fingerprint matches the last clean run's, main.py skips all
-# 14 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
+# 15 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
 #
 # Why the key SET and not a count or a MAX(Update_Date): a count misses
 # one-in-one-out, and nothing guarantees Plex stamps Update_Date on a status
@@ -77,6 +77,14 @@ extractions:
   # New — not extracted anywhere else in the repo before 2026-09-11.
   - plex_view: Sales_v_Release_Status
     bq_table: raw_Sales_v_Release_Status
+    filter: ""
+    date_col: ""
+
+  # Priority lookup — added 2026-10-07 for the Monday Priority column. Resolves
+  # Sales_v_Release.Priority_Key (the per-line Priority dropdown in the Plex
+  # sales-order screen) to its word. Small code table, pulled whole.
+  - plex_view: Sales_v_Priority
+    bq_table: raw_Sales_v_Priority
     filter: ""
     date_col: ""
 

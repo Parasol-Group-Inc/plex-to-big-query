@@ -74,8 +74,8 @@ list would miss exactly the new orders it exists to surface.
 Each new row becomes an item in the **New from Plex** group, named after the
 label SKU. The job fills: Customer Name, Date (order date), Description, Sales
 Order ("Sales Order #…"), Email, Phone Number, **Item** (the Plex part number,
-in the text column next to Design File), **Sales Rep** (the BDM, see below) and
-LCR. The Job Note is split in two, in the view itself (`reason_code`,
+in the text column next to Design File), **Sales Rep** (the BDM, see below),
+**Priority** (the line's Priority dropdown from Plex, see below) and LCR. The Job Note is split in two, in the view itself (`reason_code`,
 `reason_code_label`, `memo`): if its **first character is a digit 1–6**, that
 digit sets Reason Code and the rest becomes Memo; otherwise the whole note goes
 to Memo and **nothing is written to Reason Code**. A note that only *starts
@@ -192,6 +192,19 @@ on the board is never pushed again. Every push is also recorded in the
   real source. The rest is pending Jennilyn's internal team meeting, and she
   has separately signalled that bottle/label size probably don't need a Monday
   column at all. Not wired to any Monday push yet either way.
+
+- **Priority (2026-10-07).** The Priority dropdown (`PriorityKey`) shown on each
+  sales-order line in Plex. It lives on the **release**
+  (`Sales_v_Release.Priority_Key`), not the PO line, and is resolved to its word
+  through the `Sales_v_Priority` lookup. The value carried is the one on the
+  release the row collapses to (the earliest-due), so it matches the Due Date
+  shown. The five Plex options are **RUSH / High / Medium / Low / Blanket**, and
+  the word is pushed **verbatim** to Monday's **Priority** status column — the
+  board's Priority column is set up to carry those same five labels. In PlexTest
+  every release currently sits on one priority key, so only one of the five is
+  exercised on test until production data varies. Because the push only ever
+  *creates* items, a priority changed on an order already on the board is not
+  re-pushed.
 
 - **Sales Rep = the BDM (2026-09-24).** Plex's "BDM" fields are the order's
   **Inside Salesperson** (`Sales_v_PO.Inside_Sales`) and the customer's

@@ -11,6 +11,37 @@
 
 ---
 
+## UPDATE — 2026-10-07: line Priority → Monday Priority column
+
+Added the sales-order line's **Priority** to the queue and the push. It is a
+**release** attribute in Plex (`Sales_v_Release.Priority_Key`), resolved to a
+word via a new `raw_Sales_v_Priority` extraction (both yamls), surfaced as
+`priority` in `label_design_view.sql`, and mapped to the board's **Priority**
+status column in `push.py`. Carried from the earliest-due release, so it
+matches the Due Date shown. View dry-runs clean.
+
+Plex's five Priority options are confirmed from the order-line form's
+`PriorityKey` dropdown: **RUSH / High / Medium / Low / Blanket**. The word is
+pushed **verbatim**; the Monday Priority column should carry those same five
+labels (decided 2026-10-07). `create_labels_if_missing` is a safety net, but set
+the board's labels up first so colours/order are right.
+
+**Board action:** add High / Medium / Low / Blanket to the Priority column
+(`color_mkzvyt93`) alongside the existing RUSH. Monday's MCP connector isn't
+authorised in this session, so this is done in the Monday UI (or an authorised
+session).
+
+**Open before prod trust:** `raw_Sales_v_Priority` is empty until the next ETL
+run, and PlexTest has one priority key (`1602`) on every release, so only one of
+the five is exercised on test. Deploy via `./scripts/deploy.sh`, run the test
+job, then:
+```sql
+SELECT Priority_Key, Priority, COUNT(*) FROM `voxdatalake.PlexTest.raw_Sales_v_Priority` GROUP BY 1,2;  -- the lookup
+SELECT DISTINCT priority FROM `voxdatalake.PlexTest.label_design_report`;        -- what reaches the push
+```
+
+---
+
 ## UPDATE — 2026-10-02 (late): deployed and verified end to end
 
 `label_design_report` is live at **49 columns** on PlexTest, and the push

@@ -48,8 +48,13 @@ don't need an entry.
   the sandbox's sales generator seeds from it and aborts: *no priced customer
   parts that join to a real part*. `Sales_v_Price` cannot substitute — it
   resolves to 1 distinct customer part. No current table carries a price.
-  **Next step: re-run the sales_orders pipeline and see whether Plex returns
-  price rows at all.** Blocked on a `gcloud auth login` reauth.
+  **Settled the same day: Plex itself returns nothing.** The Cloud Run logs
+  for both 2026-10-06 runs show `Fetched 0 rows from Plex
+  [Part_v_Customer_Part_Price]` against an unfiltered `SELECT *`, so the ETL
+  is healthy and the guard is correct — the test tenant has no price records.
+  `Part_v_Part_Product_Group` and `Sales_v_Release_Allocation` are empty the
+  same way. Re-running the pipeline cannot help. Open as S14 / SC-B15: check
+  the Plex test tenant before falling back to a sandbox-only price pairing.
 
 ## 2026-10-06 (sandbox) - Scorecard ticket set, and two fixes confirmed on real data
 

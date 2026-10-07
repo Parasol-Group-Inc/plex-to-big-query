@@ -1,5 +1,8 @@
 driver/
 .env
+# Any .env variant (.env.clickup holds a ClickUp API token, etc.)
+.env.*
+!.env.example
 output/
 terraform/terraform.tfvars
 terraform/*.tfstate

@@ -14,6 +14,28 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-07 (label-design) - Push the line Priority to Monday
+
+### Added
+
+- **The sales-order line's Priority now reaches Monday's Priority column.** Each
+  line in the Plex sales-order screen carries a Priority dropdown; it lives on
+  the **release** (`Sales_v_Release.Priority_Key`), not the PO line, and resolves
+  to a word through the `Sales_v_Priority` lookup — a new extraction in both
+  `reports/label_design.yaml` and `reports/test/label_design.yaml`
+  (`raw_Sales_v_Priority`, bringing the list to 15). `label_design_view.sql`
+  LEFT JOINs the lookup on the release's `Priority_Key` and surfaces `priority`,
+  carried from the same earliest-due release the row already collapses to, so it
+  matches the Due Date shown. `label_design_service/push.py` maps `priority` to
+  the board's **Priority** status column, pushed verbatim. Plex's five options
+  (confirmed from the `PriorityKey` dropdown on the order-line form) are
+  **RUSH / High / Medium / Low / Blanket**; the board's Priority column is set up
+  to carry those same five labels, so values land on the right label with the
+  right colour. `create_labels_if_missing` remains a safety net.
+- **Test note:** in PlexTest every release currently sits on one priority key
+  (`1602`), so only one of the five words is exercised on test until production
+  data varies. `raw_Sales_v_Priority` is empty until the next ETL run.
+
 ## 2026-10-02 (label-design) - Part attributes come off the LABEL part
 
 ### Fixed

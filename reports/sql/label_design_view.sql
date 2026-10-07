@@ -338,6 +338,14 @@ release_lines AS (
     cust.Name                                     AS customer_name,
     cp.Customer_Part_No                           AS customer_part_no,
     rs.Release_Status                             AS line_status,
+
+    -- The line's Priority (2026-10-07, Emilio). In the Plex sales-order screen
+    -- each line/release row carries a Priority dropdown; it lives on the
+    -- RELEASE (`Sales_v_Release.Priority_Key`), not the PO line, and resolves to
+    -- a word through `Sales_v_Priority`. The value is carried from whichever
+    -- release the QUALIFY below keeps (the earliest-due), so the surfaced
+    -- priority matches the surfaced due date. Goes to Monday's Priority column.
+    pr.Priority                                   AS priority,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS INT64), 0), 1000))),
       NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
@@ -436,6 +444,11 @@ release_lines AS (
   JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release_Status` AS rs
     ON SAFE_CAST(rs.Release_Status_Key AS INT64) = SAFE_CAST(rel.Release_Status_Key AS INT64)
 
+  -- Priority lookup (2026-10-07). LEFT so a release with no/unknown priority
+  -- key still produces its queue row rather than being dropped.
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Priority` AS pr
+    ON SAFE_CAST(pr.Priority_Key AS INT64) = SAFE_CAST(rel.Priority_Key AS INT64)
+
   -- Addition 2: the ORDER must be approved, not just the release in Label
   -- Design. Matched on the status NAME rather than the key on purpose — Vox cut
   -- the status list from 10 to 7 in September and three keys vanished, which is
@@ -501,6 +514,7 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
+  priority,
   MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,

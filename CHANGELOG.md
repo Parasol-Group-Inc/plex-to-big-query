@@ -14,6 +14,43 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-07 (sandbox) - Sandbox snapshot re-pinned; rebuild blocked on a frozen price table
+
+### Fixed
+
+- **`scripts/scorecard_sandbox/build.py` could not be rebuilt at all.** The
+  pinned `SNAPSHOT` (`2026-09-23 12:00:00+00`) fell out of BigQuery's 7-day
+  time-travel window on 2026-09-30. Re-pinned to `2026-10-07 00:00:00+00`.
+- **The injector-row cleanup crashed the build on a type change.**
+  `LEGACY_INJECTOR_ROWS` matched two keys with a bare `LIKE '99%'`.
+  `Cell_Depletion_Key` is autodetected from row values and has since become
+  `INT64` (`Cell_Production_Key` is still `STRING`), so the DELETE failed with
+  *No matching signature for operator LIKE* and took the whole build down.
+  Both predicates now `CAST(... AS STRING)` first, so either type works.
+
+### Changed
+
+- **The snapshot is no longer pre-collapse, and cannot be again.** The old
+  instant was chosen to sit before the 2026-09-24 tenant cut-back; no
+  pre-collapse instant is reachable any more. This is an improvement, not a
+  loss: after the 2026-10-05 refresh a current instant scores better than the
+  old one on every relation that matters — 6,179/6,179 customer parts to parts
+  and to customers, 3,479/3,479 customers to reps, 50,094 flat-BOM rows.
+
+### Found
+
+- **`raw_Part_v_Customer_Part_Price` is frozen, and it blocks the rebuild.**
+  It joins **0 of 2,119** rows to `raw_Part_v_Customer_Part`. Last written
+  2026-10-02 while its parent was refreshed 2026-10-06 21:06 — the
+  keep-yesterday-on-zero-rows guard (SC-B9) holding keys from the pre-collapse
+  generation. The tile views survive this (all ten reach it through a
+  `LEFT JOIN`, and real pricing moved to `Sales_v_Price` on 2026-09-04), but
+  the sandbox's sales generator seeds from it and aborts: *no priced customer
+  parts that join to a real part*. `Sales_v_Price` cannot substitute — it
+  resolves to 1 distinct customer part. No current table carries a price.
+  **Next step: re-run the sales_orders pipeline and see whether Plex returns
+  price rows at all.** Blocked on a `gcloud auth login` reauth.
+
 ## 2026-10-06 (sandbox) - Scorecard ticket set, and two fixes confirmed on real data
 
 ### Added

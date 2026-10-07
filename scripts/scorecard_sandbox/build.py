@@ -47,16 +47,31 @@ from common import PROJECT, SANDBOX, SOURCE, Sandbox  # noqa: E402
 REF = re.compile(r"\{gcp_project\}\.\{dataset\}\.([A-Za-z0-9_]+)")
 
 # THE SNAPSHOT. Plex tables are copied from PlexTest AS IT WAS at this
-# instant (BigQuery time travel, 7-day window), not as it is now. Checked with
-# snapshot_check.py on 2026-09-24: at this moment every key the tile views
-# join on resolves — 2,119/2,119 customer part prices, 2,120/2,120 customer
-# parts, 182 customers (150 with an account rep), 160 jobs. By the evening of
-# the 24th the tenant had been cut back to 24 customers and 312 unpriced
-# customer parts, and the ETL's keep-yesterday-on-zero-rows rule left a price
-# table pointing at keys that no longer existed: 0/2,119 joined.
+# instant (BigQuery time travel, 7-day window), not as it is now.
+#
+# Re-pinned 2026-10-06. The previous instant (2026-09-23 12:00:00+00) was
+# chosen to sit BEFORE the 2026-09-24 tenant cut-back, and expired out of the
+# time-travel window on 2026-09-30 — no pre-collapse instant is reachable any
+# more, and none ever will be again. That is fine: the tenant has since been
+# repopulated and the 2026-10-05 refresh rebuilt every raw table, so a
+# current instant now scores BETTER than the old one did on everything that
+# matters. snapshot_check.py at this instant: 6,179/6,179 customer parts to
+# parts, 6,179/6,179 to customers, 3,479/3,479 customers to reps, 50,094
+# flat-BOM rows, every job and container key resolving.
+#
+# ONE relation still fails, and it is expected rather than a reason to hunt
+# for another instant: raw_Part_v_Customer_Part_Price joins 0/2,119 to
+# raw_Part_v_Customer_Part. That price table is a fossil — the ETL's
+# keep-yesterday-on-zero-rows guard froze it with pre-collapse keys that no
+# longer exist. It does not matter here, because Part_v_Customer_Part_Price
+# was superseded on 2026-09-04: the real figure is the ORDER LINE price from
+# Sales_v_Price (Jennilyn: "it needs to be the line item price"), and all ten
+# sales views reach the old table through a LEFT JOIN, so a miss yields a NULL
+# fallback price, never a dropped row.
 # If time travel no longer reaches this instant, pick a new one with
-# snapshot_check.py — never build on an instant that fails it.
-SNAPSHOT = "2026-09-23 12:00:00+00"
+# snapshot_check.py — never build on an instant that fails it for any reason
+# other than that price table.
+SNAPSHOT = "2026-10-07 00:00:00+00"
 
 # Copied as they are NOW: the real Quality records (Vox's Quality team keeps
 # adding to them) and everything a person enters by hand.
@@ -70,8 +85,12 @@ LEGACY_INJECTOR_ROWS = {
     "raw_Part_v_Cycle_Inventory": "SAFE_CAST(Cycle_Inventory_Key AS INT64) >= 990000000",
     "raw_Sales_v_Shipper": "SAFE_CAST(Shipper_Key AS INT64) >= 990000000",
     "raw_Sales_v_Shipper_Line": "SAFE_CAST(Shipper_Line_Key AS INT64) >= 990000000",
-    "raw_Part_v_Cell_Production": "Cell_Production_Key LIKE '99%'",
-    "raw_Part_v_Cell_Depletion": "Cell_Depletion_Key LIKE '99%'",
+    # CAST to STRING, don't LIKE the column directly: these two keys are
+    # autodetected from row values, so the same column is STRING in one table
+    # and INT64 in the other (Cell_Depletion_Key flipped to INT64 once the
+    # table had real rows, and a bare LIKE then fails the whole build).
+    "raw_Part_v_Cell_Production": "CAST(Cell_Production_Key AS STRING) LIKE '99%'",
+    "raw_Part_v_Cell_Depletion": "CAST(Cell_Depletion_Key AS STRING) LIKE '99%'",
     "safety_incidents": "updated_by LIKE 'ZZTEST%'",
 }
 

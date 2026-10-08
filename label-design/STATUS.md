@@ -11,6 +11,33 @@
 
 ---
 
+## UPDATE — 2026-10-08: production push path built (dormant until cutover)
+
+Stood up the **production** push so the whole prod path exists ahead of cutover,
+but **did not release it**. `terraform/main.tf` now has:
+
+- **`plex-etl-label-design-push`** (prod Cloud Run job) — mirrors the test push
+  job exactly, except `BQ_DATASET = var.bq_dataset` (prod). Same "Plex Import"
+  board (`18432111755`), same `New from Plex` group, `max_retries = 0`.
+- **`plex-label-design-push-sync`** (prod scheduler) — **`paused = true`**.
+  Nothing fires on its own. At cutover: pause the test push scheduler, un-pause
+  this one.
+
+Also added `plex-etl-label-design-push` to `_ALL_JOBS` in
+`deploy/cloudbuild.yaml` so the prod job gets images.
+
+**Note — the stale test-push image.** Today's test pushes landed with **no
+Priority** on the board. Root cause: `push.py`'s Priority mapping ships only via
+**Cloud Build** (the image), and Cloud Build hasn't run since the Priority
+commit — the running test-push container is pre-Priority. The fix is to rebuild:
+`./scripts/deploy.sh` first (creates the prod job + paused scheduler), **then**
+Cloud Build (`gcloud builds submit --config deploy/cloudbuild.yaml
+--project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .`)
+to push the current image to every job, including both pushes. Then a fresh test
+order carries Priority onto Monday.
+
+---
+
 ## UPDATE — 2026-10-07: line Priority → Monday Priority column
 
 Added the sales-order line's **Priority** to the queue and the push. It is a

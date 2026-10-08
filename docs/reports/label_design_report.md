@@ -196,7 +196,10 @@ on the board is never pushed again. Every push is also recorded in the
 - **Priority (2026-10-07).** The Priority dropdown (`PriorityKey`) shown on each
   sales-order line in Plex. It lives on the **release**
   (`Sales_v_Release.Priority_Key`), not the PO line, and is resolved to its word
-  through the `Sales_v_Priority` lookup. The value carried is the one on the
+  through the `Part_v_Priority` lookup (its **`Description`** column — the lookup's
+  own `Priority` column is just a sort number). `Sales_v_Priority` replicates
+  empty on this tenant and is *not* the source. Keys: `1601 High`, `1602 Medium`,
+  `1603 Low`, `1912 RUSH`, `1915 Blanket`. The value carried is the one on the
   release the row collapses to (the earliest-due), so it matches the Due Date
   shown. The five Plex options are **RUSH / High / Medium / Low / Blanket**, and
   the word is pushed **verbatim** to Monday's **Priority** status column — the

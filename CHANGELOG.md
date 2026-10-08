@@ -580,6 +580,10 @@ first.
   it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
   yields a code. `label_design_service/reason_code.py` and its test are
   removed; their cases live in the injector now.
+  Reason Code catalog: 1 Customer Initiated: Label Edit · 2 Customer initiated:
+  Label review · 3 New label design (Vox design) · 4 New label review (Customer
+  design) · 5 Vox Initiated: Label Edit/Review · 6 3D Rendering. First note char
+  1–6 = code, rest = Memo; a leading quantity ("12ct", "3.5 oz") is not a code.
 - **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
   version of the query.
 - **A NULL customer part number falls back to `Part_Key`** for the collapse

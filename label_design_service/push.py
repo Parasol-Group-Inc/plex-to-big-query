@@ -135,6 +135,15 @@ def _part_text(r):
     return " ".join(str(x).strip() for x in (r.get("part_no"), r.get("part_revision")) if x) or str(r.get("part_key"))
 
 
+def _item(r):
+    # The "Item" column: the customer part number when the line carries one
+    # (FG/label parts), else the Plex part number (2026-10-08, Emilio). Component
+    # lines (POWDER/SUPPLY) have no customer part, so they used to leave Item
+    # blank; `part_no` is always populated and keeps the part identifiable.
+    return ((r.get("customer_part_no") or "").strip()
+            or (r.get("part_no") or "").strip() or None)
+
+
 COLUMNS = [
     ("Customer Name", "text", _text("customer_name")),
     ("Date", "date", _date),
@@ -149,9 +158,17 @@ COLUMNS = [
     ("Reason Code", "status", _label("reason_code_label")),
     ("Email", "email", _email),
     ("Phone Number", "text", _text("customer_phone")),
-    # `bdm`: the order's Inside Sales, else the customer's Assigned To, else
-    # Order_Salesperson — see label_design_view.sql.
+    # Sales Rep = the BDM / Outside Salesperson: order's Outside Sales, else the
+    # customer's Assigned To 2, else Order_Salesperson secondary (2026-10-08).
+    # The AM (Inside Salesperson) now has its own column below — the two used to
+    # be conflated into one "Sales Rep" that was actually the AM. Both resolved
+    # in label_design_view.sql.
     ("Sales Rep", "status", _label("bdm")),
+    # The AM / Inside Salesperson (Account Manager): order's Inside Sales, else
+    # the customer's Assigned To, else Order_Salesperson primary. Needs an
+    # "Inside Sales Rep" status column on the board; a board without it logs a
+    # warning and skips the field.
+    ("Inside Sales Rep", "status", _label("am")),
     # The line's Priority (2026-10-07), from Sales_v_Release.Priority_Key via
     # Sales_v_Priority — the Priority dropdown (`PriorityKey`) on every
     # sales-order line. Plex's five options are RUSH / High / Medium / Low /
@@ -161,7 +178,9 @@ COLUMNS = [
     ("Priority", "status", _label("priority")),
     # The text "Item" column next to Design File (the product), NOT the item
     # name column, which on Design & QA holds the label code the team assigns.
-    ("Item", "text", _text("customer_part_no")),
+    # Falls back to the Plex part number when there is no customer part
+    # (component lines) — see _item.
+    ("Item", "text", _item),
     # Added 2026-09-29, replacing the 2026-09-25 "Plex Part URL" / "PO URL"
     # columns (deleted from Plex Import that day). The URLs are built in the
     # view, host by dataset, so the report and the board carry the same links.
@@ -369,7 +388,15 @@ def main():
                 v = build(r)
                 if v is not None:
                     values[col_ids[title]] = v
-        name = (r.get("customer_part_no") or "").strip() or f"(no part #) {r.get('order_number')}"
+        # The item name: the customer part # when the line has one (FG/label
+        # parts), else the full line description — "<part no> Rev xx | <TYPE> |
+        # <name>" — which is what the historical Sheet/NetSuite items were named
+        # and keeps component lines (POWDER/SUPPLY, no customer part #) legible
+        # instead of a bare "(no part #) 16" (2026-10-08, Emilio). The order-only
+        # fallback stays as a last resort if even the description is blank.
+        name = ((r.get("customer_part_no") or "").strip()
+                or (r.get("line_description") or "").strip()
+                or f"(no part #) {r.get('order_number')}")
         entry = {"run_id": run_id, "pushed_at": dt.datetime.now(dt.timezone.utc), "board_id": BOARD_ID,
                  "dedupe_key": r["dedupe_key"], "lcr": r["_lcr"], "order_number": r.get("order_number"),
                  "customer_part_no": r.get("customer_part_no"), "column_values": json.dumps(values)}

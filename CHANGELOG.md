@@ -14,6 +14,40 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
+
+### Fixed
+
+- **"Sales Rep" was the AM, not the BDM — now split into two columns, with the
+  BDM sourced from the field it actually replicates into.** The view resolved
+  `bdm` from `Sales_v_PO.Inside_Sales` → `Common_v_Customer.Assigned_To` → the
+  primary salesperson — but per Vox's glossary those are all the **AM** (Account
+  Manager / Inside Salesperson), never the BDM. The BDM (Outside Salesperson)
+  does **not** land in `Sales_v_PO.Outside_Sales` — that replicates as `0` even
+  when the Plex UI shows a BDM (order 16 / PO_Key 5021015 shows Janet Pacheco on
+  screen; `Outside_Sales = 0` in BigQuery). It lands in
+  **`Sales_v_Order_Salesperson`** instead (same "the field the picker writes
+  isn't the field that replicates" trap `Sales_v_Priority` sprang). `Sort_Order`
+  is `0` on every row there, so it can't rank reps; an order can carry more than
+  one outside rep, so the lowest `Plexus_User_No` is taken for a deterministic
+  single BDM. The Order_Salesperson rep is never the order's `Inside_Sales` AM
+  (confirmed across every populated order), so it is unambiguously the BDM.
+  `label_design_view.sql` now resolves both: `am` =
+  `COALESCE(Inside_Sales, customer Assigned_To)`, `bdm` =
+  `COALESCE(Order_Salesperson rep, Outside_Sales, Assigned_To2)` (the last two
+  are empty-today fallbacks). Validated on PlexTest: order 16 → am Ashley
+  Quintana, bdm Janet Pacheco; order 17 → am Camilo Montano, bdm Kami Butcher.
+  `push.py` maps **Sales Rep → `bdm`** and adds a new **Inside Sales Rep → `am`**
+  column. **The board needs an "Inside Sales Rep" status column** or that field
+  is logged and skipped.
+- **Component lines no longer lose their part info on Monday.** Lines with no
+  customer part number (POWDER/SUPPLY components) were pushed as `(no part #) 16`
+  with a blank **Item** column. The Monday item is now named from the full part
+  line (`line_description`, e.g. `12014-01VOXNU-1 Rev 00 | POWDER | Bacopa…`) when
+  there is no customer part, and the **Item** column falls back from
+  `customer_part_no` to the Plex `part_no`. Both match how the historical
+  Sheet/NetSuite items looked.
+
 ## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
 
 ### Added

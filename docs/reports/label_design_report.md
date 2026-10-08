@@ -73,9 +73,13 @@ list would miss exactly the new orders it exists to surface.
 
 Each new row becomes an item in the **New from Plex** group, named after the
 label SKU. The job fills: Customer Name, Date (order date), Description, Sales
-Order ("Sales Order #…"), Email, Phone Number, **Item** (the Plex part number,
-in the text column next to Design File), **Sales Rep** (the BDM, see below),
-**Priority** (the line's Priority dropdown from Plex, see below) and LCR. The Job Note is split in two, in the view itself (`reason_code`,
+Order ("Sales Order #…"), Email, Phone Number, **Item** (the customer part
+number in the text column next to Design File, falling back to the Plex part
+number when a line has no customer part), **Sales Rep** (the BDM) and **Inside
+Sales Rep** (the AM) — see below, **Priority** (the line's Priority dropdown
+from Plex, see below) and LCR. The item is named after the customer part, or,
+when a line has none (component lines), the full part line
+("`12014-01VOXNU-1 Rev 00 | POWDER | Bacopa…`"). The Job Note is split in two, in the view itself (`reason_code`,
 `reason_code_label`, `memo`): if its **first character is a digit 1–6**, that
 digit sets Reason Code and the rest becomes Memo; otherwise the whole note goes
 to Memo and **nothing is written to Reason Code**. A note that only *starts
@@ -209,12 +213,24 @@ on the board is never pushed again. Every push is also recorded in the
   *creates* items, a priority changed on an order already on the board is not
   re-pushed.
 
-- **Sales Rep = the BDM (2026-09-24).** Plex's "BDM" fields are the order's
-  **Inside Salesperson** (`Sales_v_PO.Inside_Sales`) and the customer's
-  **Assigned To** (`Common_v_Customer.Assigned_To`). The `bdm` column takes
-  the order's first, then the customer's. The older primary/secondary
-  salesperson table is only a last fallback, because Plex barely uses it: one
-  row in all of test. All three are still exposed separately.
+- **Sales Rep = the BDM, Inside Sales Rep = the AM (corrected 2026-10-08).**
+  Plex splits the rep into two different people, and they had been conflated —
+  the "Sales Rep" column was really the AM. They are now separate:
+  - **Sales Rep → the BDM** (Business Development Manager / **Outside
+    Salesperson**): the rep *to the customer*. This comes from the
+    **Order Salesperson** table (`Sales_v_Order_Salesperson`), *not* the order's
+    "Outside Sales" field — that field replicates as empty even when Plex shows a
+    BDM on screen. If an order lists more than one outside rep, one is chosen
+    deterministically. (`Sales_v_PO.Outside_Sales` and `Assigned_To2` are kept
+    only as last-resort fallbacks, and are empty on test data.)
+  - **Inside Sales Rep → the AM** (Account Manager / **Inside Salesperson**):
+    the order's **Inside Sales** (`Sales_v_PO.Inside_Sales`), else the
+    customer's **Assigned To** (`Common_v_Customer.Assigned_To`).
+
+  Verified on PlexTest order 16: Inside Sales Rep **Ashley Quintana**, Sales Rep
+  **Janet Pacheco** — matching the Plex order screen. Orders with no outside rep
+  assigned leave Sales Rep blank. The board needs an **Inside Sales Rep** status
+  column, or that field is logged and skipped.
 
 - **Two sheet columns cannot be filled from Plex.** *WO Number* (the work order
   is raised *after* the label is approved, so an order still in Label Design

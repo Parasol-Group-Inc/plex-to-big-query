@@ -15,10 +15,16 @@
 
 Added the sales-order line's **Priority** to the queue and the push. It is a
 **release** attribute in Plex (`Sales_v_Release.Priority_Key`), resolved to a
-word via a new `raw_Sales_v_Priority` extraction (both yamls), surfaced as
+word via a new `raw_Part_v_Priority` extraction (both yamls), surfaced as
 `priority` in `label_design_view.sql`, and mapped to the board's **Priority**
 status column in `push.py`. Carried from the earliest-due release, so it
-matches the Due Date shown. View dry-runs clean.
+matches the Due Date shown.
+
+> **Source correction (2026-10-07):** the first wiring used `Sales_v_Priority`,
+> which replicates **empty** here, so `priority` came back NULL. The real lookup
+> is **`Part_v_Priority`**, and the word is its **`Description`** column (its own
+> `Priority` column is a sort number). Keys: `1601 High · 1602 Medium · 1603 Low
+> · 1912 RUSH · 1915 Blanket`. The test order's lines are all `1602` → **Medium**.
 
 Plex's five Priority options are confirmed from the order-line form's
 `PriorityKey` dropdown: **RUSH / High / Medium / Low / Blanket**. The word is

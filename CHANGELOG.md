@@ -34,7 +34,20 @@ don't need an entry.
   right colour. `create_labels_if_missing` remains a safety net.
 - **Test note:** in PlexTest every release currently sits on one priority key
   (`1602`), so only one of the five words is exercised on test until production
-  data varies. `raw_Sales_v_Priority` is empty until the next ETL run.
+  data varies.
+
+### Fixed
+
+- **Priority now resolves against `Part_v_Priority`, not `Sales_v_Priority`.**
+  The first wiring joined `Sales_v_Priority`, which replicates **empty** (0 rows)
+  on this tenant — so `Priority_Key = 1602` had nothing to resolve against and
+  `priority` came back NULL for every row despite the release carrying a real
+  key. The correct lookup is `Part_v_Priority` (`1601 High`, `1602 Medium`,
+  `1603 Low`, `1912 RUSH`, `1915 Blanket`). The word is that view's
+  **`Description`** column — its own `Priority` column is a sort number
+  (10/20/30/1/40), not the label. Extraction swapped to `Part_v_Priority`
+  (`raw_Part_v_Priority`) in both yamls; the view's LEFT JOIN and `pr.Description`
+  updated to match. Key `1602` now surfaces as **Medium**.
 
 ## 2026-10-06 (sandbox) - Scorecard ticket set, and two fixes confirmed on real data
 

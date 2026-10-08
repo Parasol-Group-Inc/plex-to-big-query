@@ -82,9 +82,11 @@ extractions:
 
   # Priority lookup — added 2026-10-07 for the Monday Priority column. Resolves
   # Sales_v_Release.Priority_Key (the per-line Priority dropdown in the Plex
-  # sales-order screen) to its word. Small code table, pulled whole.
-  - plex_view: Sales_v_Priority
-    bq_table: raw_Sales_v_Priority
+  # sales-order screen) to its word. Part_v_Priority, NOT Sales_v_Priority —
+  # the latter replicates empty on this tenant; the word is Part_v_Priority's
+  # Description column. Small code table, pulled whole.
+  - plex_view: Part_v_Priority
+    bq_table: raw_Part_v_Priority
     filter: ""
     date_col: ""
 

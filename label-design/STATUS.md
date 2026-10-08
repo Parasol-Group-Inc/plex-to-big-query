@@ -11,6 +11,33 @@
 
 ---
 
+## UPDATE — 2026-10-08 (later): Sales roles + part-number fallbacks
+
+Three fixes to what reaches Monday, all shipping in the same image:
+
+- **Sales Rep was the AM, not the BDM.** The view's `bdm` was built from
+  `Inside_Sales`/`Assigned_To`/primary salesperson — all the **AM** per the
+  glossary. Rewired: new `am` = that old logic; corrected `bdm` = **Outside
+  Salesperson** (`Sales_v_PO.Outside_Sales` → `Common_v_Customer.Assigned_To2`
+  → secondary). `push.py` now maps **Sales Rep → bdm** and adds **Inside Sales
+  Rep → am**. No new extraction (both columns already land). Validated: order 16
+  `am` = Ashley Quintana, `bdm` = NULL (no outside rep set anywhere in PlexTest
+  — so Sales Rep is blank on test until real data carries one; that is expected,
+  not a bug). **Board action: add an "Inside Sales Rep" status column**, or the
+  field is skipped.
+- **Item name / Item column no longer blank for component lines.** Lines with no
+  customer part (POWDER/SUPPLY) were `(no part #) 16`. Item name now falls back
+  to the full part line; the **Item** column falls back `customer_part_no` →
+  `part_no`.
+- **Priority confirmed working** — order 16's 18:38 push carried High/Low/Blanket
+  onto the board, and the phone (`800-100-1000`) ships as a text column. So the
+  deployed image is already current on Priority + phone.
+
+Deploy: `./scripts/deploy.sh` (view) + Cloud Build (push.py). Verify `am`/`bdm`
+on the next real order.
+
+---
+
 ## UPDATE — 2026-10-08: production push path built (dormant until cutover)
 
 Stood up the **production** push so the whole prod path exists ahead of cutover,

@@ -14,6 +14,31 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
+
+### Fixed
+
+- **"Sales Rep" was the AM, not the BDM — now split into two columns.** The view
+  resolved `bdm` from `Sales_v_PO.Inside_Sales` → `Common_v_Customer.Assigned_To`
+  → the primary salesperson — but per Vox's glossary those are all the **AM**
+  (Account Manager / Inside Salesperson), never the BDM. The real BDM is the
+  **Outside Salesperson**: `Sales_v_PO.Outside_Sales` → `Common_v_Customer.Assigned_To2`
+  → the secondary salesperson. `label_design_view.sql` now resolves both — a new
+  `am` column (the old logic) and a corrected `bdm` (the outside side). No new
+  extraction: both source columns already land on `raw_Sales_v_PO` /
+  `raw_Common_v_Customer`. `push.py` maps **Sales Rep → `bdm`** and adds a new
+  **Inside Sales Rep → `am`** column. The BDM is unset on every PlexTest order
+  today, so Sales Rep is blank on test data until a real order carries an outside
+  rep (expected). **The board needs an "Inside Sales Rep" status column** or that
+  field is logged and skipped.
+- **Component lines no longer lose their part info on Monday.** Lines with no
+  customer part number (POWDER/SUPPLY components) were pushed as `(no part #) 16`
+  with a blank **Item** column. The Monday item is now named from the full part
+  line (`line_description`, e.g. `12014-01VOXNU-1 Rev 00 | POWDER | Bacopa…`) when
+  there is no customer part, and the **Item** column falls back from
+  `customer_part_no` to the Plex `part_no`. Both match how the historical
+  Sheet/NetSuite items looked.
+
 ## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
 
 ### Added

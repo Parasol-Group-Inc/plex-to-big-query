@@ -359,23 +359,30 @@ release_lines AS (
     jn.Job_Note                                   AS job_note,
     NULLIF(TRIM(jn.Job_Note), '')                 AS _note,
 
-    -- Addition 1: who to ask. Both, because "BDM" has never been pinned to one.
+    -- ── Sales roles: AM and BDM are DIFFERENT people (2026-10-08, Emilio) ──────
+    -- Plex (and Vox's glossary) split the sales rep in two, and they were being
+    -- conflated: everything below used to feed one `bdm` column that was really
+    -- the AM. The glossary origins pin each one down:
+    --   AM  (Account Manager / Inside Salesperson), terms "Assigned To /
+    --        Inside Sales / Inside Salesperson":
+    --        Sales_v_PO.Inside_Sales  -> Common_v_Customer.Assigned_To
+    --   BDM (Business Dev. Manager / Outside Salesperson), terms "Outside Sales /
+    --        Outside Salesperson / Assigned To 2" (the picker is the "Outside
+    --        Sales Dialog", so it is Outside Sales):
+    --        Sales_v_PO.Outside_Sales -> Common_v_Customer.Assigned_To2
+    -- Monday's "Sales Rep" is the BDM; the AM goes to a new "Inside Sales Rep".
+    -- Each takes the ORDER field first (most specific), then the CUSTOMER
+    -- default, then the old Order_Salesperson table (primary for AM, secondary
+    -- for BDM) as a last resort.
     up.user_name                                  AS sales_rep_primary,
     us.user_name                                  AS sales_rep_secondary,
-
-    -- The BDM (2026-09-24). Order_Salesperson above turned out to be nearly
-    -- empty in Plex: one row in all of test, with Sort_Order 0, which the = 1
-    -- filter misses too. Vox records the rep in two other places, both in
-    -- Plex's "BDM" field group:
-    --   Sales_v_PO.Inside_Sales        "Inside Salesperson" on the ORDER, set
-    --                                   on every order entered since SO 4.
-    --   Common_v_Customer.Assigned_To  "Assigned To" on the CUSTOMER, the
-    --                                   account owner. 16 of 24 test customers.
-    -- `bdm` takes the order first (the most specific), then the customer, then
-    -- the old salesperson table. This is what goes to Monday's Sales Rep.
     ui.user_name                                  AS sales_rep_inside,
     ua.user_name                                  AS customer_account_rep,
-    COALESCE(ui.user_name, ua.user_name, up.user_name) AS bdm,
+    COALESCE(ui.user_name, ua.user_name, up.user_name) AS am,
+    -- BDM / Outside Salesperson. Empty across PlexTest today (no outside rep is
+    -- assigned on any test order or customer), so it is NULL until real data
+    -- carries one — expected, not a broken join.
+    COALESCE(uo.user_name, ub.user_name, us.user_name) AS bdm,
 
     -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
     -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
@@ -478,6 +485,11 @@ release_lines AS (
   LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
+  -- The BDM / Outside Salesperson side (2026-10-08): order's Outside Sales and
+  -- the customer's Assigned To 2. Both already extracted on raw_Sales_v_PO /
+  -- raw_Common_v_Customer — no new extraction.
+  LEFT JOIN users         AS uo ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
+  LEFT JOIN users         AS ub ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
 
   LEFT JOIN bottles AS bt
     ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
@@ -526,6 +538,7 @@ SELECT
   sales_rep_secondary,
   sales_rep_inside,
   customer_account_rep,
+  am,
   bdm,
   customer_email,
   customer_phone,

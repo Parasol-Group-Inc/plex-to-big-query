@@ -11,20 +11,41 @@
 
 ---
 
+## UPDATE — 2026-10-08 (latest): BDM source corrected — it's in Order_Salesperson
+
+The earlier "Sales roles" fix below sourced `bdm` from
+`Sales_v_PO.Outside_Sales` → `Assigned_To2` and concluded the BDM was unset on
+all PlexTest orders. **That was wrong.** Order 16 shows BDM **Janet Pacheco** on
+the Plex order screen, but `Outside_Sales` replicates as `0` — the BDM actually
+lands in **`Sales_v_Order_Salesperson`** (Janet's user_no is there). Same trap
+`Sales_v_Priority` sprang: the field the picker writes isn't the field that
+replicates.
+
+Fixed in `label_design_view.sql`: a `rep_outside` CTE picks one BDM per order
+from `Order_Salesperson` (its `Sort_Order` is `0` on every row, so the lowest
+`Plexus_User_No` breaks ties on multi-rep orders). `bdm` =
+`COALESCE(Order_Salesperson rep, Outside_Sales, Assigned_To2)`; `am` =
+`COALESCE(Inside_Sales, Assigned_To)`. The Order_Salesperson rep is never the
+order's Inside_Sales AM (checked across every populated order), so it is
+unambiguously the BDM. **Validated on PlexTest: order 16 → am Ashley Quintana,
+bdm Janet Pacheco; order 17 → am Camilo Montano, bdm Kami Butcher.** Orders with
+no outside rep leave Sales Rep blank. Still ships via `./scripts/deploy.sh`
+(view). Board action unchanged: add an **Inside Sales Rep** status column.
+
+---
+
 ## UPDATE — 2026-10-08 (later): Sales roles + part-number fallbacks
 
 Three fixes to what reaches Monday, all shipping in the same image:
 
 - **Sales Rep was the AM, not the BDM.** The view's `bdm` was built from
   `Inside_Sales`/`Assigned_To`/primary salesperson — all the **AM** per the
-  glossary. Rewired: new `am` = that old logic; corrected `bdm` = **Outside
-  Salesperson** (`Sales_v_PO.Outside_Sales` → `Common_v_Customer.Assigned_To2`
-  → secondary). `push.py` now maps **Sales Rep → bdm** and adds **Inside Sales
-  Rep → am**. No new extraction (both columns already land). Validated: order 16
-  `am` = Ashley Quintana, `bdm` = NULL (no outside rep set anywhere in PlexTest
-  — so Sales Rep is blank on test until real data carries one; that is expected,
-  not a bug). **Board action: add an "Inside Sales Rep" status column**, or the
-  field is skipped.
+  glossary. Rewired: new `am` = that old logic; corrected `bdm` = the Outside
+  Salesperson. `push.py` now maps **Sales Rep → bdm** and adds **Inside Sales
+  Rep → am**. **Board action: add an "Inside Sales Rep" status column**, or the
+  field is skipped. *(⚠ The BDM **source** stated here — `Outside_Sales` →
+  `Assigned_To2` — was wrong, and the "bdm = NULL, expected" conclusion with it;
+  see the "latest" correction above: the BDM is in `Sales_v_Order_Salesperson`.)*
 - **Item name / Item column no longer blank for component lines.** Lines with no
   customer part (POWDER/SUPPLY) were `(no part #) 16`. Item name now falls back
   to the full part line; the **Item** column falls back `customer_part_no` →

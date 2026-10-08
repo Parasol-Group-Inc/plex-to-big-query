@@ -217,19 +217,20 @@ on the board is never pushed again. Every push is also recorded in the
   Plex splits the rep into two different people, and they had been conflated —
   the "Sales Rep" column was really the AM. They are now separate:
   - **Sales Rep → the BDM** (Business Development Manager / **Outside
-    Salesperson**): the order's **Outside Sales** (`Sales_v_PO.Outside_Sales`),
-    else the customer's **Assigned To 2** (`Common_v_Customer.Assigned_To2`),
-    else the salesperson table's secondary. This is the rep *to the customer*.
+    Salesperson**): the rep *to the customer*. This comes from the
+    **Order Salesperson** table (`Sales_v_Order_Salesperson`), *not* the order's
+    "Outside Sales" field — that field replicates as empty even when Plex shows a
+    BDM on screen. If an order lists more than one outside rep, one is chosen
+    deterministically. (`Sales_v_PO.Outside_Sales` and `Assigned_To2` are kept
+    only as last-resort fallbacks, and are empty on test data.)
   - **Inside Sales Rep → the AM** (Account Manager / **Inside Salesperson**):
     the order's **Inside Sales** (`Sales_v_PO.Inside_Sales`), else the
-    customer's **Assigned To** (`Common_v_Customer.Assigned_To`), else the
-    salesperson table's primary.
+    customer's **Assigned To** (`Common_v_Customer.Assigned_To`).
 
-  Each prefers the order field, then the customer default, then the old
-  salesperson table (which Plex barely uses). The BDM is unset on every
-  PlexTest order today, so Sales Rep is blank on test data until a real order
-  carries an outside rep; the AM is populated. The board needs an **Inside
-  Sales Rep** status column, or that field is logged and skipped.
+  Verified on PlexTest order 16: Inside Sales Rep **Ashley Quintana**, Sales Rep
+  **Janet Pacheco** — matching the Plex order screen. Orders with no outside rep
+  assigned leave Sales Rep blank. The board needs an **Inside Sales Rep** status
+  column, or that field is logged and skipped.
 
 - **Two sheet columns cannot be filled from Plex.** *WO Number* (the work order
   is raised *after* the label is approved, so an order still in Label Design

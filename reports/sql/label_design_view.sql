@@ -32,27 +32,29 @@
 -- per line — so every line of an order carries the same rep, which is what
 -- "so they know which rep to ask" wants.
 --
--- BDM vs primary rep is NOT guessed at: both are exposed. `Sort_Order = 1` is
--- the primary and `2` the secondary, and which of those Vox calls the BDM has
--- never been stated. The consumer picks; nothing here silently decides.
+-- The BDM (Outside Salesperson) lands in `Sales_v_Order_Salesperson`, one or
+-- more rows per ORDER — NOT in `Sales_v_PO.Outside_Sales`, which replicates as
+-- 0 even when the Plex UI shows a BDM (order 16 / PO_Key 5021015 has BDM Janet
+-- Pacheco on screen, Outside_Sales = 0 in BigQuery, and her user_no lands here
+-- instead). This is the same "the field the picker writes isn't the field that
+-- replicates" trap `Sales_v_Priority` already sprang.
+--
+-- `Sort_Order` is 0 on EVERY row across PlexTest, so it cannot rank anything —
+-- an earlier build filtered `= 1` / `= 2` and matched nothing, which is why the
+-- BDM read NULL. Some orders carry more than one outside rep (orders 4, 5, 12
+-- each have two); the lowest Plexus_User_No is taken so one deterministic BDM
+-- lands per order. The Order_Salesperson rep is never the order's Inside_Sales
+-- AM — confirmed across every populated order — so it is unambiguously the BDM.
 --
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
 
-WITH rep_primary AS (
+WITH rep_outside AS (
   SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
+    SAFE_CAST(sp.PO_Key AS INT64) AS PO_Key,
+    MIN(SAFE_CAST(sp.Plexus_User_No AS INT64)) AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 1
-),
-
-rep_secondary AS (
-  SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
-  FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 2
+  GROUP BY 1
 ),
 
 -- `Plexus_Control_v_Plexus_User` has NO `Name` column — it holds `First_Name`,
@@ -362,27 +364,24 @@ release_lines AS (
     -- ── Sales roles: AM and BDM are DIFFERENT people (2026-10-08, Emilio) ──────
     -- Plex (and Vox's glossary) split the sales rep in two, and they were being
     -- conflated: everything below used to feed one `bdm` column that was really
-    -- the AM. The glossary origins pin each one down:
+    -- the AM. The glossary origins pin each one down, but the FIELD each one
+    -- actually replicates into had to be found by chasing order 16 (below):
     --   AM  (Account Manager / Inside Salesperson), terms "Assigned To /
     --        Inside Sales / Inside Salesperson":
     --        Sales_v_PO.Inside_Sales  -> Common_v_Customer.Assigned_To
     --   BDM (Business Dev. Manager / Outside Salesperson), terms "Outside Sales /
-    --        Outside Salesperson / Assigned To 2" (the picker is the "Outside
-    --        Sales Dialog", so it is Outside Sales):
-    --        Sales_v_PO.Outside_Sales -> Common_v_Customer.Assigned_To2
+    --        Outside Salesperson / Assigned To 2", picker "Outside Sales Dialog":
+    --        lands in Sales_v_Order_Salesperson (see rep_outside above);
+    --        Sales_v_PO.Outside_Sales / Common_v_Customer.Assigned_To2 replicate
+    --        empty, so they are only trailing fallbacks.
     -- Monday's "Sales Rep" is the BDM; the AM goes to a new "Inside Sales Rep".
-    -- Each takes the ORDER field first (most specific), then the CUSTOMER
-    -- default, then the old Order_Salesperson table (primary for AM, secondary
-    -- for BDM) as a last resort.
-    up.user_name                                  AS sales_rep_primary,
-    us.user_name                                  AS sales_rep_secondary,
     ui.user_name                                  AS sales_rep_inside,
     ua.user_name                                  AS customer_account_rep,
-    COALESCE(ui.user_name, ua.user_name, up.user_name) AS am,
-    -- BDM / Outside Salesperson. Empty across PlexTest today (no outside rep is
-    -- assigned on any test order or customer), so it is NULL until real data
-    -- carries one — expected, not a broken join.
-    COALESCE(uo.user_name, ub.user_name, us.user_name) AS bdm,
+    -- AM: the order's Inside_Sales first, then the customer's Assigned_To.
+    COALESCE(ui.user_name, ua.user_name)          AS am,
+    -- BDM: the Order_Salesperson outside rep first (the only field populated in
+    -- PlexTest), then Outside_Sales, then Assigned_To2 as last resorts.
+    COALESCE(uo2.user_name, uo.user_name, ub.user_name) AS bdm,
 
     -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
     -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
@@ -479,17 +478,15 @@ release_lines AS (
   LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
     ON SAFE_CAST(cust.Customer_No AS INT64) = SAFE_CAST(po.Customer_No AS INT64)
 
-  LEFT JOIN rep_primary   AS rp ON rp.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN rep_secondary AS rq ON rq.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN users         AS up ON up.Plexus_User_No = rp.Plexus_User_No
-  LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
+  -- AM side: the order's Inside_Sales and the customer's Assigned_To.
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
-  -- The BDM / Outside Salesperson side (2026-10-08): order's Outside Sales and
-  -- the customer's Assigned To 2. Both already extracted on raw_Sales_v_PO /
-  -- raw_Common_v_Customer — no new extraction.
-  LEFT JOIN users         AS uo ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
-  LEFT JOIN users         AS ub ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
+  -- BDM side (2026-10-08): the real source is Order_Salesperson (rep_outside);
+  -- Outside_Sales and Assigned_To2 replicate empty and are trailing fallbacks.
+  LEFT JOIN rep_outside   AS ro  ON ro.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
+  LEFT JOIN users         AS uo2 ON uo2.Plexus_User_No = ro.Plexus_User_No
+  LEFT JOIN users         AS uo  ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
+  LEFT JOIN users         AS ub  ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
 
   LEFT JOIN bottles AS bt
     ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
@@ -534,8 +531,6 @@ SELECT
   MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,
-  sales_rep_primary,
-  sales_rep_secondary,
   sales_rep_inside,
   customer_account_rep,
   am,

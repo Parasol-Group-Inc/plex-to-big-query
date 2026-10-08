@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
+
+### Added
+
+- **Production Label Design push infrastructure, stood up but deliberately not
+  released.** `terraform/main.tf` now defines `plex-etl-label-design-push` (prod
+  Cloud Run job) and `plex-label-design-push-sync` (prod scheduler). The job
+  mirrors the test push exactly except it reads the **prod** dataset
+  (`var.bq_dataset`); it writes to the **same** "Plex Import" Monday board
+  (`18432111755`) the test push already targets — the board the team moved to for
+  good on 2026-09-26. The scheduler carries **`paused = true`**, so the whole prod
+  path exists and receives container images, but nothing fires on its own. At
+  cutover, pause the test push scheduler and un-pause this one.
+- **`plex-etl-label-design-push` added to `_ALL_JOBS`** in
+  `deploy/cloudbuild.yaml`, so the new prod job gets the current image (with the
+  Priority fix) from every Cloud Build deploy. A job missing from that list
+  silently never gets a new image.
+
 ## 2026-10-07 (label-design) - Push the line Priority to Monday
 
 ### Added

@@ -5591,3 +5591,81 @@ resource "google_cloud_scheduler_job" "label_design_push_test" {
     }
   }
 }
+
+# ── Label Design push — PRODUCTION (built dormant, 2026-10-08) ────────────────
+# Stood up ahead of cutover so the whole prod path exists and gets images from
+# Cloud Build, but it is DELIBERATELY NOT RELEASED: the scheduler below is
+# `paused = true`, so nothing fires on its own. It reads the PROD view
+# (var.bq_dataset) and writes to the SAME "Plex Import" board the test push
+# uses (18432111755) — the board the team moved to for good. While prod is
+# paused there is no test/prod duplication; at cutover, pause the TEST push
+# scheduler and un-pause this one, and prod takes over the same board.
+#
+# Mirrors label_design_push_test exactly except the dataset (prod) — same
+# image, same group, max_retries = 0 for the same reason.
+resource "google_cloud_run_v2_job" "label_design_push" {
+  name     = "plex-etl-label-design-push"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        args  = ["python", "-m", "label_design_service.push"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "MONDAY_BOARD_ID"
+          value = "18432111755"
+        }
+        env {
+          name  = "MONDAY_GROUP_TITLE"
+          value = "New from Plex"
+        }
+        env {
+          name  = "SECRET_MONDAY_API_KEY"
+          value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+      }
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "label_design_push" {
+  name        = "plex-label-design-push-sync"
+  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board — PAUSED until cutover"
+  schedule    = "35 5-17 * * 1-5" # mirrors the test push cadence; inert while paused
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  # NOT RELEASED. Built so the resource exists and can be un-paused by hand at
+  # cutover; fires nothing until then.
+  paused = true
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_push.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

@@ -48,6 +48,15 @@ don't need an entry.
   `customer_part_no` to the Plex `part_no`. Both match how the historical
   Sheet/NetSuite items looked.
 
+### Documentation
+
+- Synced the docs to the AM/BDM split and the (paused) prod push job:
+  `docs/OPEN_ITEMS.md` (prod push job now exists; new L12 to verify both
+  sales-role columns on the next real order), `docs/reports/REPORT_CATALOG.md`,
+  `docs/reports/label_design_report.md` (both push jobs described), and the
+  stale header comment in `reports/sql/label_design_view.sql` (comment only, no
+  SQL change).
+
 ## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
 
 ### Added

@@ -279,6 +279,21 @@
   .result-item:hover{border-color:var(--brand);}
   .result-item .rsec{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;}
 
+
+  /* ---------- Sandbox lineage ---------- */
+  .modes{display:inline-flex;border:1px solid var(--hair);border-radius:999px;background:var(--card);padding:3px;gap:2px;}
+  .modes button{all:unset;cursor:pointer;font-family:var(--mono);font-size:12px;padding:6px 14px;border-radius:999px;color:var(--muted);}
+  .modes button[aria-pressed="true"]{background:var(--navy);color:#fff;}
+  .modes button:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+  .origin-badge.sandbox{background:#E8F4F4;color:#0E6B70;border-color:#C4E3E4;}
+  .view-chip{display:block;font-family:var(--mono);font-size:12px;background:#E8F4F4;border:1px solid #C4E3E4;color:#0B5559;padding:8px 11px;border-radius:8px;margin-bottom:6px;word-break:break-all;}
+  .kindtag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:6px;}
+  .kindtag.real{background:var(--confirmed-bg);color:var(--confirmed);}
+  .kindtag.injected{background:var(--flagged-bg);color:var(--flagged);}
+  .sbx-warn{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 16px;line-height:1.5;}
+  body.mode-today .sbx-only{display:none !important;}
+  body.mode-sandbox .today-only{display:none !important;}
+
   @media (max-width:820px){
     .row3{grid-template-columns:1fr;}
     .row2{grid-template-columns:1fr;}
@@ -298,13 +313,14 @@
       <div class="glyph">VS</div>
       <div>
         <h1>Vox Scorecard — Data Lineage Navigator</h1>
-        <div class="sub">click any figure to trace its source · audit session 2</div>
+        <div class="sub">click any figure to trace its source · audit session 2 + sandbox</div>
       </div>
     </div>
+    <div class="modes" role="group" aria-label="Lineage source"><button id="m-today" aria-pressed="false">Today: Sheets</button><button id="m-sbx" aria-pressed="true">Sandbox: BigQuery</button></div>
     <div class="trace-status"><span class="dot"></span> <b>32 / 32</b>&nbsp;tiles traced</div>
   </div>
 
-  <div class="instructions"><span class="pip"></span> Every number below is wired to its Looker Studio Setup panel. Click one to open its lineage.</div>
+  <div class="instructions"><span class="pip"></span> Click a figure to open its lineage. Sandbox mode shows the ScorecardSandbox view that will replace each source; Today mode shows the Sheet audit.</div>
 
   <div class="board">
     <div class="board-title">VOX NUTRITION MTD SCORECARD</div>
@@ -438,11 +454,11 @@
       </div>
     </div>
 
-    <footer class="note">Data Last Updated: 7/31/2026 10:39:22 AM</footer>
+    <footer class="note" id="foot"></footer>
   </div>
 
   <div class="searchbar">
-    <input type="text" id="search" placeholder="Search the audit — e.g. &quot;formula&quot;, &quot;FPY&quot;, &quot;BigQuery&quot;, &quot;flagged&quot;…">
+    <input type="text" id="search" placeholder="Search — e.g. &quot;FPY&quot;, &quot;production_vs_goal_report&quot;, &quot;manual&quot;, &quot;flagged&quot;…">
   </div>
   <div class="results" id="results"></div>
 
@@ -464,6 +480,18 @@
     </div>
 
     <div class="meta-row" id="d-meta"></div>
+
+    <div class="sbx-only">
+      <div class="sbx-warn">Not real business data. ScorecardSandbox rows are clones of PlexTest rows with SBX document numbers, sized near the 7/31 scorecard.</div>
+      <div class="block"><div class="k">Sandbox view(s)</div><div class="v" id="s-views"></div></div>
+      <div class="block"><div class="k">Sandbox figure</div><div class="v" id="s-rows"></div></div>
+      <div class="block" id="s-manual-wrap"><div class="k">Manual-data table it reads</div><div class="v mono" id="s-manual"></div></div>
+      <div class="block"><div class="k">Built from</div><div class="v mono" id="s-files" style="white-space:pre-wrap;"></div></div>
+      <div class="thread-line"><span>what changes vs today</span><span class="seg"></span></div>
+      <div class="block"><div class="k">Sandbox note</div><div class="v next" id="s-note"></div></div>
+      <div class="block"><div class="k">Today's source (for comparison)</div><div class="v mono" id="s-today"></div></div>
+    </div>
+    <div class="today-only">
 
     <div class="block">
       <div class="k">Source / Field / Config (chart-level)</div>
@@ -491,6 +519,7 @@
       <div class="k">Next step</div>
       <div class="v next" id="d-next"></div>
     </div>
+    </div>
   </div>
 </aside>
 
@@ -508,7 +537,20 @@
     "connector": "Sheets / ds16",
     "freshness": "15 min",
     "structure": "Fields: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count\nAggregation notes: % Revenue Target defaults to Sum",
-    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting."
+    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_revenue_summary_report"
+      ],
+      "sql": [
+        "reports/sql/sales_revenue_summary_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "Sep 2026 = $4,948,764 (Oct so far $988,125); view holds 59 rows over 11 months",
+      "kind": "real",
+      "note": "Reads 0 when no shipments exist in the month; that is a true answer, not a fault.",
+      "manual": null
+    }
   },
   {
     "section": "Revenue",
@@ -522,7 +564,20 @@
     "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
     "freshness": "Live (view computes on query; no fixed cache interval observed)",
     "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
-    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_revenue_run_rate_report"
+      ],
+      "sql": [
+        "reports/sql/sales_revenue_run_rate_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "Sep = 100% (complete month); Oct = 39% into month, run rate $2.55M",
+      "kind": "real",
+      "note": "Replaces the Sheet's hand-typed run rate. Counts calendar days, not business days.",
+      "manual": null
+    }
   },
   {
     "section": "Revenue",
@@ -536,7 +591,20 @@
     "connector": "Sheets / ds16",
     "freshness": "15 min",
     "structure": "Fields: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count\nAggregation notes: % Revenue Target defaults to Sum",
-    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting."
+    "structure_note": "Revenue in Shipping and Revenue in WIP are typed as TEXT, not Number \u2014 likely stored with $ or commas in the sheet, so they cannot be summed/charted numerically. Check the source Sheet formatting.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.revenue_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/revenue_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep goal $5.04M, 11 months of goals",
+      "kind": "real",
+      "note": "Goal comes from scorecard_goals_app (the manual-data app), not a Sheet. The 12 monthly figures loaded are the company-wide SALES goal, so confirm or retract.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Revenue",
@@ -550,7 +618,20 @@
     "connector": "Calculated field on Vox_Looker_DB - Rev_MTD (Sheets / ds16)",
     "freshness": "15 min",
     "structure": "Formula: MAX(MTD Revenue) / MAX(Goal)\nBuilt on source: Vox_Looker_DB - Rev_MTD\nFull field list: % Revenue Target, Date, Goal, Inventory Balance, MTD Revenue, MTD Run Rate, REVENUE, Revenue in Shipping, Revenue in WIP, Record Count",
-    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.revenue_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/revenue_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep 98.2% to goal ($4,948,764 of $5.04M); Oct 18.9% so far",
+      "kind": "real",
+      "note": "The ratio is computed inside the view, so Looker needs no MAX/MAX calculated field.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Operational Health",
@@ -564,7 +645,18 @@
     "connector": "Sheets / ds22",
     "freshness": "15 min",
     "structure": "Fields: '7/23/2026' (Sum) = actually holds the Safe Days value (8); 'Last OSHA' (Text) = actually holds the label 'Safe Days'; Record Count\nAggregation notes: Field names and values are swapped",
-    "structure_note": "Source sheet has no header row \u2014 it's a 2-row label/value table (Last OSHA: 7/23/2026 / Safe Days: 8). Looker Studio read row 1 as headers, so field names and values are backwards. Underlying numbers are correct; only the labels are broken. Needs a real Metric/Value header structure."
+    "structure_note": "Source sheet has no header row \u2014 it's a 2-row label/value table (Last OSHA: 7/23/2026 / Safe Days: 8). Looker Studio read row 1 as headers, so field names and values are backwards. Underlying numbers are correct; only the labels are broken. Needs a real Metric/Value header structure.",
+    "sandbox": {
+      "views": [
+        "safety_incidents (manual-data app table)"
+      ],
+      "sql": [],
+      "generator": "scripts/scorecard_sandbox/manual.py",
+      "rows": "Last incident 2 Oct 2026, so 10 days as of 12 Oct; 2 rows in the log",
+      "kind": "injected",
+      "note": "Plex has no safety object. The sandbox holds the one real 7/23 recordable; days count forward from the newest row.",
+      "manual": "safety_incidents"
+    }
   },
   {
     "section": "Operational Health",
@@ -578,7 +670,20 @@
     "connector": "BigQuery / ds161",
     "freshness": "12 hours",
     "structure": "Fields: snapshot_date, total_unshipped_revenue (Sum), Record Count\nAggregation notes: Clean",
-    "structure_note": "Genuine dollar total; likely feeds 'Total in Shipping' / WIP tiles."
+    "structure_note": "Genuine dollar total; likely feeds 'Total in Shipping' / WIP tiles.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.shipping_pending_revenue_report"
+      ],
+      "sql": [
+        "reports/sql/shipping_pending_revenue_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "$1,180,554 ready across 38 shipper lines",
+      "kind": "injected",
+      "note": "Counts only the ready quantity, never the whole order. Prices fall back to the customer list when a shipment price is unset.",
+      "manual": null
+    }
   },
   {
     "section": "Operational Health",
@@ -592,7 +697,20 @@
     "connector": "Sheets / ds36",
     "freshness": "15 min",
     "structure": "Fields: Avg. Daily, Current Qty, Item Name, On Order, Record Count\nAggregation notes: Avg. Daily defaults to Sum",
-    "structure_note": "Raw sheet has ~23 columns incl. a full reorder-point analysis table; Looker Studio only pulls a smaller secondary set (Item Name/Current Qty/Avg. Daily/On Order). The detailed table isn't used at all \u2014 confirm intentional."
+    "structure_note": "Raw sheet has ~23 columns incl. a full reorder-point analysis table; Looker Studio only pulls a smaller secondary set (Item Name/Current Qty/Avg. Daily/On Order). The detailed table isn't used at all \u2014 confirm intentional.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.inventory_out_of_stock_report"
+      ],
+      "sql": [
+        "reports/sql/inventory_out_of_stock_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/inventory.py",
+      "rows": "7 parts short (6 with stock on hand but negative availability, 1 with none on hand)",
+      "kind": "real",
+      "note": "Fixes the old no-filter bug by running the real availability SQL. The sandbox lands on 7, not the live 6, because one part has nothing on hand. Drops to 0 when orders move to Quote status.",
+      "manual": null
+    }
   },
   {
     "section": "Operational Health",
@@ -606,7 +724,20 @@
     "connector": "Sheets / ds32",
     "freshness": "15 min",
     "structure": "Fields: Amount (Sum), Order (Sum), Phase, Record Count\nAggregation notes: Order is a sort key, not a quantity \u2014 confirmed via data preview",
-    "structure_note": "5 phases: Quotes, Pending SOs, WIP, Ready to Ship, Inventory Val. Order = 1-5 display sequence, not summable data \u2014 resolved, not an issue."
+    "structure_note": "5 phases: Quotes, Pending SOs, WIP, Ready to Ship, Inventory Val. Order = 1-5 display sequence, not summable data \u2014 resolved, not an issue.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_order_value_by_status_report"
+      ],
+      "sql": [
+        "reports/sql/sales_order_value_by_status_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "$4,475,132 across 192 order lines",
+      "kind": "real",
+      "note": "Approved, unshipped orders. Any screenshot from before 9 Sep overstates this by about 2.4x.",
+      "manual": null
+    }
   },
   {
     "section": "Sales",
@@ -620,7 +751,20 @@
     "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
     "freshness": "Live (view computes on query; no fixed cache interval observed)",
     "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
-    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_mtd_summary_report"
+      ],
+      "sql": [
+        "reports/sql/sales_mtd_summary_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "Sep 2026 = $4,273,911 (Oct so far $959,353); 168 rep-month rows",
+      "kind": "real",
+      "note": "A sale counts the month the order first reached Pending Fulfillment, so it differs from Revenue by design.",
+      "manual": null
+    }
   },
   {
     "section": "Sales",
@@ -634,7 +778,20 @@
     "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
     "freshness": "Live (view computes on query; no fixed cache interval observed)",
     "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
-    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/sales_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/manual.py + scripts/scorecard_sandbox/sales.py",
+      "rows": "Sep: $4,273,911 of the $5.04M company-wide goal = 84.8%; 201 rep-month rows",
+      "kind": "real",
+      "note": "The company-wide goal is its own row with actual 0, so never sum goal_value across rows. Scope is an exact string match.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Sales",
@@ -648,7 +805,20 @@
     "connector": "BigQuery (view, not in original 27-source inventory \u2014 found during chart-level audit)",
     "freshness": "Live (view computes on query; no fixed cache interval observed)",
     "structure": "Fields: month (DATE), goal (INT64 \u2014 hardcoded literal per month), actual_total (NUMERIC \u2014 SUM(vw_sales.amount) grouped by month), goal_progress (NUMERIC \u2014 actual_total / goal, rounded to 4dp), pct_into_month (NUMERIC \u2014 days_elapsed / total_days, rounded to 4dp)\nAggregation notes: goal_progress and pct_into_month are percentages, but the view itself pre-computes them per month via SQL \u2014 Looker Studio's Sum default over exactly 1 row/month is a no-op given confirmed row grain.",
-    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction."
+    "structure_note": "Defined by a 3-CTE query: monthly_goals (12 hardcoded UNION ALL rows for 2026 \u2014 flagged data-governance risk), monthly_sales (SUM(amount) GROUP BY month from voxdatalake.VoxScorecardsLive.vw_sales), and days_in_month (calendar math for pct_into_month). Row grain confirmed: exactly one row per month, by construction.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/sales_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep company-wide goal $5.04M (its own row, actual 0)",
+      "kind": "real",
+      "note": "The 68 real goals were imported into the app on 2026-09-24. One is scoped to the literal text 'Sales Representative', which matches nobody.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Sales",
@@ -662,7 +832,20 @@
     "connector": "BigQuery / ds163",
     "freshness": "4 hours",
     "structure": "Fields: amount (Sum), date_approved, name, sales_rep, sales_rep_2, Record Count\nAggregation notes: Clean",
-    "structure_note": "Two separate rep columns (sales_rep, sales_rep_2) \u2014 confirm what distinguishes them (e.g. split deals)."
+    "structure_note": "Two separate rep columns (sales_rep, sales_rep_2) \u2014 confirm what distinguishes them (e.g. split deals).",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.sales_mtd_summary_report"
+      ],
+      "sql": [
+        "reports/sql/sales_mtd_summary_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "2026 YTD = $40,570,480 booked",
+      "kind": "real",
+      "note": "Same view as MTD with a sales_year filter. The sandbox holds a full simulated year; production is short by pre-go-live months until a top-up is entered.",
+      "manual": null
+    }
   },
   {
     "section": "Pipeline",
@@ -676,7 +859,20 @@
     "connector": "BigQuery / ds168",
     "freshness": "4 hours",
     "structure": "Fields: pipeline_total (Sum), probability (Sum), stage, Record Count\nAggregation notes: probability defaults to Sum",
-    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it."
+    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.pipeline_plex_value_report"
+      ],
+      "sql": [
+        "reports/sql/pipeline_plex_value_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "Plex stages only: Quote $178,364 (19 lines), Pending Sales Approval $787,750 (38 lines)",
+      "kind": "real",
+      "note": "Plex supplies only the NS Quotes and NS Pending SOs stages. Opportunities and Forecast have no Plex path and stay Monday's, so the funnel remains a blend.",
+      "manual": null
+    }
   },
   {
     "section": "Pipeline",
@@ -690,7 +886,20 @@
     "connector": "BigQuery / ds168",
     "freshness": "4 hours",
     "structure": "Fields: pipeline_total (Sum), probability (Sum), stage, Record Count\nAggregation notes: probability defaults to Sum",
-    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it."
+    "structure_note": "probability is normally a % per deal; summing across rows isn't meaningful unless a chart re-aggregates it.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.pipeline_plex_value_report"
+      ],
+      "sql": [
+        "reports/sql/pipeline_plex_value_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/sales.py",
+      "rows": "$966,114 from Plex; Monday's stages are not in the sandbox",
+      "kind": "real",
+      "note": "Plex part of the total only. Whether it stays a Plex + Monday blend is an open decision with Jennilyn.",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -704,7 +913,22 @@
     "connector": "Blend \u2014 encap goals + totals",
     "freshness": "Inherits from Sheets sources (~15 min)",
     "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Encap Date, Encap Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Encapsulation)\nJoin key: Encap Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
-    "structure_note": "Working. No calculated field in the blend itself \u2014 the % to Goal math must live at chart level."
+    "structure_note": "Working. No calculated field in the blend itself \u2014 the % to Goal math must live at chart level.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_monthly_by_workcenter_group_report",
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_monthly_by_workcenter_group_view.sql",
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep: Encapsulating 118.28M vs 100.00M goal; Bottling 1.53M vs 1.50M; Labeling 719.1K vs 700.0K; 66 rows",
+      "kind": "injected",
+      "note": "Replaces the Looker blend of two Sheets: goal and actual arrive already joined in one view. The group is Encapsulating in Plex, Encapsulation on the tile.",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -718,7 +942,20 @@
     "connector": "Sheets / ds15",
     "freshness": "15 min",
     "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
-    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.encap_daily_report"
+      ],
+      "sql": [
+        "reports/sql/encap_daily_report_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "5 Oct 2026 = 5,220,211 off Encapsulating",
+      "kind": "injected",
+      "note": "Replaces Production_Daily (Sheet).",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -732,7 +969,20 @@
     "connector": "Calculated field on blend \u2014 encap goals + totals (field ID qt_stxthsll2d)",
     "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
     "structure": "Formula: SUM(Encap Total) / SUM(Encapsulation)\nBuilt on blend: encap goals + totals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Encap Date, Encap Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Encapsulation)\n  Join key: Encap Date = GOALS",
-    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep 108.5% (118,279,725 of 100,000,000)",
+      "kind": "injected",
+      "note": "% to goal is computed in the view, so the Looker calculated field is not needed. Goals are typed on the Production goals tab of the manual-data form.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Production",
@@ -746,7 +996,22 @@
     "connector": "Blend \u2014 bottling daily+ goals",
     "freshness": "Inherits from Sheets sources (~15 min)",
     "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Bottling Date, Bottling Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Bottling)\nJoin key: Bottling Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
-    "structure_note": "Working. Identical structure to the Encap blend."
+    "structure_note": "Working. Identical structure to the Encap blend.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_monthly_by_workcenter_group_report",
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_monthly_by_workcenter_group_view.sql",
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep: 1.53M made vs 1.50M goal",
+      "kind": "injected",
+      "note": "Same single-view pattern as Encapsulation.",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -760,7 +1025,20 @@
     "connector": "Sheets / ds15",
     "freshness": "15 min",
     "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
-    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.packaging_daily_report"
+      ],
+      "sql": [
+        "reports/sql/packaging_daily_report_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "5 Oct 2026 = 78,385 off Bottling",
+      "kind": "injected",
+      "note": "Replaces Production_Daily (Sheet).",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -774,7 +1052,20 @@
     "connector": "Calculated field on blend \u2014 bottling daily+ goals (field ID qt_ae8tyyll2d)",
     "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
     "structure": "Formula: SUM(Bottling Total) / SUM(Bottling)\nBuilt on blend: bottling daily+ goals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Bottling Date, Bottling Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Bottling)\n  Join key: Bottling Date = GOALS",
-    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep 101.8% (1,529,209 of 1,500,000)",
+      "kind": "injected",
+      "note": "Same as Encapsulation % to goal.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Production",
@@ -788,7 +1079,22 @@
     "connector": "Blend \u2014 labeling daily + goals",
     "freshness": "Inherits from Sheets sources (~15 min)",
     "structure": "Table 1: Vox_Looker_DB - Production_Daily\n(Labeling Date, Labeling Total)\nTable 2: Vox_Looker_DB - Production_Goals\n(GOALS, Labeling)\nJoin key: Labeling Date = GOALS\nMerge type: Left outer\nUsed by 6 chart(s) on the dashboard.",
-    "structure_note": "Working. Identical structure to the Encap/Bottling blends."
+    "structure_note": "Working. Identical structure to the Encap/Bottling blends.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_monthly_by_workcenter_group_report",
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_monthly_by_workcenter_group_view.sql",
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep: 719.1K made vs 700.0K goal",
+      "kind": "injected",
+      "note": "Same single-view pattern as Encapsulation.",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -802,7 +1108,20 @@
     "connector": "Sheets / ds15",
     "freshness": "15 min",
     "structure": "Fields: Blending/Bottling/Encap/Labeling: Date, Total (Sum), Yesterday (Sum) x4 stages, Record Count\nAggregation notes: Clean",
-    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates."
+    "structure_note": "Highest-usage source (21 charts). Wide layout (4 near-identical stage column groups) \u2014 adding a new stage later requires a schema change plus chart updates.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.labeling_daily_report"
+      ],
+      "sql": [
+        "reports/sql/labeling_daily_report_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "5 Oct 2026 = 36,735 off Labeling",
+      "kind": "injected",
+      "note": "Replaces Production_Daily (Sheet).",
+      "manual": null
+    }
   },
   {
     "section": "Production",
@@ -816,7 +1135,20 @@
     "connector": "Calculated field on blend \u2014 labeling daily + goals (field ID qt_b68tyyll2d)",
     "freshness": "Recomputed live on every load; inherits blend's ~15 min data freshness",
     "structure": "Formula: SUM(Labeling Total) / SUM(Labeling)\nBuilt on blend: labeling daily + goals\n  Table 1: Vox_Looker_DB - Production_Daily\n(Labeling Date, Labeling Total)\n  Table 2: Vox_Looker_DB - Production_Goals\n(GOALS, Labeling)\n  Join key: Labeling Date = GOALS",
-    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage."
+    "structure_note": "Ratio built from two already-aggregated components (numerator and denominator combined before dividing) \u2014 a safe construction, distinct from summing an already-computed percentage.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.production_vs_goal_report"
+      ],
+      "sql": [
+        "reports/sql/production_vs_goal_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
+      "rows": "Sep 102.0% (719,061 of 700,000)",
+      "kind": "injected",
+      "note": "The unnamed 'New Field' calculated field disappears: the percentage is a real column.",
+      "manual": "scorecard_goals_app"
+    }
   },
   {
     "section": "Quality Metrics",
@@ -830,7 +1162,20 @@
     "connector": "Sheets / ds17",
     "freshness": "15 min",
     "structure": "Fields: RW and Incoming Report Number(s), Date, Status, Total Cost (COG + Labor) (Sum), Record Count\nAggregation notes: Clean",
-    "structure_note": "Genuine additive dollar total; feeds the Reworks tile."
+    "structure_note": "Genuine additive dollar total; feeds the Reworks tile.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_nonconformance_report"
+      ],
+      "sql": [
+        "reports/sql/quality_nonconformance_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/quality.py",
+      "rows": "Sep: 3 NCs dispositioned Rework, of 38 raised (189 NCs in the year)",
+      "kind": "real",
+      "note": "'Rework' exists twice in Plex (an NC disposition and a container status). Nobody has said which population the tile means.",
+      "manual": null
+    }
   },
   {
     "section": "Quality Metrics",
@@ -844,7 +1189,20 @@
     "connector": "Sheets / ds18",
     "freshness": "15 min",
     "structure": "Fields: Date Deviation was Initiated, Deviation No., Status, Record Count\nAggregation notes: Clean",
-    "structure_note": "Simple log/register; feeds the Deviations tile via Record Count."
+    "structure_note": "Simple log/register; feeds the Deviations tile via Record Count.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_deviation_report"
+      ],
+      "sql": [
+        "reports/sql/quality_deviation_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/quality.py",
+      "rows": "Sep: 16 deviations (160 in the year)",
+      "kind": "real",
+      "note": "Both real deviations link to no job, part or problem. The sandbox generates 15-21 a month.",
+      "manual": null
+    }
   },
   {
     "section": "Quality Metrics",
@@ -858,7 +1216,20 @@
     "connector": "Sheets / ds19",
     "freshness": "15 min",
     "structure": "Fields: Material Destruction Report Number(s), Report Date, Status, Value (Sum), Record Count\nAggregation notes: Clean",
-    "structure_note": "Genuine additive dollar total. Original dashboard tile showed 'No data' for Destruction $ \u2014 check whether this source has rows for the current period."
+    "structure_note": "Genuine additive dollar total. Original dashboard tile showed 'No data' for Destruction $ \u2014 check whether this source has rows for the current period.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_disposition_cost_report"
+      ],
+      "sql": [
+        "reports/sql/quality_disposition_cost_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/quality.py",
+      "rows": "Sep: Destruction $2,190.95 (4 NCs); Rework $370.64 (3 NCs)",
+      "kind": "real",
+      "note": "Cost is 0.00 on all real NCs; the money is typed into the description. The sandbox draws a per-part unit cost, which is its own invention.",
+      "manual": null
+    }
   },
   {
     "section": "Quality Metrics",
@@ -872,7 +1243,20 @@
     "connector": "Sheets / ds160",
     "freshness": "15 min",
     "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
-    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_fpy_by_area_month_report"
+      ],
+      "sql": [
+        "reports/sql/quality_fpy_by_area_month_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "Sep 91.74% (Oct so far 91.28%)",
+      "kind": "injected",
+      "note": "Built from PRODUCTION records, not Quality records. Confirm that is the FPY definition Vox means. DPMO uses a placeholder of 1 opportunity.",
+      "manual": null
+    }
   },
   {
     "section": "Quality Metrics",
@@ -886,7 +1270,20 @@
     "connector": "Sheets / ds160",
     "freshness": "15 min",
     "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
-    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_fpy_by_area_month_report"
+      ],
+      "sql": [
+        "reports/sql/quality_fpy_by_area_month_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "Sep 99.86% (Oct so far 99.86%)",
+      "kind": "injected",
+      "note": "Same view as the other FPY tiles. A computed ratio, so the Sum-on-a-percentage risk is gone.",
+      "manual": null
+    }
   },
   {
     "section": "Quality Metrics",
@@ -900,7 +1297,20 @@
     "connector": "Sheets / ds160",
     "freshness": "15 min",
     "structure": "Fields: Area, DPMO, FPY, Month, Opps, Sigma, Total NCs+ Reworks, Total Produced, Record Count\nAggregation notes: FPY, DPMO, Sigma default to Sum",
-    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong."
+    "structure_note": "HIGH PRIORITY: FPY/DPMO/Sigma are rates, not additive. Feeds the dashboard's FPY tiles (Encap/Bottling/Labeling). If any chart sums across Areas/Months, the displayed % is likely wrong.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_fpy_by_area_month_report"
+      ],
+      "sql": [
+        "reports/sql/quality_fpy_by_area_month_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "Sep 99.32% (Oct so far 99.44%)",
+      "kind": "injected",
+      "note": "Same view as the other FPY tiles.",
+      "manual": null
+    }
   },
   {
     "section": "Operations",
@@ -914,7 +1324,20 @@
     "connector": "Sheets / ds165",
     "freshness": "15 min",
     "structure": "Fields: Average Work Days (Sum), Bonus Standard (Sum), Item Stock Type, Performance Standard (Sum), Record Count\nAggregation notes: Average Work Days defaults to Sum",
-    "structure_note": "A field literally named 'Average' is being summed \u2014 clearest example of the aggregation issue in the whole report. Should be Average."
+    "structure_note": "A field literally named 'Average' is being summed \u2014 clearest example of the aggregation issue in the whole report. Should be Average.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.quality_turnaround_time_report"
+      ],
+      "sql": [
+        "reports/sql/quality_turnaround_time_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/quality.py",
+      "rows": "157 of 189 NCs closed. Avg work days: Finished Goods 9.2, Raw Materials 4.8, no part 7.4",
+      "kind": "real",
+      "note": "Ships both clocks (from when it happened, and from when it was written up). Standards come from turnaround_standards, which must exist or the view fails to create.",
+      "manual": "turnaround_standards"
+    }
   },
   {
     "section": "Operations",
@@ -928,7 +1351,20 @@
     "connector": "Sheets / ds174",
     "freshness": "15 min",
     "structure": "Fields: Cap Specs, Caps Pending, Customer, Date Entered, Days in WIP, Description, Qty Ordered, SKU, Yield, Record Count\nAggregation notes: Yield, Days in WIP default to Sum",
-    "structure_note": "Yield is typically a % per job; Days in WIP summed across jobs is not meaningful. Consider Average."
+    "structure_note": "Yield is typically a % per job; Days in WIP summed across jobs is not meaningful. Consider Average.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.mfg_job_open_caps_report"
+      ],
+      "sql": [
+        "reports/sql/mfg_job_open_caps_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "220,470,871 caps pending across 55 open jobs",
+      "kind": "real",
+      "note": "Adds the status filter the Sheet lacked. The sandbox sizes the open backlog to the live 219.7M.",
+      "manual": null
+    }
   },
   {
     "section": "Operations",
@@ -942,11 +1378,73 @@
     "connector": "Sheets / ds173",
     "freshness": "15 min",
     "structure": "Fields: Bottle, Company, DATE, Pill Count (Sum), Product, QTY (Sum), WO#, Record Count\nAggregation notes: Clean",
-    "structure_note": "Genuine additive quantities; no issues."
+    "structure_note": "Genuine additive quantities; no issues.",
+    "sandbox": {
+      "views": [
+        "voxdatalake.ScorecardSandbox.bottling_job_open_report"
+      ],
+      "sql": [
+        "reports/sql/bottling_job_open_view.sql"
+      ],
+      "generator": "scripts/scorecard_sandbox/production.py",
+      "rows": "1,200,000 bottles pending across 70 open jobs",
+      "kind": "real",
+      "note": "The sandbox sizes the open backlog to the live 1.2M.",
+      "manual": null
+    }
   }
 ]
 </script>
 <script>
+
+  const SBX_SWAP = [
+    ['rev-mtd','.metric-big',['$4,948,764']],['rev-into-month','.val',['100%']],['rev-goal','.val',['$5.04M']],['rev-to-goal','.val',['98%']],
+    ['safe-days','.val',['10']],['shipping','.metric-big',['$1,180,554']],['oos','.val',['7']],['wip','.val',['$4.48M']],
+    ['sales-mtd','.metric-big',['$4,273,911']],['sales-to-goal','.val',['85%']],['sales-goal','.val',['$5.0M']],['sales-ytd','.val',['$40.6M']],
+    ['pipeline-funnel','li span:last-child',['Monday','Monday','$178.36K','$787.75K']],['pipeline-total','b',['$966,114']],
+    ['encap-bar','.tag',['118.28M','100.00M']],['bottling-bar','.tag',['1.53M','1.50M']],['labeling-bar','.tag',['719.10K','700.00K']],
+    ['encap-yday','.val',['5.2M']],['bottling-yday','.val',['78.4K']],['labeling-yday','.val',['36.7K']],
+    ['encap-goal','.val',['109%']],['bottling-goal','.val',['102%']],['labeling-goal','.val',['102%']],
+    ['reworks','.val',['3']],['deviations','.val',['16']],['destruction','.val',['$2,191']],
+    ['fpy-encap','.val',['91.74%']],['fpy-bottling','.val',['99.86%']],['fpy-labeling','.val',['99.32%']],
+    ['open-caps','.val',['220.5M']],['open-bottles','.val',['1.2M']]
+  ];
+  const SBX_WIDTHS = {'encap-bar':'85%','bottling-bar':'98%','labeling-bar':'97%'};
+  const SBX_TAT = '<div class="tat-bar" style="height:100%;">9.2</div><div class="tat-bar" style="height:80%;">7.4</div><div class="tat-bar" style="height:52%;background:#5B93BE;">4.8</div>';
+  const SBX_TAT_CAP = 'Finished Goods · No part on record · Raw Materials (avg work days, closed NCs)';
+  function applyValues(m){
+    SBX_SWAP.forEach(([id, sel, texts])=>{
+      document.querySelectorAll('button[data-id="'+id+'"] '+sel).forEach((n,i)=>{
+        if(n.dataset.orig === undefined) n.dataset.orig = n.textContent;
+        n.textContent = m==='sandbox' ? (texts[i] !== undefined ? texts[i] : n.dataset.orig) : n.dataset.orig;
+      });
+    });
+    Object.keys(SBX_WIDTHS).forEach(id=>{
+      const f = document.querySelectorAll('button[data-id="'+id+'"] .fill')[1];
+      if(!f) return;
+      if(f.dataset.orig === undefined) f.dataset.orig = f.style.width;
+      f.style.width = m==='sandbox' ? SBX_WIDTHS[id] : f.dataset.orig;
+    });
+    const tc = document.querySelector('.tat-chart'), cap = document.querySelector('.tat-cap');
+    if(tc.dataset.orig === undefined){ tc.dataset.orig = tc.innerHTML; cap.dataset.orig = cap.textContent; }
+    tc.innerHTML = m==='sandbox' ? SBX_TAT : tc.dataset.orig;
+    cap.textContent = m==='sandbox' ? SBX_TAT_CAP : cap.dataset.orig;
+    document.getElementById('foot').textContent = m==='sandbox'
+      ? 'Sandbox figures: September 2026 (latest full month) unless noted; yesterday = 5 Oct 2026. Built 2026-10-06 from voxdatalake.ScorecardSandbox. Not real business data.'
+      : 'Figures shown: live Looker scorecard, 7/31/2026 10:39 AM.';
+  }
+  const DS_NAME = 'voxdatalake.ScorecardSandbox';
+  let mode = 'sandbox';
+  let currentId = null;
+  function setMode(m){
+    mode = m;
+    document.body.classList.toggle('mode-sandbox', m==='sandbox');
+    document.body.classList.toggle('mode-today', m==='today');
+    document.getElementById('m-sbx').setAttribute('aria-pressed', String(m==='sandbox'));
+    document.getElementById('m-today').setAttribute('aria-pressed', String(m==='today'));
+    applyValues(m);
+    if(currentId) openTile(currentId);
+  }
   const DATA = JSON.parse(document.getElementById('tile-data').textContent);
   const byId = {};
   DATA.forEach(d => byId[d.id] = d);
@@ -974,6 +1472,7 @@
   function openTile(id){
     const d = byId[id];
     if(!d) return;
+    currentId = id;
     document.querySelectorAll('button.m').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll(`button.m[data-id="${id}"]`).forEach(b=>b.classList.add('active'));
 
@@ -1022,6 +1521,25 @@
       document.getElementById('d-next').textContent = d.next_step;
     }
 
+    const sb = d.sandbox;
+    if(sb){
+      const esc = t => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      document.getElementById('s-views').innerHTML = sb.views.map(v => '<span class="view-chip">'+esc(v)+'</span>').join('');
+      document.getElementById('s-rows').innerHTML = esc(sb.rows) + '<span class="kindtag '+esc(sb.kind)+'">'+esc(sb.kind)+'</span>';
+      document.getElementById('s-note').textContent = sb.note;
+      document.getElementById('s-files').textContent = sb.sql.concat([sb.generator]).join('\n');
+      document.getElementById('s-today').textContent = d.source;
+      document.getElementById('s-manual-wrap').style.display = sb.manual ? '' : 'none';
+      if(sb.manual) document.getElementById('s-manual').textContent = DS_NAME + '.' + sb.manual;
+      if(mode === 'sandbox'){
+        const o2 = document.getElementById('d-origin');
+        o2.textContent = '\u25F1  ScorecardSandbox (BigQuery view)';
+        o2.className = 'origin-badge sandbox';
+        const b2 = document.getElementById('d-badge');
+        b2.textContent = sb.kind === 'real' ? 'Real PlexTest rows cloned' : 'Generated rows, cloned shape';
+        b2.className = 'badge ' + (sb.kind === 'real' ? 'clean' : 'flag');
+      }
+    }
     drawer.querySelector('.drawer-body').scrollTop = 0;
     drawer.classList.add('show');
     scrim.classList.add('show');
@@ -1039,6 +1557,10 @@
   scrim.addEventListener('click', closeDrawer);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
 
+  document.getElementById('m-sbx').addEventListener('click', ()=>setMode('sandbox'));
+  document.getElementById('m-today').addEventListener('click', ()=>setMode('today'));
+  setMode('sandbox');
+
   // ---- search ----
   const search = document.getElementById('search');
   const results = document.getElementById('results');
@@ -1046,7 +1568,7 @@
     const q = search.value.trim().toLowerCase();
     if(q.length < 2){ results.classList.remove('show'); results.innerHTML=''; return; }
     const hits = DATA.filter(d =>
-      (d.tile + d.source + d.basis + d.next_step + d.section + d.confidence).toLowerCase().includes(q)
+      (d.tile + d.source + d.basis + d.next_step + d.section + d.confidence + ((d.sandbox && (d.sandbox.views.join(' ') + d.sandbox.note)) || '')).toLowerCase().includes(q)
     ).slice(0, 8);
     results.innerHTML = hits.map(d => `
       <div class="result-item" data-id="${d.id}">

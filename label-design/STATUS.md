@@ -11,7 +11,51 @@
 
 ---
 
-## UPDATE — 2026-10-08 (latest): BDM source corrected — it's in Order_Salesperson
+## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
+
+The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second
+source was built beside it: `plex_api_service/extract.py`, Cloud Run job
+`plex-etl-plex-api-test` (PR #28). It reads `connect.plex.com` (headers
+`X-Plex-Connect-Api-Key` / `-Secret`; secrets `plex-api-consumer-key` and
+`-secret` in Secret Manager) and writes **BigQuery only, never Monday**:
+
+- `plex_api_payloads` - raw JSON, one row per changed record (SHA-256 deduped)
+- `plex_api_audit` - one row per resource per run
+- `plex_api_<resource>_latest` views (`orders` typed; lines/releases raw JSON)
+
+**The ODBC ETL, `raw_*` tables, `label_design_view.sql` and the push are
+untouched.** No scheduler: run by hand.
+
+What the API showed (2026-10-12): **the two hosts are different tenants** (an
+early note here said they were identical; that was a truncated comparison and
+wrong). `connect.plex.com` = PRODUCTION: 3 orders, 0 lines, 0 releases (no
+Label Design releases until the 19 Oct cutover). `test.connect.plex.com` =
+the PlexTest tenant, LIVE: 16 orders (10 Pending Fulfillment), 12 lines, 12
+releases, created the same day. The job defaulted to the production host, so
+its first run saw only 3 orders; the test job now sets
+`PLEX_API_BASE=https://test.connect.plex.com`. Parts (15,380), customers
+(4,069) and employees (140) are also available. Order lines carry only IDs
+(`partId`, `customerPartId`, no part number); releases carry `partNumber`,
+`status`, `dueDate`, `quantity`; BDM/AM ids (`outsideSalesIds`,
+`insideSalesId`) were empty on the orders checked. Limits: Plex throttles at
+200 calls/min (the job spaces calls 0.35 s apart), `limit`/`offset` are
+ignored on the order list, BOM needs `?PartId=`, list filters accept repeated
+`?Id=a&Id=b`, and `X-Plex-Connect-Tenant-Id` / `-Customer-Id` headers switch
+tenant (job env `PLEX_API_TENANT_ID` / `PLEX_API_CUSTOMER_ID`).
+
+Verified: Cloud Run job runs `ok`. **Data cleanup owed:** the first runs wrote the 3
+production-host orders into `plex_api_payloads`; drop that table (it is only
+scratch) before the first test-host run, or those rows stay in the `_latest`
+views. The audit `detail` now records `host=`.
+
+**Next:** land the test-host data (orders, lines, releases, parts, customers),
+resolve `partId` / `customerPartId` against parts, then build the Label Design report on `plex_api_*` (release
+status = Label Design, Job Note, BOM label part, BDM/AM) and compare it with
+the ODBC view before switching anything. Open item L13.
+
+---
+
+## UPDATE — 2026-10-08: BDM source corrected — it's in Order_Salesperson
 
 The earlier "Sales roles" fix below sourced `bdm` from
 `Sales_v_PO.Outside_Sales` → `Assigned_To2` and concluded the BDM was unset on

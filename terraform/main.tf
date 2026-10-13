@@ -5718,6 +5718,10 @@ resource "google_cloud_run_v2_job" "plex_api_test" {
           value = var.bq_dataset_test
         }
         env {
+          name  = "PLEX_API_BASE"
+          value = "https://test.connect.plex.com"
+        }
+        env {
           name  = "SECRET_PLEX_API_CONSUMER_KEY"
           value = google_secret_manager_secret.plex_api_consumer_key.secret_id
         }

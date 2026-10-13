@@ -11,7 +11,32 @@
 
 ---
 
-## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
+## UPDATE — 2026-10-13 (latest): API push to Monday + BOM + report view
+
+Built the full pipeline from Plex REST API → BigQuery → Monday:
+
+1. **Extractor (`main.py`)** now fetches `boms` (per unique partId from
+   order lines, `/engineering/v1/boms?PartId=<uuid>`). All resources have
+   typed fields so `_latest` views expose proper columns. Default resources:
+   `orders,order_lines,releases,boms`.
+
+2. **Report view (`views.sql`)** — `plex_api_label_design_report`: joins
+   releases (status='Label Design') → lines → orders → customers → parts →
+   BOM label parts (73\*) → BOM bottle parts (53\*). Bottle material parsed
+   from FG part name. Same dedupe key pattern as the ODBC push.
+
+3. **Push function (`push.py`)** — companion Cloud Function. Reads the
+   report view, creates items on Monday board 18432111755, group "API_Test".
+   LCR hash dedupe, `plex_api_push_log` audit table, partial-create fallback.
+   Columns: Customer Name, Date, Sales Order, Customer PO, Email, Phone,
+   Bottle Material, Label Part #, Description, Item, LCR.
+
+**Not deployed yet.** Next: deploy updated extractor, run it, verify the
+view returns rows, deploy the push function, run it, check Monday.
+
+---
+
+## UPDATE — 2026-10-12: live Plex REST API landed in BigQuery
 
 The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second
 source was built beside it: `plex_api_service/extract.py`, Cloud Run job

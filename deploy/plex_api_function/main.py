@@ -88,10 +88,12 @@ AUDIT_SCHEMA = [
 ]
 
 # resource -> (path, parent resource or None)
+# "boms" is a child of order_lines (one BOM call per unique partId on lines).
 RESOURCE_DEFS = {
     "orders": ("/sales/v1/orders", None),
     "order_lines": ("/sales/v1/orders/{parent}/lines", "orders"),
     "releases": ("/sales/v1/releases", None),
+    "boms": ("/engineering/v1/boms", "order_lines"),  # fetched per unique partId
     "parts": ("/mdm/v2/parts", None),
     "customers": ("/mdm/v1/customers", None),
     "employees": ("/mdm/v1/employees", None),
@@ -99,6 +101,21 @@ RESOURCE_DEFS = {
 
 ORDER_FIELDS = ["orderNumber", "poNumber", "status", "type", "customerId", "insideSalesId",
                 "orderDate", "createdDate", "modifiedDate", "note", "accountingJobNo"]
+RELEASE_FIELDS = ["releaseNumber", "orderLineId", "status", "type", "partNumber",
+                  "dueDate", "shipDate", "quantity", "quantityShipped", "note", "source"]
+LINE_FIELDS = ["orderId", "partId", "customerPartId", "lineNumber", "note", "containerType"]
+BOM_FIELDS = ["partId", "partNumber", "partOperationCode", "componentPartId",
+              "componentPartNumber", "componentPartNumberRevision", "quantity", "active"]
+CUSTOMER_FIELDS = ["code", "name", "status", "type", "businessType", "email", "phone",
+                   "assignedToId", "assignedTo2Id"]
+# Map resource -> typed fields
+TYPED_FIELDS = {
+    "orders": ORDER_FIELDS,
+    "releases": RELEASE_FIELDS,
+    "order_lines": LINE_FIELDS,
+    "boms": BOM_FIELDS,
+    "customers": CUSTOMER_FIELDS,
+}
 
 VIEW_SQL = """
 CREATE OR REPLACE VIEW `{p}.{d}.plex_api_{res}_latest` AS
@@ -183,9 +200,10 @@ def _ensure_tables(bq):
 
 def _ensure_views(bq, resources):
     for res in resources:
+        fields = TYPED_FIELDS.get(res, [])
         extra = ""
-        if res == "orders":
-            extra = ",\n  " + ",\n  ".join(f"JSON_VALUE(payload, '$.{f}') AS {f}" for f in ORDER_FIELDS)
+        if fields:
+            extra = ",\n  " + ",\n  ".join(f"JSON_VALUE(payload, '$.{f}') AS {f}" for f in fields)
         bq.query(VIEW_SQL.format(p=GCP_PROJECT, d=BQ_DATASET, res=res, payloads=PAYLOADS,
                                  extra=extra)).result()
 
@@ -208,7 +226,7 @@ def _load(bq, table, rows, schema):
 
 def _run():
     """Core logic, returns (ok: bool, summary: str)."""
-    wanted = [r.strip() for r in os.environ.get("RESOURCES", "orders,order_lines,releases").split(",") if r.strip()]
+    wanted = [r.strip() for r in os.environ.get("RESOURCES", "orders,order_lines,releases,boms").split(",") if r.strip()]
     unknown = [r for r in wanted if r not in RESOURCE_DEFS]
     if unknown:
         return False, f"unknown RESOURCES: {unknown}"
@@ -229,6 +247,22 @@ def _run():
         try:
             if parent is None:
                 records = [(None, r) for r in api.list_all(path)]
+            elif res == "boms":
+                # One BOM call per unique partId from order lines, not per line row.
+                if parent not in fetched_by_res:
+                    raise RuntimeError(f"'{res}' needs '{parent}' in RESOURCES")
+                seen_parts = set()
+                for line in fetched_by_res[parent]:
+                    pid = line.get("partId")
+                    if not pid or pid in seen_parts:
+                        continue
+                    seen_parts.add(pid)
+                    try:
+                        bom = api.get(path, {"PartId": pid})
+                        bom = bom if isinstance(bom, list) else (bom.get("data") or bom.get("items") or [])
+                        records += [(pid, c) for c in bom]
+                    except RuntimeError as e:
+                        detail.append(str(e)[:200])
             else:
                 if parent not in fetched_by_res:
                     raise RuntimeError(f"'{res}' needs '{parent}' in RESOURCES")

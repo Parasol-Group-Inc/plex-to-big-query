@@ -5671,19 +5671,33 @@ resource "google_cloud_scheduler_job" "label_design_push" {
 }
 
 # ===========================================================================
-# PLEX REST API -> BIGQUERY LANDING - added 2026-10-12
+# PLEX REST API -> BIGQUERY LANDING — Cloud Function (Gen 2)
+# Added 2026-10-12 as Cloud Run job, pivoted to Cloud Function 2026-10-13.
 #
-# The ODBC database runs up to 4 h behind Plex, too stale for Label Design.
-# This job reads connect.plex.com live (Sales Orders, lines, Releases) and
-# lands raw payloads + an audit row per run in `plex_api_payloads` /
-# `plex_api_audit` (+ `plex_api_*_latest` views), created by the job. Same
-# image, different command. BigQuery only: nothing is pushed to Monday.
-# NO SCHEDULER yet: run it by hand until the order lines / releases shapes
-# are confirmed on real data.
+# The ODBC ETL is for heavy processes (ODBC driver, large extractions). This
+# is a lightweight near-real-time pull: stdlib HTTP + BigQuery client, no ODBC,
+# no Docker image, deployed as a single Python file via `gcloud functions deploy`.
+# Pioneer for future API-based reports.
 #
-# Values added by hand, never in state:
+# Source: deploy/plex_api_function/ (main.py + requirements.txt)
+#
+# Deploy (from the repo root):
+#   gcloud functions deploy plex-api-extract-test \
+#     --gen2 --runtime=python312 --region=us-central1 \
+#     --source=deploy/plex_api_function \
+#     --entry-point=plex_api_extract \
+#     --trigger-http --no-allow-unauthenticated \
+#     --service-account=<etl SA email> \
+#     --timeout=540 --memory=512Mi \
+#     --set-env-vars="GCP_PROJECT=voxdatalake,BQ_DATASET=PlexTest,PLEX_API_BASE=https://test.connect.plex.com,SECRET_PLEX_API_CONSUMER_KEY=plex-api-consumer-key,SECRET_PLEX_API_CONSUMER_SECRET=plex-api-consumer-secret" \
+#     --project=voxdatalake
+#
+# Secrets (values added by hand, never in state):
 #   printf '%s' "$KEY"    | gcloud secrets versions add plex-api-consumer-key    --data-file=- --project=voxdatalake
 #   printf '%s' "$SECRET" | gcloud secrets versions add plex-api-consumer-secret --data-file=- --project=voxdatalake
+#
+# NO SCHEDULER yet: run by hand. Once shapes are confirmed, add a
+# google_cloud_scheduler_job here pointing at the function URL.
 # ===========================================================================
 resource "google_secret_manager_secret" "plex_api_consumer_key" {
   secret_id = "plex-api-consumer-key"
@@ -5696,50 +5710,5 @@ resource "google_secret_manager_secret" "plex_api_consumer_secret" {
   secret_id = "plex-api-consumer-secret"
   replication {
     auto {}
-  }
-}
-
-resource "google_cloud_run_v2_job" "plex_api_test" {
-  name     = "plex-etl-plex-api-test"
-  location = var.gcp_region
-
-  template {
-    template {
-      service_account = google_service_account.etl.email
-      containers {
-        image = var.image_url
-        args  = ["python", "-m", "plex_api_service.extract"]
-        env {
-          name  = "GCP_PROJECT"
-          value = var.gcp_project
-        }
-        env {
-          name  = "BQ_DATASET"
-          value = var.bq_dataset_test
-        }
-        env {
-          name  = "PLEX_API_BASE"
-          value = "https://test.connect.plex.com"
-        }
-        env {
-          name  = "SECRET_PLEX_API_CONSUMER_KEY"
-          value = google_secret_manager_secret.plex_api_consumer_key.secret_id
-        }
-        env {
-          name  = "SECRET_PLEX_API_CONSUMER_SECRET"
-          value = google_secret_manager_secret.plex_api_consumer_secret.secret_id
-        }
-      }
-      max_retries = 0
-      timeout     = "900s"
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].template[0].containers[0].image,
-      client,
-      client_version,
-    ]
   }
 }

@@ -48,6 +48,13 @@ production-host orders into `plex_api_payloads`; drop that table (it is only
 scratch) before the first test-host run, or those rows stay in the `_latest`
 views. The audit `detail` now records `host=`.
 
+**Architecture pivot (2026-10-13):** moved from a Cloud Run job (same Docker
+image as the ODBC ETL) to a **standalone Cloud Function (Gen 2)** in
+`deploy/plex_api_function/`. The extractor needs only stdlib + BigQuery +
+Secret Manager. No ODBC driver, no Docker build, no Cloud Build. Deploy with
+`gcloud functions deploy`. This is the pioneer for future API-based reports;
+the ODBC ETL stays for heavy processes. `plex_api_service/` is deleted.
+
 **Next:** land the test-host data (orders, lines, releases, parts, customers),
 resolve `partId` / `customerPartId` against parts, then build the Label Design report on `plex_api_*` (release
 status = Label Design, Job Note, BOM label part, BDM/AM) and compare it with

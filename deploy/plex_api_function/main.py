@@ -1,24 +1,18 @@
-#!/usr/bin/env python3
-"""Plex REST API (connect.plex.com) -> BigQuery landing tables.
+"""Plex REST API (connect.plex.com) → BigQuery landing tables.
 
-Why this exists: the ODBC ETL reads a Plex database that is up to 4 hours
-behind, which is too stale for the Label Design queue. The REST API reads live
-data. This job lands that data in BigQuery WITHOUT touching the ODBC tables:
+Deployed as a Cloud Function (Gen 2), triggered by Cloud Scheduler via HTTP.
+The ODBC ETL is for heavy processes; this is a lightweight, near-real-time
+pull of live Plex data for reports that can't tolerate a 4-hour lag.
 
-    <dataset>.plex_api_payloads   append-only; one row per CHANGED record
-                                  (resource, record_id, parent_id, payload JSON)
-    <dataset>.plex_api_audit      one row per resource per run (rows, calls,
-                                  errors, outcome)
-    <dataset>.plex_api_<x>_latest views: newest payload per record (created by
-                                  this job, see VIEW_SQL)
+Tables (created on first run):
+    <dataset>.plex_api_payloads   append-only raw JSON, one row per CHANGED record
+    <dataset>.plex_api_audit      one row per resource per run
 
-Run:
-    python -m plex_api_service.extract              # in the container
-    DRY_RUN=1 python -m plex_api_service.extract    # fetch + count, write nothing
+Views (created/refreshed each run):
+    <dataset>.plex_api_<resource>_latest   newest payload per record_id
 
-A record is only inserted when its payload hash differs from the newest stored
-one, so a run with no changes writes zero rows. Writes are batch LOAD jobs, not
-streaming, so a test row can be deleted straight away.
+A record is only inserted when its payload hash differs from the last stored
+one, so a quiet hour costs zero rows.
 
 Resources (RESOURCES env, comma list; default orders,order_lines,releases):
     orders       GET /sales/v1/orders
@@ -31,31 +25,31 @@ Resources (RESOURCES env, comma list; default orders,order_lines,releases):
 Environment:
     GCP_PROJECT                      voxdatalake
     BQ_DATASET                       PlexTest | PlexProd
-    PLEX_API_CONSUMER_KEY            direct (local runs) ...
+    PLEX_API_CONSUMER_KEY            direct ...
     PLEX_API_CONSUMER_SECRET
     SECRET_PLEX_API_CONSUMER_KEY     ... or Secret Manager names   [plex-api-consumer-key]
     SECRET_PLEX_API_CONSUMER_SECRET                                [plex-api-consumer-secret]
-    PLEX_API_TENANT_ID               optional: run against another tenant (header
-                                     X-Plex-Connect-Tenant-Id) than the key's default
-    PLEX_API_CUSTOMER_ID             optional: same, by PCN (X-Plex-Connect-Customer-Id)
-    PLEX_API_BASE                    https://connect.plex.com = PRODUCTION tenant,
-                                     https://test.connect.plex.com = TEST tenant (feeds PlexTest)
-                                     [https://connect.plex.com]
+    PLEX_API_TENANT_ID               optional: X-Plex-Connect-Tenant-Id header
+    PLEX_API_CUSTOMER_ID             optional: X-Plex-Connect-Customer-Id header
+    PLEX_API_BASE                    [https://connect.plex.com]
+                                     test.connect.plex.com = TEST tenant
     MIN_INTERVAL                     seconds between calls; Plex throttles at 200/min [0.35]
-    RESOURCES, DRY_RUN, MAX_PAGES    [50]
+    RESOURCES                        comma list [orders,order_lines,releases]
+    DRY_RUN                          1 = fetch + count, write nothing
+    MAX_PAGES                        [50]
 """
 import datetime as dt
 import hashlib
 import json
 import logging
 import os
-import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
+import functions_framework
 from google.cloud import bigquery
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -74,9 +68,9 @@ AUDIT = "plex_api_audit"
 PAYLOAD_SCHEMA = [
     bigquery.SchemaField("resource", "STRING", mode="REQUIRED"),
     bigquery.SchemaField("record_id", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("parent_id", "STRING"),  # order id for order_lines
+    bigquery.SchemaField("parent_id", "STRING"),
     bigquery.SchemaField("payload_hash", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("payload", "STRING", mode="REQUIRED"),  # raw JSON, untouched
+    bigquery.SchemaField("payload", "STRING", mode="REQUIRED"),
     bigquery.SchemaField("run_id", "STRING", mode="REQUIRED"),
     bigquery.SchemaField("fetched_at", "TIMESTAMP", mode="REQUIRED"),
 ]
@@ -85,16 +79,16 @@ AUDIT_SCHEMA = [
     bigquery.SchemaField("started_at", "TIMESTAMP", mode="REQUIRED"),
     bigquery.SchemaField("finished_at", "TIMESTAMP"),
     bigquery.SchemaField("resource", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("fetched", "INT64"),   # records the API returned
-    bigquery.SchemaField("inserted", "INT64"),  # new or changed -> written
-    bigquery.SchemaField("calls", "INT64"),     # HTTP calls made
-    bigquery.SchemaField("errors", "INT64"),    # calls that failed after retries
-    bigquery.SchemaField("outcome", "STRING", mode="REQUIRED"),  # ok | partial | failed | dry_run
+    bigquery.SchemaField("fetched", "INT64"),
+    bigquery.SchemaField("inserted", "INT64"),
+    bigquery.SchemaField("calls", "INT64"),
+    bigquery.SchemaField("errors", "INT64"),
+    bigquery.SchemaField("outcome", "STRING", mode="REQUIRED"),
     bigquery.SchemaField("detail", "STRING"),
 ]
 
 # resource -> (path, parent resource or None)
-RESOURCES = {
+RESOURCE_DEFS = {
     "orders": ("/sales/v1/orders", None),
     "order_lines": ("/sales/v1/orders/{parent}/lines", "orders"),
     "releases": ("/sales/v1/releases", None),
@@ -103,9 +97,9 @@ RESOURCES = {
     "employees": ("/mdm/v1/employees", None),
 }
 
-# One "newest payload per record" view per resource. Orders is typed with the
-# fields seen live on 2026-10-12; the rest expose the raw JSON until real rows
-# (order lines, releases) show their shape.
+ORDER_FIELDS = ["orderNumber", "poNumber", "status", "type", "customerId", "insideSalesId",
+                "orderDate", "createdDate", "modifiedDate", "note", "accountingJobNo"]
+
 VIEW_SQL = """
 CREATE OR REPLACE VIEW `{p}.{d}.plex_api_{res}_latest` AS
 SELECT * EXCEPT (rn){extra}
@@ -115,15 +109,13 @@ FROM (
 )
 WHERE rn = 1
 """
-ORDER_FIELDS = ["orderNumber", "poNumber", "status", "type", "customerId", "insideSalesId",
-                "orderDate", "createdDate", "modifiedDate", "note", "accountingJobNo"]
 
 
 class Api:
-    def __init__(self, key, secret):
-        self.headers = {"X-Plex-Connect-Api-Key": key, "X-Plex-Connect-Api-Secret": secret,
+    def __init__(self, key, secret_val):
+        self.headers = {"X-Plex-Connect-Api-Key": key,
+                        "X-Plex-Connect-Api-Secret": secret_val,
                         "Accept": "application/json"}
-        # The key's default tenant decides what it sees; these switch tenant.
         for header, env in (("X-Plex-Connect-Tenant-Id", "PLEX_API_TENANT_ID"),
                             ("X-Plex-Connect-Customer-Id", "PLEX_API_CUSTOMER_ID")):
             if os.environ.get(env):
@@ -146,7 +138,6 @@ class Api:
                 with urllib.request.urlopen(req, timeout=120) as r:
                     return json.loads(r.read().decode("utf-8"))
             except urllib.error.HTTPError as e:
-                # 4xx other than 429 won't improve by retrying
                 if e.code != 429 and e.code < 500:
                     self.errors += 1
                     raise RuntimeError(f"HTTP {e.code} {path}: {e.read().decode('utf-8', 'replace')[:300]}")
@@ -157,11 +148,7 @@ class Api:
         self.errors += 1
         raise RuntimeError(f"{path} failed after {tries} tries: {err}")
 
-    def list(self, path):
-        """All records of a list endpoint. Paging is not documented for these
-        endpoints (the order list ignored limit/offset when probed), so page
-        until a page adds no new ids, which also ends a server that ignores
-        offset and returns the same page forever."""
+    def list_all(self, path):
         seen, out = set(), []
         for page in range(MAX_PAGES):
             body = self.get(path, {"limit": PAGE_SIZE, "offset": page * PAGE_SIZE})
@@ -176,7 +163,7 @@ class Api:
         return out
 
 
-def secret(env_value, env_name, default):
+def _secret(env_value, env_name, default):
     if os.environ.get(env_value):
         return os.environ[env_value]
     from google.cloud import secretmanager
@@ -185,7 +172,7 @@ def secret(env_value, env_name, default):
         name=name).payload.data.decode("utf-8").strip()
 
 
-def ensure_tables(bq):
+def _ensure_tables(bq):
     for name, schema in ((PAYLOADS, PAYLOAD_SCHEMA), (AUDIT, AUDIT_SCHEMA)):
         t = bigquery.Table(f"{GCP_PROJECT}.{BQ_DATASET}.{name}", schema=schema)
         if name == PAYLOADS:
@@ -194,7 +181,7 @@ def ensure_tables(bq):
         bq.create_table(t, exists_ok=True)
 
 
-def ensure_views(bq, resources):
+def _ensure_views(bq, resources):
     for res in resources:
         extra = ""
         if res == "orders":
@@ -203,14 +190,14 @@ def ensure_views(bq, resources):
                                  extra=extra)).result()
 
 
-def latest_hashes(bq, resource):
+def _latest_hashes(bq, resource):
     q = f"""SELECT record_id, ARRAY_AGG(payload_hash ORDER BY fetched_at DESC LIMIT 1)[OFFSET(0)] AS h
             FROM `{GCP_PROJECT}.{BQ_DATASET}.{PAYLOADS}` WHERE resource = @r GROUP BY 1"""
     cfg = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("r", "STRING", resource)])
     return {r.record_id: r.h for r in bq.query(q, job_config=cfg).result()}
 
 
-def load(bq, table, rows, schema):
+def _load(bq, table, rows, schema):
     if not rows:
         return
     job = bq.load_table_from_json(rows, f"{GCP_PROJECT}.{BQ_DATASET}.{table}",
@@ -219,30 +206,32 @@ def load(bq, table, rows, schema):
     job.result()
 
 
-def main():
+def _run():
+    """Core logic, returns (ok: bool, summary: str)."""
     wanted = [r.strip() for r in os.environ.get("RESOURCES", "orders,order_lines,releases").split(",") if r.strip()]
-    unknown = [r for r in wanted if r not in RESOURCES]
+    unknown = [r for r in wanted if r not in RESOURCE_DEFS]
     if unknown:
-        sys.exit(f"unknown RESOURCES: {unknown}; known: {list(RESOURCES)}")
-    api = Api(secret("PLEX_API_CONSUMER_KEY", "SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
-              secret("PLEX_API_CONSUMER_SECRET", "SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))
+        return False, f"unknown RESOURCES: {unknown}"
+
+    api = Api(_secret("PLEX_API_CONSUMER_KEY", "SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
+              _secret("PLEX_API_CONSUMER_SECRET", "SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))
     bq = bigquery.Client(project=GCP_PROJECT)
     run_id, started = str(uuid.uuid4()), dt.datetime.now(dt.timezone.utc)
     if not DRY_RUN:
-        ensure_tables(bq)
+        _ensure_tables(bq)
     log.info("run %s -> %s.%s resources=%s dry_run=%s", run_id, GCP_PROJECT, BQ_DATASET, wanted, DRY_RUN)
 
-    fetched_by_res, audit, failed = {}, [], False
+    fetched_by_res, audit_rows, failed, summary = {}, [], False, []
     for res in wanted:
-        path, parent = RESOURCES[res]
+        path, parent = RESOURCE_DEFS[res]
         calls0, errs0 = api.calls, api.errors
         records, detail = [], []
         try:
             if parent is None:
-                records = [(None, r) for r in api.list(path)]
+                records = [(None, r) for r in api.list_all(path)]
             else:
                 if parent not in fetched_by_res:
-                    raise RuntimeError(f"'{res}' needs '{parent}' in RESOURCES (it is fetched per {parent})")
+                    raise RuntimeError(f"'{res}' needs '{parent}' in RESOURCES")
                 for p in fetched_by_res[parent]:
                     try:
                         records += [(p["id"], r) for r in api.get(path.format(parent=p["id"]))]
@@ -255,7 +244,7 @@ def main():
         now = dt.datetime.now(dt.timezone.utc)
         rows = []
         if not DRY_RUN and (records or not detail):
-            old = latest_hashes(bq, res)
+            old = _latest_hashes(bq, res)
             for parent_id, r in records:
                 body = json.dumps(r, sort_keys=True, separators=(",", ":"))
                 h = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -264,22 +253,37 @@ def main():
                     rows.append({"resource": res, "record_id": rid, "parent_id": parent_id,
                                  "payload_hash": h, "payload": body, "run_id": run_id,
                                  "fetched_at": now.isoformat()})
-            load(bq, PAYLOADS, rows, PAYLOAD_SCHEMA)
+            _load(bq, PAYLOADS, rows, PAYLOAD_SCHEMA)
+
         errors = api.errors - errs0
         outcome = "dry_run" if DRY_RUN else ("failed" if detail and not records else "partial" if detail else "ok")
         failed |= outcome == "failed"
-        log.info("%-12s fetched=%d inserted=%d calls=%d errors=%d %s", res, len(records), len(rows),
-                 api.calls - calls0, errors, outcome)
-        audit.append({"run_id": run_id, "started_at": started.isoformat(),
-                      "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "resource": res,
-                      "fetched": len(records), "inserted": len(rows), "calls": api.calls - calls0,
-                      "errors": errors, "outcome": outcome,
-                      "detail": "; ".join([f"host={urllib.parse.urlparse(BASE).netloc}"] + detail)[:1000]})
+        line = f"{res}: fetched={len(records)} inserted={len(rows)} errors={errors} {outcome}"
+        log.info(line)
+        summary.append(line)
+        audit_rows.append({"run_id": run_id, "started_at": started.isoformat(),
+                           "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "resource": res,
+                           "fetched": len(records), "inserted": len(rows), "calls": api.calls - calls0,
+                           "errors": errors, "outcome": outcome,
+                           "detail": "; ".join([f"host={urllib.parse.urlparse(BASE).netloc}"] + detail)[:1000]})
+
     if not DRY_RUN:
-        load(bq, AUDIT, audit, AUDIT_SCHEMA)
-        ensure_views(bq, wanted)
-    sys.exit(1 if failed else 0)
+        _load(bq, AUDIT, audit_rows, AUDIT_SCHEMA)
+        _ensure_views(bq, wanted)
+
+    return not failed, "\n".join(summary)
 
 
+@functions_framework.http
+def plex_api_extract(request):
+    """HTTP entry point for Cloud Functions / Cloud Scheduler."""
+    ok, summary = _run()
+    return (summary, 200 if ok else 500)
+
+
+# Also runnable directly: python main.py
 if __name__ == "__main__":
-    main()
+    import sys
+    ok, summary = _run()
+    print(summary)
+    sys.exit(0 if ok else 1)

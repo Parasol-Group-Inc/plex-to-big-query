@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-13 (label-design) - Plex API extractor: Cloud Run job -> Cloud Function
+
+### Changed
+
+- **Pivoted the Plex REST API extractor from a Cloud Run job (riding the ODBC
+  Docker image) to a standalone Cloud Function (Gen 2).** The extractor needs
+  only stdlib HTTP + `google-cloud-bigquery` + `google-cloud-secret-manager`;
+  it had no business carrying the ODBC driver, pyodbc, ksh, or 32-bit libs.
+  Source moves from `plex_api_service/` (deleted) to
+  `deploy/plex_api_function/` (main.py + requirements.txt). Deployed with
+  `gcloud functions deploy`, not Cloud Build. This is the pioneer pattern for
+  future API-based reports: the ODBC ETL stays for heavy processes.
+
+### Removed
+
+- `plex_api_service/` directory (replaced by `deploy/plex_api_function/`).
+- `plex-etl-plex-api-test` Cloud Run job from Terraform and `_ALL_JOBS`.
+- `COPY plex_api_service/*.py` from Dockerfile.
+
 ## 2026-10-12 (label-design) - Plex REST API landing job (BigQuery only)
 
 ### Added

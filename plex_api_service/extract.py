@@ -35,7 +35,13 @@ Environment:
     PLEX_API_CONSUMER_SECRET
     SECRET_PLEX_API_CONSUMER_KEY     ... or Secret Manager names   [plex-api-consumer-key]
     SECRET_PLEX_API_CONSUMER_SECRET                                [plex-api-consumer-secret]
-    PLEX_API_BASE                    [https://connect.plex.com]
+    PLEX_API_TENANT_ID               optional: run against another tenant (header
+                                     X-Plex-Connect-Tenant-Id) than the key's default
+    PLEX_API_CUSTOMER_ID             optional: same, by PCN (X-Plex-Connect-Customer-Id)
+    PLEX_API_BASE                    https://connect.plex.com = PRODUCTION tenant,
+                                     https://test.connect.plex.com = TEST tenant (feeds PlexTest)
+                                     [https://connect.plex.com]
+    MIN_INTERVAL                     seconds between calls; Plex throttles at 200/min [0.35]
     RESOURCES, DRY_RUN, MAX_PAGES    [50]
 """
 import datetime as dt
@@ -61,6 +67,7 @@ BASE = os.environ.get("PLEX_API_BASE", "https://connect.plex.com").rstrip("/")
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0", "false", "False")
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "50"))
 PAGE_SIZE = 500
+MIN_INTERVAL = float(os.environ.get("MIN_INTERVAL", "0.35"))
 
 PAYLOADS = "plex_api_payloads"
 AUDIT = "plex_api_audit"
@@ -116,13 +123,23 @@ class Api:
     def __init__(self, key, secret):
         self.headers = {"X-Plex-Connect-Api-Key": key, "X-Plex-Connect-Api-Secret": secret,
                         "Accept": "application/json"}
+        # The key's default tenant decides what it sees; these switch tenant.
+        for header, env in (("X-Plex-Connect-Tenant-Id", "PLEX_API_TENANT_ID"),
+                            ("X-Plex-Connect-Customer-Id", "PLEX_API_CUSTOMER_ID")):
+            if os.environ.get(env):
+                self.headers[header] = os.environ[env]
+        self.last_call = 0.0
         self.calls = 0
         self.errors = 0
 
     def get(self, path, params=None, tries=4):
-        url = BASE + path + ("?" + urllib.parse.urlencode(params) if params else "")
+        url = BASE + path + ("?" + urllib.parse.urlencode(params, doseq=True) if params else "")
         err = ""
         for attempt in range(tries):
+            wait = MIN_INTERVAL - (time.monotonic() - self.last_call)
+            if wait > 0:
+                time.sleep(wait)
+            self.last_call = time.monotonic()
             self.calls += 1
             try:
                 req = urllib.request.Request(url, headers=self.headers)
@@ -256,7 +273,8 @@ def main():
         audit.append({"run_id": run_id, "started_at": started.isoformat(),
                       "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "resource": res,
                       "fetched": len(records), "inserted": len(rows), "calls": api.calls - calls0,
-                      "errors": errors, "outcome": outcome, "detail": "; ".join(detail)[:1000] or None})
+                      "errors": errors, "outcome": outcome,
+                      "detail": "; ".join([f"host={urllib.parse.urlparse(BASE).netloc}"] + detail)[:1000]})
     if not DRY_RUN:
         load(bq, AUDIT, audit, AUDIT_SCHEMA)
         ensure_views(bq, wanted)

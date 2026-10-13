@@ -29,9 +29,11 @@ don't need an entry.
   or view is touched.** No scheduler: run by hand. Secrets
   `plex-api-consumer-key` / `plex-api-consumer-secret` are created empty by
   Terraform and filled by hand (commands in the `main.tf` comment).
-  Probed 2026-10-12: the key sees 3 orders (none Pending Fulfillment), 0
-  order lines, 0 releases, but 15,380 parts, so the order-line and release
-  shapes are unconfirmed and their views expose raw JSON for now. A local run
+  Probed 2026-10-12: `connect.plex.com` (production) has 3 orders, 0 lines,
+  0 releases; `test.connect.plex.com` has 16 orders, 12 lines, 12 releases, live.
+  The test job sets `PLEX_API_BASE` to the test host; calls are spaced 0.35 s
+  (Plex throttles at 200/min); optional tenant headers via
+  `PLEX_API_TENANT_ID` / `PLEX_API_CUSTOMER_ID`; audit `detail` records the host. A local run
   wrote the 3 orders and a rerun inserted 0. Deployed and verified
   2026-10-12: the Cloud Run job wrote 3 `ok` audit rows (orders 3 fetched,
   lines 0, releases 0).

@@ -27,10 +27,12 @@
 -- the same customer part on a *different* order legitimately repeats.
 --
 -- ── ONE DELIBERATE DIFFERENCE FROM THE STORED PROCEDURE ─────────────────────
--- Hers joins `Common_v_Customer` on `Customer_No`. That is kept, but note the
--- rep columns come from `Sales_v_Order_Salesperson`, which is per ORDER, not
--- per line — so every line of an order carries the same rep, which is what
--- "so they know which rep to ask" wants.
+-- Hers joins `Common_v_Customer` on `Customer_No`. That is kept. The rep
+-- columns are per ORDER, not per line — so every line of an order carries the
+-- same reps, which is what "so they know which rep to ask" wants. The BDM comes
+-- from `Sales_v_Order_Salesperson` and the AM from `Sales_v_PO.Inside_Sales`
+-- (with customer-level fallbacks); see the AM/BDM block below for the full
+-- sourcing.
 --
 -- The BDM (Outside Salesperson) lands in `Sales_v_Order_Salesperson`, one or
 -- more rows per ORDER — NOT in `Sales_v_PO.Outside_Sales`, which replicates as

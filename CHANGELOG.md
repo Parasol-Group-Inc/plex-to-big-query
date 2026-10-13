@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-12 (label-design) - Plex REST API landing job (BigQuery only)
+
+### Added
+
+- **`plex_api_service/extract.py` + Cloud Run job `plex-etl-plex-api-test`.**
+  The ODBC database is up to 4 hours behind Plex; the REST API
+  (`connect.plex.com`, key + secret headers) is live. The job lands Sales
+  Orders, order lines and Sales Releases in new tables in the dataset
+  (PlexTest): `plex_api_payloads` (append-only raw JSON, one row per
+  changed record, hash-deduped), `plex_api_audit` (one row per resource per
+  run) and `plex_api_<resource>_latest` views (`plex_api_orders_latest` is
+  typed). **BigQuery only; nothing is pushed to Monday and no existing table
+  or view is touched.** No scheduler: run by hand. Secrets
+  `plex-api-consumer-key` / `plex-api-consumer-secret` are created empty by
+  Terraform and filled by hand (commands in the `main.tf` comment).
+  Probed 2026-10-12: the key sees 3 orders (none Pending Fulfillment), 0
+  order lines, 0 releases, but 15,380 parts, so the order-line and release
+  shapes are unconfirmed and their views expose raw JSON for now. A local run
+  wrote the 3 orders and a rerun inserted 0.
+
 ## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
 
 ### Fixed
@@ -47,6 +67,15 @@ don't need an entry.
   there is no customer part, and the **Item** column falls back from
   `customer_part_no` to the Plex `part_no`. Both match how the historical
   Sheet/NetSuite items looked.
+
+### Documentation
+
+- Synced the docs to the AM/BDM split and the (paused) prod push job:
+  `docs/OPEN_ITEMS.md` (prod push job now exists; new L12 to verify both
+  sales-role columns on the next real order), `docs/reports/REPORT_CATALOG.md`,
+  `docs/reports/label_design_report.md` (both push jobs described), and the
+  stale header comment in `reports/sql/label_design_view.sql` (comment only, no
+  SQL change).
 
 ## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
 
@@ -580,6 +609,10 @@ first.
   it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
   yields a code. `label_design_service/reason_code.py` and its test are
   removed; their cases live in the injector now.
+  Reason Code catalog: 1 Customer Initiated: Label Edit · 2 Customer initiated:
+  Label review · 3 New label design (Vox design) · 4 New label review (Customer
+  design) · 5 Vox Initiated: Label Edit/Review · 6 3D Rendering. First note char
+  1–6 = code, rest = Memo; a leading quantity ("12ct", "3.5 oz") is not a code.
 - **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
   version of the query.
 - **A NULL customer part number falls back to `Part_Key`** for the collapse

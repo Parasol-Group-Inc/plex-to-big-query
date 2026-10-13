@@ -63,9 +63,14 @@ list would miss exactly the new orders it exists to surface.
 - **Pipeline:** `reports/label_design.yaml` → `label_design_report`
 - **SQL:** `reports/sql/label_design_view.sql`
 - **Downstream (from 2026-09-24):** `label_design_service/push.py`, a Cloud Run
-  job (`plex-etl-label-design-push-test`) that runs 30 minutes after the ETL and
-  creates one Monday item per new order **line**, straight from this view. No
-  sheet in between. It is test-only for now (PlexTest → the "Plex Import" board).
+  job that runs 30 minutes after the ETL and creates one Monday item per new
+  order **line**, straight from this view. No sheet in between. There are two
+  jobs: the **test** job `plex-etl-label-design-push-test` (PlexTest → the "Plex
+  Import" board), which runs today, and the **prod** job
+  `plex-etl-label-design-push` with scheduler `plex-label-design-push-sync`,
+  built 2026-10-08 but **paused** — it stays dormant until the 19 Oct cutover,
+  when the prod scheduler is un-paused and the test one is paused/repointed
+  (PlexProd → the same board; the view picks `vox.on.plex.com` for PlexProd).
 - **Retired:** `deploy/archive/label_design_sync/`, the Apps Script that used to decide
   which rows were new, write them to a sheet, and push them to Monday.
 

@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-12 (label-design) - Plex REST API landing job (BigQuery only)
+
+### Added
+
+- **`plex_api_service/extract.py` + Cloud Run job `plex-etl-plex-api-test`.**
+  The ODBC database is up to 4 hours behind Plex; the REST API
+  (`connect.plex.com`, key + secret headers) is live. The job lands Sales
+  Orders, order lines and Sales Releases in new tables in the dataset
+  (PlexTest): `plex_api_payloads` (append-only raw JSON, one row per
+  changed record, hash-deduped), `plex_api_audit` (one row per resource per
+  run) and `plex_api_<resource>_latest` views (`plex_api_orders_latest` is
+  typed). **BigQuery only; nothing is pushed to Monday and no existing table
+  or view is touched.** No scheduler: run by hand. Secrets
+  `plex-api-consumer-key` / `plex-api-consumer-secret` are created empty by
+  Terraform and filled by hand (commands in the `main.tf` comment).
+  Probed 2026-10-12: the key sees 3 orders (none Pending Fulfillment), 0
+  order lines, 0 releases, but 15,380 parts, so the order-line and release
+  shapes are unconfirmed and their views expose raw JSON for now. A local run
+  wrote the 3 orders and a rerun inserted 0.
+
 ## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
 
 ### Fixed

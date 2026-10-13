@@ -5669,3 +5669,73 @@ resource "google_cloud_scheduler_job" "label_design_push" {
     }
   }
 }
+
+# ===========================================================================
+# PLEX REST API -> BIGQUERY LANDING - added 2026-10-12
+#
+# The ODBC database runs up to 4 h behind Plex, too stale for Label Design.
+# This job reads connect.plex.com live (Sales Orders, lines, Releases) and
+# lands raw payloads + an audit row per run in `plex_api_payloads` /
+# `plex_api_audit` (+ `plex_api_*_latest` views), created by the job. Same
+# image, different command. BigQuery only: nothing is pushed to Monday.
+# NO SCHEDULER yet: run it by hand until the order lines / releases shapes
+# are confirmed on real data.
+#
+# Values added by hand, never in state:
+#   printf '%s' "$KEY"    | gcloud secrets versions add plex-api-consumer-key    --data-file=- --project=voxdatalake
+#   printf '%s' "$SECRET" | gcloud secrets versions add plex-api-consumer-secret --data-file=- --project=voxdatalake
+# ===========================================================================
+resource "google_secret_manager_secret" "plex_api_consumer_key" {
+  secret_id = "plex-api-consumer-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "plex_api_consumer_secret" {
+  secret_id = "plex-api-consumer-secret"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_cloud_run_v2_job" "plex_api_test" {
+  name     = "plex-etl-plex-api-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        args  = ["python", "-m", "plex_api_service.extract"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "SECRET_PLEX_API_CONSUMER_KEY"
+          value = google_secret_manager_secret.plex_api_consumer_key.secret_id
+        }
+        env {
+          name  = "SECRET_PLEX_API_CONSUMER_SECRET"
+          value = google_secret_manager_secret.plex_api_consumer_secret.secret_id
+        }
+      }
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}

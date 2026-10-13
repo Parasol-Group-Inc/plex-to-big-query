@@ -11,7 +11,40 @@
 
 ---
 
-## UPDATE — 2026-10-08 (latest): BDM source corrected — it's in Order_Salesperson
+## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
+
+The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second
+source was built beside it: `plex_api_service/extract.py`, Cloud Run job
+`plex-etl-plex-api-test` (PR #28). It reads `connect.plex.com` (headers
+`X-Plex-Connect-Api-Key` / `-Secret`; secrets `plex-api-consumer-key` and
+`-secret` in Secret Manager) and writes **BigQuery only, never Monday**:
+
+- `plex_api_payloads` - raw JSON, one row per changed record (SHA-256 deduped)
+- `plex_api_audit` - one row per resource per run
+- `plex_api_<resource>_latest` views (`orders` typed; lines/releases raw JSON)
+
+**The ODBC ETL, `raw_*` tables, `label_design_view.sql` and the push are
+untouched.** No scheduler: run by hand.
+
+What the API showed (2026-10-12): 3 orders (#1 Cancelled, #2/#3 Pending Sales
+Approval, none Pending Fulfillment), **0 order lines, 0 releases**, but 15,380
+parts, 4,069 customers, 140 employees. `connect.plex.com` and
+`test.connect.plex.com` return identical data, so the key is bound to one
+tenant, probably the test PCN (unconfirmed). Paging is undocumented: `limit` /
+`offset` are ignored on the order list. BOM needs `?PartId=`.
+
+Verified: first Cloud Run run = 3 orders fetched, 0 inserted (already loaded
+by a local run), all three resources `ok`.
+
+**Next:** get real orders with lines and releases to land (a production-tenant
+key, or test orders created in the tenant the key sees), confirm the line /
+release JSON, then build the Label Design report on `plex_api_*` (release
+status = Label Design, Job Note, BOM label part, BDM/AM) and compare it with
+the ODBC view before switching anything. Open item L13.
+
+---
+
+## UPDATE — 2026-10-08: BDM source corrected — it's in Order_Salesperson
 
 The earlier "Sales roles" fix below sourced `bdm` from
 `Sales_v_PO.Outside_Sales` → `Assigned_To2` and concluded the BDM was unset on

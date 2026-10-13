@@ -32,7 +32,9 @@ don't need an entry.
   Probed 2026-10-12: the key sees 3 orders (none Pending Fulfillment), 0
   order lines, 0 releases, but 15,380 parts, so the order-line and release
   shapes are unconfirmed and their views expose raw JSON for now. A local run
-  wrote the 3 orders and a rerun inserted 0.
+  wrote the 3 orders and a rerun inserted 0. Deployed and verified
+  2026-10-12: the Cloud Run job wrote 3 `ok` audit rows (orders 3 fetched,
+  lines 0, releases 0).
 
 ## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
 

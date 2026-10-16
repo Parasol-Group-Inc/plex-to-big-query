@@ -484,6 +484,7 @@
     <div class="sbx-only">
       <div class="sbx-warn">Not real business data. ScorecardSandbox rows are clones of PlexTest rows with SBX document numbers, sized near the 7/31 scorecard.</div>
       <div class="block"><div class="k">Sandbox view(s)</div><div class="v" id="s-views"></div></div>
+      <div class="block"><div class="k">Column used</div><div class="v mono" id="s-cols" style="white-space:pre-wrap;"></div></div>
       <div class="block"><div class="k">Sandbox figure</div><div class="v" id="s-rows"></div></div>
       <div class="block" id="s-manual-wrap"><div class="k">Manual-data table it reads</div><div class="v mono" id="s-manual"></div></div>
       <div class="block"><div class="k">Built from</div><div class="v mono" id="s-files" style="white-space:pre-wrap;"></div></div>
@@ -549,7 +550,8 @@
       "rows": "Sep 2026 = $4,948,764 (Oct so far $988,125); view holds 59 rows over 11 months",
       "kind": "real",
       "note": "Reads 0 when no shipments exist in the month; that is a true answer, not a fault.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(shipping_revenue) WHERE revenue_month = selected month (rows are per part_group)"
     }
   },
   {
@@ -576,7 +578,8 @@
       "rows": "Sep = 100% (complete month); Oct = 39% into month, run rate $2.55M",
       "kind": "real",
       "note": "Replaces the Sheet's hand-typed run rate. Counts calendar days, not business days.",
-      "manual": null
+      "manual": null,
+      "columns": "pct_into_month WHERE revenue_month = selected month (days_elapsed \u00f7 days_in_month, computed at query time); run_rate_projection for the run rate"
     }
   },
   {
@@ -603,7 +606,8 @@
       "rows": "Sep goal $5.04M, 11 months of goals",
       "kind": "real",
       "note": "Goal comes from scorecard_goals_app (the manual-data app), not a Sheet. The 12 monthly figures loaded are the company-wide SALES goal, so confirm or retract.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "goal_value WHERE revenue_month = selected month"
     }
   },
   {
@@ -630,7 +634,8 @@
       "rows": "Sep 98.2% to goal ($4,948,764 of $5.04M); Oct 18.9% so far",
       "kind": "real",
       "note": "The ratio is computed inside the view, so Looker needs no MAX/MAX calculated field.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "pct_to_goal (= actual_revenue / goal_value) WHERE revenue_month = selected month"
     }
   },
   {
@@ -655,7 +660,8 @@
       "rows": "Last incident 2 Oct 2026, so 10 days as of 12 Oct; 2 rows in the log",
       "kind": "injected",
       "note": "Plex has no safety object. The sandbox holds the one real 7/23 recordable; days count forward from the newest row.",
-      "manual": "safety_incidents"
+      "manual": "safety_incidents",
+      "columns": "DATE_DIFF(today, MAX(incident_date), DAY) WHERE recordable = 'true' AND NOT is_deleted"
     }
   },
   {
@@ -682,7 +688,8 @@
       "rows": "$1,180,554 ready across 38 shipper lines",
       "kind": "injected",
       "note": "Counts only the ready quantity, never the whole order. Prices fall back to the customer list when a shipment price is unset.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(ready_value) over all rows (one row per shipper line)"
     }
   },
   {
@@ -709,7 +716,8 @@
       "rows": "7 parts short (6 with stock on hand but negative availability, 1 with none on hand)",
       "kind": "real",
       "note": "Fixes the old no-filter bug by running the real availability SQL. The sandbox lands on 7, not the live 6, because one part has nothing on hand. Drops to 0 when orders move to Quote status.",
-      "manual": null
+      "manual": null,
+      "columns": "COUNT(*) \u2014 every row is one part with quantity_available < 0; no_inventory_on_hand splits the two kinds"
     }
   },
   {
@@ -736,7 +744,8 @@
       "rows": "$4,475,132 across 192 order lines",
       "kind": "real",
       "note": "Approved, unshipped orders. Any screenshot from before 9 Sep overstates this by about 2.4x.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(wip_value) over all rows (one row per open release; so_status Pending Fulfillment or Hold)"
     }
   },
   {
@@ -763,7 +772,8 @@
       "rows": "Sep 2026 = $4,273,911 (Oct so far $959,353); 168 rep-month rows",
       "kind": "real",
       "note": "A sale counts the month the order first reached Pending Fulfillment, so it differs from Revenue by design.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(sales_value) WHERE sales_month = selected month (rows are per sales_rep)"
     }
   },
   {
@@ -790,7 +800,8 @@
       "rows": "Sep: $4,273,911 of the $5.04M company-wide goal = 84.8%; 201 rep-month rows",
       "kind": "real",
       "note": "The company-wide goal is its own row with actual 0, so never sum goal_value across rows. Scope is an exact string match.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "SUM(actual_sales) \u00f7 goal_value of the sales_rep = '(company-wide)' row, WHERE sales_month = selected month"
     }
   },
   {
@@ -817,7 +828,8 @@
       "rows": "Sep company-wide goal $5.04M (its own row, actual 0)",
       "kind": "real",
       "note": "The 68 real goals were imported into the app on 2026-09-24. One is scoped to the literal text 'Sales Representative', which matches nobody.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "goal_value WHERE sales_rep = '(company-wide)' AND sales_month = selected month"
     }
   },
   {
@@ -844,7 +856,8 @@
       "rows": "2026 YTD = $40,570,480 booked",
       "kind": "real",
       "note": "Same view as MTD with a sales_year filter. The sandbox holds a full simulated year; production is short by pre-go-live months until a top-up is entered.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(sales_value) WHERE sales_year = selected year"
     }
   },
   {
@@ -871,7 +884,8 @@
       "rows": "Plex stages only: Quote $178,364 (19 lines), Pending Sales Approval $787,750 (38 lines)",
       "kind": "real",
       "note": "Plex supplies only the NS Quotes and NS Pending SOs stages. Opportunities and Forecast have no Plex path and stay Monday's, so the funnel remains a blend.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(pipeline_value) GROUP BY pipeline_stage (one row per order line)"
     }
   },
   {
@@ -898,7 +912,8 @@
       "rows": "$966,114 from Plex; Monday's stages are not in the sandbox",
       "kind": "real",
       "note": "Plex part of the total only. Whether it stays a Plex + Monday blend is an open decision with Jennilyn.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(pipeline_value) over all rows"
     }
   },
   {
@@ -924,10 +939,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep: Encapsulating 118.28M vs 100.00M goal; Bottling 1.53M vs 1.50M; Labeling 719.1K vs 700.0K; 66 rows",
+      "rows": "Sep: Encapsulating 108.51M vs 100.00M goal; Bottling 1.53M vs 1.50M; Labeling 714.2K vs 700.0K (good units; with scrap: 118.28M / 1.53M / 719.1K); 66 rows",
       "kind": "injected",
       "note": "Replaces the Looker blend of two Sheets: goal and actual arrive already joined in one view. The group is Encapsulating in Plex, Encapsulation on the tile.",
-      "manual": null
+      "manual": null,
+      "columns": "production_vs_goal_report: actual_qty (bar) and goal_value (target line) WHERE workcenter_group = 'Encapsulating' AND production_month = selected month. actual_qty is good units, the same column pct_to_goal divides; total_qty (good + scrap) is the alternative if Vox's 'Encap Total' counts scrap. production_monthly_by_workcenter_group_report carries the same actual_qty/total_qty for groups without a goal."
     }
   },
   {
@@ -954,7 +970,8 @@
       "rows": "5 Oct 2026 = 5,220,211 off Encapsulating",
       "kind": "injected",
       "note": "Replaces Production_Daily (Sheet).",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(actual_qty) WHERE production_date = yesterday (latest production day)"
     }
   },
   {
@@ -978,10 +995,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep 108.5% (118,279,725 of 100,000,000)",
+      "rows": "Sep 108.5% (108,507,808 of 100,000,000)",
       "kind": "injected",
       "note": "% to goal is computed in the view, so the Looker calculated field is not needed. Goals are typed on the Production goals tab of the manual-data form.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "pct_to_goal WHERE workcenter_group = 'Encapsulating' AND production_month = selected month"
     }
   },
   {
@@ -1007,10 +1025,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep: 1.53M made vs 1.50M goal",
+      "rows": "Sep: 1.53M made vs 1.50M goal (1,527,081 good units)",
       "kind": "injected",
       "note": "Same single-view pattern as Encapsulation.",
-      "manual": null
+      "manual": null,
+      "columns": "production_vs_goal_report: actual_qty (bar) and goal_value (target line) WHERE workcenter_group = 'Bottling' AND production_month = selected month. actual_qty is good units, the same column pct_to_goal divides; total_qty (good + scrap) is the alternative if Vox's 'Encap Total' counts scrap. production_monthly_by_workcenter_group_report carries the same actual_qty/total_qty for groups without a goal."
     }
   },
   {
@@ -1037,7 +1056,8 @@
       "rows": "5 Oct 2026 = 78,385 off Bottling",
       "kind": "injected",
       "note": "Replaces Production_Daily (Sheet).",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(actual_qty) WHERE production_date = yesterday (latest production day)"
     }
   },
   {
@@ -1061,10 +1081,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep 101.8% (1,529,209 of 1,500,000)",
+      "rows": "Sep 101.8% (1,527,081 of 1,500,000)",
       "kind": "injected",
       "note": "Same as Encapsulation % to goal.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "pct_to_goal WHERE workcenter_group = 'Bottling' AND production_month = selected month"
     }
   },
   {
@@ -1090,10 +1111,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep: 719.1K made vs 700.0K goal",
+      "rows": "Sep: 714.2K made vs 700.0K goal (714,153 good units; 719,061 with scrap)",
       "kind": "injected",
       "note": "Same single-view pattern as Encapsulation.",
-      "manual": null
+      "manual": null,
+      "columns": "production_vs_goal_report: actual_qty (bar) and goal_value (target line) WHERE workcenter_group = 'Labeling' AND production_month = selected month. actual_qty is good units, the same column pct_to_goal divides; total_qty (good + scrap) is the alternative if Vox's 'Encap Total' counts scrap. production_monthly_by_workcenter_group_report carries the same actual_qty/total_qty for groups without a goal."
     }
   },
   {
@@ -1120,7 +1142,8 @@
       "rows": "5 Oct 2026 = 36,735 off Labeling",
       "kind": "injected",
       "note": "Replaces Production_Daily (Sheet).",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(actual_qty) WHERE production_date = yesterday (latest production day)"
     }
   },
   {
@@ -1144,10 +1167,11 @@
         "reports/sql/production_vs_goal_view.sql"
       ],
       "generator": "scripts/scorecard_sandbox/production.py + scripts/scorecard_sandbox/manual.py",
-      "rows": "Sep 102.0% (719,061 of 700,000)",
+      "rows": "Sep 102.0% (714,153 of 700,000)",
       "kind": "injected",
       "note": "The unnamed 'New Field' calculated field disappears: the percentage is a real column.",
-      "manual": "scorecard_goals_app"
+      "manual": "scorecard_goals_app",
+      "columns": "pct_to_goal WHERE workcenter_group = 'Labeling' AND production_month = selected month"
     }
   },
   {
@@ -1174,7 +1198,8 @@
       "rows": "Sep: 3 NCs dispositioned Rework, of 38 raised (189 NCs in the year)",
       "kind": "real",
       "note": "'Rework' exists twice in Plex (an NC disposition and a container status). Nobody has said which population the tile means.",
-      "manual": null
+      "manual": null,
+      "columns": "COUNTIF(final_disposition = 'Rework') WHERE DATE_TRUNC(problem_date, MONTH) = selected month"
     }
   },
   {
@@ -1201,7 +1226,8 @@
       "rows": "Sep: 16 deviations (160 in the year)",
       "kind": "real",
       "note": "Both real deviations link to no job, part or problem. The sandbox generates 15-21 a month.",
-      "manual": null
+      "manual": null,
+      "columns": "COUNT(*) WHERE deviation_month = selected month"
     }
   },
   {
@@ -1228,7 +1254,8 @@
       "rows": "Sep: Destruction $2,190.95 (4 NCs); Rework $370.64 (3 NCs)",
       "kind": "real",
       "note": "Cost is 0.00 on all real NCs; the money is typed into the description. The sandbox draws a per-part unit cost, which is its own invention.",
-      "manual": null
+      "manual": null,
+      "columns": "total_cost WHERE disposition_class = 'Destruction' AND problem_month = selected month (nc_count for the count)"
     }
   },
   {
@@ -1255,7 +1282,8 @@
       "rows": "Sep 91.74% (Oct so far 91.28%)",
       "kind": "injected",
       "note": "Built from PRODUCTION records, not Quality records. Confirm that is the FPY definition Vox means. DPMO uses a placeholder of 1 opportunity.",
-      "manual": null
+      "manual": null,
+      "columns": "fpy WHERE area = 'Encapsulating' AND fpy_month = selected month"
     }
   },
   {
@@ -1282,7 +1310,8 @@
       "rows": "Sep 99.86% (Oct so far 99.86%)",
       "kind": "injected",
       "note": "Same view as the other FPY tiles. A computed ratio, so the Sum-on-a-percentage risk is gone.",
-      "manual": null
+      "manual": null,
+      "columns": "fpy WHERE area = 'Bottling' AND fpy_month = selected month"
     }
   },
   {
@@ -1309,7 +1338,8 @@
       "rows": "Sep 99.32% (Oct so far 99.44%)",
       "kind": "injected",
       "note": "Same view as the other FPY tiles.",
-      "manual": null
+      "manual": null,
+      "columns": "fpy WHERE area = 'Labeling' AND fpy_month = selected month"
     }
   },
   {
@@ -1336,7 +1366,8 @@
       "rows": "157 of 189 NCs closed. Avg work days: Finished Goods 9.2, Raw Materials 4.8, no part 7.4",
       "kind": "real",
       "note": "Ships both clocks (from when it happened, and from when it was written up). Standards come from turnaround_standards, which must exist or the view fails to create.",
-      "manual": "turnaround_standards"
+      "manual": "turnaround_standards",
+      "columns": "AVG(turnaround_work_days) GROUP BY stock_type, WHERE closed_date IS NOT NULL; performance_standard_days is the comparison line"
     }
   },
   {
@@ -1363,7 +1394,8 @@
       "rows": "220,470,871 caps pending across 55 open jobs",
       "kind": "real",
       "note": "Adds the status filter the Sheet lacked. The sandbox sizes the open backlog to the live 219.7M.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(caps_pending) over all rows (one row per open job)"
     }
   },
   {
@@ -1390,7 +1422,8 @@
       "rows": "1,200,000 bottles pending across 70 open jobs",
       "kind": "real",
       "note": "The sandbox sizes the open backlog to the live 1.2M.",
-      "manual": null
+      "manual": null,
+      "columns": "SUM(qty_pending) over all rows (one row per open job)"
     }
   }
 ]
@@ -1525,6 +1558,7 @@
     if(sb){
       const esc = t => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
       document.getElementById('s-views').innerHTML = sb.views.map(v => '<span class="view-chip">'+esc(v)+'</span>').join('');
+      document.getElementById('s-cols').textContent = sb.columns || '\u2014';
       document.getElementById('s-rows').innerHTML = esc(sb.rows) + '<span class="kindtag '+esc(sb.kind)+'">'+esc(sb.kind)+'</span>';
       document.getElementById('s-note').textContent = sb.note;
       document.getElementById('s-files').textContent = sb.sql.concat([sb.generator]).join('\n');

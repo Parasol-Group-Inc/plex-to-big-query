@@ -27,6 +27,363 @@ don't need an entry.
   item S11. The Lineage Navigator artifact shows the same setups with copy
   buttons. Docs only; nothing deployed.
 
+## 2026-10-13 (label-design) - Plex API extractor: Cloud Run job -> Cloud Function
+
+### Changed
+
+- **Pivoted the Plex REST API extractor from a Cloud Run job (riding the ODBC
+  Docker image) to a standalone Cloud Function (Gen 2).** The extractor needs
+  only stdlib HTTP + `google-cloud-bigquery` + `google-cloud-secret-manager`;
+  it had no business carrying the ODBC driver, pyodbc, ksh, or 32-bit libs.
+  Source moves from `plex_api_service/` (deleted) to
+  `deploy/plex_api_function/` (main.py + requirements.txt). Deployed with
+  `gcloud functions deploy`, not Cloud Build. This is the pioneer pattern for
+  future API-based reports: the ODBC ETL stays for heavy processes.
+
+### Removed
+
+- `plex_api_service/` directory (replaced by `deploy/plex_api_function/`).
+- `plex-etl-plex-api-test` Cloud Run job from Terraform and `_ALL_JOBS`.
+- `COPY plex_api_service/*.py` from Dockerfile.
+
+## 2026-10-12 (label-design) - Plex REST API landing job (BigQuery only)
+
+### Added
+
+- **`plex_api_service/extract.py` + Cloud Run job `plex-etl-plex-api-test`.**
+  The ODBC database is up to 4 hours behind Plex; the REST API
+  (`connect.plex.com`, key + secret headers) is live. The job lands Sales
+  Orders, order lines and Sales Releases in new tables in the dataset
+  (PlexTest): `plex_api_payloads` (append-only raw JSON, one row per
+  changed record, hash-deduped), `plex_api_audit` (one row per resource per
+  run) and `plex_api_<resource>_latest` views (`plex_api_orders_latest` is
+  typed). **BigQuery only; nothing is pushed to Monday and no existing table
+  or view is touched.** No scheduler: run by hand. Secrets
+  `plex-api-consumer-key` / `plex-api-consumer-secret` are created empty by
+  Terraform and filled by hand (commands in the `main.tf` comment).
+  Probed 2026-10-12: `connect.plex.com` (production) has 3 orders, 0 lines,
+  0 releases; `test.connect.plex.com` has 16 orders, 12 lines, 12 releases, live.
+  The test job sets `PLEX_API_BASE` to the test host; calls are spaced 0.35 s
+  (Plex throttles at 200/min); optional tenant headers via
+  `PLEX_API_TENANT_ID` / `PLEX_API_CUSTOMER_ID`; audit `detail` records the host. A local run
+  wrote the 3 orders and a rerun inserted 0. Deployed and verified
+  2026-10-12: the Cloud Run job wrote 3 `ok` audit rows (orders 3 fetched,
+  lines 0, releases 0).
+
+## 2026-10-08 (label-design) - Sales roles (AM vs BDM), part-number fallbacks
+
+### Fixed
+
+- **"Sales Rep" was the AM, not the BDM — now split into two columns, with the
+  BDM sourced from the field it actually replicates into.** The view resolved
+  `bdm` from `Sales_v_PO.Inside_Sales` → `Common_v_Customer.Assigned_To` → the
+  primary salesperson — but per Vox's glossary those are all the **AM** (Account
+  Manager / Inside Salesperson), never the BDM. The BDM (Outside Salesperson)
+  does **not** land in `Sales_v_PO.Outside_Sales` — that replicates as `0` even
+  when the Plex UI shows a BDM (order 16 / PO_Key 5021015 shows Janet Pacheco on
+  screen; `Outside_Sales = 0` in BigQuery). It lands in
+  **`Sales_v_Order_Salesperson`** instead (same "the field the picker writes
+  isn't the field that replicates" trap `Sales_v_Priority` sprang). `Sort_Order`
+  is `0` on every row there, so it can't rank reps; an order can carry more than
+  one outside rep, so the lowest `Plexus_User_No` is taken for a deterministic
+  single BDM. The Order_Salesperson rep is never the order's `Inside_Sales` AM
+  (confirmed across every populated order), so it is unambiguously the BDM.
+  `label_design_view.sql` now resolves both: `am` =
+  `COALESCE(Inside_Sales, customer Assigned_To)`, `bdm` =
+  `COALESCE(Order_Salesperson rep, Outside_Sales, Assigned_To2)` (the last two
+  are empty-today fallbacks). Validated on PlexTest: order 16 → am Ashley
+  Quintana, bdm Janet Pacheco; order 17 → am Camilo Montano, bdm Kami Butcher.
+  `push.py` maps **Sales Rep → `bdm`** and adds a new **Inside Sales Rep → `am`**
+  column. **The board needs an "Inside Sales Rep" status column** or that field
+  is logged and skipped.
+- **Component lines no longer lose their part info on Monday.** Lines with no
+  customer part number (POWDER/SUPPLY components) were pushed as `(no part #) 16`
+  with a blank **Item** column. The Monday item is now named from the full part
+  line (`line_description`, e.g. `12014-01VOXNU-1 Rev 00 | POWDER | Bacopa…`) when
+  there is no customer part, and the **Item** column falls back from
+  `customer_part_no` to the Plex `part_no`. Both match how the historical
+  Sheet/NetSuite items looked.
+
+### Documentation
+
+- Synced the docs to the AM/BDM split and the (paused) prod push job:
+  `docs/OPEN_ITEMS.md` (prod push job now exists; new L12 to verify both
+  sales-role columns on the next real order), `docs/reports/REPORT_CATALOG.md`,
+  `docs/reports/label_design_report.md` (both push jobs described), and the
+  stale header comment in `reports/sql/label_design_view.sql` (comment only, no
+  SQL change).
+
+## 2026-10-08 (label-design) - Build the production push path (dormant until cutover)
+
+### Added
+
+- **Production Label Design push infrastructure, stood up but deliberately not
+  released.** `terraform/main.tf` now defines `plex-etl-label-design-push` (prod
+  Cloud Run job) and `plex-label-design-push-sync` (prod scheduler). The job
+  mirrors the test push exactly except it reads the **prod** dataset
+  (`var.bq_dataset`); it writes to the **same** "Plex Import" Monday board
+  (`18432111755`) the test push already targets — the board the team moved to for
+  good on 2026-09-26. The scheduler carries **`paused = true`**, so the whole prod
+  path exists and receives container images, but nothing fires on its own. At
+  cutover, pause the test push scheduler and un-pause this one.
+- **`plex-etl-label-design-push` added to `_ALL_JOBS`** in
+  `deploy/cloudbuild.yaml`, so the new prod job gets the current image (with the
+  Priority fix) from every Cloud Build deploy. A job missing from that list
+  silently never gets a new image.
+
+## 2026-10-07 (label-design) - Push the line Priority to Monday
+
+### Added
+
+- **The sales-order line's Priority now reaches Monday's Priority column.** Each
+  line in the Plex sales-order screen carries a Priority dropdown; it lives on
+  the **release** (`Sales_v_Release.Priority_Key`), not the PO line, and resolves
+  to a word through the `Sales_v_Priority` lookup — a new extraction in both
+  `reports/label_design.yaml` and `reports/test/label_design.yaml`
+  (`raw_Sales_v_Priority`, bringing the list to 15). `label_design_view.sql`
+  LEFT JOINs the lookup on the release's `Priority_Key` and surfaces `priority`,
+  carried from the same earliest-due release the row already collapses to, so it
+  matches the Due Date shown. `label_design_service/push.py` maps `priority` to
+  the board's **Priority** status column, pushed verbatim. Plex's five options
+  (confirmed from the `PriorityKey` dropdown on the order-line form) are
+  **RUSH / High / Medium / Low / Blanket**; the board's Priority column is set up
+  to carry those same five labels, so values land on the right label with the
+  right colour. `create_labels_if_missing` remains a safety net.
+- **Test note:** in PlexTest every release currently sits on one priority key
+  (`1602`), so only one of the five words is exercised on test until production
+  data varies.
+
+### Fixed
+
+- **Priority now resolves against `Part_v_Priority`, not `Sales_v_Priority`.**
+  The first wiring joined `Sales_v_Priority`, which replicates **empty** (0 rows)
+  on this tenant — so `Priority_Key = 1602` had nothing to resolve against and
+  `priority` came back NULL for every row despite the release carrying a real
+  key. The correct lookup is `Part_v_Priority` (`1601 High`, `1602 Medium`,
+  `1603 Low`, `1912 RUSH`, `1915 Blanket`). The word is that view's
+  **`Description`** column — its own `Priority` column is a sort number
+  (10/20/30/1/40), not the label. Extraction swapped to `Part_v_Priority`
+  (`raw_Part_v_Priority`) in both yamls; the view's LEFT JOIN and `pr.Description`
+  updated to match. Key `1602` now surfaces as **Medium**.
+
+## 2026-10-06 (sandbox) - Scorecard ticket set, and two fixes confirmed on real data
+
+### Added
+- **`docs/SCORECARD_CLICKUP_TICKETS.md`** - one ClickUp-ready ticket per
+  scorecard element: 35 tile tickets (SC-00 .. SC-34) and 14 blocker tickets
+  (SC-B1 .. SC-B14) owned by people outside this team, each cross-referenced
+  to the tiles it blocks. Row counts in it are real, from the 2026-10-05
+  PlexTest refresh.
+
+### Confirmed
+A full PlexTest refresh (all six scorecard pipelines, 2026-10-05) verified two
+fixes that were deployed 2026-09-25 but had never been seen working on real
+data:
+- **Finding 1, sales rep resolution.** 7 of 8 October rows in
+  `sales_mtd_summary_report` now carry real rep names instead of every row
+  reading "(no rep assigned)". The one remaining unassigned row is a genuine
+  Plex gap.
+- **Finding 7, part group.** `sales_revenue_summary_report.part_group` resolves
+  to "Capsule" instead of a single "(no group)" bar. This needed the new
+  `raw_Part_v_Part_Group` extraction, so it could not be proven until this run.
+
+All 37 checked views exist - **0 missing, 2 empty**.
+
+### Found
+- **Cycle count accuracy is empty for an unidentified reason.**
+  `raw_Part_v_Cycle_Inventory` holds 17 records and **all 17 have a NULL
+  `Cycle_Inventory_Date`**, so the view's `IS NOT NULL` filter drops
+  everything. This is not the "counting is lumpy" case the view was designed
+  around. Warehouse owns it (SC-B12).
+- **Pre-Weigh is producing with no goal** - 250 units in October,
+  `production_without_goal = true`. It was never in the seeded placeholder set,
+  which covered only Encapsulating / Bottling / Labeling (SC-B6).
+- **Encapsulating has produced 0 units in any month** in PlexTest, so
+  `encap_daily_report` is legitimately empty despite 3 open cap jobs
+  (1,542,000 caps).
+- **`sales_revenue_run_rate_report` counts `days_elapsed` in UTC.** It returned
+  6 of 31 on 2026-10-05, because the job completed 00:07 UTC / 18:07 Mountain.
+  After ~6pm Mountain the denominator advances a day early and the projection
+  drops.
+- **`safety_incidents` holds one row dated 2026-10-02**, not the 7/23
+  recordable that `docs/OPEN_ITEMS.md` S6 describes. Safe Days would read ~4,
+  not ~75. Unconfirmed whether it is real or an app test entry (SC-B13).
+
+## 2026-10-05 (sandbox) - Tile status check was blind to five tiles
+
+### Fixed
+- **`scripts/scorecard_status.ps1` counted 30 of the 35 views the scorecard
+  reads.** Its list had drifted from `reports/*.yaml`, so a clean run
+  reported nothing at all about five tiles - and reported it as success,
+  which is the same failure mode the script exists to catch. Added:
+  - `sales_orders_pending_accounting_approval_report` (Sales | Orders
+    pending accounting approval) - the tile
+    `SCORECARD_SANDBOX_FINDINGS.md` finding 3 covers;
+  - `encap_daily_report`, `packaging_daily_report`,
+    `labeling_daily_report` (Production | Encap / Bottling / Labeling
+    daily);
+  - `safety_incidents` (Operations | Safe days). It has no view - Looker
+    computes Safe Days from the table's latest date - so it is counted
+    alongside the goal tables, like `scorecard_goals_app`.
+
+## 2026-10-02 (sandbox) - Goal tables seeded so every goal tile has a number
+
+Found by querying both datasets rather than trusting the Migration Board:
+**`PlexProd` held no manual data at all** — 0 goals in either table, 0
+turnaround standards — and `PlexProd.safety_incidents` **did not exist**.
+In `PlexTest`, the 12 revenue goals the board still advertises were gone
+(the app table is `WRITE_TRUNCATE` from its sheet, and the 2026-09-24
+legacy import rebuilt it with sales rows only).
+
+### Added
+- **The 68 real sales goals copied `PlexTest` -> `PlexProd`**
+  (`scorecard_goals`), provenance columns preserved.
+- **Reference placeholders, clearly labelled**, so the tiles render a number
+  before the real targets are negotiated:
+  - revenue, 12 months of 2026, both datasets - a copy of the company-wide
+    sales goal (12 rows each);
+  - production, 12 months x `Encapsulating` / `Bottling` / `Labeling`, both
+    datasets - the live scorecard board's 100M / 1.5M / 700K (36 rows each);
+  - `PlexProd.turnaround_standards` - the same three labelled placeholder
+    rows `PlexTest` already had.
+  - Every placeholder row carries `updated_by = 'PLACEHOLDER (not a real
+    goal)'` and a `note` saying so, which is what the Manual Data app shows
+    above the entry fields.
+- **`PlexProd.safety_incidents` created** with `PlexTest`'s schema. Open item
+  S2 (pointing the app at `PlexProd`) would have failed without it.
+
+**They are in the legacy `scorecard_goals` table on purpose, not
+`scorecard_goals_app`.** `scorecard_goals_resolved` prefers the app, so a
+real goal entered in the form overrides its placeholder automatically, and
+the app's truncate-and-push cannot wipe them meanwhile.
+
+### Verified
+Through the views, not the tables: `PlexProd.scorecard_goals_resolved` now
+returns 68 sales / 12 revenue / 36 production; `production_vs_goal_report`
+36 rows and `sales_vs_goal_report` 68 in test; 28 nonconformances now match
+a turnaround standard instead of `none set`.
+
+**`revenue_vs_goal_report` is still 0 rows, and the fill cannot change
+that** - it is driven `FROM actual LEFT JOIN goal`, and
+`sales_revenue_summary_report` has 0 rows in *both* datasets. A month with a
+goal and no revenue does not appear at all. Worth deciding whether that
+should be a FULL JOIN, so a missed month reads 0% rather than vanishing.
+
+## 2026-10-02 (label-design) - Part attributes come off the LABEL part
+
+### Fixed
+
+- **The ten `part_*` columns were looking at the wrong part, and every one of
+  them read NULL.** `part_attributes_pivoted` was joined to the order line's
+  part - the finished good, `93001-00KAYAN-0`. QA records label attributes
+  against the **label** part, `73001-00KAYAN-0`, which reaches the order line
+  only through the bill of materials. The two keys never met.
+
+  `reports/sql/label_design_view.sql` gains a `labels` CTE over
+  `raw_Part_v_Flat_BOM`, mechanically identical to the `bottles` CTE added
+  2026-09-29: the component whose `Name` starts "LABEL", collapsed to one row
+  **before** the join so a second label could never duplicate a queue row. Of
+  the 169 parts with a BOM in PlexTest, 54 have a label component and none has
+  two. The attribute pivot now joins on that key.
+
+  Verified end to end against PlexTest the same day: `93001-00KAYAN-0` now
+  resolves `Label Size = 2.4 x 6.8 in`, `Printing Material = White BOPP`,
+  `Allergen = Tree Nuts`, `Trademark = N/A`. A part with no label component
+  gets NULLs, which is what every row got before.
+
+- **The pivot asked for `'Size'`; the populated attribute is `'Label Size'`.**
+  Both exist in Plex - `Size` (key 2383) is assigned to nothing, `Label Size`
+  (key 7436) carries the values. A new `part_label_size` column reads the
+  latter; `part_size` is kept, still reading the former.
+
+### Added
+
+- **`label_part_key`, `label_part_no`, `label_part_name`** on
+  `label_design_report`, and `part_label_size`. 49 columns, up from 45.
+
+- **Four Monday columns in `label_design_service/push.py`:** `Label Part #`
+  (text), `Label Size` (text), `Printing Material` (status) and `Allergen`
+  (text), created on the Plex Import board ahead of this commit. Size and
+  Allergen are text on purpose - sizes multiply and allergens arrive as
+  combinations, either of which would fill a status column with one-off
+  labels. 20 mapped columns, up from 16.
+
+  The **item name is unchanged** (still `customer_part_no`). Whether it should
+  become the label code instead is Ashley's call, not a side effect of this
+  fix; the label part number gets its own column so both can be seen side by
+  side first.
+
+### Changed
+
+- **Three attribute names in the pivot no longer exist in Plex.** The catalog
+  on 2026-10-02 holds exactly eight attributes: Allergen, Certifications,
+  Hazardous, Label Size, Material Classification, Printing Material, Size,
+  Trademark. `Bottle Material`, `California PDP` and `Prop 65 Requirement`
+  were all present on 2026-09-21 and are gone. Their columns are **kept**,
+  emitting NULL, pending Jennilyn confirming whether they were removed or
+  renamed - dropping a column that turns out to have been renamed loses the
+  mapping work twice over. This is the same trap that caught the original
+  build, which guessed at two attribute names and got both wrong.
+
+- **PlexTest and PlexProd carry identical attribute data** (40 assignments
+  across 10 label parts, same values, verified 2026-10-02), so this is
+  verifiable on test rather than needing a prod run. The report doc's
+  "every value is currently blank" note was stale and is corrected.
+
+## 2026-10-02 (label-design) - The Sheet-based Apps Script is archived
+
+### Removed
+
+- **`deploy/label_design_sync/` moves to `deploy/archive/label_design_sync/`.**
+  The Sheet -> Monday Apps Script was superseded by `label_design_service/push.py`
+  on 2026-09-24 and has been marked "being retired" since 2026-09-25.
+
+  **It was safe to retire because its triggers could not reach Monday.com.**
+  `installTriggers()` only ever scheduled `checkForNewOrdersAuto` (reads
+  BigQuery, appends to the sheet's MONDAY tab, never touches Monday.com) and
+  `sendDailySummary`. The push, `pushToMondayAndArchiveManual`, was menu-only
+  by design. So unlike `deploy/goals_sheet_to_bigquery.gs` - deleted while its
+  trigger kept truncating a table - a forgotten trigger here could only have
+  refreshed a spreadsheet and sent email. No `[Label Design] Summary` email has
+  reached the recipient list since the changeover, so the triggers are gone.
+
+- **`scripts/build_logo_gs.py` -> `scripts/build_logo.py`**, and its `build_gs()`
+  half is removed. It wrote two things: `assets/vox-logo.png`, still attached
+  inline by `email_utils.py`, and `label_design_sync/Logo.gs`, the same bytes
+  as base64 for Apps Script. The second consumer is archived, so the frozen
+  `Logo.gs` in the archive is the last generated copy and nothing regenerates
+  it. The PNG half is untouched.
+
+### Changed
+
+- References re-pointed at the new path across `.githooks/hooks.py` (the
+  project-ownership regex), `.gitignore`, `CONTRIBUTING.md`, `README.md`,
+  `docs/CHEATSHEET.md`, `docs/reports/label_design_report.md`,
+  `label-design/README.md`, `label-design/monday_board_catalog.md`,
+  `label_design_service/push.py` and `terraform/main.tf`. The archived
+  documents' own banners now say archived rather than "being retired", and
+  their links out are corrected for the extra directory level.
+
+- New `deploy/archive/README.md`, modelled on `docs/archive/README.md`, with
+  the warning that archiving deployed code does not switch it off.
+
+## 2026-10-02 (label-design) - Label Design runs Monday to Friday
+
+### Changed
+
+- **The three Label Design schedules narrow to weekdays** (`* * 1-5`):
+  `plex-label-design-sync` (:00), `plex-label-design-sync-test` (:05) and
+  `plex-label-design-push-sync-test` (:35), all still hourly 5 AM - 5 PM
+  Mountain. Closes OPEN_ITEMS L9, which had been half-answered since
+  2026-10-01 - Jennilyn gave the hours, not the days.
+
+  The block comment above these resources used to argue the opposite, that
+  Saturday and Sunday had to be included or the team would find a two-day-stale
+  queue on Monday morning. The 5 AM start retired that argument: Monday's first
+  run sweeps up the weekend before anyone arrives. Weekend orders now reach the
+  board Monday at 5 AM, which is intended while nobody works the queue then.
+
+  Schedule-only - no image rebuild. Ships with `./scripts/deploy.sh`.
 ## 2026-10-01 (scorecard) - Manual Data app: the "already saved" panel stacked
 
 ### Fixed
@@ -288,6 +645,10 @@ first.
   it. A note starting with a quantity or decimal ("12ct", "3.5 oz") no longer
   yields a code. `label_design_service/reason_code.py` and its test are
   removed; their cases live in the injector now.
+  Reason Code catalog: 1 Customer Initiated: Label Edit · 2 Customer initiated:
+  Label review · 3 New label design (Vox design) · 4 New label review (Customer
+  design) · 5 Vox Initiated: Label Edit/Review · 6 3D Rendering. First note char
+  1–6 = code, rest = Memo; a leading quantity ("12ct", "3.5 oz") is not a code.
 - **Status filters** trim and ignore case, matching Emilio's hand-checked Plex
   version of the query.
 - **A NULL customer part number falls back to `Part_Key`** for the collapse

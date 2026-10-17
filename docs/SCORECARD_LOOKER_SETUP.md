@@ -31,6 +31,9 @@ https://claude.ai/artifact/1kiCCV2BhBD4aDEQPfCUKZ
 - **Sales goals:** each rep also has a goal row in `sales_vs_goal_report`, so
   the company goal must be filtered to `sales_rep = (company-wide)`. Summing
   `goal_value` across the rows adds every rep's goal on top.
+- **Revenue goal tiles can come out empty outside the sandbox.**
+  `revenue_vs_goal_report` drops a month that has a goal but no revenue
+  (open item S13), so `$4.7M Goal` and `88% to Goal` read blank there until that is decided.
 - **Not yet checked in Looker itself.** Every field listed exists in its view
   (checked against the BigQuery schemas on 2026-10-16), but no tile has been
   built from this page yet. The Safe Days formula is the one most likely to

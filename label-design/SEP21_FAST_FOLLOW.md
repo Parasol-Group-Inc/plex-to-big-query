@@ -13,6 +13,14 @@ Two decisions on that call change what we build, and one of them undoes part
 of what shipped on 2026-09-21:
 
 1. **Part attributes stay in Plex. They are not going into Monday.**
+   > **⚠ CHALLENGED 2026-10-02, not yet re-decided.** Four attributes
+   > (`Label Part #`, `Label Size`, `Printing Material`, `Allergen`) now DO
+   > go to Monday — Emilio asked for it after seeing QA fill them in, and it
+   > is deployed. The reasoning below still reads correctly for 09-21: at the
+   > time the attributes were structurally unreachable (point 2), so pushing
+   > them would have sent blanks. The BOM hop built on 2026-10-02 removes
+   > that, which changes the premise rather than the decision. **Jennilyn has
+   > not been asked again** — OPEN_ITEMS L9.
 2. **Attributes will only ever be placed on "sevens" — the label part numbers.
    The parts our queue carries are "nines", the finished goods.** So the ten
    attribute columns we just built will be structurally empty for every row of

@@ -59,13 +59,17 @@ $Views = [ordered]@{
     'sales_mtd_by_status_change_report',
     'sales_order_value_by_status_report',
     'pipeline_plex_value_report',
-    'sales_vs_goal_report'
+    'sales_vs_goal_report',
+    'sales_orders_pending_accounting_approval_report'
   )
   'Production'  = @(
     'production_monthly_by_workcenter_group_report',
     'production_vs_goal_report',
     'mfg_job_open_caps_report',
-    'bottling_job_open_report'
+    'bottling_job_open_report',
+    'encap_daily_report',
+    'packaging_daily_report',
+    'labeling_daily_report'
   )
   'Quality'     = @(
     'quality_fpy_by_area_month_report',
@@ -90,7 +94,10 @@ $Views = [ordered]@{
     'scorecard_goals_resolved'
   )
   'Operational' = @(
-    'label_design_report'
+    'label_design_report',
+    # Safe Days has no view: Looker computes it from this table's latest date.
+    # An empty table reads as a clean record, so count it like the goal tables.
+    'safety_incidents'
   )
 }
 

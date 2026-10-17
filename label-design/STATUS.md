@@ -11,6 +11,248 @@
 
 ---
 
+## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
+
+The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second
+source was built beside it: `plex_api_service/extract.py`, Cloud Run job
+`plex-etl-plex-api-test` (PR #28). It reads `connect.plex.com` (headers
+`X-Plex-Connect-Api-Key` / `-Secret`; secrets `plex-api-consumer-key` and
+`-secret` in Secret Manager) and writes **BigQuery only, never Monday**:
+
+- `plex_api_payloads` - raw JSON, one row per changed record (SHA-256 deduped)
+- `plex_api_audit` - one row per resource per run
+- `plex_api_<resource>_latest` views (`orders` typed; lines/releases raw JSON)
+
+**The ODBC ETL, `raw_*` tables, `label_design_view.sql` and the push are
+untouched.** No scheduler: run by hand.
+
+What the API showed (2026-10-12): **the two hosts are different tenants** (an
+early note here said they were identical; that was a truncated comparison and
+wrong). `connect.plex.com` = PRODUCTION: 3 orders, 0 lines, 0 releases (no
+Label Design releases until the 19 Oct cutover). `test.connect.plex.com` =
+the PlexTest tenant, LIVE: 16 orders (10 Pending Fulfillment), 12 lines, 12
+releases, created the same day. The job defaulted to the production host, so
+its first run saw only 3 orders; the test job now sets
+`PLEX_API_BASE=https://test.connect.plex.com`. Parts (15,380), customers
+(4,069) and employees (140) are also available. Order lines carry only IDs
+(`partId`, `customerPartId`, no part number); releases carry `partNumber`,
+`status`, `dueDate`, `quantity`; BDM/AM ids (`outsideSalesIds`,
+`insideSalesId`) were empty on the orders checked. Limits: Plex throttles at
+200 calls/min (the job spaces calls 0.35 s apart), `limit`/`offset` are
+ignored on the order list, BOM needs `?PartId=`, list filters accept repeated
+`?Id=a&Id=b`, and `X-Plex-Connect-Tenant-Id` / `-Customer-Id` headers switch
+tenant (job env `PLEX_API_TENANT_ID` / `PLEX_API_CUSTOMER_ID`).
+
+Verified: Cloud Run job runs `ok`. **Data cleanup owed:** the first runs wrote the 3
+production-host orders into `plex_api_payloads`; drop that table (it is only
+scratch) before the first test-host run, or those rows stay in the `_latest`
+views. The audit `detail` now records `host=`.
+
+**Architecture pivot (2026-10-13):** moved from a Cloud Run job (same Docker
+image as the ODBC ETL) to a **standalone Cloud Function (Gen 2)** in
+`deploy/plex_api_function/`. The extractor needs only stdlib + BigQuery +
+Secret Manager. No ODBC driver, no Docker build, no Cloud Build. Deploy with
+`gcloud functions deploy`. This is the pioneer for future API-based reports;
+the ODBC ETL stays for heavy processes. `plex_api_service/` is deleted.
+
+**Next:** land the test-host data (orders, lines, releases, parts, customers),
+resolve `partId` / `customerPartId` against parts, then build the Label Design report on `plex_api_*` (release
+status = Label Design, Job Note, BOM label part, BDM/AM) and compare it with
+the ODBC view before switching anything. Open item L13.
+
+---
+
+## UPDATE — 2026-10-08: BDM source corrected — it's in Order_Salesperson
+
+The earlier "Sales roles" fix below sourced `bdm` from
+`Sales_v_PO.Outside_Sales` → `Assigned_To2` and concluded the BDM was unset on
+all PlexTest orders. **That was wrong.** Order 16 shows BDM **Janet Pacheco** on
+the Plex order screen, but `Outside_Sales` replicates as `0` — the BDM actually
+lands in **`Sales_v_Order_Salesperson`** (Janet's user_no is there). Same trap
+`Sales_v_Priority` sprang: the field the picker writes isn't the field that
+replicates.
+
+Fixed in `label_design_view.sql`: a `rep_outside` CTE picks one BDM per order
+from `Order_Salesperson` (its `Sort_Order` is `0` on every row, so the lowest
+`Plexus_User_No` breaks ties on multi-rep orders). `bdm` =
+`COALESCE(Order_Salesperson rep, Outside_Sales, Assigned_To2)`; `am` =
+`COALESCE(Inside_Sales, Assigned_To)`. The Order_Salesperson rep is never the
+order's Inside_Sales AM (checked across every populated order), so it is
+unambiguously the BDM. **Validated on PlexTest: order 16 → am Ashley Quintana,
+bdm Janet Pacheco; order 17 → am Camilo Montano, bdm Kami Butcher.** Orders with
+no outside rep leave Sales Rep blank. Still ships via `./scripts/deploy.sh`
+(view). Board action unchanged: add an **Inside Sales Rep** status column.
+
+---
+
+## UPDATE — 2026-10-08 (later): Sales roles + part-number fallbacks
+
+Three fixes to what reaches Monday, all shipping in the same image:
+
+- **Sales Rep was the AM, not the BDM.** The view's `bdm` was built from
+  `Inside_Sales`/`Assigned_To`/primary salesperson — all the **AM** per the
+  glossary. Rewired: new `am` = that old logic; corrected `bdm` = the Outside
+  Salesperson. `push.py` now maps **Sales Rep → bdm** and adds **Inside Sales
+  Rep → am**. **Board action: add an "Inside Sales Rep" status column**, or the
+  field is skipped. *(⚠ The BDM **source** stated here — `Outside_Sales` →
+  `Assigned_To2` — was wrong, and the "bdm = NULL, expected" conclusion with it;
+  see the "latest" correction above: the BDM is in `Sales_v_Order_Salesperson`.)*
+- **Item name / Item column no longer blank for component lines.** Lines with no
+  customer part (POWDER/SUPPLY) were `(no part #) 16`. Item name now falls back
+  to the full part line; the **Item** column falls back `customer_part_no` →
+  `part_no`.
+- **Priority confirmed working** — order 16's 18:38 push carried High/Low/Blanket
+  onto the board, and the phone (`800-100-1000`) ships as a text column. So the
+  deployed image is already current on Priority + phone.
+
+Deploy: `./scripts/deploy.sh` (view) + Cloud Build (push.py). Verify `am`/`bdm`
+on the next real order.
+
+---
+
+## UPDATE — 2026-10-08: production push path built (dormant until cutover)
+
+Stood up the **production** push so the whole prod path exists ahead of cutover,
+but **did not release it**. `terraform/main.tf` now has:
+
+- **`plex-etl-label-design-push`** (prod Cloud Run job) — mirrors the test push
+  job exactly, except `BQ_DATASET = var.bq_dataset` (prod). Same "Plex Import"
+  board (`18432111755`), same `New from Plex` group, `max_retries = 0`.
+- **`plex-label-design-push-sync`** (prod scheduler) — **`paused = true`**.
+  Nothing fires on its own. At cutover: pause the test push scheduler, un-pause
+  this one.
+
+Also added `plex-etl-label-design-push` to `_ALL_JOBS` in
+`deploy/cloudbuild.yaml` so the prod job gets images.
+
+**Note — the stale test-push image.** Today's test pushes landed with **no
+Priority** on the board. Root cause: `push.py`'s Priority mapping ships only via
+**Cloud Build** (the image), and Cloud Build hasn't run since the Priority
+commit — the running test-push container is pre-Priority. The fix is to rebuild:
+`./scripts/deploy.sh` first (creates the prod job + paused scheduler), **then**
+Cloud Build (`gcloud builds submit --config deploy/cloudbuild.yaml
+--project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .`)
+to push the current image to every job, including both pushes. Then a fresh test
+order carries Priority onto Monday.
+
+---
+
+## UPDATE — 2026-10-07: line Priority → Monday Priority column
+
+Added the sales-order line's **Priority** to the queue and the push. It is a
+**release** attribute in Plex (`Sales_v_Release.Priority_Key`), resolved to a
+word via a new `raw_Part_v_Priority` extraction (both yamls), surfaced as
+`priority` in `label_design_view.sql`, and mapped to the board's **Priority**
+status column in `push.py`. Carried from the earliest-due release, so it
+matches the Due Date shown.
+
+> **Source correction (2026-10-07):** the first wiring used `Sales_v_Priority`,
+> which replicates **empty** here, so `priority` came back NULL. The real lookup
+> is **`Part_v_Priority`**, and the word is its **`Description`** column (its own
+> `Priority` column is a sort number). Keys: `1601 High · 1602 Medium · 1603 Low
+> · 1912 RUSH · 1915 Blanket`. The test order's lines are all `1602` → **Medium**.
+
+Plex's five Priority options are confirmed from the order-line form's
+`PriorityKey` dropdown: **RUSH / High / Medium / Low / Blanket**. The word is
+pushed **verbatim**; the Monday Priority column should carry those same five
+labels (decided 2026-10-07). `create_labels_if_missing` is a safety net, but set
+the board's labels up first so colours/order are right.
+
+**Board action:** add High / Medium / Low / Blanket to the Priority column
+(`color_mkzvyt93`) alongside the existing RUSH. Monday's MCP connector isn't
+authorised in this session, so this is done in the Monday UI (or an authorised
+session).
+
+**Open before prod trust:** `raw_Sales_v_Priority` is empty until the next ETL
+run, and PlexTest has one priority key (`1602`) on every release, so only one of
+the five is exercised on test. Deploy via `./scripts/deploy.sh`, run the test
+job, then:
+```sql
+SELECT Priority_Key, Priority, COUNT(*) FROM `voxdatalake.PlexTest.raw_Sales_v_Priority` GROUP BY 1,2;  -- the lookup
+SELECT DISTINCT priority FROM `voxdatalake.PlexTest.label_design_report`;        -- what reaches the push
+```
+
+---
+
+## UPDATE — 2026-10-02 (late): deployed and verified end to end
+
+`label_design_report` is live at **49 columns** on PlexTest, and the push
+reports **20/20 mapped columns found**. `93001-00KAYAN-0` resolves
+`73001-00KAYAN-0 | 2.4 x 6.8 in | White BOPP | Tree Nuts`.
+
+**The attributes will not appear on the 30 items already on the board.** The
+push only ever creates items, never rewrites one. They land on the next new
+order line. Backfilling the existing items would be a separate job, and may
+not be worth it given the queue turns over.
+
+**Two things this deploy taught, both now in `docs/OPEN_ITEMS.md`:**
+
+- **L10 — an unchanged change probe skips view creation, not just the
+  extraction.** The post-deploy job ran, exited 0, logged `skipped` and left
+  the old 45-column view in place. GCS had the new SQL the whole time. A
+  SQL-only change therefore cannot land while Plex is quiet. It only went
+  live after the last `applied` row in `probe_log` was retired by hand:
+  `UPDATE ... SET outcome='applied-superseded'`. The next run re-logged
+  `applied` on the same fingerprint, so the hourly skipping resumed with no
+  lasting effect. This affects every probe-driven pipeline.
+- **L9 — this contradicts a recorded decision.** The 2026-09-21 call said
+  part attributes stay in Plex and do not go to Monday. See
+  `SEP21_FAST_FOLLOW.md`, now marked challenged. Jennilyn has not been asked
+  again.
+
+---
+
+## UPDATE — 2026-10-02: the part attributes were on the wrong part
+
+Emilio spotted that QA puts the label attributes on the **label** part number,
+and only the **product** part number ever reached Monday. That was exactly
+right, and it explains a flag that had been sitting in the report doc for
+weeks as "nobody has filled anything in": the data was there all along, on a
+part the report never looked at.
+
+`93001-00KAYAN-0` is the order line's part. The attributes live on
+`73001-00KAYAN-0`, a component of it in the bill of materials. The fix is a
+`labels` CTE in `label_design_view.sql`, mechanically identical to the
+`bottles` CTE from 2026-09-29 — find the component whose name starts "LABEL",
+collapse to one row before the join, read the attributes off that key.
+
+Four Monday columns now carry it: **Label Part #**, **Label Size**,
+**Printing Material**, **Allergen**. Created on the board first, which was
+safe — the push skips a column it cannot find with a warning, never a
+failure.
+
+**Two things turned up on the way, both worth a word with Jennilyn:**
+
+- The pivot asked for an attribute called `Size`. The one with values in it is
+  `Label Size`. Both exist; `Size` is assigned to nothing.
+- `Bottle Material`, `California PDP` and `Prop 65 Requirement` were in the
+  Plex catalog on 2026-09-21 and are **not there now**. Their columns are kept
+  and blank rather than deleted, in case they were renamed rather than
+  removed.
+
+**Still open for Ashley:** the item name is still the customer part number.
+The team's own hand-made rows put the label code (`s7187`, `CL3776`) there
+instead. Changing it alters how every row on the board reads, so it is a
+decision, not a side effect — the label part number has its own column now so
+both can be compared first.
+
+---
+
+## UPDATE — 2026-10-02: weekdays only
+
+The three Label Design schedules now run Monday to Friday (`* * 1-5`), still
+hourly 5 AM - 5 PM Mountain. This closes the last open question from the
+2026-10-01 change: Jennilyn gave the hours that day but not the days, so it
+had been running Saturday and Sunday in the meantime.
+
+The original rationale for seven days was that orders are entered over the
+weekend and a weekday-only refresh would hand the team a stale queue on Monday
+morning. The 5 AM start answers that — Monday's first run sweeps up the weekend
+before the team arrives. If anyone starts working the queue at weekends, all
+three schedules have to move back together.
+
+---
+
 ## UPDATE — 2026-10-01: hourly, behind a change probe
 
 The queue refreshes within the hour now, not at 9:30 and 1:30. Running the

@@ -6,7 +6,7 @@ Quick-reference commands for every common error. Copy-paste ready — substitute
 
 > **Deploying a fix:** anything Terraform manages (`terraform.tfvars`, `main.tf`, `reports/` YAML/SQL) goes out with `./scripts/deploy.sh` from the primary folder on a clean, pushed `main` — never a bare `terraform apply`. Terraform's own deploy guard refuses plan/apply anywhere else. See `CONTRIBUTING.md` § "Branches, folders and locks".
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **26** live jobs (13 pipelines × prod/test). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **27** live jobs (13 pipelines × prod/test, plus the Label Design push job). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -311,7 +311,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
-or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 26 jobs in one build (see "Full rebuild procedure" below).
+or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 27 jobs in one build (see "Full rebuild procedure" below).
 
 ### `denied: Unauthenticated request`
 
@@ -438,7 +438,7 @@ Use this when you've changed Python code, the email template, or Python dependen
 # 1. Refuses unless you're on a clean main (an image deploy has no guard inside it)
 ./scripts/deploy_preflight.sh
 
-# 2. Build, push, move all 26 jobs onto the new image (deploy-all step), then
+# 2. Build, push, move all 27 jobs onto the new image (deploy-all step), then
 #    smoke-test plex-etl-sales-orders-test. SHORT_SHA must be passed by hand.
 gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
   --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
@@ -487,7 +487,7 @@ Secrets (token, API key, password) can be rotated with a single `gcloud secrets 
 
 ## Nuke and redeploy to a new project
 
-Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (26 jobs, 52 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
+Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (27 jobs, 51 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
 
 ```bash
 # 1. Destroy all GCP resources (from terraform/, after TEARDOWN.md steps 1-4)
@@ -512,12 +512,14 @@ docker push us-central1-docker.pkg.dev/new-project-id/plex-pipeline/etl:$SHA
 # apply won't touch the image; see "Full rebuild procedure" above)
 ./scripts/deploy.sh
 
-# 5. Re-populate ALL FIVE secrets in the new project
+# 5. Re-populate ALL SIX secrets in the new project — or, from a backup,
+#    ./scripts/restore_secrets.sh --project new-project-id --apply
 echo -n 'TOKEN'    | gcloud secrets versions add plex-access-token  --data-file=- --project=new-project-id
 echo -n 'SG.key'   | gcloud secrets versions add sendgrid-api-key   --data-file=- --project=new-project-id
 echo -n 'USER'     | gcloud secrets versions add plex-odbc-user     --data-file=- --project=new-project-id
 echo -n 'PASSWORD' | gcloud secrets versions add plex-odbc-password --data-file=- --project=new-project-id
 echo -n 'CODE'     | gcloud secrets versions add plex-company-code  --data-file=- --project=new-project-id
+echo -n 'MONDAY'   | gcloud secrets versions add monday-api-key     --data-file=- --project=new-project-id
 
 # 6. Nothing to upload by hand: every reports/ YAML and SQL file is a Terraform-managed
 #    GCS object, created in step 3. BUT every YAML's sql_file is a hardcoded

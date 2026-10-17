@@ -145,7 +145,7 @@ graph LR
 | `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
 | `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
 | `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |
-| `label-design/`, `label_design_service/`, `deploy/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, sheet sync, on-demand app | Label Design |
+| `label-design/`, `label_design_service/`, `deploy/archive/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, retired sheet sync, on-demand app | Label Design |
 | `docs/` | Guides; `docs/reports/` holds the business docs; `docs/archive/` holds finished history | shared |
 | `reports-list/`, `spreadsheets/` | Company report inventory and the Google Sheets being mapped, with status per row | shared |
 | `catalog/`, `mapping/` | Plex ODBC schema catalogs; NetSuite ↔ Plex mapping | shared |

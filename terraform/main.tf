@@ -5146,19 +5146,21 @@ resource "google_storage_bucket_object" "production_vs_goal_view_sql" {
 # scheduler behind them, so `label_design_report` had never been created and
 # the job had never run at all. This block is the missing half.
 #
-# TWICE A DAY, EVERY DAY — not the single overnight run every other pipeline
-# uses. This is an operational queue the sales and design teams work from, and
-# it feeds `deploy/label_design_sync/Code.gs`, whose Apps Script triggers fire
-# in the 10:00 and 14:00 Mountain hours. The ETL is therefore scheduled 30
-# minutes AHEAD of each of those, so the Apps Script always reads a view
-# refreshed this cycle rather than the previous one. Moving either side means
-# moving both.
+# HOURLY ON WEEKDAYS — not the single overnight run every other pipeline uses.
+# This is an operational queue the labeling team works from, so it refreshes
+# every hour from 5 AM to 5 PM Mountain (Jennilyn, 2026-10-01 — the team
+# starts at 5). Each run is probe-gated: a cycle with nothing new in Plex
+# costs one small fingerprint query and stops, so the hourly cadence is cheap.
 #
-# Saturday and Sunday are included deliberately: orders are entered over the
-# weekend, and a weekday-only refresh would hand the team a two-day-stale
-# queue on Monday morning. The weekday-only part is the *summary email*, and
-# that lives in the Apps Script (SUMMARY_DAYS), not here — see
-# deploy/label_design_sync/README.md.
+# MONDAY TO FRIDAY (Emilio, 2026-10-02 — closes OPEN_ITEMS L9). An earlier
+# version of this block ran all seven days, reasoning that orders are entered
+# over the weekend and a weekday-only refresh would hand the team a two-day-
+# stale queue on Monday morning. The 5 AM start is what retired that argument:
+# Monday's first run sweeps up everything entered over the weekend before the
+# team arrives, so nobody waits on a stale queue. Weekend orders simply do not
+# reach the board until Monday 5 AM, which is the intended behaviour while
+# nobody works the queue at weekends. If that changes, change it back here —
+# all three schedules below must move together.
 # ═══════════════════════════════════════════════════════════════════════════
 
 resource "google_storage_bucket_object" "label_design_config_prod" {
@@ -5320,7 +5322,7 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
-  schedule    = "0 5-17 * * *" # every hour 5 AM - 5 PM Mountain — see scheduler_time_zone
+  schedule    = "0 5-17 * * 1-5" # hourly 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5475,7 +5477,7 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
 resource "google_cloud_scheduler_job" "etl_label_design_test" {
   name        = "plex-label-design-sync-test"
   description = "Triggers Plex to BigQuery Label Design queue ETL job (test, hourly, probe-gated)"
-  schedule    = "5 5-17 * * *" # every hour at :05, 5 AM - 5 PM Mountain — see scheduler_time_zone
+  schedule    = "5 5-17 * * 1-5" # hourly at :05, 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5493,7 +5495,7 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
 # ═══════════════════════════════════════════════════════════════════════════
 # LABEL DESIGN → MONDAY PUSH — added 2026-09-24
 #
-# Replaces the Sheet + Apps Script hop (deploy/label_design_sync/). Same image
+# Replaces the Sheet + Apps Script hop (deploy/archive/label_design_sync/). Same image
 # as the ETL, different command: `python -m label_design_service.push` reads
 # `label_design_report` and creates one Monday item per new order + part,
 # deduped on an LCR hash written into the item itself. Every attempt is
@@ -5575,7 +5577,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
 resource "google_cloud_scheduler_job" "label_design_push_test" {
   name        = "plex-label-design-push-sync-test"
   description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
-  schedule    = "35 5-17 * * *" # 30 min after plex-label-design-sync-test (:05); last push 5:35 PM
+  schedule    = "35 5-17 * * 1-5" # 30 min after plex-label-design-sync-test (:05), Mon-Fri; last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5587,5 +5589,126 @@ resource "google_cloud_scheduler_job" "label_design_push_test" {
     oauth_token {
       service_account_email = google_service_account.etl.email
     }
+  }
+}
+
+# ── Label Design push — PRODUCTION (built dormant, 2026-10-08) ────────────────
+# Stood up ahead of cutover so the whole prod path exists and gets images from
+# Cloud Build, but it is DELIBERATELY NOT RELEASED: the scheduler below is
+# `paused = true`, so nothing fires on its own. It reads the PROD view
+# (var.bq_dataset) and writes to the SAME "Plex Import" board the test push
+# uses (18432111755) — the board the team moved to for good. While prod is
+# paused there is no test/prod duplication; at cutover, pause the TEST push
+# scheduler and un-pause this one, and prod takes over the same board.
+#
+# Mirrors label_design_push_test exactly except the dataset (prod) — same
+# image, same group, max_retries = 0 for the same reason.
+resource "google_cloud_run_v2_job" "label_design_push" {
+  name     = "plex-etl-label-design-push"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        args  = ["python", "-m", "label_design_service.push"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "MONDAY_BOARD_ID"
+          value = "18432111755"
+        }
+        env {
+          name  = "MONDAY_GROUP_TITLE"
+          value = "New from Plex"
+        }
+        env {
+          name  = "SECRET_MONDAY_API_KEY"
+          value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+      }
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "label_design_push" {
+  name        = "plex-label-design-push-sync"
+  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board — PAUSED until cutover"
+  schedule    = "35 5-17 * * 1-5" # mirrors the test push cadence; inert while paused
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  # NOT RELEASED. Built so the resource exists and can be un-paused by hand at
+  # cutover; fires nothing until then.
+  paused = true
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_push.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ===========================================================================
+# PLEX REST API -> BIGQUERY LANDING — Cloud Function (Gen 2)
+# Added 2026-10-12 as Cloud Run job, pivoted to Cloud Function 2026-10-13.
+#
+# The ODBC ETL is for heavy processes (ODBC driver, large extractions). This
+# is a lightweight near-real-time pull: stdlib HTTP + BigQuery client, no ODBC,
+# no Docker image, deployed as a single Python file via `gcloud functions deploy`.
+# Pioneer for future API-based reports.
+#
+# Source: deploy/plex_api_function/ (main.py + requirements.txt)
+#
+# Deploy (from the repo root):
+#   gcloud functions deploy plex-api-extract-test \
+#     --gen2 --runtime=python312 --region=us-central1 \
+#     --source=deploy/plex_api_function \
+#     --entry-point=plex_api_extract \
+#     --trigger-http --no-allow-unauthenticated \
+#     --service-account=<etl SA email> \
+#     --timeout=540 --memory=512Mi \
+#     --set-env-vars="GCP_PROJECT=voxdatalake,BQ_DATASET=PlexTest,PLEX_API_BASE=https://test.connect.plex.com,SECRET_PLEX_API_CONSUMER_KEY=plex-api-consumer-key,SECRET_PLEX_API_CONSUMER_SECRET=plex-api-consumer-secret" \
+#     --project=voxdatalake
+#
+# Secrets (values added by hand, never in state):
+#   printf '%s' "$KEY"    | gcloud secrets versions add plex-api-consumer-key    --data-file=- --project=voxdatalake
+#   printf '%s' "$SECRET" | gcloud secrets versions add plex-api-consumer-secret --data-file=- --project=voxdatalake
+#
+# NO SCHEDULER yet: run by hand. Once shapes are confirmed, add a
+# google_cloud_scheduler_job here pointing at the function URL.
+# ===========================================================================
+resource "google_secret_manager_secret" "plex_api_consumer_key" {
+  secret_id = "plex-api-consumer-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "plex_api_consumer_secret" {
+  secret_id = "plex-api-consumer-secret"
+  replication {
+    auto {}
   }
 }

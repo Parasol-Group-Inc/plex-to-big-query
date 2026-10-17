@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-16 (scorecard) - Looker Studio setup for every scorecard tile
+
+### Added
+- **`docs/SCORECARD_LOOKER_SETUP.md`**: the Looker Studio settings for each of
+  the 32 scorecard tiles against `voxdatalake.ScorecardSandbox`: chart, data
+  source, metric and aggregation, date range dimension, and filter. Field
+  names were checked against the sandbox views' BigQuery schemas and filter
+  values against the data. Percentages are calculated `SUM(a) / SUM(b)` fields,
+  and the company sales goal is filtered to `(company-wide)` because reps also
+  carry goal rows. Linked from the findings doc, the sandbox README and open
+  item S11. The Lineage Navigator artifact shows the same setups with copy
+  buttons. Docs only; nothing deployed.
+
 ## 2026-10-13 (label-design) - Plex API extractor: Cloud Run job -> Cloud Function
 
 ### Changed

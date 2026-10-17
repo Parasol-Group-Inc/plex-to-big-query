@@ -39,7 +39,7 @@ and `CHANGELOG.md`.
 | S9 | **No home for:** the lab TAT target, the DPMO opportunities per unit (currently 1), and the pipeline stage probabilities. | Jennilyn | Decide each. |
 | S10 | **Inventory value has no month-end trend.** `Part_v_Snapshot` has no quantity, so only the current snapshot is valued. | Decision | Store a daily on-hand copy, or find a Plex inventory-history source. The interim answer is NetSuite. |
 | S12 | **The manual-data app's "already saved" panel fix is in the repo but not in the deployed web app.** `deploy/manual_data_app/Index.html` is the source of truth; the Apps Script project holds its own copy. | Emilio | Paste the new `Index.html` into the Apps Script project, then **Deploy → Manage deployments → edit → New version**. A code change needs a new version; Script Properties do not. |
-| S11 | **Looker Studio report** to be built against `voxdatalake.ScorecardSandbox`. | Emilio | The tile-by-tile build list is in the findings doc. |
+| S11 | **Looker Studio report** to be built against `voxdatalake.ScorecardSandbox`. | Emilio | Build each tile from [`SCORECARD_LOOKER_SETUP.md`](SCORECARD_LOOKER_SETUP.md); what is still open per tile is in the findings doc. |
 
 ## Label Design
 

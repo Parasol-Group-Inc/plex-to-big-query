@@ -182,6 +182,8 @@ the next fix found in the sandbox has somewhere to go first.
    at a `raw_*` table.
 2. **Build every tile from the view it will read in production.** The tile →
    view map is `TILES` in `scripts/board/board_data.py`.
+   The Looker settings per tile (metric, aggregation, date range, filter) are
+   in [`docs/SCORECARD_LOOKER_SETUP.md`](../../docs/SCORECARD_LOOKER_SETUP.md).
 3. **At go-live, change each source's dataset to `PlexProd`.** Anything built
    on a view that has a `proposed_sql/` override only works in prod once that
    fix is deployed.

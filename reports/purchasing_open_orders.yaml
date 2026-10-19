@@ -19,30 +19,38 @@ description: "Vox | Open Purchase Orders (NetSuite parity) — prod (PlexProd da
 #   Change SQL    → edit reports/sql/purchasing_open_orders_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Purchase order header — one row per supplier PO
   - plex_view: Purchasing_v_PO
     bq_table: raw_Purchasing_v_PO
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Key]
 
   # PO status lookup — mirrors Sales_v_PO_Status
   - plex_view: Purchasing_v_PO_Status
     bq_table: raw_Purchasing_v_PO_Status
     filter: ""
     date_col: ""
+    probe: [PO_Status_Key]
 
   # PO type lookup — mirrors Sales_v_PO_Type
   - plex_view: Purchasing_v_PO_Type
     bq_table: raw_Purchasing_v_PO_Type
     filter: ""
     date_col: ""
+    probe: [Add_Date, PO_Type_Key]
 
   # Release schedule — qty/due date per line (mirrors Sales_v_Release)
   - plex_view: Purchasing_v_Release
     bq_table: raw_Purchasing_v_Release
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   # Line items — confirmed live: Purchasing_v_Line_Item.PO_Key joins directly
   # back to Purchasing_v_PO (no separate "PO_Line" view on this side)
@@ -50,12 +58,14 @@ extractions:
     bq_table: raw_Purchasing_v_Line_Item
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Line_Item_Key]
 
   # Supplier master — mirrors Common_v_Customer
   - plex_view: Common_v_Supplier
     bq_table: raw_Common_v_Supplier
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).

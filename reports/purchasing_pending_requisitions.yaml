@@ -23,24 +23,31 @@ description: "Vox | Purchasing | Pending Order Requisitions (NetSuite parity) �
 #   Change SQL    → edit reports/sql/purchasing_pending_requisitions_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Requisition header/line — one row per requisition (no separate line-item view on this side)
   - plex_view: Purchasing_v_Requisition
     bq_table: raw_Purchasing_v_Requisition
     filter: ""
     date_col: ""
+    probe: [Requisition_Key]
 
   # Requisition status lookup — New / Approved / Cancelled on the test tenant (see SQL notes)
   - plex_view: Purchasing_v_Requisition_Status
     bq_table: raw_Purchasing_v_Requisition_Status
     filter: ""
     date_col: ""
+    probe: [Requisition_Status_Key]
 
   # Requisition type lookup (display only — 0 rows on test tenant)
   - plex_view: Purchasing_v_Requisition_Type
     bq_table: raw_Purchasing_v_Requisition_Type
     filter: ""
     date_col: ""
+    probe: [Requisition_Type_Key]
 
   # Requisition → PO release bridge — a matching row here means the requisition
   # already became a PO, so it's no longer "pending order"

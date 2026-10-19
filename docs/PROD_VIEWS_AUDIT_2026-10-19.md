@@ -69,22 +69,21 @@ if present, otherwise the latest history row on or before the snapshot date.
 **Result.** About 1.49M rows over 35 snapshots and 14,713 parts, in both
 datasets. That's large, so filter on `snapshot_date` in Looker.
 
-## Decisions for the owner
+## Decisions (Emilio, 2026-10-19)
 
-1. **Open orders include POs in "Quote" status** (PO_Status 2653, 78 POs, 136
-   lines in prod). `sales_orders_open_report` excludes only Closed/Cancelled.
-   Should quotes count as open orders? If not, add 2653 to the exclusion.
-2. **Old `v2_*` views:** `v2_production_vs_goal_report`, `v2_revenue_vs_goal_report`,
-   `v2_sales_vs_goal_report` and `v2_scorecard_goals_resolved`, in both
-   datasets. Leftovers from 2026-09-24 that nothing in the repo manages. Drop
-   them by hand once no Looker dashboard uses them.
-3. **`labeling_open_work_orders_report` matches `Labeling Line%` only.** Prod's
-   one labeling operation sits on "Schedule Labeling", so the report is empty.
-   Widen to the whole Labeling group (which would also bring in Label Design /
-   Label Approval) or keep as is? The recommendation is to keep it.
-4. **The customer price list is empty in Plex prod.** Will Vox load customer
-   part prices into Plex? Until it does, the line price is the only source.
-   Orders whose lines lack a price show no value.
+1. **Quote-status POs stay in open orders** (PO_Status 2653, 78 POs / 136 lines
+   in prod). Tracked as fast follow FF1 in case it needs to change; the fix is
+   one line.
+2. **The orphan `v2_*` views are kept for now** and tracked to be sunset (FF2):
+   `v2_production_vs_goal_report`, `v2_revenue_vs_goal_report`,
+   `v2_sales_vs_goal_report`, `v2_scorecard_goals_resolved`.
+3. **`labeling_open_work_orders_report` keeps its `Labeling Line%` filter.**
+   Closed, no change.
+4. **The empty customer price list in Plex prod** is tracked as a pending fast
+   follow (FF3). Order values come from line prices until Vox loads price
+   lists.
+
+All three fast follows are in OPEN_ITEMS S14.
 
 ## For people, not code
 

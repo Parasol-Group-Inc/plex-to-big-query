@@ -43,9 +43,15 @@ plus checks by hand. The full results are in
 ### Docs
 - The nine report docs note the fix. The snapshot doc's stale "join confirmed
   live" claim is corrected.
-- OPEN_ITEMS: S2 gets the current goals state; new S14 holds four decisions
-  (Quote status in open orders, the orphan `v2_*` views, the labeling filter,
-  and the empty customer price list).
+- OPEN_ITEMS: S2 gets the current goals state. New S14 holds three fast
+  follows from Emilio's decisions: FF1, Quote-status POs stay in open orders
+  (revisit on request); FF2, sunset the orphan `v2_*` views; FF3, customer
+  prices not yet loaded in Plex prod. The labeling open-WO filter stays as it
+  is (decision closed).
+- Goals (S2): the manual-data app becomes the only writer of prod goals. Its
+  sheet already holds all 116 goals reloaded into the legacy prod table on
+  2026-10-19, with identical values, so switching `BQ_DATASET` to `PlexProd`
+  changes no tile.
 
 ## 2026-10-19 (dev) - Audit - Part Info and Routing (Container Types): second view on part_routing
 

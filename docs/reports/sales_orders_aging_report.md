@@ -1,6 +1,6 @@
 # Report for Orders Past 14 Days Old
 
-> **Status:** ✅ Deployed 2026-08-21, decided best-criteria — one open question flagged for review once real orders age · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Deployed 2026-08-21, decided best-criteria — one open question flagged for review once real orders age · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

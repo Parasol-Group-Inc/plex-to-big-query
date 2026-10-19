@@ -14,6 +14,43 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Change probe phase 2, stage B: prod runs move to the dispatcher
+
+### Verified first: stage A end to end, on test jobs (17:26-17:41 MT)
+- **Scheduled slots:** two temporary schedule rows (`part-routing-test` probe,
+  `sales-quotes-test` full, both at 17:26) were each dispatched **once**, at
+  the 17:30 tick. Each job received `RUN_MODE` / `DISPATCH_ID` and wrote its
+  own outcome (`success`) to `PlexOps.etl_dispatch_log`.
+- **Failure handling:** a simulated failure got **exactly one** follow-up
+  probe at the first tick past 15 minutes (17:35). It correctly logged
+  `skipped`, since nothing had changed since the full run. The 17:40 tick sent
+  no second one.
+- `part_routing_test` built `part_shelf_life_report` on that run: 35,370 rows,
+  28 parts without shelf life.
+
+### Changed
+- **The 13 prod nightly schedulers and 12 prod `-retry` schedulers are
+  removed** (25 resources). Prod runs only when the dispatcher starts it from
+  `PlexOps.etl_schedule`: 1 / 6 / 11 PM probe, 4 AM full, 4-minute stagger.
+  Test jobs keep their nightly scheduler and retry.
+- **Prod jobs: `max_retries = 0`** (12 jobs; part_routing already was). A
+  failure gets the dispatcher's one follow-up probe instead.
+- **`deploy/etl_dispatcher/enable_prod_schedule.sql`** enables the prod rows
+  and deletes the E2E test rows. Run it right after the apply.
+- **Dispatcher logging.** The tick summary is printed as one JSON line, with
+  severity ERROR when it has errors. The Functions Framework had swallowed the
+  INFO log line on the first deploy. Redeploy the function.
+- **`outputs.tf`:** the prod scheduler output now points at the dispatcher.
+- **Docs:**
+  - CLAUDE.md, OPERATIONS (the ETL schedule is live; the 9:45 PM retry
+    section is now test-only) and TECHNICAL_REFERENCE (retry mechanism is
+    test-only).
+  - EMAIL_SCHEDULE (prod 4 runs a day, up to 52 emails threaded per pipeline;
+    test 13).
+  - PROBE_BUILD_PLAN status and REPORT_CATALOG.
+  - **40 report docs' `Runs:` lines** now read "prod 1 PM / 6 PM / 11 PM
+    probe + 4 AM full, test nightly". Label Design is unchanged.
+
 ## 2026-10-19 (dev) - Change probe phase 2, stage A: schedule table + ETL dispatcher
 
 Design and decisions: `docs/PROBE_BUILD_PLAN.md` § "The dispatcher". **Stage A

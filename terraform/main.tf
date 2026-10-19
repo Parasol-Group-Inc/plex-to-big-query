@@ -372,7 +372,9 @@ resource "google_cloud_run_v2_job" "etl" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -394,51 +396,9 @@ resource "google_cloud_run_v2_job" "etl" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl" {
-  name        = var.scheduler_job
-  description = "Triggers Plex to BigQuery ETL job"
-  schedule    = var.scheduler_cron
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # Retries the same job if today's scheduled run failed. Fires every day at
 # the same time regardless — main.py checks job_run_log and no-ops if
 # today's scheduled run already succeeded/partial.
-resource "google_cloud_scheduler_job" "etl_retry" {
-  name        = "${var.scheduler_job}-retry"
-  description = "Retries the sales orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Test environment ── same image, test Plex host, PlexTest dataset ──────────
 
 resource "google_bigquery_dataset" "plex_test" {
@@ -788,7 +748,9 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -807,48 +769,6 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_work_orders" {
-  name        = "plex-work-orders-sync"
-  description = "Triggers Plex to BigQuery work orders ETL job"
-  schedule    = "20 19 * * *" # 7:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_work_orders_retry" {
-  name        = "plex-work-orders-sync-retry"
-  description = "Retries the work orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -1167,7 +1087,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1186,48 +1108,6 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_open_orders" {
-  name        = "plex-purchasing-open-orders-sync"
-  description = "Triggers Plex to BigQuery purchasing open orders ETL job"
-  schedule    = "40 19 * * *" # 7:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_retry" {
-  name        = "plex-purchasing-open-orders-sync-retry"
-  description = "Retries the purchasing open orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -1534,7 +1414,9 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1553,48 +1435,6 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_obsolescence" {
-  name        = "plex-part-obsolescence-sync"
-  description = "Triggers Plex to BigQuery part obsolescence ETL job"
-  schedule    = "0 20 * * *" # 8:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_obsolescence_retry" {
-  name        = "plex-part-obsolescence-sync-retry"
-  description = "Retries the part obsolescence ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -1901,7 +1741,9 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1920,48 +1762,6 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_activity" {
-  name        = "plex-inventory-activity-sync"
-  description = "Triggers Plex to BigQuery inventory activity ETL job"
-  schedule    = "20 20 * * *" # 8:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_activity_retry" {
-  name        = "plex-inventory-activity-sync-retry"
-  description = "Retries the inventory activity ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -2279,7 +2079,9 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -2298,42 +2100,6 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_snapshot" {
-  name        = "plex-inventory-snapshot-sync"
-  description = "Triggers Plex to BigQuery inventory snapshot ETL job"
-  schedule    = "40 20 * * *" # 8:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_snapshot_retry" {
-  name        = "plex-inventory-snapshot-sync-retry"
-  description = "Retries the inventory snapshot ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
 
@@ -2796,7 +2562,9 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -2815,42 +2583,6 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_nonconformance" {
-  name        = "plex-quality-nonconformance-sync"
-  description = "Triggers Plex to BigQuery quality non-conformance ETL job"
-  schedule    = "0 21 * * *" # 9:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_nonconformance.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_nonconformance_retry" {
-  name        = "plex-quality-nonconformance-sync-retry"
-  description = "Retries the quality non-conformance ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_nonconformance.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
 
@@ -3168,7 +2900,9 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -3187,42 +2921,6 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory" {
-  name        = "plex-part-on-hand-inventory-sync"
-  description = "Triggers Plex to BigQuery part on-hand inventory ETL job"
-  schedule    = "20 21 * * *" # 9:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_retry" {
-  name        = "plex-part-on-hand-inventory-sync-retry"
-  description = "Retries the part on-hand inventory ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
 
@@ -3621,7 +3319,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -3640,48 +3340,6 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions" {
-  name        = "plex-purchasing-pending-requisitions-sync"
-  description = "Triggers Plex to BigQuery purchasing pending requisitions ETL job"
-  schedule    = "40 21 * * *" # 9:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_retry" {
-  name        = "plex-purchasing-pending-requisitions-sync-retry"
-  description = "Retries the purchasing pending requisitions ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -3997,7 +3655,9 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4008,48 +3668,6 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_quotes" {
-  name        = "plex-sales-quotes-sync"
-  description = "Triggers Plex to BigQuery Open Quotes ETL job"
-  schedule    = "0 22 * * *" # 10:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_quotes_retry" {
-  name        = "plex-sales-quotes-sync-retry"
-  description = "Retries the Open Quotes ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -4355,7 +3973,9 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4366,48 +3986,6 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_returns" {
-  name        = "plex-sales-returns-sync"
-  description = "Triggers Plex to BigQuery Open RMA's ETL job"
-  schedule    = "20 22 * * *" # 10:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_returns_retry" {
-  name        = "plex-sales-returns-sync-retry"
-  description = "Retries the Open RMA's ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -4718,7 +4296,9 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4729,48 +4309,6 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
       client,
       client_version,
     ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_supplier_returns" {
-  name        = "plex-quality-supplier-returns-sync"
-  description = "Triggers Plex to BigQuery Approve Vendor Return Authorizations ETL job"
-  schedule    = "40 22 * * *" # 10:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_retry" {
-  name        = "plex-quality-supplier-returns-sync-retry"
-  description = "Retries the Approve Vendor Return Authorizations ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
   }
 }
 
@@ -5897,24 +5435,6 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_part_routing" {
-  name        = "plex-part-routing-sync"
-  description = "Triggers Plex to BigQuery Part Info and Routing ETL job"
-  schedule    = "0 23 * * *" # 11:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_routing.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Part Info and Routing — test (PlexTest, 11:10 PM Mountain) ──────────────
 
 resource "google_cloud_run_v2_job" "etl_part_routing_test" {
@@ -6067,10 +5587,10 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
 # come, with RUN_MODE=probe|full, and sends ONE follow-up probe 15 minutes after
 # a failed or partial run. Every start is a row in PlexOps.etl_dispatch_log.
 #
-# STAGED. Stage A (this block): the dataset, tables and dispatcher exist; the
-# prod rows are seeded DISABLED (deploy/etl_dispatcher/seed_schedule.sql) and
-# the nightly prod schedulers stay. Stage B: enable the prod rows, remove the
-# prod nightly + -retry schedulers, prod max_retries = 0.
+# STAGED. Stage A: the dataset, tables and dispatcher, prod rows seeded
+# disabled (deploy/etl_dispatcher/seed_schedule.sql). Stage B (live, see the
+# note below): prod rows enabled, prod nightly + -retry schedulers removed,
+# prod max_retries = 0.
 #
 # The function is deployed with gcloud, like the Plex API extractor (no
 # archive provider, no image). From the repo root:
@@ -6090,6 +5610,12 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
 # 404 every 5 minutes until it exists. Keep --max-instances=1 and --timeout=300
 # on every redeploy: they are only in this command.
 # ═══════════════════════════════════════════════════════════════════════════
+
+# STAGE B (2026-10-19): the 13 prod nightly schedulers and the 12 prod -retry
+# schedulers are REMOVED — prod runs only when the dispatcher starts it from
+# PlexOps.etl_schedule (enabled the same day), and a failed run gets one
+# follow-up probe 15 min later instead of a 9:45 PM retry. Prod jobs have
+# max_retries = 0. Test jobs keep their nightly scheduler and -retry.
 
 resource "google_bigquery_dataset" "ops" {
   dataset_id                 = "PlexOps"

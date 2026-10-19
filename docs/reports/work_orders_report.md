@@ -1,6 +1,6 @@
 # Work Orders
 
-> **Status:** ✅ Built and deployed 2026-07-13 · **Category:** Production · **Runs:** `plex-etl-work-orders` / `plex-etl-work-orders-test`, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-07-13 · **Category:** Production · **Runs:** `plex-etl-work-orders` / `plex-etl-work-orders-test`, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

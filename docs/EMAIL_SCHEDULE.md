@@ -32,11 +32,23 @@ page.
 ## The short version
 
 - **14 pipelines, 30 Cloud Run Jobs** (prod + test, plus the Label Design push
-  jobs for prod and test), 71 BigQuery views (2026-10-19). Thirteen pipelines
-  run once a day in an evening cascade, 7:00-11:10 PM; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
+  jobs for prod and test), 71 BigQuery views (2026-10-19).
+- **Prod (13 pipelines), since probe phase 2 stage B, 2026-10-19:** started by
+  the ETL dispatcher from `PlexOps.etl_schedule`.
+  - At **1 PM, 6 PM and 11 PM** a probe runs first; when nothing changed it
+    sends the short "Probe ran — nothing to update" email.
+  - At **4 AM** it always runs in full.
+  - The 13 jobs are 4 minutes apart: 13:00 … 13:48, 18:00 … 18:48, and so on.
+  - Same subject per pipeline and day, so each pipeline's day is one Gmail
+    thread.
+  - **No prod retry scheduler:** a failed run gets one follow-up probe 15 min
+    later.
+  - Times are changed with SQL (docs/OPERATIONS.md § ETL schedule).
+- **Test (13 pipelines):** once a day in the evening cascade, 7:10-11:10 PM, as
+  before, with the 9:45 PM retry; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
   test at :05, push at :35).
-- **Every evening-cascade run sends one email** — so a normal day is **26
-  scheduled emails**, plus whatever the 9:45 PM retries send (see the caution
+- **Every run sends one email:** prod up to 13 × 4 = **52 a day** (threaded per
+  pipeline), test **13 a day**, plus whatever the 9:45 PM retries send (see the caution
   under the table). Label Design is the exception: it runs `EMAIL_MODE=on_error`,
   so its hourly runs mail only when partial or failed; a clean run is recorded
   in `job_run_log` and `probe_log` instead.

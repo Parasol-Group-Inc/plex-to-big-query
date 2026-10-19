@@ -212,7 +212,7 @@ Either order is safe, and so is rolling the image back:
 ## Status
 
 - **Phase 1:** built 2026-10-19 on `dev`. PR open.
-- **Phase 2:** built 2026-10-19 (dispatcher, `PlexOps`, seed, Terraform stage A, `tests/test_dispatcher.py` 12 tests). Stage A and B status: CHANGELOG.
+- **Phase 2:** stage A deployed and tested end to end on test jobs 2026-10-19; **stage B** (prod rows enabled, the 25 prod nightly/`-retry` schedulers removed, prod `max_retries = 0`) in the PR that follows. See CHANGELOG.
 - **First new pipeline on the probe: `part_routing`** (Audit - Part Info and
   Routing, built 2026-10-19). It added two engine features:
   - **`page_key` keyset paging** for large views;

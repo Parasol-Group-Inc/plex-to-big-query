@@ -1,6 +1,6 @@
 # Inventory Activity Detail Usage Per Month
 
-> **Status:** ✅ Built and deployed 2026-08-10/11, one open validation item pending real production data · **Category:** Supply Chain · **Runs:** `plex-etl-inventory-activity` 8:20 PM / `plex-etl-inventory-activity-test` 8:30 PM Mountain
+> **Status:** ✅ Built and deployed 2026-08-10/11, one open validation item pending real production data · **Category:** Supply Chain · **Runs:** prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

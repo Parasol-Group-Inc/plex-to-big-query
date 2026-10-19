@@ -1,6 +1,6 @@
 # Part Obsolescence
 
-> **Status:** ✅ Built and deployed, confirmed live against real production infrastructure 2026-08-10/11 · **Category:** Supply Chain · **Runs:** own daily job, 8:00 PM / 8:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed, confirmed live against real production infrastructure 2026-08-10/11 · **Category:** Supply Chain · **Runs:** own daily job, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

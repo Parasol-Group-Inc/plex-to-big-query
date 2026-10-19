@@ -51,6 +51,11 @@ from zoneinfo import ZoneInfo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("etl_dispatcher")
+# The Functions Framework configures the root logger before this module loads,
+# so basicConfig above is a no-op there and INFO lines were dropped (seen on
+# the first deploy, 2026-10-19). Set the level explicitly; the tick summary is
+# also printed as one JSON line, which Cloud Logging stores as jsonPayload.
+log.setLevel(logging.INFO)
 
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "voxdatalake")
 REGION = os.environ.get("REGION", "us-central1")
@@ -315,7 +320,8 @@ def tick(now_utc=None, dry_run=False):
         if action == "dispatch":
             busy.add(row["job_name"])
 
-    log.info("tick: %s", json.dumps(summary, default=str))
+    print(json.dumps({"message": "etl-dispatcher tick", "severity":
+                      "ERROR" if summary["errors"] else "INFO", **summary}, default=str), flush=True)
     return summary
 
 

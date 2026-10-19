@@ -1,6 +1,6 @@
 # Labeling Daily Report
 
-> **Status:** ✅ Fixed 2026-09-01 (join bug, see Flags below) and reverified against `PlexTest` — still 0 rows, now confirmed for a real reason (no Labeling production logged yet on this tenant), not the join bug · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Fixed 2026-09-01 (join bug, see Flags below) and reverified against `PlexTest` — still 0 rows, now confirmed for a real reason (no Labeling production logged yet on this tenant), not the join bug · **Category:** Production · **Runs:** rides the Work Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

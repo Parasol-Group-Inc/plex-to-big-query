@@ -1,6 +1,6 @@
 # Audit - Part Info and Routing
 
-> **Status:** 🔬 Built 2026-10-19, checked on PlexTest data (66,768 rows, 15,676 parts), not yet deployed · **Category:** Production · **Runs:** nightly, 11:00 PM Mountain (moves to the 1 PM / 6 PM / 11 PM / 4 AM probe schedule in phase 2 of the probe rollout)
+> **Status:** 🔬 Built 2026-10-19, checked on PlexTest data (66,768 rows, 15,676 parts), not yet deployed · **Category:** Production · **Runs:** prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

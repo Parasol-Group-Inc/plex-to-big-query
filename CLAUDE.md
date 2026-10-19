@@ -230,10 +230,9 @@ before touching it:
   fixes found there (rep resolution, Deposit Review, scrap flag). Production
   still runs `reports/sql/`. When a fix lands there, delete its override.
 
-## Prod ETL times move to a table, not Cloud Scheduler (probe phase 2)
+## Prod ETL times live in a table, not Cloud Scheduler (since 2026-10-19)
 
-**From stage B** of probe phase 2 (`docs/PROBE_BUILD_PLAN.md`; see the CHANGELOG
-for whether it is live yet), `PlexOps.etl_schedule` holds every
+Since probe phase 2 stage B (`docs/PROBE_BUILD_PLAN.md`), `PlexOps.etl_schedule` holds every
 prod job's run times: 1 PM / 6 PM / 11 PM `probe`, plus a 4 AM `full` run. The
 `etl-dispatcher` Cloud Function (called every 5 min by `plex-etl-dispatcher`)
 starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.

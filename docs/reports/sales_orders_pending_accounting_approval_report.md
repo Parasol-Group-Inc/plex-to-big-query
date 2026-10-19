@@ -1,6 +1,6 @@
 # Orders Pending Approval by Accounting
 
-> **Status:** ⚠ Repointed 2026-09-09 after the status it targeted was deleted in Plex — returns 2 rows again, but the new status choice needs confirming · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ⚠ Repointed 2026-09-09 after the status it targeted was deleted in Plex — returns 2 rows again, but the new status choice needs confirming · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

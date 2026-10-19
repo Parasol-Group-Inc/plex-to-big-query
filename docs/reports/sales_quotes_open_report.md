@@ -1,6 +1,6 @@
 # Open Quotes
 
-> **Status:** ✅ Built, deployed, and verified 2026-08-23 · **Category:** Sales · **Runs:** own Cloud Run job, 10:00 PM / 10:10 PM Mountain (prod/test)
+> **Status:** ✅ Built, deployed, and verified 2026-08-23 · **Category:** Sales · **Runs:** own Cloud Run job, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

@@ -452,10 +452,10 @@ and test YAML. Review the dry run first.
 
 ## ETL schedule (prod) — `PlexOps.etl_schedule`
 
-**From stage B of probe phase 2** (check the CHANGELOG for whether it is
-live), prod ETL run times live in a **table**, not in Cloud Scheduler. In stage
-A the prod rows exist but are disabled, and the nightly prod schedulers still
-drive prod. The dispatcher (`etl-dispatcher`, called every 5 minutes)
+Since **stage B of probe phase 2 (2026-10-19)**, prod ETL run times live in a
+**table**, not in Cloud Scheduler. There are no per-job prod schedulers and no
+prod retry. Test jobs keep their nightly scheduler and the 9:45 PM retry
+below. The dispatcher (`etl-dispatcher`, called every 5 minutes)
 starts whatever is due. Test jobs keep their own nightly schedulers.
 
 **See the schedule:**
@@ -511,9 +511,14 @@ curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ---
 
-## Failure Retry (9:45 PM Mountain)
+## Failure Retry (9:45 PM Mountain) — TEST jobs only since 2026-10-19
 
-24 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM
+> **Prod no longer has this.** Since probe phase 2 stage B, prod jobs have no
+> `-retry` scheduler and `max_retries = 0`. A failed prod run gets one
+> follow-up probe 15 minutes later from the dispatcher (§ ETL schedule above).
+> What follows describes the **test** jobs, which keep it.
+
+Originally 24 jobs had a second Cloud Scheduler trigger that fires daily at **9:45 PM
 `America/Denver`** (handles the MST/MDT switch automatically — no manual
 adjustment needed). The naming is uniform — `plex-<pipeline>-sync-retry`
 retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries

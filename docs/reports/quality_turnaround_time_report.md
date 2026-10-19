@@ -1,6 +1,6 @@
 # Turn Around Time Report
 
-> **Status:** ✅ Built and deployed · **repointed 2026-09-22 to the table Vox actually writes to (22 real records), shipping BOTH turnaround clocks, and now measuring each record against the Performance and Bonus standards** · 🔧 **work-day turnaround added 2026-09-24, deployed 2026-09-25** · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline, 9:00 PM / 9:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed · **repointed 2026-09-22 to the table Vox actually writes to (22 real records), shipping BOTH turnaround clocks, and now measuring each record against the Performance and Bonus standards** · 🔧 **work-day turnaround added 2026-09-24, deployed 2026-09-25** · **Category:** Quality · **Runs:** rides the Quality Nonconformance pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

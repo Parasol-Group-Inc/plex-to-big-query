@@ -1,6 +1,6 @@
 # MFG Job Schedule - Success Metrics (Done/YTD List, unified)
 
-> **Status:** ✅ Built and deployed 2026-08-26, verified live against `PlexTest` (25 real jobs) · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-26, verified live against `PlexTest` (25 real jobs) · **Category:** Production · **Runs:** rides the Work Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

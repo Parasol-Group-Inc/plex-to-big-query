@@ -4,7 +4,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 
 **Convention: keep these in sync with the code.** Any change to a report's YAML/SQL gets a matching update to its doc here, in the same commit — same discipline as `CHANGELOG.md`.
 
-**Change probe (2026-10-19).** Every nightly report's YAML gained `probe_mode: auto` and per-table `probe: [...]` columns. That changes *when* a report refreshes, not *what* it contains: a run can now check Plex first and skip when nothing changed. No report doc below needed an update for it. The schedule change itself, from one nightly run to 1 PM / 6 PM / 11 PM probes plus a 4 AM full run, lands in phase 2. At that point each doc's **Runs:** line is updated. See [PROBE_BUILD_PLAN.md](../PROBE_BUILD_PLAN.md).
+**Change probe (2026-10-19).** Every nightly report's YAML gained `probe_mode: auto` and per-table `probe: [...]` columns. That changes *when* a report refreshes, not *what* it contains: a run can now check Plex first and skip when nothing changed. No report doc below needed an update for it. The schedule change itself, from one nightly run to 1 PM / 6 PM / 11 PM probes plus a 4 AM full run, landed in phase 2 stage B, and each doc's **Runs:** line was updated then. See [PROBE_BUILD_PLAN.md](../PROBE_BUILD_PLAN.md).
 
 ## Template for a new report doc
 

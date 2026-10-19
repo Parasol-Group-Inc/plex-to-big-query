@@ -1,6 +1,6 @@
 # MFG Job Schedule - Inventory Availability (partial)
 
-> **Status:** ✅ Built and deployed 2026-08-26, verified live (0 rows, benign) · **Category:** Production · **Runs:** rides the Part On-Hand Inventory pipeline, 9:20 PM / 9:30 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-26, verified live (0 rows, benign) · **Category:** Production · **Runs:** rides the Part On-Hand Inventory pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

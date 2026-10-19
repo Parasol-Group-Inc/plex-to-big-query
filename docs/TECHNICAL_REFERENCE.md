@@ -290,7 +290,9 @@ A run started by the ETL dispatcher carries `DISPATCH_ID`. At the end, `record_d
 
 ## Retry mechanism
 
-Every report family has 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job **except Label Design and its push job**, which have none — see "Change probe" above for why.
+> **Since 2026-10-19 (probe phase 2 stage B), this is TEST-only.** Prod jobs have no scheduler of their own: the ETL dispatcher starts them from `PlexOps.etl_schedule`, they have `max_retries = 0`, and a failed or partial prod run gets one follow-up probe 15 minutes later (`docs/PROBE_BUILD_PLAN.md`). The text below describes the test jobs.
+
+Originally every report family had 3 Cloud Scheduler triggers: prod (its own slot in the evening cascade, `America/Denver`) and test (10 minutes after prod, same time zone), plus one shared retry trigger firing **9:45 PM Mountain** (`America/Denver`, handles MST/MDT automatically) across every job **except Label Design and its push job**, which have none — see "Change probe" above for why.
 
 The retry trigger runs with `RUN_MODE=retry`. On every run, `run_and_report()`:
 1. Calls `get_todays_run_status(bq, job_identity)` — `job_identity` is `CLOUD_RUN_JOB` (auto-set by Cloud Run) or the report's `report_name` as a local-run fallback

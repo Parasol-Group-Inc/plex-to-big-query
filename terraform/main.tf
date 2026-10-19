@@ -58,6 +58,9 @@ resource "google_project_service" "required" {
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "storage.googleapis.com",
+    # The ETL dispatcher (deploy/etl_dispatcher/) and the Plex API extractor
+    # are Gen 2 Cloud Functions.
+    "cloudfunctions.googleapis.com",
   ])
 
   project            = var.gcp_project
@@ -102,8 +105,10 @@ resource "google_project_iam_member" "etl_roles" {
 resource "google_project_iam_custom_role" "run_with_overrides" {
   role_id     = "plexEtlRunWithOverrides"
   title       = "Plex ETL - run jobs with overrides"
-  description = "Lets the retry schedulers invoke a Cloud Run job with an overrides body; roles/run.invoker alone cannot."
-  permissions = ["run.jobs.runWithOverrides"]
+  description = "Lets the retry schedulers and the ETL dispatcher invoke a Cloud Run job with an overrides body (roles/run.invoker alone cannot), and lets the dispatcher read an execution's status."
+  # run.executions.get (added 2026-10-19): the dispatcher reads a run's Cloud
+  # Run execution to tell a crash from a run still in progress. Read-only.
+  permissions = ["run.jobs.runWithOverrides", "run.executions.get"]
 }
 
 resource "google_project_iam_member" "etl_run_with_overrides" {
@@ -6048,6 +6053,113 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
 
     oauth_token {
       service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ETL DISPATCHER — probe rollout phase 2 (docs/PROBE_BUILD_PLAN.md), 2026-10-19
+#
+# The prod schedule moves from per-job Cloud Scheduler crons into a TABLE,
+# PlexOps.etl_schedule, so times change with a SQL UPDATE instead of a deploy.
+# Cloud Scheduler cannot read BigQuery, so one scheduler calls the dispatcher
+# (a Gen 2 Cloud Function) every 5 minutes; it starts the jobs whose slot has
+# come, with RUN_MODE=probe|full, and sends ONE follow-up probe 15 minutes after
+# a failed or partial run. Every start is a row in PlexOps.etl_dispatch_log.
+#
+# STAGED. Stage A (this block): the dataset, tables and dispatcher exist; the
+# prod rows are seeded DISABLED (deploy/etl_dispatcher/seed_schedule.sql) and
+# the nightly prod schedulers stay. Stage B: enable the prod rows, remove the
+# prod nightly + -retry schedulers, prod max_retries = 0.
+#
+# The function is deployed with gcloud, like the Plex API extractor (no
+# archive provider, no image). From the repo root:
+#   gcloud functions deploy etl-dispatcher \
+#     --gen2 --runtime=python312 --region=us-central1 \
+#     --source=deploy/etl_dispatcher --entry-point=dispatch \
+#     --trigger-http --no-allow-unauthenticated \
+#     --service-account=<etl SA email> \
+#     --timeout=300 --memory=512Mi --max-instances=1 \
+#     --set-env-vars=GCP_PROJECT=voxdatalake,OPS_DATASET=PlexOps \
+#     --project=voxdatalake
+# --max-instances=1: two overlapping ticks must not race; the slot key in the
+# dispatch log makes a repeat harmless, but one instance makes it impossible.
+# The ETL service account already holds roles/run.invoker project-wide, which
+# covers invoking a Gen 2 function, so no extra binding is needed.
+# ORDER: deploy the function BEFORE running deploy.sh, or this scheduler gets a
+# 404 every 5 minutes until it exists. Keep --max-instances=1 and --timeout=300
+# on every redeploy: they are only in this command.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_bigquery_dataset" "ops" {
+  dataset_id                 = "PlexOps"
+  location                   = var.bq_location
+  description                = "ETL operations: the prod run schedule and the dispatcher's log. Not report data."
+  delete_contents_on_destroy = false
+}
+
+# One row per job per time. Edit with SQL; the dispatcher reads it every 5 min.
+resource "google_bigquery_table" "etl_schedule" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "etl_schedule"
+  deletion_protection = true
+  description         = "Prod ETL run times (America/Denver). mode: probe | full. See docs/OPERATIONS.md § ETL schedule."
+
+  schema = jsonencode([
+    { name = "job_name", type = "STRING", mode = "REQUIRED", description = "Cloud Run job, e.g. plex-etl-sales-orders" },
+    { name = "run_time", type = "STRING", mode = "REQUIRED", description = "HH:MM, America/Denver wall clock" },
+    { name = "mode", type = "STRING", mode = "REQUIRED", description = "probe (skip if unchanged) or full (always extract)" },
+    { name = "enabled", type = "BOOL", mode = "REQUIRED" },
+    { name = "note", type = "STRING", mode = "NULLABLE" },
+    { name = "updated_by", type = "STRING", mode = "NULLABLE" },
+    { name = "updated_at", type = "TIMESTAMP", mode = "NULLABLE" },
+  ])
+}
+
+# One row per start, written by the dispatcher; the job fills outcome/finished_at.
+resource "google_bigquery_table" "etl_dispatch_log" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "etl_dispatch_log"
+  deletion_protection = true
+  description         = "Every job start by the ETL dispatcher, and how it ended."
+
+  schema = jsonencode([
+    { name = "dispatch_id", type = "STRING", mode = "REQUIRED" },
+    { name = "job_name", type = "STRING", mode = "REQUIRED" },
+    { name = "mode", type = "STRING", mode = "REQUIRED" },
+    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up" },
+    { name = "scheduled_for", type = "TIMESTAMP", mode = "NULLABLE", description = "the schedule slot (UTC); NULL for a follow-up" },
+    { name = "followup_of", type = "STRING", mode = "NULLABLE", description = "dispatch_id of the failed run this follows up" },
+    { name = "dispatched_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "execution_name", type = "STRING", mode = "NULLABLE" },
+    { name = "outcome", type = "STRING", mode = "NULLABLE", description = "success | partial | failed | skipped | skipped-busy | lost | dispatch-failed | succeeded-unrecorded; NULL while running" },
+    { name = "finished_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "detail", type = "STRING", mode = "NULLABLE" },
+  ])
+}
+
+resource "google_cloud_scheduler_job" "etl_dispatcher" {
+  name        = "plex-etl-dispatcher"
+  description = "Every 5 minutes: start the ETL jobs due in PlexOps.etl_schedule (docs/PROBE_BUILD_PLAN.md)"
+  schedule    = "*/5 * * * *"
+  time_zone   = "America/Denver"
+  region      = var.gcp_region
+
+  # A tick is idempotent (slot key in the dispatch log), so a retry is safe.
+  retry_config {
+    retry_count = 1
+  }
+  # Longer than the function's 300 s timeout, so a slow tick is not cut off
+  # and retried while it is still working (the default is 180 s).
+  attempt_deadline = "320s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
+
+    oidc_token {
+      service_account_email = google_service_account.etl.email
+      audience              = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
     }
   }
 }

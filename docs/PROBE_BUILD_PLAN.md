@@ -89,38 +89,79 @@ logs an `inconclusive` row:
 
 The probe may never be the reason a change is missed.
 
-## The dispatcher (phase 2)
+## The dispatcher (phase 2), as built 2026-10-19
 
-Cloud Scheduler cannot read BigQuery, so a small Cloud Function,
-`plex-etl-dispatcher`, does it. It is a Gen 2 function, the same pattern as
-`deploy/plex_api_function/`. One Cloud Scheduler job calls it every 5 minutes.
-On each call it:
+Cloud Scheduler cannot read BigQuery, so a Gen 2 Cloud Function,
+**`etl-dispatcher`** (`deploy/etl_dispatcher/main.py`), does. The Cloud
+Scheduler job **`plex-etl-dispatcher`** calls it every 5 minutes. Its tables
+live in their own dataset, **`PlexOps`**, because they are about running jobs
+in every environment, not report data:
 
-1. Reads `PlexProd.etl_schedule`. Columns: `job_name`, `run_time` (`HH:MM`,
-   America/Denver), `mode` (`probe`/`full`), `enabled`, `note`, `updated_by`,
-   `updated_at`. There is one row per job per time, staggered a few minutes
-   apart so 12 jobs don't hit Plex at once.
-2. For each enabled row whose time has passed today, within the last 30
-   minutes, and which has no row yet in `PlexProd.etl_dispatch_log` for
-   (`job_name`, `scheduled_for`): inserts a dispatch row with DML and starts
-   the job with `RUN_MODE` and `DISPATCH_ID` as env overrides. The ETL service
-   account can do this since D2 closed on 2026-10-02.
-3. Finds dispatch rows whose run ended `failed` or `partial`, or which never
-   reported back within the job timeout, and which are not themselves
-   follow-ups and have none yet. Once 15 minutes have passed, it dispatches
-   exactly one follow-up `probe`.
-4. Skips a job that still has a dispatch running.
+- **`PlexOps.etl_schedule`:** one row per job per time. Columns: `job_name`,
+  `run_time` (`HH:MM`, America/Denver), `mode` (`probe`/`full`), `enabled`,
+  `note`, `updated_by`, `updated_at`.
+  - Seeded by `deploy/etl_dispatcher/seed_schedule.sql`: 13 prod jobs × (13:00,
+    18:00, 23:00 probe; 04:00 full) = 52 rows.
+  - Staggered **4 minutes** apart (13:00, 13:04, … 13:48), so 13 jobs don't
+    open Plex ODBC sessions at once. Not 5: 12 × 5 would put the last 11 PM
+    slot at "24:00".
+- **`PlexOps.etl_dispatch_log`:** one row per start: `dispatch_id`,
+  `job_name`, `mode`, `reason` (`schedule`/`follow-up`), `scheduled_for`,
+  `followup_of`, `dispatched_at`, `execution_name`, `outcome`, `finished_at`,
+  `detail`.
 
-The job writes its own outcome onto its dispatch row at the end of the run
-(`record_dispatch_outcome` in `main.py`), which is what step 3 reads.
+**Each tick:**
+1. **Reconcile.** A run writes its own outcome when it finishes
+   (`record_dispatch_outcome`; the dispatcher passes
+   `DISPATCH_LOG_TABLE=PlexOps.etl_dispatch_log`).
+   - If a run crashed before that, the dispatcher reads the Cloud Run
+     execution and records `failed`.
+   - Succeeded at the Cloud Run level but never recorded:
+     `succeeded-unrecorded`.
+   - No outcome and no finished execution after 2 hours: `lost`.
+2. **Dispatch due slots.** A slot is an enabled row whose time came within the
+   last **30 minutes**, so a missed tick still runs it. A late slot (23:55)
+   still runs after midnight.
+   - **Idempotency key:** (`job_name`, `scheduled_for`). Two overlapping ticks,
+     a Cloud Scheduler retry, or the same row entered twice all start the job
+     once.
+   - **A job whose previous run is still open isn't started twice.** The slot
+     is logged as `skipped-busy`.
+   - **The log row is inserted before the run starts,** so a crash in between
+     leaves a row (reconciled as `lost`), never an orphan run that would be
+     started again.
+3. **Follow up.** A run that ended `failed`, `partial` or `lost` gets **one**
+   `probe` run, 15 minutes after it finished. It gets none if more than 6
+   hours have passed; the next scheduled time covers it. A follow-up never
+   gets a follow-up.
 
-**Changing a time** is one statement. No deploy:
+**The run is started** with env overrides `RUN_MODE`, `DISPATCH_ID` and
+`DISPATCH_LOG_TABLE`. That needs `run.jobs.runWithOverrides`, held by the
+ETL service account through the `plexEtlRunWithOverrides` custom role
+(OPEN_ITEMS D2). Reading an execution's status needs `run.executions.get`,
+added to the same role. The function runs as the ETL service account, with
+`--max-instances=1`.
+
+**`?dry_run=1`** returns what a tick would do, with no writes and no runs.
+
+**Changing a time** is one statement, with no deploy:
 
 ```sql
-UPDATE `voxdatalake.PlexProd.etl_schedule`
+UPDATE `voxdatalake.PlexOps.etl_schedule`
 SET run_time = '13:30', updated_by = 'emilio', updated_at = CURRENT_TIMESTAMP()
 WHERE job_name = 'plex-etl-sales-orders' AND run_time = '13:00';
 ```
+
+### Rollout in two stages
+- **Stage A:** the dataset, tables, dispatcher and its scheduler. The prod rows
+  are seeded **disabled**, and the nightly prod schedulers keep running. Then
+  an end-to-end test on test jobs, with temporary test rows: a probe slot, a
+  full slot, and a forced failure to see the follow-up. Test jobs still have
+  `max_retries = 1`, so a failed test run gets a Cloud Run retry as well;
+  that's expected during the test. Prod goes to 0 in stage B.
+- **Stage B:** enable the prod rows (one `UPDATE`), then remove the prod nightly
+  and `-retry` schedulers, and set `max_retries = 0` on the prod jobs. Test
+  jobs keep their nightly scheduler and retry.
 
 ## Delivery
 
@@ -171,7 +212,7 @@ Either order is safe, and so is rolling the image back:
 ## Status
 
 - **Phase 1:** built 2026-10-19 on `dev`. PR open.
-- **Phase 2:** designed (above), not built.
+- **Phase 2:** built 2026-10-19 (dispatcher, `PlexOps`, seed, Terraform stage A, `tests/test_dispatcher.py` 12 tests). Stage A and B status: CHANGELOG.
 - **First new pipeline on the probe: `part_routing`** (Audit - Part Info and
   Routing, built 2026-10-19). It added two engine features:
   - **`page_key` keyset paging** for large views;

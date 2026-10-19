@@ -67,7 +67,7 @@ JOB_RUN_LOG_TABLE = os.environ.get("JOB_RUN_LOG_TABLE", "job_run_log")
 # outcome back onto that dispatch row, which is how the dispatcher knows a run
 # failed and owes it one follow-up probe 15 minutes later.
 DISPATCH_ID        = os.environ.get("DISPATCH_ID", "")
-DISPATCH_LOG_TABLE = os.environ.get("DISPATCH_LOG_TABLE", "etl_dispatch_log")
+DISPATCH_LOG_TABLE = os.environ.get("DISPATCH_LOG_TABLE", "etl_dispatch_log")  # "dataset.table" or "table"
 
 # Emails show times in this zone, and the subject's date is this zone's date —
 # an 11 PM Mountain run would otherwise land in the next day's UTC thread.
@@ -570,8 +570,12 @@ def record_dispatch_outcome(status: str, detail: str = ""):
     which then treats it as failed."""
     if not DISPATCH_ID or OUTPUT_MODE != "bigquery":
         return
+    # The dispatcher passes "PlexOps.etl_dispatch_log": its tables live in their
+    # own dataset, not in this job's PlexProd/PlexTest. A bare table name still
+    # means this job's dataset.
+    table = DISPATCH_LOG_TABLE if "." in DISPATCH_LOG_TABLE else f"{BQ_DATASET}.{DISPATCH_LOG_TABLE}"
     query = f"""
-        UPDATE `{GCP_PROJECT}.{BQ_DATASET}.{DISPATCH_LOG_TABLE}`
+        UPDATE `{GCP_PROJECT}.{table}`
         SET outcome = @status, finished_at = CURRENT_TIMESTAMP(),
             execution_name = @execution, detail = @detail
         WHERE dispatch_id = @dispatch_id
@@ -582,10 +586,15 @@ def record_dispatch_outcome(status: str, detail: str = ""):
         bigquery.ScalarQueryParameter("detail", "STRING", (detail or "")[:1000] or None),
         bigquery.ScalarQueryParameter("dispatch_id", "STRING", DISPATCH_ID),
     ])
-    try:
-        bigquery.Client(project=GCP_PROJECT).query(query, job_config=job_config).result()
-    except Exception:
-        log.exception(f"Failed to record dispatch outcome for {DISPATCH_ID}.")
+    # Two attempts: concurrent DML on the log can lose a serialization race,
+    # and a lost outcome would read as "succeeded-unrecorded", costing a
+    # partial run its follow-up.
+    for attempt in (1, 2):
+        try:
+            bigquery.Client(project=GCP_PROJECT).query(query, job_config=job_config).result()
+            return
+        except Exception:
+            log.exception(f"Failed to record dispatch outcome for {DISPATCH_ID} (attempt {attempt}).")
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────

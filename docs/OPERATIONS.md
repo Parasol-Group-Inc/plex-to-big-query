@@ -450,6 +450,67 @@ and test YAML. Review the dry run first.
 
 ---
 
+## ETL schedule (prod) — `PlexOps.etl_schedule`
+
+**From stage B of probe phase 2** (check the CHANGELOG for whether it is
+live), prod ETL run times live in a **table**, not in Cloud Scheduler. In stage
+A the prod rows exist but are disabled, and the nightly prod schedulers still
+drive prod. The dispatcher (`etl-dispatcher`, called every 5 minutes)
+starts whatever is due. Test jobs keep their own nightly schedulers.
+
+**See the schedule:**
+```sql
+SELECT job_name, run_time, mode, enabled FROM `voxdatalake.PlexOps.etl_schedule`
+ORDER BY run_time, job_name;
+```
+
+**Change a time, or pause a job.** No deploy needed; it takes effect within
+5 minutes.
+```sql
+UPDATE `voxdatalake.PlexOps.etl_schedule`
+SET run_time = '13:30', updated_by = 'emilio', updated_at = CURRENT_TIMESTAMP()
+WHERE job_name = 'plex-etl-sales-orders' AND run_time = '13:00';
+
+UPDATE `voxdatalake.PlexOps.etl_schedule`
+SET enabled = FALSE, updated_by = 'emilio', updated_at = CURRENT_TIMESTAMP()
+WHERE job_name = 'plex-etl-sales-orders';
+```
+
+- **`mode`:** `probe` skips when nothing changed in Plex; `full` always
+  extracts. Keep one `full` time a day per job: it catches edits the probe
+  can't see.
+- **`run_time`:** America/Denver wall clock (`HH:MM`).
+- **A typo is reported, not ignored.** A bad `run_time` or `mode` appears in
+  the dispatcher's `errors` (Cloud Logging, `etl-dispatcher`).
+
+**What happened today:**
+```sql
+SELECT job_name, mode, reason, scheduled_for, dispatched_at, outcome, finished_at, detail
+FROM `voxdatalake.PlexOps.etl_dispatch_log`
+WHERE DATE(dispatched_at, 'America/Denver') = CURRENT_DATE('America/Denver')
+ORDER BY dispatched_at DESC;
+```
+
+**Outcome values:**
+- **`success` / `partial` / `failed` / `skipped`:** written by the job.
+  `skipped` means the probe saw no change.
+- **`skipped-busy`:** the previous run of that job was still going.
+- **`lost`:** no outcome after 2 h.
+- **`dispatch-failed`:** Cloud Run refused the start.
+- **`succeeded-unrecorded`:** Cloud Run says it succeeded, but the job wrote
+  no outcome.
+
+**Retries.** A `failed` / `partial` / `lost` run gets one follow-up probe 15
+minutes later (`reason = 'follow-up'`). There's no other retry.
+
+**Dry run** (from a terminal with gcloud):
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  "https://us-central1-voxdatalake.cloudfunctions.net/etl-dispatcher?dry_run=1"
+```
+
+---
+
 ## Failure Retry (9:45 PM Mountain)
 
 24 jobs have a second Cloud Scheduler trigger that fires daily at **9:45 PM

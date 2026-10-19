@@ -14,6 +14,49 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Change probe phase 2, stage A: schedule table + ETL dispatcher
+
+Design and decisions: `docs/PROBE_BUILD_PLAN.md` § "The dispatcher". **Stage A
+changes no prod run:** the prod schedule rows are seeded disabled, and the
+nightly prod schedulers stay until stage B.
+
+### Added
+- **`PlexOps` dataset** (Terraform):
+  - **`etl_schedule`:** a job's run times (America/Denver), `probe`/`full`,
+    and `enabled`. Edited with SQL.
+  - **`etl_dispatch_log`:** one row per start and its outcome.
+- **`etl-dispatcher`, a Gen 2 Cloud Function** (`deploy/etl_dispatcher/`,
+  deployed with gcloud), called every 5 min by the new `plex-etl-dispatcher`
+  scheduler. Each tick:
+  - **Reconciles** open runs from their Cloud Run execution status, so a crash
+    is never mistaken for a running job.
+  - **Dispatches** due slots, idempotent on (job, slot); a slot is due if it
+    came within the last 30 minutes, and it still runs across midnight; a
+    busy job's slot is logged `skipped-busy`.
+  - **Follows up** a failed, partial or lost run with ONE probe 15 minutes
+    later, and never chains follow-ups.
+  - Runs are started with `RUN_MODE`, `DISPATCH_ID` and `DISPATCH_LOG_TABLE`
+    as env overrides. `?dry_run=1` shows a tick without acting.
+- **`deploy/etl_dispatcher/seed_schedule.sql`:** 13 prod jobs × (1 PM, 6 PM,
+  11 PM probe; 4 AM full), staggered 4 min (13:00 … 13:48), seeded disabled.
+  It refuses to run on a non-empty table.
+- **`tests/test_dispatcher.py`:** 12 tests (DST-safe slots, the window,
+  idempotency, busy jobs, invalid rows, the single follow-up, execution-status
+  reconcile, the seed's stagger staying inside each hour).
+- **`plexEtlRunWithOverrides` custom role:** gains `run.executions.get`, so
+  the dispatcher can read a run's status. Read-only.
+- **The Cloud Functions API** is now in Terraform's required services.
+
+### Changed
+- **`main.py`:** `DISPATCH_LOG_TABLE` accepts `dataset.table`, so a run writes
+  its outcome to `PlexOps.etl_dispatch_log` whatever its own dataset. A bare
+  name still means the job's dataset. One test added; `tests/test_probe.py`
+  now has 24.
+- **CLAUDE.md:** a section saying prod run times now live in
+  `PlexOps.etl_schedule`.
+- **OPERATIONS:** a new "ETL schedule (prod)" section (change a time, pause a
+  job, read the log, outcome meanings, dry run).
+
 ## 2026-10-19 (dev) - Vox Nutrition Item List with Shelf Life Details: third view on part_routing
 
 ### Added

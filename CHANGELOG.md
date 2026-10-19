@@ -14,6 +14,46 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Audit - Part Info and Routing (Container Types): second view on part_routing
+
+### Added
+- **`part_info_routing_container_report`** rebuilds the Plex stored procedure
+  *Audit - Part_Info_and_Routing_wContainerType* (Shannon Hadley). It is a
+  **second view on the `part_routing` pipeline**, not a new pipeline: every
+  table it reads is already pulled for report 1, except two that are new:
+  - **`Part_v_Part_Operation_Approved_Container`:** 24,937 rows. It's set to
+    page by `Approved_Container_Key` once it passes 25,000 (one call today).
+    Its probe SUMs the pack quantities.
+  - **`Part_v_Container_Type`:** 15 rows.
+
+  Same job, schedule, probe and email. Terraform adds one GCS object, the SQL
+  file.
+  - **The procedure's `CROSS APPLY` / `OUTER APPLY` counts** become two
+    pre-aggregated CTEs.
+  - **Same inner joins, `MATL` exclusion and `Shippable = 1` filter.**
+  - **`Part_Op_Type` and `Location` are left out:** the procedure LEFT JOINs
+    them but never selects them. Both keys were checked unique on PlexTest
+    (0 duplicates), so leaving them out can't change a row.
+  - **Two added columns,** `standard_pack_quantity` and
+    `containers_per_master`, because the request asked for quantities per
+    container.
+  - **Checked on PlexTest:** 32,482 rows over 15,676 shippable operations;
+    8,131 primary containers, the same count Plex returns. `is_primary`
+    never disagrees with `primary`. A sampled bottling part shows its four
+    boxes, with the 12x12x20 box as primary, as in Plex.
+- **Found on Plex while building it:**
+  - **`SUM()` on a bit column is refused** (they land in BigQuery as 0/1 INT64) ("Operand data type bit is invalid
+    for sum"), so `Primary` / `Shippable` can't be probe sums. A
+    primary-flag flip alone waits for the 4 AM full run.
+  - **`Primary` is a reserved word** in Plex SQL.
+
+  Both are in TECHNICAL_REFERENCE.
+- Docs:
+  - new `docs/reports/part_info_routing_container_report.md`;
+  - rows in REPORT_CATALOG (72), EMAIL_SCHEDULE (70 views) and
+    `reports-list/production.md`;
+  - OPEN_ITEMS D10, PROBE_BUILD_PLAN.
+
 ## 2026-10-19 (dev) - Audit - Part Info and Routing (stored procedure rebuild); paging and sum: probes
 
 ### Added

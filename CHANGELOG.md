@@ -14,6 +14,29 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (scorecard) - Open orders exclude quotes; audit decisions recorded
+
+### Changed
+- **`sales_orders_open_report` excludes quote-stage orders** (Jennilyn: "quote-stage
+  orders don't account for open orders"). It now also drops any PO whose status
+  Plex flags `Is_Quote = 1`, which is "Quote" (2653) in prod and test. That's
+  Plex's own flag, not a hard-coded key.
+  - Prod: 600 → 464 lines (the 136 quote lines, 78 POs).
+  - Test: 592 → 459 lines.
+  - This closes audit fast follow FF1. It reverses the earlier "keep them"
+    answer, which had been recorded on the same day.
+
+### Docs
+- **Brought the audit decisions to `main`.** That commit landed on the
+  `scorecard-prod-views` branch just after PR #37 was merged.
+  - `docs/PROD_VIEWS_AUDIT_2026-10-19.md` records the decisions.
+  - OPEN_ITEMS **S15** holds the remaining fast follows: FF2, sunset the
+    `v2_*` views; FF3, customer prices not loaded in Plex prod. It's numbered
+    S15 because S14 was taken by the goal-seed item.
+- **OPEN_ITEMS S2** merges both sessions' goals notes into one process: the
+  app is the only writer of prod goals. Retract the 2 Oct test safety incident
+  before switching, then set `BQ_DATASET=PlexProd` and run `pushAll()`.
+
 ## 2026-10-19 (scorecard) - Goals reseeded from the originals; the app's import is "newest edit wins"
 
 ### Fixed

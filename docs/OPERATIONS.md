@@ -79,7 +79,16 @@ Add a new entry to the `extractions[]` list, in both YAMLs:
     bq_table: raw_Sales_v_PO_Type     # ← BigQuery table name (choose anything)
     filter: ""                         # ← WHERE clause, or "" for all rows
     date_col: ""                       # ← timestamp column for incremental, or ""
+    probe: [Update_Date, PO_Type_Key]  # ← optional: change-probe columns (MAX each; sum:Col for SUM)
+    page_key: PO_Type_Key              # ← optional: pull in keyset pages by this integer column
+    page_size: 25000                   # ← optional with page_key (default 25,000 rows per call)
 ```
+
+`probe:` is filled for you by `python scripts/generate_probe_columns.py --write`.
+Add `sum:` columns by hand, for rates, quantities and lead times only. Never use
+`sum:` on a key: Plex's 32-bit SUM overflows. Use `page_key` only for a large
+view (tens of thousands of rows or more). Paging and probing are explained in
+`docs/TECHNICAL_REFERENCE.md` § "Change probe".
 
 Check the pair still matches before committing:
 

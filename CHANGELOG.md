@@ -14,6 +14,54 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Audit - Part Info and Routing (stored procedure rebuild); paging and sum: probes
+
+### Added
+- **New pipeline `part_routing`, view `part_info_routing_report`.** It rebuilds
+  the Plex stored procedure *Audit - Part_Info_and_Routing* (Shannon Hadley).
+  - The procedure's 14-table join runs in BigQuery
+    (`reports/sql/part_info_routing_view.sql`), with the same join types,
+    `MATL` filter and column order. Each table is pulled on its own: about
+    110k rows in all, the largest about 65k. The `@PCN_Keys` parameter isn't
+    needed (one PCN on this connection), and `@Building_Codes` becomes a
+    Looker filter on `main_building`.
+  - Checked on PlexTest: 66,768 rows over 15,676 parts. A sampled bottling
+    part matches Plex's routing screen (SCHED - Bottling, Bottling 1-6, Bulk
+    Room Bottling, with their rates).
+  - Jobs `plex-etl-part-routing` / `-test` run nightly at 11:00 / 11:10 PM
+    Mountain, with **no `-retry` scheduler and `max_retries = 0`** (the probe
+    is the retry), and a 900 s timeout. Prod moves to the dispatcher in
+    phase 2.
+  - Both jobs are added to Cloud Build's `_ALL_JOBS` (30 jobs, checked
+    against Terraform).
+- **`page_key` / `page_size` on an extraction** (`query_plex_paged`): count
+  first, then `SELECT TOP n … WHERE key > last ORDER BY key` pages.
+  - A full page's boundary key is re-fetched as one group, so a non-unique
+    key is never split across pages.
+  - Rows with a NULL key are fetched at the end; a count mismatch (rows added
+    or removed mid-pull) is a WARNING, not a failure.
+  - The filter must start with `WHERE` and carry no `ORDER BY`/`GROUP BY`;
+    `date_col` is refused with `page_key`.
+  - Plex accepts `TOP` and rejects `LIMIT`; equal key ranges were rejected
+    because the keys cluster (pages of 4 and 15,624 rows).
+  - On Plex test, `Part_v_Approved_Workcenter` came back as 64,942 rows in 3
+    pages, 12.4 s, every row once.
+- **`sum:<col>` probe columns** make edits visible on views with no change
+  date (rates, crew size, lead time). A `sum:` on a `*_Key`/`*_No` column is
+  refused: `SUM(Workcenter_Key)` overflows Plex's 32-bit integer (about 5.6
+  billion) and fails the query, as measured. Float sums are rounded to 4
+  places in the snapshot, so they can't flap between runs.
+- **Text joins and filters normalised for Plex's collation:**
+  `UPPER(RTRIM())` on the Part_Status join and the `MATL` filter, since SQL
+  Server ignores case and trailing spaces. The `BIT` casts became `<> 0`.
+- Tests: 23 in `tests/test_probe.py` (paging, the boundary group, the
+  mismatch warning, validation, `sum:` and the key-sum guard).
+- Docs:
+  - new `docs/reports/part_info_routing_report.md`;
+  - rows in REPORT_CATALOG, EMAIL_SCHEDULE and `reports-list/production.md`;
+  - TECHNICAL_REFERENCE (paging, `sum:`), OPERATIONS (extraction keys) and
+    PROBE_BUILD_PLAN.
+
 ## 2026-10-19 (label-design) - Go-live cutoff: no order before 18 Oct reaches BigQuery or Monday
 
 ### Changed

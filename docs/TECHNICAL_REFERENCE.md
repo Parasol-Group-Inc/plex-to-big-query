@@ -186,8 +186,48 @@ extractions:
 ```
 
 Each extraction becomes `SELECT COUNT(*), MAX(<col>), ... FROM <view> <filter>`. That is the same view and filter as `query_plex()`, unaliased, so it counts exactly what the extraction pulls. The columns were picked from the catalog by `scripts/generate_probe_columns.py`: a change date and/or the view's `<Entity>_Key`. The script is idempotent and never overwrites an existing `probe:` line. An extraction without a list probes by `COUNT(*)` only.
+- **`sum:<col>`** in the list becomes `SUM(<col>)` (added 2026-10-19). On a view
+  with no change date, it is what makes an *edit* visible: a run rate typed over
+  keeps the count and keys but moves the sum.
+- **Never `sum:` a key column.** Plex sums integers in 32 bits:
+  `SUM(Workcenter_Key)` over 65,000 rows (about 5.6 billion) fails the whole
+  query. A `sum:` on a column named `*_Key` / `*_No` (any case) is refused as
+  inconclusive. A sum on any other integer column that overflows fails the
+  probe query, which is also inconclusive, so the run is full rather than
+  failed. Use plain MAX for keys. Float results are rounded to 4 places in the
+  snapshot, because a SUM over unordered rows can differ in its last bits
+  between runs.
 
 **Both kinds** also fold in `config_fingerprint()`: a hash of the report YAML as deployed plus every view's SQL. So a config or SQL deploy always runs in full; this fixes OPEN_ITEMS L10. `run_probe()` returns `(fingerprint, snapshot)`. The snapshot is `{source: value}`, with the config hash under `(config + SQL)`, and `changed_sources()` diffs it against the last clean run's to name the tables that moved.
+
+### Paging a large extraction (`page_key`)
+
+An extraction can set `page_key: <integer column>`, and optionally
+`page_size:` (default 25,000; `DEFAULT_PAGE_SIZE`). `query_plex_paged()` then:
+
+1. Counts the rows. If they fit in one page, it does a normal single pull.
+2. Otherwise it walks the key, one page at a time:
+   `SELECT TOP <n> * FROM <view> WHERE [<filter> AND] <key> > <last> ORDER BY <key>`.
+
+Some things to know:
+- **Keyset, not equal key ranges.** Plex keys cluster: four equal ranges held
+  4 and 15,624 rows. Plex accepts `TOP` and rejects `LIMIT`.
+- **The key need not be unique.** When a page comes back full, the rows on its
+  last key are fetched again as one group, so no key is split across pages.
+- **NULL keys are covered.** The keyset walk cannot reach rows whose key is
+  NULL, so they are fetched with one extra `… IS NULL` query at the end.
+- **A count mismatch is a WARNING, not a failure.** It happens when rows are
+  added or removed during the pull.
+- **A paged extraction's `filter` must start with `WHERE`** (any case or
+  whitespace). It is combined with the page condition, so it may not carry
+  `ORDER BY` / `GROUP BY`. `date_col` is refused with `page_key`, because
+  paging orders by the key.
+- **The pages are joined into one DataFrame before the single BigQuery
+  write.** Paging bounds each Plex call, not memory.
+
+Used by `Part_v_Approved_Workcenter` in `part_routing`: 64,942 rows in 3
+pages, 12.4 s, every (operation, workcenter) row exactly once, as checked on
+Plex test on 2026-10-19.
 
 ### When a run may skip (`probe_may_skip`)
 

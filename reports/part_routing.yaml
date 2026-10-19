@@ -1,0 +1,146 @@
+report_name: part_routing
+category: Production
+description: "Vox | Audit - Part Info and Routing — prod (PlexProd dataset)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plex stored procedure "Audit - Part_Info_and_Routing" (author Shannon Hadley,
+# SQL Development Environment), rebuilt 2026-10-19. One row per part operation
+# x approved workcenter x approved supplier, with the run rates, crew size,
+# lead time and who created/updated what.
+#
+# WHY NOT RUN THE PROCEDURE ITSELF: its 14-table join is what makes it heavy in
+# Plex. Here each table is pulled on its own (all 14 together are ~110k rows,
+# the largest ~65k) and the join runs in BigQuery: reports/sql/
+# part_info_routing_view.sql, which mirrors the procedure line by line.
+#
+# Its two parameters are not needed: @PCN_Keys picks among company PCNs, and
+# this connection sees exactly one (338756, Vox Nutrition; the CT/TX PCNs in
+# the procedure's comments are not in this group). @Building_Codes is a filter
+# on `main_building`, which the view exposes for Looker to filter on instead.
+#
+# SHARED TABLES: Part_v_Part, Part_v_Part_Group, Common_v_Building,
+# Part_v_Workcenter, Plexus_Control_v_Plexus_User and Common_v_Supplier are also
+# extracted by other pipelines into the same raw_* tables. They are pulled again
+# here on purpose: the change probe can only vouch for tables this config
+# extracts, so a change to one of them must be seen by THIS report's probe.
+#
+# Docs: docs/reports/part_info_routing_report.md. Probe and paging:
+# docs/PROBE_BUILD_PLAN.md, docs/TECHNICAL_REFERENCE.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Column lists were
+# picked for this report by hand (sum: entries make edits visible on views with
+# no change date).
+probe_mode: auto
+
+extractions:
+  # Part master — number, revision, status, type, group, building, creator
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Part_Key]
+
+  # Status lookup — the 'Part Active' flag
+  - plex_view: Part_v_Part_Status
+    bq_table: raw_Part_v_Part_Status
+    filter: ""
+    date_col: ""
+    probe: [Part_Status_Key]
+
+  # Part group lookup
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
+    filter: ""
+    date_col: ""
+    probe: [Part_Group_Key]
+
+  # Building lookup — the part's main building
+  - plex_view: Common_v_Building
+    bq_table: raw_Common_v_Building
+    filter: ""
+    date_col: ""
+    probe: [Building_Key]
+
+  # The routing: one row per part operation
+  - plex_view: Part_v_Part_Operation
+    bq_table: raw_Part_v_Part_Operation
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Key]
+
+  # Operation lookup — code and inventory type
+  - plex_view: Part_v_Operation
+    bq_table: raw_Part_v_Operation
+    filter: ""
+    date_col: ""
+    probe: [Operation_Key]
+
+  # Approved workcenters per operation, with run rates and crew size.
+  # The largest source (~65k rows on 2026-10-19) and the reason paging exists.
+  # No change date, so the probe also SUMs the rate/crew columns: a run rate
+  # typed over keeps the count and keys but moves the sum. Never SUM a key:
+  # SUM(Workcenter_Key) overflows Plex's 32-bit integer here (~5.6 billion) and
+  # the driver fails the query (measured 2026-10-19).
+  - plex_view: Part_v_Approved_Workcenter
+    bq_table: raw_Part_v_Approved_Workcenter
+    filter: ""
+    date_col: ""
+    probe: [Part_Operation_Key, sum:Standard_Production_Rate, sum:Ideal_Rate, sum:Target_Rate, sum:Crew_Size]
+    page_key: Part_Operation_Key
+    page_size: 25000
+
+  # Workcenter lookup — code
+  - plex_view: Part_v_Workcenter
+    bq_table: raw_Part_v_Workcenter
+    filter: ""
+    date_col: ""
+    probe: [Workcenter_Key]
+
+  # Part operation type lookup
+  - plex_view: Part_v_Part_Op_Type
+    bq_table: raw_Part_v_Part_Op_Type
+    filter: ""
+    date_col: ""
+    probe: [Part_Op_Type_Key]
+
+  # Location lookup — the routing's process location
+  - plex_view: Common_v_Location
+    bq_table: raw_Common_v_Location
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Location_Key]
+
+  # Users — who created the part / last updated the routing
+  - plex_view: Plexus_Control_v_Plexus_User
+    bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+    probe: [Plexus_User_No]
+
+  # Approved suppliers per operation, with lead time. No change date, so the
+  # probe SUMs the lead time (not Supplier_No: a key sum, already 2.09 billion
+  # of the 2.15 billion 32-bit limit).
+  - plex_view: Part_v_Approved_Supplier
+    bq_table: raw_Part_v_Approved_Supplier
+    filter: ""
+    date_col: ""
+    probe: [Approved_Supplier_Key, sum:Lead_Time]
+
+  # Supplier lookup — code
+  - plex_view: Common_v_Supplier
+    bq_table: raw_Common_v_Supplier
+    filter: ""
+    date_col: ""
+    probe: [Supplier_No]
+
+  # The PCN code shown as the report's first columns
+  - plex_view: Plexus_Control_v_Customer_Group_Member
+    bq_table: raw_Plexus_Control_v_Customer_Group_Member
+    filter: ""
+    date_col: ""
+
+bq_view:
+  name: part_info_routing_report
+  display_name: "Audit - Part Info and Routing"
+  sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_view.sql

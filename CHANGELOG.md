@@ -14,6 +14,21 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (label-design) - Go-live cutoff: no order before 18 Oct reaches BigQuery or Monday
+
+### Changed
+- **`label_design_view.sql`: `AND po.order_date_resolved >= DATE '2026-10-18'`**,
+  next to the 14-day window (Emilio). Prod Plex holds cutover-migrated orders
+  dated back to 5 Oct, and the team handles those by hand.
+  - Checked against PlexProd before shipping: the live view's 38 rows (all
+    dated 5-15 Oct) drop to 0. Orders dated 18 Oct or later pass as before.
+  - The view SQL is shared, so test and prod both get the cutoff.
+- **Not changed:** the 38 items already pushed to "Plex Import" on 2026-10-19
+  stay there. The cutoff only stops new items.
+- **The line becomes a no-op from 2026-11-01,** when the 14-day window is the
+  stricter of the two. Delete it then.
+- Docs: `docs/reports/label_design_report.md` and `label-design/STATUS.md`.
+
 ## 2026-10-19 (dev) - Change probe for every pipeline, phase 1: engine, emails, probe columns
 
 Plan, decisions and measurements: [docs/PROBE_BUILD_PLAN.md](docs/PROBE_BUILD_PLAN.md).

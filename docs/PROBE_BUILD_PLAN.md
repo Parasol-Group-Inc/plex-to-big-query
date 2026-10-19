@@ -180,3 +180,6 @@ Either order is safe, and so is rolling the image back:
     integer, so that is refused.
 
   Its prod job starts nightly and joins the dispatcher in phase 2 like the rest.
+- **Second view on `part_routing`: Container Types** (2026-10-19). It reuses
+  all of report 1's tables plus two more. Plex refuses `SUM` on bit columns,
+  so a primary-container flip is seen at the 4 AM full run, not by the probe.

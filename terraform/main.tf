@@ -5752,6 +5752,14 @@ resource "google_storage_bucket_object" "part_info_routing_view_sql" {
   content_type = "text/plain"
 }
 
+# Second view on the same pipeline (2026-10-19): the wContainerType procedure.
+resource "google_storage_bucket_object" "part_info_routing_container_view_sql" {
+  name         = "sql/part_info_routing_container_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_info_routing_container_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Part Info and Routing — prod (PlexProd, 11:00 PM Mountain) ──────────────
 
 resource "google_cloud_run_v2_job" "etl_part_routing" {

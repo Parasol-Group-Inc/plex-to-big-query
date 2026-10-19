@@ -32,7 +32,7 @@ page.
 ## The short version
 
 - **14 pipelines, 30 Cloud Run Jobs** (prod + test, plus the Label Design push
-  jobs for prod and test), 69 BigQuery views (2026-10-19). Thirteen pipelines
+  jobs for prod and test), 70 BigQuery views (2026-10-19). Thirteen pipelines
   run once a day in an evening cascade, 7:00-11:10 PM; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
   test at :05, push at :35).
 - **Every evening-cascade run sends one email** — so a normal day is **26
@@ -74,7 +74,7 @@ but see the caution below the table.
 | **Sales** | `sales_quotes` | Open Quotes | `plex-etl-sales-quotes` | 10:00 PM | `plex-etl-sales-quotes-test` | 10:10 PM |
 | **Sales** | `sales_returns` | Open RMA's | `plex-etl-sales-returns` | 10:20 PM | `plex-etl-sales-returns-test` | 10:30 PM |
 | **Supply Chain** | `quality_supplier_returns` | Approve Vendor Return Authorizations | `plex-etl-quality-supplier-returns` | 10:40 PM | `plex-etl-quality-supplier-returns-test` | 10:50 PM |
-| **Production** | `part_routing` | Audit - Part Info and Routing | `plex-etl-part-routing` | 11:00 PM (no retry) | `plex-etl-part-routing-test` | 11:10 PM (no retry) |
+| **Production** | `part_routing` | Audit - Part Info and Routing, Audit - Part Info and Routing (Container Types) | `plex-etl-part-routing` | 11:00 PM (no retry) | `plex-etl-part-routing-test` | 11:10 PM (no retry) |
 | *all except `label_design` and `part_routing`* | *retry* | — | `plex-<pipeline>-sync-retry` | 9:45 PM | `plex-<pipeline>-sync-test-retry` | 9:45 PM |
 
 Prod/test pairs are staggered 10 minutes apart. `scorecard_goals_resolved` is

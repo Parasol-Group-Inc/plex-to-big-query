@@ -194,7 +194,10 @@ Each extraction becomes `SELECT COUNT(*), MAX(<col>), ... FROM <view> <filter>`.
   query. A `sum:` on a column named `*_Key` / `*_No` (any case) is refused as
   inconclusive. A sum on any other integer column that overflows fails the
   probe query, which is also inconclusive, so the run is full rather than
-  failed. Use plain MAX for keys. Float results are rounded to 4 places in the
+  failed. Plex also refuses `SUM` on a **bit** column (`Operand data type bit
+  is invalid for sum`), so flags such as `Primary` and `Shippable` can't be
+  summed. `Primary` is also a reserved word in Plex's SQL. Use plain MAX for
+  keys. Float results are rounded to 4 places in the
   snapshot, because a SUM over unordered rows can differ in its last bits
   between runs.
 

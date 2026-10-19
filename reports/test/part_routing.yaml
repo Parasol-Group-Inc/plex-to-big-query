@@ -1,6 +1,6 @@
 report_name: part_routing_test
 category: Production
-description: "Vox | Audit - Part Info and Routing — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+description: "Vox | Audit - Part Info and Routing (+ Container Types) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
 
 probe_mode: auto
 
@@ -90,7 +90,24 @@ extractions:
     filter: ""
     date_col: ""
 
+  - plex_view: Part_v_Part_Operation_Approved_Container
+    bq_table: raw_Part_v_Part_Operation_Approved_Container
+    filter: ""
+    date_col: ""
+    probe: [Approved_Container_Key, sum:Standard_Pack_Quantity, sum:Containers_Per_Master]
+    page_key: Approved_Container_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Container_Type
+    bq_table: raw_Part_v_Container_Type
+    filter: ""
+    date_col: ""
+    probe: [Container_Type_Key]
+
 bq_view:
-  name: part_info_routing_report
-  display_name: "Audit - Part Info and Routing"
-  sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_view.sql
+  - name: part_info_routing_report
+    display_name: "Audit - Part Info and Routing"
+    sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_view.sql
+  - name: part_info_routing_container_report
+    display_name: "Audit - Part Info and Routing (Container Types)"
+    sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_container_view.sql

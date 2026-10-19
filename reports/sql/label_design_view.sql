@@ -27,32 +27,36 @@
 -- the same customer part on a *different* order legitimately repeats.
 --
 -- ── ONE DELIBERATE DIFFERENCE FROM THE STORED PROCEDURE ─────────────────────
--- Hers joins `Common_v_Customer` on `Customer_No`. That is kept, but note the
--- rep columns come from `Sales_v_Order_Salesperson`, which is per ORDER, not
--- per line — so every line of an order carries the same rep, which is what
--- "so they know which rep to ask" wants.
+-- Hers joins `Common_v_Customer` on `Customer_No`. That is kept. The rep
+-- columns are per ORDER, not per line — so every line of an order carries the
+-- same reps, which is what "so they know which rep to ask" wants. The BDM comes
+-- from `Sales_v_Order_Salesperson` and the AM from `Sales_v_PO.Inside_Sales`
+-- (with customer-level fallbacks); see the AM/BDM block below for the full
+-- sourcing.
 --
--- BDM vs primary rep is NOT guessed at: both are exposed. `Sort_Order = 1` is
--- the primary and `2` the secondary, and which of those Vox calls the BDM has
--- never been stated. The consumer picks; nothing here silently decides.
+-- The BDM (Outside Salesperson) lands in `Sales_v_Order_Salesperson`, one or
+-- more rows per ORDER — NOT in `Sales_v_PO.Outside_Sales`, which replicates as
+-- 0 even when the Plex UI shows a BDM (order 16 / PO_Key 5021015 has BDM Janet
+-- Pacheco on screen, Outside_Sales = 0 in BigQuery, and her user_no lands here
+-- instead). This is the same "the field the picker writes isn't the field that
+-- replicates" trap `Sales_v_Priority` already sprang.
+--
+-- `Sort_Order` is 0 on EVERY row across PlexTest, so it cannot rank anything —
+-- an earlier build filtered `= 1` / `= 2` and matched nothing, which is why the
+-- BDM read NULL. Some orders carry more than one outside rep (orders 4, 5, 12
+-- each have two); the lowest Plexus_User_No is taken so one deterministic BDM
+-- lands per order. The Order_Salesperson rep is never the order's Inside_Sales
+-- AM — confirmed across every populated order — so it is unambiguously the BDM.
 --
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
 
-WITH rep_primary AS (
+WITH rep_outside AS (
   SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
+    SAFE_CAST(sp.PO_Key AS INT64) AS PO_Key,
+    MIN(SAFE_CAST(sp.Plexus_User_No AS INT64)) AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 1
-),
-
-rep_secondary AS (
-  SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
-  FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 2
+  GROUP BY 1
 ),
 
 -- `Plexus_Control_v_Plexus_User` has NO `Name` column — it holds `First_Name`,
@@ -157,14 +161,31 @@ job_notes AS (
 -- so that mapping finally has a real source. The rest is pending Jennilyn's
 -- internal team meeting.
 --
--- Values are currently ALL BLANK -- 28 assignments (14 parts x Allergen +
--- Hazardous), every one an EMPTY STRING, not NULL (verified against live
--- BigQuery 2026-09-21). Hence the NULLIF(TRIM(...), '') on every branch below:
--- without it these columns emit '' rather than NULL, which reads downstream as
--- "filled in, but blank" and would let the Monday push service overwrite a
--- hand-entered value with an empty one. Note the previously-documented
--- populated example (Allergen = "Yes" on Part_Key 11003458) is GONE -- that
--- part is no longer in the table at all, so the data has been reloaded since.
+-- ── These hang off the LABEL part, not the finished good (2026-10-02) ──────
+-- Until today this CTE was joined to the order line's part -- the finished
+-- good, 93001-00KAYAN-0 -- and every one of these columns read NULL. QA does
+-- not put attributes there. They put them on the LABEL part, 73001-00KAYAN-0,
+-- which reaches the order line only through the bill of materials. Hence the
+-- `labels` CTE below, and the join on lb.l.part_key rather than pol.Part_Key.
+--
+-- 40 assignments across 10 label parts, IDENTICAL in PlexTest and PlexProd
+-- (verified 2026-10-02), so this is verifiable on test. Four attributes carry
+-- values -- Label Size, Printing Material, Allergen, Trademark -- and the
+-- other four in the catalog are assigned to nothing yet.
+--
+-- The NULLIF(TRIM(...), '') on every branch stays regardless: Plex writes an
+-- EMPTY STRING, not NULL, for an assigned-but-unfilled attribute, and without
+-- this these columns emit '' rather than NULL. Downstream that reads as
+-- "filled in, but blank" and would let the Monday push overwrite a
+-- hand-entered value with an empty one.
+--
+-- THREE NAMES BELOW NO LONGER EXIST IN PLEX. The catalog on 2026-10-02 holds
+-- exactly eight attributes: Allergen, Certifications, Hazardous, Label Size,
+-- Material Classification, Printing Material, Size, Trademark. 'Bottle
+-- Material', 'California PDP' and 'Prop 65 Requirement' were all there on
+-- 2026-09-21 and are gone. Their columns are KEPT, emitting NULL, until
+-- Jennilyn says whether they were removed or renamed -- dropping a column
+-- that turns out to have been renamed loses the mapping work twice over.
 part_attribute_types AS (
   SELECT
     SAFE_CAST(a.Attribute_Key AS INT64) AS Attribute_Key,
@@ -181,6 +202,11 @@ part_attribute_types AS (
 part_attributes_pivoted AS (
   SELECT
     SAFE_CAST(pa.Part_Key AS INT64) AS Part_Key,
+    -- 'Label Size' (key 7436) is where the values are: "2.4 x 6.8 in",
+    -- "Custom". Plain 'Size' (key 2383) still exists and is assigned to
+    -- nothing -- this CTE asked only for that one until 2026-10-02, so
+    -- part_size read NULL even for parts that had a size filled in.
+    MAX(CASE WHEN pt.Attribute_Name = 'Label Size'              THEN NULLIF(TRIM(pa.Value), '') END) AS part_label_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Size'                    THEN NULLIF(TRIM(pa.Value), '') END) AS part_size,
     MAX(CASE WHEN pt.Attribute_Name = 'Allergen'                THEN NULLIF(TRIM(pa.Value), '') END) AS part_allergen,
     MAX(CASE WHEN pt.Attribute_Name = 'Hazardous'               THEN NULLIF(TRIM(pa.Value), '') END) AS part_hazardous,
@@ -225,6 +251,38 @@ bottles AS (
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
     ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
   WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'BOTTLE')
+  GROUP BY 1
+),
+
+-- ── Label part, through the BOM (2026-10-02, Emilio) ────────────────────────
+-- Monday only ever received the PRODUCT part number, but QA records the label
+-- attributes against the LABEL part, which is a BOM component of it:
+--
+--   93001-00KAYAN-0  finished good (the order line's part)
+--   └─ 73001-00KAYAN-0  LABEL | Kaya Naturals - Max Detox 60ct (X003F6U4BR)
+--                       Standard Label        <- Label Size, Printing
+--                                                Material, Allergen, Trademark
+--
+-- Identical mechanics to `bottles` above, prefix 'LABEL' instead of 'BOTTLE'.
+-- Of the 169 parts with a BOM in PlexTest, 54 have a label component and NOT
+-- ONE has two (checked 2026-10-02), so the ARRAY_AGG tie-break is insurance
+-- rather than a real case. It still matters that the pick happens HERE,
+-- before the join: a second label would otherwise duplicate a queue row, and
+-- this view's whole contract is one row per order line.
+--
+-- A part with no label component gets NULLs. That is not a regression --
+-- every attribute column was NULL for every row before this existed.
+labels AS (
+  SELECT
+    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+    ARRAY_AGG(STRUCT(SAFE_CAST(c.Part_Key AS INT64) AS part_key,
+                     c.Part_No AS part_no,
+                     c.Name    AS name)
+              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS l
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'LABEL')
   GROUP BY 1
 ),
 
@@ -284,6 +342,18 @@ release_lines AS (
     cust.Name                                     AS customer_name,
     cp.Customer_Part_No                           AS customer_part_no,
     rs.Release_Status                             AS line_status,
+
+    -- The line's Priority (2026-10-07, Emilio). In the Plex sales-order screen
+    -- each line/release row carries a Priority dropdown; it lives on the
+    -- RELEASE (`Sales_v_Release.Priority_Key`), not the PO line, and resolves to
+    -- its word through `Part_v_Priority` — NOT `Sales_v_Priority`, which
+    -- replicates empty on this tenant (confirmed 2026-10-07). The label is that
+    -- view's `Description` column (High/Medium/Low/RUSH/Blanket); its own
+    -- `Priority` column is just a sort number (10/20/30/1/40). The value is
+    -- carried from whichever release the QUALIFY below keeps (the earliest-due),
+    -- so the surfaced priority matches the surfaced due date. Goes to Monday's
+    -- Priority column.
+    pr.Description                                AS priority,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS INT64), 0), 1000))),
       NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
@@ -293,23 +363,27 @@ release_lines AS (
     jn.Job_Note                                   AS job_note,
     NULLIF(TRIM(jn.Job_Note), '')                 AS _note,
 
-    -- Addition 1: who to ask. Both, because "BDM" has never been pinned to one.
-    up.user_name                                  AS sales_rep_primary,
-    us.user_name                                  AS sales_rep_secondary,
-
-    -- The BDM (2026-09-24). Order_Salesperson above turned out to be nearly
-    -- empty in Plex: one row in all of test, with Sort_Order 0, which the = 1
-    -- filter misses too. Vox records the rep in two other places, both in
-    -- Plex's "BDM" field group:
-    --   Sales_v_PO.Inside_Sales        "Inside Salesperson" on the ORDER, set
-    --                                   on every order entered since SO 4.
-    --   Common_v_Customer.Assigned_To  "Assigned To" on the CUSTOMER, the
-    --                                   account owner. 16 of 24 test customers.
-    -- `bdm` takes the order first (the most specific), then the customer, then
-    -- the old salesperson table. This is what goes to Monday's Sales Rep.
+    -- ── Sales roles: AM and BDM are DIFFERENT people (2026-10-08, Emilio) ──────
+    -- Plex (and Vox's glossary) split the sales rep in two, and they were being
+    -- conflated: everything below used to feed one `bdm` column that was really
+    -- the AM. The glossary origins pin each one down, but the FIELD each one
+    -- actually replicates into had to be found by chasing order 16 (below):
+    --   AM  (Account Manager / Inside Salesperson), terms "Assigned To /
+    --        Inside Sales / Inside Salesperson":
+    --        Sales_v_PO.Inside_Sales  -> Common_v_Customer.Assigned_To
+    --   BDM (Business Dev. Manager / Outside Salesperson), terms "Outside Sales /
+    --        Outside Salesperson / Assigned To 2", picker "Outside Sales Dialog":
+    --        lands in Sales_v_Order_Salesperson (see rep_outside above);
+    --        Sales_v_PO.Outside_Sales / Common_v_Customer.Assigned_To2 replicate
+    --        empty, so they are only trailing fallbacks.
+    -- Monday's "Sales Rep" is the BDM; the AM goes to a new "Inside Sales Rep".
     ui.user_name                                  AS sales_rep_inside,
     ua.user_name                                  AS customer_account_rep,
-    COALESCE(ui.user_name, ua.user_name, up.user_name) AS bdm,
+    -- AM: the order's Inside_Sales first, then the customer's Assigned_To.
+    COALESCE(ui.user_name, ua.user_name)          AS am,
+    -- BDM: the Order_Salesperson outside rep first (the only field populated in
+    -- PlexTest), then Outside_Sales, then Assigned_To2 as last resorts.
+    COALESCE(uo2.user_name, uo.user_name, ub.user_name) AS bdm,
 
     -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
     -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
@@ -341,10 +415,14 @@ release_lines AS (
     part.Name                                     AS part_name,
     bt.b.part_no                                  AS bottle_part_no,
     bt.b.name                                     AS bottle_name,
+    lb.l.part_key                                 AS label_part_key,
+    lb.l.part_no                                  AS label_part_no,
+    lb.l.name                                     AS label_part_name,
 
     -- Added 2026-09-16 — see the "Part Attributes" CTEs above. A property of
     -- the PART, not the release, so it is identical across every row this
     -- collapses together; no aggregation needed beyond the plain passthrough.
+    pap.part_label_size                            AS part_label_size,
     pap.part_size                                  AS part_size,
     pap.part_allergen                              AS part_allergen,
     pap.part_hazardous                             AS part_hazardous,
@@ -378,6 +456,11 @@ release_lines AS (
   JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release_Status` AS rs
     ON SAFE_CAST(rs.Release_Status_Key AS INT64) = SAFE_CAST(rel.Release_Status_Key AS INT64)
 
+  -- Priority lookup (2026-10-07). LEFT so a release with no/unknown priority
+  -- key still produces its queue row rather than being dropped.
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Priority` AS pr
+    ON SAFE_CAST(pr.Priority_Key AS INT64) = SAFE_CAST(rel.Priority_Key AS INT64)
+
   -- Addition 2: the ORDER must be approved, not just the release in Label
   -- Design. Matched on the status NAME rather than the key on purpose — Vox cut
   -- the status list from 10 to 7 in September and three keys vanished, which is
@@ -397,18 +480,27 @@ release_lines AS (
   LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
     ON SAFE_CAST(cust.Customer_No AS INT64) = SAFE_CAST(po.Customer_No AS INT64)
 
-  LEFT JOIN rep_primary   AS rp ON rp.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN rep_secondary AS rq ON rq.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN users         AS up ON up.Plexus_User_No = rp.Plexus_User_No
-  LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
+  -- AM side: the order's Inside_Sales and the customer's Assigned_To.
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
+  -- BDM side (2026-10-08): the real source is Order_Salesperson (rep_outside);
+  -- Outside_Sales and Assigned_To2 replicate empty and are trailing fallbacks.
+  LEFT JOIN rep_outside   AS ro  ON ro.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
+  LEFT JOIN users         AS uo2 ON uo2.Plexus_User_No = ro.Plexus_User_No
+  LEFT JOIN users         AS uo  ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
+  LEFT JOIN users         AS ub  ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
 
   LEFT JOIN bottles AS bt
     ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
 
+  LEFT JOIN labels AS lb
+    ON lb.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+
+  -- The LABEL part's attributes, not the finished good's (2026-10-02). See the
+  -- `labels` CTE. Joining this to pol.Part_Key, as it did until today, matched
+  -- nothing: all 40 populated assignments in Plex are on 73001-* label parts.
   LEFT JOIN part_attributes_pivoted AS pap
-    ON pap.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
+    ON pap.Part_Key = lb.l.part_key
 
   -- Trimmed and uppercased so stray whitespace or casing in Plex can't
   -- silently empty the queue (2026-09-29, matching the Plex version).
@@ -437,13 +529,13 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
+  priority,
   MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,
-  sales_rep_primary,
-  sales_rep_secondary,
   sales_rep_inside,
   customer_account_rep,
+  am,
   bdm,
   customer_email,
   customer_phone,
@@ -464,11 +556,15 @@ SELECT
     NULLIF(TRIM(part_name), '')], ' | '), '')                               AS line_description,
   bottle_part_no,
   bottle_name,
+  label_part_key,
+  label_part_no,
+  label_part_name,
   CASE REGEXP_EXTRACT(UPPER(bottle_name), r'\b(HDPE|PET|GLASS)\b')
     WHEN 'HDPE'  THEN 'HDPE'
     WHEN 'PET'   THEN 'PET'
     WHEN 'GLASS' THEN 'Glass'
   END                                                                       AS bottle_material,
+  part_label_size,
   part_size,
   part_allergen,
   part_hazardous,

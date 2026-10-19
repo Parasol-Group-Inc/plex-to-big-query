@@ -7,24 +7,46 @@ what it's actually made of, and who hears about it. Built 2026-08-13 while
 standardizing report naming across the whole pipeline (see
 [OPERATIONS.md](OPERATIONS.md) for the retry mechanism this depends on).
 The schedule table below is derived from the `google_cloud_scheduler_job`
-resources in `terraform/main.tf` (Sales Orders' two times come from
-`scheduler_cron`/`scheduler_cron_test` in `terraform.tfvars`) — if they
-disagree, `main.tf` wins; fix this page.
+resources in `terraform/main.tf` — if they disagree, `main.tf` wins; fix this
+page.
+
+> **Three of these times are not in git.** 25 of the 27 daily schedules are
+> hardcoded in `main.tf` and can be checked from any folder. The exceptions are
+> **Sales Orders** (`scheduler_cron` / `scheduler_cron_test`) and **every
+> retry** (`retry_scheduler_cron`), which read `terraform.tfvars` — a
+> gitignored file that exists only in the primary folder. Sales Orders is the
+> odd one out because it was the only pipeline when the repo was built; the
+> twelve added since are hardcoded like normal.
+>
+> **Don't read the `variables.tf` defaults instead — they are wrong.** They say
+> `0 2 * * *` and `0 6 * * *`; the live values are 7:00 PM and 9:45 PM
+> Mountain. To check the real values from any folder, read the backup:
+>
+> ```bash
+> gcloud storage cat >   gs://voxdatalake-terraform-state/plex-to-big-query/backups/latest/terraform__terraform.tfvars >   | grep cron
+> ```
+>
+> That backup is written by `scripts/backup_to_bucket.ps1`, so it is only as
+> fresh as the last backup — but these three values change about once a year.
 
 ## The short version
 
-- **13 pipelines, 26 Cloud Run Jobs** (prod + test), 68 BigQuery views.
-  Twelve pipelines run once a day in an evening cascade; **Label Design runs
-  twice a day** (9:30 AM and 1:30 PM prod, 9:40 AM and 1:40 PM test).
-- **Every run sends one email** — so a normal day is **28 scheduled
-  emails** (24 from the evening cascade + 4 from Label Design), plus whatever
-  the 9:45 PM retries send (see the caution under the table).
+- **13 pipelines, 27 Cloud Run Jobs** (prod + test, plus the Label Design push
+  job), 68 BigQuery views. Twelve pipelines run once a day in an evening
+  cascade; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
+  test at :05, push at :35).
+- **Every evening-cascade run sends one email** — so a normal day is **24
+  scheduled emails**, plus whatever the 9:45 PM retries send (see the caution
+  under the table). Label Design is the exception: it runs `EMAIL_MODE=on_error`,
+  so its hourly runs mail only when partial or failed; a clean run is recorded
+  in `job_run_log` and `probe_log` instead.
 - **Every email goes to the same 3 people, prod and test alike** —
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
-- **52 Cloud Scheduler jobs** back these 26 jobs (one normal trigger + one
-  retry trigger each), named `plex-<pipeline>-sync[-test]` and
+- **51 Cloud Scheduler jobs** back these 27 jobs — one normal trigger each
+  (27), plus one retry trigger on every job except Label Design's two and its
+  push (24). Named `plex-<pipeline>-sync[-test]` and
   `plex-<pipeline>-sync[-test]-retry`. (Two *other* schedulers —
   `monday-daily-sync` and `monday-daily-sync-VoxScorecardsLive` — also live in
   this GCP project but belong to an unrelated Monday.com integration, not this
@@ -39,7 +61,7 @@ but see the caution below the table.
 
 | Category | Pipeline | Reports produced (email body lists each by this name) | Prod job | Prod time | Test job | Test time |
 |---|---|---|---|---|---|---|
-| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | 9:30 AM, 1:30 PM | `plex-etl-label-design-test` | 9:40 AM, 1:40 PM |
+| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | hourly 5 AM - 5 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
 | **Sales** | `sales_orders` | 27 reports — see `bq_view` in `reports/sales_orders.yaml` | `plex-etl-sales-orders` | 7:00 PM | `plex-etl-sales-orders-test` | 7:10 PM |
 | **Production** | `work_orders` | 19 reports — see `bq_view` in `reports/work_orders.yaml` | `plex-etl-work-orders` | 7:20 PM | `plex-etl-work-orders-test` | 7:30 PM |
 | **Supply Chain** | `purchasing_open_orders` | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 7:40 PM | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
@@ -58,24 +80,31 @@ Prod/test pairs are staggered 10 minutes apart. `scorecard_goals_resolved` is
 built by both `sales_orders` and `work_orders`, which is why the per-pipeline
 view counts add up to 69 while there are 68 distinct views.
 
-> **Caution — the 9:45 PM retry predates the late slots.** The retry was set
-> 15 minutes after the *last* job back when the cascade ended at 9:30 PM. It
-> now fires before `plex-etl-purchasing-pending-requisitions-test` (9:50 PM)
-> and the six sales-quotes / sales-returns / quality-supplier-returns jobs
-> (10:00–10:50 PM). And "today" in the retry check is the **UTC** date
-> (`run_date` in `job_run_log`, `CURRENT_DATE()` in `main.py`), so Label
-> Design's 9:30 AM / 1:30 PM runs land on the previous UTC day from its 9:45 PM
-> retry. Reading `main.py`, a retry that finds no scheduled run "today" does a
-> full run — so those nine jobs likely get an extra full run (and email)
-> every night. Not yet confirmed against `job_run_log`; check before relying
-> on the retry for those pipelines:
+> **Caution — the 9:45 PM retry has produced no runs at all. Settled from
+> the code, 2026-10-01.** The retry was set 15 minutes after the *last* job
+> back when the cascade ended at 9:30 PM. It now fires before
+> `plex-etl-purchasing-pending-requisitions-test` (9:50 PM) and the six
+> sales-quotes / sales-returns / quality-supplier-returns jobs (10:00–10:50
+> PM). And "today" in the retry check is the **UTC** date (`run_date` in
+> `job_run_log`, `CURRENT_DATE()` in `main.py`), so when those seven jobs'
+> retries fire, no scheduled run exists for the current UTC date and
+> `main.py` proceeds with a full run and an email.
 >
-> ```sql
-> SELECT job_name, run_mode, status, logged_at
-> FROM `voxdatalake.PlexProd.job_run_log`
-> WHERE run_mode = 'retry' AND status != 'skipped'
-> ORDER BY logged_at DESC
+> **That code path is real, but it is not firing.** Every retry invocation
+> writes exactly one `job_run_log` row with `run_mode='retry'` — a no-op logs
+> `status='skipped'`, a real run logs its outcome, and no path returns without
+> logging. There are **zero** such rows since 2026-07-21 (OPEN_ITEMS D2), so
+> no retry is reaching the container. Check Cloud Scheduler's own execution
+> history, not `job_run_log`:
+>
+> ```bash
+> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
 > ```
+>
+> **Until that is answered, no pipeline has a working automatic retry** — a
+> failed nightly run waits for a human. Label Design is the exception by
+> design: no retry trigger, because its hourly probe re-runs a failed cycle
+> within the hour.
 
 **Changing a time:** Sales Orders' pair is `scheduler_cron`/`scheduler_cron_test`
 in `terraform.tfvars`; every other job's `schedule` is a literal in
@@ -241,7 +270,7 @@ retry-skip logic):
   unrelated `terraform apply`. `image_url` in `terraform.tfvars` is now
   always a pinned commit SHA (never `:latest`) and only matters for
   first-time job creation; `deploy/cloudbuild.yaml`'s single `deploy-all`
-  step (all 26 jobs today, one loop) — or a manual `gcloud run jobs update
+  step (all 27 jobs today, one loop) — or a manual `gcloud run jobs update
   --image=...`— is the only thing that ever moves a job onto a new image.
   Verified live: `terraform plan` shows `No changes` immediately after a
   real `gcloud run jobs update`, both right after adding the lifecycle

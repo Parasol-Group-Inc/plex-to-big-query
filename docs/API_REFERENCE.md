@@ -4,7 +4,7 @@ Last reviewed: 2026-09-25
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **26** live jobs (13 pipelines × prod/test: `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; schedulers `plex-<pipeline>-sync[-test][-retry]`). Substitute any other job name in the commands below the same way.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **27** live jobs (13 pipelines × prod/test, plus `plex-etl-label-design-push-test`: `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; schedulers `plex-<pipeline>-sync[-test][-retry]`). Substitute any other job name in the commands below the same way.
 >
 > **Deploys:** anything Terraform manages ships with `./scripts/deploy.sh` from the primary folder (`C:\F\Parasol\plex-to-big-query`) on a clean, pushed `main`; images ship with `./scripts/deploy_preflight.sh` + `gcloud builds submit` (§9). See `CONTRIBUTING.md`.
 
@@ -481,7 +481,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA && \
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest && \
 gcloud run jobs update plex-etl-sales-orders --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
-Repeat the last `gcloud run jobs update` per job, or loop over all 26 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the loop). The normal route does all of it in one call, from the primary folder on an up-to-date `main`:
+Repeat the last `gcloud run jobs update` per job, or loop over all 27 (see `docs/TROUBLESHOOTING.md` § "Full rebuild procedure" for the loop). The normal route does all of it in one call, from the primary folder on an up-to-date `main`:
 
 ```bash
 ./scripts/deploy_preflight.sh

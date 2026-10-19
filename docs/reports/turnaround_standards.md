@@ -1,6 +1,6 @@
 # Turnaround standards — the one Quality table nothing here creates
 
-> **Status:** ✅ Table created in **both** `PlexTest` and `PlexProd` 2026-09-22 · **empty in production — waiting on the real figures** · **Category:** Quality · **Maintained by:** Jennilyn, by hand, directly in BigQuery
+> **Status:** ✅ Table created in **both** `PlexTest` and `PlexProd` 2026-09-22 · **three labelled placeholders in production since 2026-10-02 — still waiting on the real figures** · **Category:** Quality · **Maintained by:** Jennilyn, by hand, directly in BigQuery
 
 ## What it is
 

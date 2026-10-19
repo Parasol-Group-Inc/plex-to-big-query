@@ -16,7 +16,7 @@ this board is *for*, see [`monday_board_guide.md`](monday_board_guide.md).
 **Why this exists:** Monday's column ids are per-board and are **not** the
 column titles — a column titled "Sales Order" might be `text_mkzkhws2` on this
 board and something else entirely on a different one. `pushToMonday_()` in
-[`deploy/label_design_sync/Code.gs`](../deploy/label_design_sync/Code.gs)
+[`deploy/archive/label_design_sync/Code.gs`](../deploy/archive/label_design_sync/Code.gs)
 needs the real ids to write to the right place; this file is where they're
 recorded so nobody has to re-query the board to find them again.
 
@@ -32,7 +32,7 @@ query {
 ```
 
 or run `listMondayColumns()` from the Apps Script editor (see
-[`deploy/label_design_sync/README.md`](../deploy/label_design_sync/README.md)),
+[`deploy/archive/label_design_sync/README.md`](../deploy/archive/label_design_sync/README.md)),
 which prints the same thing plus a ready-to-paste `MONDAY_COLUMNS` map.
 
 ## All 61 columns

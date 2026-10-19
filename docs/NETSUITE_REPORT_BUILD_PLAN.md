@@ -76,7 +76,7 @@ happened in the two batches described above rather than one pass.
 
 All prod jobs will run on their own schedule going forward — only the
 `-test` variants were manually triggered to verify. Full enumerated
-schedule (all 16 jobs, not just these 7): [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
+schedule (all 27 jobs, not just these 7): [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 > **Note on the two paragraphs above:** an earlier draft of this doc said
 > "None are deployed" here, written before Round 4 and never updated after

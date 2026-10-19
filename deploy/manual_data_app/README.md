@@ -38,6 +38,30 @@ Adding another is a **registry entry in `Code.gs` plus `setupSheets()`** — no
 new form code. If adding one requires editing `Index.html`, the registry is
 missing a field type; that's the thing to fix.
 
+## Goal seed: `scorecard_goals` → the goals tab
+
+`scorecard_goals` in `BQ_DATASET` is the **seed table**. When goals change
+outside the app, reseed it from the originals (rep goals:
+`VoxScorecardsLive.sales_goals`; company-wide sales goal: the live Looker view
+`VoxScorecardsLive.vw_sales_mtd_vs_goal`), and the app picks it up:
+
+- **Automatically.** `pushAll()`, the hourly trigger, first runs `seedGoals_()`.
+  It acts only when the seed's newest `updated_at` differs from the last seed it
+  applied to this dataset (Script Property `GOALS_SEEDED_<dataset>`). So a
+  reseed reaches the sheet, and BigQuery, within the hour, and switching
+  `BQ_DATASET` to `PlexProd` seeds there on the first push.
+- **Immediately.** Run `importLegacyGoals()` from the editor.
+
+**Newest edit wins, as in the resolver.** Per (metric, month, scope), a seed row
+is appended only when the app has no row for that key, or its newest row is
+older and holds a different figure. The appended row keeps the seed's own
+`updated_at`, so an edit made in the app afterwards stays on top, and
+re-running changes nothing.
+
+Reseeded 2026-10-19 in `PlexTest` and `PlexProd` (backups:
+`scorecard_goals_backup_20261019`). Revenue and production goals there are
+still the labelled 2026-10-02 placeholders: no original exists in BigQuery.
+
 ## How it flows, and why the sheet is in the middle
 
 ```

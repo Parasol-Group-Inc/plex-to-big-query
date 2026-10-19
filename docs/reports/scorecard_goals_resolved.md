@@ -144,4 +144,13 @@ Also **disable the old Apps Script project**. Deleting
 `deploy/goals_sheet_to_bigquery.gs` from the repo does not stop a deployed
 trigger from still truncating that table on a schedule.
 
+**Update 2026-10-19: the import is now "newest edit wins", and it runs by itself.**
+Jennilyn kept editing rep goals in `VoxScorecardsLive.sales_goals` with SQL, so the
+app's 24 Sep copies went stale (October Tyler Hall and Kami Butcher), and the
+"skip keys the app already has" rule could never correct them. `scorecard_goals`
+was reseeded from the originals in both datasets, and `importLegacyGoals()` /
+the hourly `pushAll()` now append a seed row whenever it is newer than the app's
+newest row for that key and differs from it. An edit made in the app after the
+seed still wins. See `deploy/manual_data_app/README.md`.
+
 **Update 2026-09-24:** `importLegacyGoals()` has been run in `PlexTest` — all 68 legacy goals are now in the app there. Before deleting the legacy branch, run step 1's check in **both** `PlexTest` and `PlexProd`.

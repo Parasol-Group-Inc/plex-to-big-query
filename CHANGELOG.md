@@ -14,6 +14,36 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (scorecard) - Goals reseeded from the originals; the app's import is "newest edit wins"
+
+### Fixed
+- **The scorecard's rep goals had fallen behind Jennilyn's.** She edits
+  `VoxScorecardsLive.sales_goals` directly with SQL (12 Oct: October Tyler Hall
+  $1,325,000, Kami Butcher $1,800,000). The app imported that table once, on
+  24 Sep, and its old import skipped every key it already had, so the stale
+  $1.8M / $2.0M stayed, as did a December Tyler Hall "Test" edit ($1.8M against
+  $1.6M) in PlexTest.
+
+### Changed
+- **`scorecard_goals` reseeded in PlexTest and PlexProd (data, not code):**
+  56 rep goals from `VoxScorecardsLive.sales_goals`, 12 company-wide sales goals
+  from the live Looker view `vw_sales_mtd_vs_goal`, and the existing labelled
+  revenue/production placeholders, 116 rows. Old contents kept in
+  `scorecard_goals_backup_20261019`. PlexProd's app table is empty, so its
+  resolver serves the corrected goals now. PlexTest corrects once the app runs.
+- **`importLegacyGoals()` now applies the resolver's rule, newest edit wins.**
+  A seed row is appended when the app has no row for the key, or when its
+  newest row is older and differs; the row keeps the seed's `updated_at`, so a
+  later edit in the app still wins and re-runs are harmless. Tested against a
+  mock sheet: stale, missing, identical, newer-in-app and re-run cases.
+- **`pushAll()` runs the seed first** (`seedGoals_()`), once per new seed per
+  `BQ_DATASET`, so a reseed lands within the hour and the first push after
+  switching to PlexProd seeds there.
+
+**Ships by hand:** paste `deploy/manual_data_app/Code.gs` and `Push.gs` into the
+Apps Script project, then Deploy → Manage deployments → New version. Nothing
+in Terraform or the ETL changes.
+
 ## 2026-10-19 - Label Design cutover: the prod push to Monday is live
 
 ### Changed

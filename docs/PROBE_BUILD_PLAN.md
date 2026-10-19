@@ -172,3 +172,11 @@ Either order is safe, and so is rolling the image back:
 
 - **Phase 1:** built 2026-10-19 on `dev`. PR open.
 - **Phase 2:** designed (above), not built.
+- **First new pipeline on the probe: `part_routing`** (Audit - Part Info and
+  Routing, built 2026-10-19). It added two engine features:
+  - **`page_key` keyset paging** for large views;
+  - **`sum:` probe columns**, so edits show on views with no change date.
+    Measured on Plex test: SUM of a key column overflows Plex's 32-bit
+    integer, so that is refused.
+
+  Its prod job starts nightly and joins the dispatcher in phase 2 like the rest.

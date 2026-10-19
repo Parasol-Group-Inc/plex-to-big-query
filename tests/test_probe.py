@@ -190,6 +190,145 @@ def test_cursor_failure_is_inconclusive_not_fatal():
     raise AssertionError("a cursor error must be inconclusive")
 
 
+# ── paging (query_plex_paged) ──────────────────────────────────────────────────
+import re as _re
+
+
+class PagingConn:
+    """A tiny Plex: one table, answers COUNT(*), TOP-keyset pages and the
+    boundary-key query exactly the way query_plex_paged() writes them."""
+
+    def __init__(self, rows, key="Part_Operation_Key"):
+        self.rows, self.key, self.sql = rows, key, []
+
+    def cursor(self):
+        conn = self
+
+        class C:
+            description = [("Part_Operation_Key", int), ("Workcenter_Key", int), ("Ideal_Rate", float)]
+
+            def execute(self, sql):
+                conn.sql.append(sql)
+                k = conn.key
+                if sql.startswith("SELECT COUNT(*)"):
+                    self.out = [(len(conn.rows),)]
+                elif m_ := _re.match(rf"SELECT TOP (\d+) \* FROM \w+ WHERE {k} (> (\d+)|IS NOT NULL) ORDER BY {k}$", sql):
+                    n, last = int(m_.group(1)), m_.group(3)
+                    pool = sorted((r for r in conn.rows if r[0] is not None and (last is None or r[0] > int(last))),
+                                  key=lambda r: r[0])
+                    self.out = pool[:n]
+                elif _re.match(rf"SELECT \* FROM \w+ WHERE {k} IS NULL$", sql):
+                    self.out = [r for r in conn.rows if r[0] is None]
+                elif m_ := _re.match(rf"SELECT \* FROM \w+ WHERE {k} = (\d+)$", sql):
+                    self.out = [r for r in conn.rows if r[0] == int(m_.group(1))]
+                elif sql.startswith("SELECT * FROM"):
+                    self.out = list(conn.rows)
+                else:
+                    raise AssertionError(sql)
+
+            def fetchall(self):
+                return self.out
+
+            def close(self):
+                pass
+
+        return C()
+
+
+def _rows():
+    # Clustered, repeating keys: like the real Approved_Workcenter table.
+    rows = []
+    for op in list(range(1000, 1040)) + list(range(900000, 900003)):
+        for wc in range(1, 8 if op % 3 else 3):
+            rows.append((op, wc, op * 0.5 + wc))
+    return rows
+
+
+def test_paging_returns_every_row_once_without_splitting_keys():
+    rows = _rows()
+    conn = PagingConn(rows)
+    df = m.query_plex_paged(conn, "Part_v_Approved_Workcenter", "", "Part_Operation_Key", 50)
+    got = sorted(map(tuple, df.itertuples(index=False, name=None)))
+    assert got == sorted(rows), (len(got), len(rows))
+    assert df.attrs["pages"] > 1 and "page_note" not in df.attrs
+    assert any(q.startswith("SELECT TOP 50 ") for q in conn.sql)
+    assert not any("LIMIT" in q for q in conn.sql), "Plex rejects LIMIT"
+
+
+def test_paging_keeps_rows_with_a_null_key():
+    rows = _rows() + [(None, 9, 1.0), (None, 10, 2.0)]
+    df = m.query_plex_paged(PagingConn(rows), "Part_v_Approved_Workcenter", "", "Part_Operation_Key", 50)
+    assert len(df) == len(rows) and "page_note" not in df.attrs
+
+
+def test_float_sums_are_rounded_in_the_snapshot():
+    cfg = auto_config(extractions=[{"plex_view": "V", "bq_table": "raw_v", "filter": "", "probe": ["sum:Rate"]}])
+    _, a = m.run_probe(FakeConn({"FROM V": [(3, 645305690.6000001)]}), cfg)
+    _, b = m.run_probe(FakeConn({"FROM V": [(3, 645305690.5999999)]}), cfg)
+    assert a["raw_v"] == b["raw_v"] == "3|645305690.6000"
+
+
+def test_paging_small_table_is_one_plain_pull():
+    conn = PagingConn(_rows()[:10])
+    df = m.query_plex_paged(conn, "Part_v_Approved_Workcenter", "", "Part_Operation_Key", 50)
+    assert len(df) == 10 and df.attrs["pages"] == 1
+    assert not any("TOP" in q for q in conn.sql)
+
+
+def test_paging_reports_a_count_mismatch_instead_of_failing():
+    rows = _rows()
+    conn = PagingConn(rows)
+    original = conn.cursor
+
+    def lying_cursor():
+        c = original()
+        real = c.execute
+
+        def execute(sql):
+            real(sql)
+            if sql.startswith("SELECT COUNT(*)"):
+                c.out = [(len(rows) + 5,)]
+        c.execute = execute
+        return c
+    conn.cursor = lying_cursor
+    df = m.query_plex_paged(conn, "Part_v_Approved_Workcenter", "", "Part_Operation_Key", 50)
+    assert "counted" in df.attrs.get("page_note", "")
+
+
+def test_paging_validation():
+    base = {"plex_view": "Part_v_Approved_Workcenter", "bq_table": "raw_x", "page_key": "Part_Operation_Key"}
+    assert m.validate_extraction(base) == ""
+    assert "page_size" in m.validate_extraction(dict(base, page_size=5))
+    assert "page_size" in m.validate_extraction(dict(base, page_size="big"))
+    assert "identifier" in m.validate_extraction(dict(base, page_key="Key; DROP"))
+    assert "WHERE" in m.validate_extraction(dict(base, filter="ORDER BY x"))
+    assert m.validate_extraction(dict(base, filter="where\n  Active = 1")) == "", "multi-line/lower-case WHERE is fine"
+    assert "ORDER BY" in m.validate_extraction(dict(base, filter="WHERE a = 1 ORDER BY b"))
+    assert "date_col" in m.validate_extraction(dict(base, date_col="Update_Date"))
+
+
+def test_auto_probe_sum_columns():
+    cfg = auto_config(extractions=[{"plex_view": "Part_v_Approved_Workcenter", "bq_table": "raw_aw",
+                                    "filter": "", "probe": ["Part_Operation_Key", "sum:Ideal_Rate", "sum:Crew_Size"]}])
+    conn = FakeConn({"FROM Part_v_Approved_Workcenter": [(64942, 66391187, 1234.5, 900)]})
+    _, snap = m.run_probe(conn, cfg)
+    assert conn.seen == ["SELECT COUNT(*), MAX(Part_Operation_Key), SUM(Ideal_Rate), SUM(Crew_Size) "
+                         "FROM Part_v_Approved_Workcenter"], conn.seen
+    assert snap["raw_aw"] == "64942|66391187|1234.5000|900"
+    keysum = auto_config(extractions=[{"plex_view": "X", "bq_table": "raw_x", "filter": "", "probe": ["sum:workcenter_key"]}])
+    try:
+        m.run_probe(FakeConn({}), keysum)
+        raise AssertionError("summing a key column must be refused (32-bit overflow in Plex)")
+    except m.ProbeInconclusive:
+        pass
+    bad = auto_config(extractions=[{"plex_view": "X", "bq_table": "raw_x", "filter": "", "probe": ["avg:Rate"]}])
+    try:
+        m.run_probe(FakeConn({}), bad)
+    except m.ProbeInconclusive:
+        return
+    raise AssertionError("only MAX (plain name) and sum: are allowed")
+
+
 # ── emails ─────────────────────────────────────────────────────────────────────
 def render(report):
     """Run send_report with SendGrid replaced; return (subject, html, text)."""

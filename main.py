@@ -145,6 +145,9 @@ def load_report_config(config_path: str) -> dict:
     return config
 
 
+# Rows per Plex call for an extraction that sets `page_key` (see query_plex_paged).
+DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25000"))
+
 # Plex view / column names: letters, digits, underscores only.
 _PLEX_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -173,6 +176,19 @@ def validate_extraction(extraction: dict) -> str:
         return f"date_col '{date_col}' is not a valid identifier (letters/digits/_ only)"
     if any(tok in filt for tok in (";", "--", "/*")):
         return f"filter for '{view}' contains a forbidden token (; -- /*): {filt}"
+    page_key = extraction.get("page_key", "") or ""
+    if page_key:
+        if not _PLEX_IDENTIFIER_RE.match(page_key):
+            return f"page_key '{page_key}' for '{view}' is not a valid identifier"
+        size = extraction.get("page_size", DEFAULT_PAGE_SIZE)
+        if not isinstance(size, int) or isinstance(size, bool) or not 100 <= size <= 1_000_000:
+            return f"page_size for '{view}' must be an integer between 100 and 1,000,000, got {size!r}"
+        if filt and not re.match(r"(?i)^\s*WHERE\s", filt):
+            return f"a paged extraction's filter must start with WHERE (it is combined with the page condition): {filt}"
+        if re.search(r"(?i)\b(ORDER|GROUP)\s+BY\b", filt):
+            return f"a paged extraction's filter may not contain ORDER BY / GROUP BY (paging adds its own): {filt}"
+        if date_col:
+            return f"'{view}' sets both page_key and date_col; paging orders by page_key, so drop date_col"
     return ""
 
 
@@ -256,6 +272,10 @@ def validate_bq_view(view_cfg) -> str:
 # why probe-driven pipelines have no `-retry` scheduler.
 PROBE_LOG_TABLE = os.environ.get("PROBE_LOG_TABLE", "probe_log")
 _PROBE_BIND_RE  = re.compile(r"^\d+$")
+# An auto-probe column: `Update_Date` -> MAX(Update_Date), `sum:Ideal_Rate` ->
+# SUM(Ideal_Rate). SUM is what makes an EDIT visible on a view with no change
+# date: a run rate typed over keeps the count and the keys but moves the sum.
+_PROBE_COLUMN_RE = re.compile(r"^(sum:)?[A-Za-z0-9_]+$")
 _CONFIG_SNAPSHOT_KEY = "(config + SQL)"
 
 
@@ -384,18 +404,29 @@ def _auto_probe_parts(conn, config: dict) -> dict:
             raise ProbeInconclusive(f"cannot probe an invalid extraction: {problem}")
         view = extraction["plex_view"]
         cols = extraction.get("probe") or []
-        if not isinstance(cols, list) or not all(
-                isinstance(c, str) and _PLEX_IDENTIFIER_RE.match(c) for c in cols):
-            raise ProbeInconclusive(f"probe column list for '{view}' must be plain identifiers: {cols!r}")
+        if not isinstance(cols, list) or not all(isinstance(c, str) and _PROBE_COLUMN_RE.match(c) for c in cols):
+            raise ProbeInconclusive(
+                f"probe column list for '{view}' must be identifiers or sum:<identifier>: {cols!r}")
+        keys_summed = [c for c in cols if c.startswith("sum:") and c.lower().endswith(("_key", "_no"))]
+        if keys_summed:
+            # Plex sums integers in 32 bits: SUM(Workcenter_Key) over 65k rows
+            # (~5.6 billion) fails the whole query (measured 2026-10-19). Key
+            # columns belong in MAX(); SUM is for rates, quantities, lead times.
+            raise ProbeInconclusive(f"probe for '{view}' sums key column(s) {keys_summed} — "
+                                    f"they overflow Plex's 32-bit SUM; use MAX instead")
         filt = (extraction.get("filter", "") or "").strip()
-        select = "COUNT(*)" + "".join(f", MAX({c})" for c in cols)
+        select = "COUNT(*)" + "".join(
+            f", SUM({c[4:]})" if c.startswith("sum:") else f", MAX({c})" for c in cols)
         # Same view and filter as query_plex(), unaliased, so the probe counts
         # exactly the rows the extraction would pull.
         sql = f"SELECT {select} FROM {view}" + (f" {filt}" if filt else "")
         rows = _probe_fetch(conn, sql, view)
         if len(rows) != 1:
             raise ProbeInconclusive(f"probe aggregate on '{view}' returned {len(rows)} rows, expected 1")
-        parts[extraction["bq_table"]] = "|".join(_cell(v) for v in rows[0])
+        # Floats rounded to 4 places: a SUM over unordered rows can differ in its
+        # last bits between runs, which would read as a change on every probe.
+        parts[extraction["bq_table"]] = "|".join(
+            f"{v:.4f}" if isinstance(v, float) else _cell(v) for v in rows[0])
     if not parts:
         raise ProbeInconclusive("probe_mode: auto, but the report has no extractions")
     return parts
@@ -768,6 +799,92 @@ def query_plex(
     return df
 
 
+def query_plex_paged(
+    conn: pyodbc.Connection,
+    plex_view: str,
+    plex_filter: str,
+    page_key: str,
+    page_size: int,
+) -> pd.DataFrame:
+    """Pull a large view in key-ordered pages instead of one call.
+
+    For an extraction with `page_key:`. Counts first, so a view that fits in one
+    page is pulled exactly as query_plex() would. Otherwise it walks the key:
+
+        SELECT TOP <n> * FROM <view> WHERE [<filter> AND] <key> > <last> ORDER BY <key>
+
+    Keyset, not equal key ranges: Plex keys cluster (measured 2026-10-19, four
+    equal ranges over Part_Operation_Key held 4 and 15,624 rows). Plex's SQL
+    engine accepts TOP but rejects LIMIT.
+
+    The key need not be unique (Part_v_Approved_Workcenter is one row per
+    operation AND workcenter). When a page comes back full, the rows on its
+    last key value are dropped and fetched again as one group, so no key is ever
+    split across pages. Rows with a NULL key, which a keyset walk cannot reach,
+    are fetched at the end. The total is checked against the count; a
+    difference (rows added or removed mid-pull) is reported in
+    df.attrs["page_note"] rather than failing the run.
+    """
+    where = re.sub(r"(?i)^\s*WHERE\s", "", plex_filter).strip() if plex_filter else ""
+    base = f"({where}) AND " if where else ""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM {plex_view}" + (f" WHERE {where}" if where else ""))
+        expected = int(cursor.fetchall()[0][0])
+    finally:
+        cursor.close()
+    if expected <= page_size:
+        log.info(f"[{plex_view}] {expected} rows fit in one page of {page_size} — single pull.")
+        df = query_plex(conn, plex_view=plex_view, plex_filter=plex_filter, plex_date_col="")
+        df.attrs["pages"] = 1
+        return df
+
+    log.info(f"[{plex_view}] {expected} rows — paging by {page_key}, {page_size} per page.")
+    columns, odbc_schema, rows, last, pages = None, None, [], None, 0
+
+    def fetch(sql):
+        nonlocal columns, odbc_schema
+        cur = conn.cursor()
+        try:
+            cur.execute(sql)
+            if columns is None:
+                columns = [c[0] for c in cur.description]
+                odbc_schema = {c[0]: _bq_type_for_odbc(c[1]) for c in cur.description}
+            return cur.fetchall()
+        finally:
+            cur.close()
+
+    while True:
+        cond = f"{page_key} > {last}" if last is not None else f"{page_key} IS NOT NULL"
+        page = fetch(f"SELECT TOP {page_size} * FROM {plex_view} WHERE {base}{cond} ORDER BY {page_key}")
+        pages += 1
+        if len(page) < page_size:
+            rows.extend(page)
+            break
+        k = columns.index(page_key)
+        boundary = page[-1][k]
+        if not isinstance(boundary, int):
+            raise RuntimeError(f"page_key {page_key} on {plex_view} is not an integer ({boundary!r}) — cannot page")
+        rows.extend(r for r in page if r[k] != boundary)
+        rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} = {boundary}"))
+        last = boundary
+        log.info(f"[{plex_view}] page {pages}: {len(rows)} rows so far (through {page_key} {boundary}).")
+
+    # Keyset paging cannot reach rows whose key is NULL; a single unpaged pull
+    # would have kept them, so fetch them explicitly rather than lose them the
+    # night a table grows past one page.
+    rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} IS NULL"))
+
+    df = pd.DataFrame.from_records(rows, columns=columns)
+    df.attrs["odbc_schema"] = odbc_schema
+    df.attrs["pages"] = pages
+    if len(df) != expected:
+        df.attrs["page_note"] = (f"{plex_view}: counted {expected} rows but paged {len(df)} — rows were "
+                                 f"added or removed in Plex during the pull")
+    log.info(f"Fetched {len(df)} rows from Plex [{plex_view}] in {pages} pages.")
+    return df
+
+
 # ── BigQuery write ────────────────────────────────────────────────────────────
 def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = None):
     """
@@ -1087,7 +1204,12 @@ def main():
 
                 log.info(f"--- Extracting {view} → {table} ---")
                 try:
-                    df = query_plex(conn, plex_view=view, plex_filter=filt, plex_date_col=date_col)
+                    if extraction.get("page_key"):
+                        df = query_plex_paged(conn, plex_view=view, plex_filter=filt,
+                                              page_key=extraction["page_key"],
+                                              page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
+                    else:
+                        df = query_plex(conn, plex_view=view, plex_filter=filt, plex_date_col=date_col)
                 except Exception as exc:
                     log.exception(f"Query failed for {view}: {exc}")
                     events.append(f"ERROR: {view} query failed: {exc}")
@@ -1107,7 +1229,10 @@ def main():
                         max_modified = col_max.to_pydatetime()
 
                 rows_fetched += len(df)
-                events.append(f"Fetched {len(df)} rows from {view}")
+                pages = df.attrs.get("pages", 1)
+                events.append(f"Fetched {len(df)} rows from {view}" + (f" in {pages} pages" if pages > 1 else ""))
+                if df.attrs.get("page_note"):
+                    events.append(f"WARNING: {df.attrs['page_note']}")
                 extraction_rows.append({"table": table, "rows": len(df), "ok": True})
 
                 if OUTPUT_MODE == "bigquery":

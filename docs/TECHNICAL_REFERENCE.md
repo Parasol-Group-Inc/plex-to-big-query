@@ -152,9 +152,11 @@ bq_view:                         # a single mapping, OR a list of mappings (see 
 
 ## Change probe (`probe:`) — skipping a run that has nothing to do
 
-Added 2026-10-01 so a pipeline can run hourly without paying for a full extraction every hour. **Opt-in per report: a config with no `probe:` block behaves exactly as it always did.** Today only `label_design` uses it.
+Added 2026-10-01 for Label Design (hourly). **Extended to every pipeline on 2026-10-19** (`probe_mode: auto`); design, measurements and rollout are in [PROBE_BUILD_PLAN.md](PROBE_BUILD_PLAN.md). A config with no `probe:` key behaves exactly as it always did.
 
-A `probe:` block sits above `extractions:` and names one or more tiny queries whose combined result is fingerprinted:
+### Two kinds
+
+**Explicit** (`label_design` only): hand-written queries, fingerprinted as a set.
 
 ```yaml
 probe:
@@ -163,39 +165,83 @@ probe:
       columns: [Release_Status_Key]
       filter: "WHERE t.Release_Status = 'Label Design'"
       bind: status_keys            # expose this query's single column to later filters
-
     - plex_view: Sales_v_Release
       columns: [Release_Key, PO_Line_Key]
       filter: "WHERE t.Release_Status_Key IN ({status_keys})"
 ```
 
-`run_probe()` in `main.py` builds `SELECT t.<col>, ... FROM <view> AS t <filter>` for each query (always aliased — the repo's Plex SQL rule), **sorts the returned row tuples** so the fingerprint describes the SET and not the order Plex happened to return, and hashes the lot: `sha256(...)[:32]`. A `bind:` query must return exactly one column; its values are interpolated into a later query's `{name}` placeholder as a comma-separated list of integers, and `_PROBE_BIND_RE` rejects anything that isn't digits.
+Each query is `SELECT t.<col>, ... FROM <view> AS t <filter>`. Its rows are sorted, so the fingerprint describes the set rather than Plex's row order. A `bind:` query must return one integer column, which becomes a comma-separated list in a later `{name}` placeholder (`_PROBE_BIND_RE` rejects anything that isn't digits).
+
+**Auto** (every nightly pipeline): `probe_mode: auto` above `extractions:`, plus an optional `probe: [...]` list on each extraction.
+
+```yaml
+probe_mode: auto
+
+extractions:
+  - plex_view: Sales_v_PO_Line
+    bq_table: raw_Sales_v_PO_Line
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, PO_Line_Key]   # MAX()'d; COUNT(*) is always included
+```
+
+Each extraction becomes `SELECT COUNT(*), MAX(<col>), ... FROM <view> <filter>`. That is the same view and filter as `query_plex()`, unaliased, so it counts exactly what the extraction pulls. The columns were picked from the catalog by `scripts/generate_probe_columns.py`: a change date and/or the view's `<Entity>_Key`. The script is idempotent and never overwrites an existing `probe:` line. An extraction without a list probes by `COUNT(*)` only.
+
+**Both kinds** also fold in `config_fingerprint()`: a hash of the report YAML as deployed plus every view's SQL. So a config or SQL deploy always runs in full; this fixes OPEN_ITEMS L10. `run_probe()` returns `(fingerprint, snapshot)`. The snapshot is `{source: value}`, with the config hash under `(config + SQL)`, and `changed_sources()` diffs it against the last clean run's to name the tables that moved.
+
+### When a run may skip (`probe_may_skip`)
+
+| `RUN_MODE` | explicit (label_design) | auto (nightly pipelines) |
+|---|---|---|
+| `scheduled` (plain scheduler fire / by hand) | may skip | **never** — full run, as before |
+| `probe` (dispatcher) | may skip | may skip |
+| `full` (dispatcher, 4 AM) | never | never — but the fingerprint is recorded |
+| `retry` | never | never |
 
 Then, before the extraction loop and only when `OUTPUT_MODE=bigquery`:
 
-1. The fingerprint is compared with the last one stored as `applied` for this report.
-2. **Equal** → log a `skipped` row to `probe_log`, close the ODBC connection and return. No extractions, no views, no email.
-3. **Different, or nothing stored yet** → the run proceeds normally.
-4. In `run_and_report()`, after `log_job_run`, the fingerprint is stored as `applied` **only if the run finished `success`** — otherwise `failed`.
-
-**Point 4 is why Label Design has no retry trigger.** A failed or partial run leaves the stored reference where it was, so the next hourly probe sees a difference and runs again. The probe *is* the retry — but only at hourly cadence. A nightly pipeline must keep its `-retry` scheduler.
+1. The fingerprint is compared with the last `applied` one for this report.
+2. **Equal and allowed to skip:** log a `skipped` row, close ODBC and return. There are no extractions and no views (the config is in the fingerprint, so nothing deployed is being skipped). The "nothing to update" email goes out unless `EMAIL_MODE=on_error`.
+3. **Otherwise:** the run proceeds in full.
+4. In `run_and_report()`, the fingerprint and snapshot are stored as `applied` **only if the run finished `success`**, otherwise `failed`. A failed or partial run leaves the reference where it was, so the next probe runs again. **The probe is the retry.**
 
 ### Fail-open
 
-Anything that stops the probe being evaluated — a query erroring, a renamed status, a `bind:` resolving to no rows — raises `ProbeInconclusive`, logs an `inconclusive` row, and **runs the full extraction**. A probe may cost time; it may never be the reason a change is missed. The cost of that safety is that a permanently broken probe is invisible: every run succeeds, it just does the full work. Check now and then:
+Anything that stops the probe being evaluated raises `ProbeInconclusive`, logs an `inconclusive` row and **runs the full extraction**:
+- a query error;
+- a non-identifier probe column;
+- an aggregate that returns no row;
+- a `bind:` that resolves to nothing;
+- since 2026-10-19, an unreadable `probe_log` (that used to fail the run).
+
+A probe may cost time; it may never be the reason a change is missed. A permanently broken probe is invisible, so check now and then:
 
 ```sql
-SELECT * FROM `voxdatalake.PlexTest.probe_log`
+SELECT * FROM `voxdatalake.PlexProd.probe_log`
 WHERE outcome = 'inconclusive' ORDER BY probed_at DESC
 ```
 
 ### `probe_log`
 
-Created on first use in the pipeline's own dataset (`PROBE_LOG_TABLE`, default `probe_log`). One row per probe: `report_name`, `job_name`, `probed_at TIMESTAMP`, `fingerprint STRING`, `outcome STRING` (`skipped` | `applied` | `failed` | `inconclusive`), `detail STRING`.
+Created on first use in the pipeline's own dataset (`PROBE_LOG_TABLE`, default `probe_log`). One row per probe:
+- `report_name`
+- `job_name`
+- `probed_at TIMESTAMP`
+- `fingerprint STRING`
+- `outcome STRING` (`skipped` | `applied` | `failed` | `inconclusive`)
+- `detail STRING`
+- `snapshot STRING`: JSON, added 2026-10-19
+- `run_mode STRING`: added 2026-10-19
 
-### What it does NOT cover
+`ensure_probe_log_table()` adds the two new columns to an older table in place.
 
-The probe runs *before* view creation, so a deploy that changes only a view's SQL does not reach BigQuery until the probe's data changes. For Label Design that is acceptable — the queue moves daily — but after a view-only deploy, trigger the job by hand rather than waiting.
+### Known limit
+
+On a table with no change date, an edit to an existing row keeps the same count and keys. The 4 AM `full` run bounds that at one day.
+
+### Dispatcher outcome
+
+A run started by the ETL dispatcher carries `DISPATCH_ID`. At the end, `record_dispatch_outcome()` writes `outcome`, `finished_at`, `execution_name` and `detail` onto that row of `DISPATCH_LOG_TABLE` (default `etl_dispatch_log`) with DML. The dispatcher reads it to schedule the one follow-up probe 15 minutes after a failure. See PROBE_BUILD_PLAN.md (phase 2).
 
 ---
 
@@ -408,7 +454,10 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `BQ_TABLE` | `plex_extract` | apply | Legacy single-view mode only — target table name |
 | `METADATA_TABLE` | `sync_metadata` | apply | Sync state tracking table |
 | `JOB_RUN_LOG_TABLE` | `job_run_log` | apply | Retry-tracking table — see "Retry mechanism" |
-| `RUN_MODE` | `""` | — | Set to `retry` by the 9:45 PM Mountain scheduler trigger; anything else runs as a normal scheduled execution |
+| `RUN_MODE` | `scheduled` | — | `scheduled`, `probe`, `full` (both set by the ETL dispatcher) or `retry` (9:45 PM retry scheduler) — see "Change probe" |
+| `DISPATCH_ID` | `""` | — | Set by the ETL dispatcher; the run writes its outcome onto that `etl_dispatch_log` row |
+| `DISPATCH_LOG_TABLE` | `etl_dispatch_log` | — | Where the dispatcher's rows live (job's own dataset) |
+| `REPORT_TIME_ZONE` | `America/Denver` | — | Zone for email times and for the subject's date |
 | `EMAIL_MODE` | `always` | apply | `on_error` sends mail only on a `partial` or `failed` run — set on both Label Design ETL jobs, which run hourly and would otherwise mail 26 times a day. A clean run is still recorded in `job_run_log` and `probe_log` |
 | `PROBE_LOG_TABLE` | `probe_log` | apply | Change-probe outcome table — see "Change probe" |
 | `REPORT_CONFIG_GCS_PATH` | `""` | — (edit the YAML instead) | GCS path to the multi-report YAML. Empty = legacy single-view mode using the vars below |

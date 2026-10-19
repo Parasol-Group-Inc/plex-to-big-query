@@ -18,36 +18,45 @@ description: "16-field Vox Nutrition sales orders report — prod (PlexProd data
 # bq_table  : Destination BigQuery table name
 # filter    : SQL WHERE clause (include the word WHERE), or "" for all rows
 # date_col  : Column name for incremental sync watermark, or "" for full refresh
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Sales Order header — one row per sales order
   - plex_view: Sales_v_PO
     bq_table: raw_Sales_v_PO
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Key]
 
   # Sales Order line items — one row per part line on each order
   - plex_view: Sales_v_PO_Line
     bq_table: raw_Sales_v_PO_Line
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Line_Key]
 
   # Status change audit trail — used to derive Date Approved (status key 2073)
   - plex_view: Sales_v_PO_Change
     bq_table: raw_Sales_v_PO_Change
     filter: ""
     date_col: Change_Date
+    probe: [Change_Date]
 
   # Status lookup — PO_Status_Key → human-readable status text
   - plex_view: Sales_v_PO_Status
     bq_table: raw_Sales_v_PO_Status
     filter: ""
     date_col: ""
+    probe: [PO_Status_Key]
 
   # Order type lookup — PO_Type_Key → order type text
   - plex_view: Sales_v_PO_Type
     bq_table: raw_Sales_v_PO_Type
     filter: ""
     date_col: ""
+    probe: [PO_Type_Key]
 
   # Sales rep assignments — Sort_Order 1 = primary rep, 2 = secondary
   - plex_view: Sales_v_Order_Salesperson
@@ -60,6 +69,7 @@ extractions:
     bq_table: raw_Sales_v_Release
     filter: ""
     date_col: ""
+    probe: [Update_Date, Release_Key]
 
   # Release-to-Job link — added 2026-08-21 for sales_order_allocation_report.
   # Pure link table (PCN, Release_Key, Job_Key): the one-hop-removed FK
@@ -82,11 +92,13 @@ extractions:
     bq_table: raw_Sales_v_Shipper
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Shipper_Key]
 
   - plex_view: Sales_v_Shipper_Line
     bq_table: raw_Sales_v_Shipper_Line
     filter: ""
     date_col: ""
+    probe: [Shipper_Line_Key]
 
   # Shipper_Status_Key → status text + a literal `Shipped` boolean, the key
   # to distinguishing "actually shipped" from "ready/pending in shipping."
@@ -94,6 +106,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Status
     filter: ""
     date_col: ""
+    probe: [Shipper_Status_Key]
 
   # One row per physical carton/package on a shipment — candidate source
   # for "number of cartons shipped."
@@ -101,6 +114,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Container
     filter: ""
     date_col: ""
+    probe: [Shipper_Container_Key]
 
   # Shipper_Line → AR invoice link + invoice date — candidate source for
   # "sorted by invoice date."
@@ -108,6 +122,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_AR_Invoice
     filter: ""
     date_col: ""
+    probe: [Add_Date]
 
   # Bridges a Shipper_Line back to the Release_Key already used above —
   # the join path back to the Sales order chain (customer, part group,
@@ -116,6 +131,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Line_Release
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   # Quantity_Allocated per release — needed for the Out-of-Stock rule from
   # the same meeting (quantity available = on-hand − allocated).
@@ -123,6 +139,7 @@ extractions:
     bq_table: raw_Sales_v_Release_Allocation
     filter: ""
     date_col: ""
+    probe: [Add_Date, Release_Allocation_Key]
 
   # Customer master — Customer_No → customer name and info
   # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
@@ -136,23 +153,27 @@ extractions:
     bq_table: raw_Sales_v_Price
     filter: ""
     date_col: ""
+    probe: [Update_Date, Price_Key]
 
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""
     date_col: ""
+    probe: [Change_Date]
 
   # Customer part pricing — tiered by Breakpoint_Quantity
   - plex_view: Part_v_Customer_Part_Price
     bq_table: raw_Part_v_Customer_Part_Price
     filter: ""
     date_col: ""
+    probe: [Customer_Part_Price_Key]
 
   # Part master — Part_Key → part number, name, product classification
   - plex_view: Part_v_Part
     bq_table: raw_Part_v_Part
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Part_Key]
 
   # Product type lookup — Part_Product_Type_Key → product type name
   - plex_view: Part_v_Part_Product_Type
@@ -168,6 +189,7 @@ extractions:
     bq_table: raw_Part_v_Part_Product_Group
     filter: ""
     date_col: ""
+    probe: [Part_Product_Group_Key]
 
   # Part group lookup — Part_v_Part.Part_Group_Key → Part_Group name
   # (Capsule, Softgel, Tablet, Gummy, Label, Packaging, Raw Ingredient, ...).
@@ -181,12 +203,14 @@ extractions:
     bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
+    probe: [Part_Group_Key]
 
   # User master — Plexus_User_No → sales rep first/last name
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
     filter: ""
     date_col: ""
+    probe: [Update_Date]
 
   # ── Added 2026-09-22 — WHO COUNTS AS A SALES REP, for sales_reps_report.
   #
@@ -203,6 +227,7 @@ extractions:
     bq_table: raw_Plexus_Control_v_Role
     filter: ""
     date_col: ""
+    probe: [Role_Key]
 
   - plex_view: Plexus_Control_v_User_Role
     bq_table: raw_Plexus_Control_v_User_Role
@@ -230,11 +255,13 @@ extractions:
     bq_table: raw_Part_v_Flat_BOM
     filter: ""
     date_col: ""
+    probe: [Flat_BOM_Key]
 
   - plex_view: Part_v_BOM
     bq_table: raw_Part_v_BOM
     filter: ""
     date_col: ""
+    probe: [BOM_Key]
 
 # BigQuery reporting view(s) that JOIN the raw tables above. The SQL files
 # are loaded from GCS at runtime so they can be edited independently without

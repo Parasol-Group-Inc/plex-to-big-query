@@ -23,16 +23,22 @@ description: "Vox | Open RMA's (NetSuite parity) — prod (PlexProd dataset)"
 #   Change SQL    → edit reports/sql/sales_returns_open_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Sales_v_Return
     bq_table: raw_Sales_v_Return
     filter: ""
     date_col: ""
+    probe: [Update_Date, Return_Key]
 
   - plex_view: Sales_v_Return_Status
     bq_table: raw_Sales_v_Return_Status
     filter: ""
     date_col: ""
+    probe: [Return_Status_Key]
 
 # Common_v_Customer is intentionally NOT extracted here — reuse
 # raw_Common_v_Customer from the sales_orders pipeline.

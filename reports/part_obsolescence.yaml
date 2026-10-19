@@ -23,6 +23,10 @@ description: "VOX | Products to be discontinued (NetSuite parity) — prod (Plex
 #   Change SQL    → edit reports/sql/part_obsolescence_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Part master, filtered to obsolete/phase-out parts only — same view the
   # sales_orders pipeline extracts in full; this is a separate filtered copy
@@ -31,6 +35,7 @@ extractions:
     bq_table: raw_Part_v_Part_Obsolescence
     filter: "WHERE Part_Status IN ('Obsolete', 'Phase Out')"
     date_col: ""
+    probe: [Updated_Date, Part_Key]
 
 bq_view:
   name: part_obsolescence_report

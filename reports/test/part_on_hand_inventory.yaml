@@ -4,28 +4,36 @@ description: "Part on-hand inventory (Available Inventory) — TEST environment 
 
 # Same extraction list as reports/part_on_hand_inventory.yaml.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Part_v_Container
     bq_table: raw_Part_v_Container
     filter: ""
     date_col: ""
+    probe: [Update_Date, Container_Key]
 
   - plex_view: Part_v_Container_Status
     bq_table: raw_Part_v_Container_Status
     filter: ""
     date_col: ""
+    probe: [Container_Status_Key]
 
   # Added 2026-09-11 — cycle counting. See reports/part_on_hand_inventory.yaml.
   - plex_view: Part_v_Cycle_Inventory
     bq_table: raw_Part_v_Cycle_Inventory
     filter: ""
     date_col: ""
+    probe: [Update_Date, Cycle_Inventory_Key]
 
   # Carries Accuracy_Threshold. Not joined yet — see the prod config.
   - plex_view: Part_v_Cycle_Frequency
     bq_table: raw_Part_v_Cycle_Frequency
     filter: ""
     date_col: ""
+    probe: [Cycle_Frequency_Key]
 
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
 # raw_Part_v_Part_Product_Type (added 2026-08-19) is the same story.

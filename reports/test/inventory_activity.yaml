@@ -5,16 +5,22 @@ description: "Inventory Activity Detail Usage Per Month — TEST environment (vo
 # Same extraction list as reports/inventory_activity.yaml — see that file for
 # the genealogy-vs-activity caveat and confirmation notes.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Part_v_Cell_Production
     bq_table: raw_Part_v_Cell_Production
     filter: ""
     date_col: Production_Date
+    probe: [Production_Date, Cell_Production_Key]
 
   - plex_view: Part_v_Cell_Depletion
     bq_table: raw_Part_v_Cell_Depletion
     filter: ""
     date_col: Production_Date
+    probe: [Production_Date, Cell_Depletion_Key]
 
 bq_view:
   - name: inventory_activity_report

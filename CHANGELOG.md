@@ -14,6 +14,72 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Change probe for every pipeline, phase 1: engine, emails, probe columns
+
+Plan, decisions and measurements: [docs/PROBE_BUILD_PLAN.md](docs/PROBE_BUILD_PLAN.md).
+This phase changes **no schedule**. Prod keeps its one nightly run until phase 2
+(the dispatcher) starts jobs in `probe` and `full` mode.
+
+### Added
+- **`probe_mode: auto`** (`main.py`). One aggregate per extraction,
+  `SELECT COUNT(*), MAX(<cols>) FROM <view> <filter>`, using the same view and
+  filter as the pull. All 12 nightly pipelines (prod + test YAMLs) now have it,
+  with each extraction's `probe: [...]` columns picked from the catalog by the
+  new `scripts/generate_probe_columns.py` (idempotent, line-based, keeps
+  comments). Per environment, 71 of 82 extractions have a list; the 11 small
+  lookup tables without one probe by `COUNT(*)` only. **The report-level key
+  is `probe_mode: auto`, not `probe: auto`**, because images from before this
+  change crash on a string `probe:`. Either deploy order, and an image
+  rollback, stay safe.
+- **Run modes `probe` and `full`** next to `scheduled` and `retry`
+  (`probe_may_skip`). A plain scheduled or hand-started run of a nightly
+  pipeline stays a full run. The probe only skips when the dispatcher asks for
+  it. Label Design's explicit probe behaves as before.
+- **Per-table probe snapshot**, stored in new `probe_log` columns `snapshot`
+  and `run_mode`, which are added in place to existing tables. The email names
+  the tables that changed.
+- **`record_dispatch_outcome()`**. A dispatcher-started run (`DISPATCH_ID`)
+  writes its outcome back for the 15-minute follow-up probe in phase 2.
+- **`templates/probe_nochange.html`**: "Probe ran — nothing to update", with
+  the same subject as a full run.
+- **`tests/test_probe.py`**: 16 tests covering the probe rules and SQL, the
+  fingerprint, fail-open, the explicit probe, all three email shapes, and a
+  real mid-run crash keeping its subject.
+- **`tzdata` pinned** in `requirements.txt`, so email dates can never silently
+  fall back to UTC.
+
+### Changed
+- **Run emails** (`templates/report.html`, `email_utils.py`):
+  - Times show in Mountain (`REPORT_TIME_ZONE`), and the subject's date is
+    the Mountain date, so an 11 PM run no longer files under tomorrow's
+    thread. The subject format itself is unchanged.
+  - A "why it ran" line sits under the stats, and errors come first.
+  - Only WARNING/ERROR events are listed; the per-table fetch/write lines
+    became a compact extraction table at the bottom.
+
+### Fixed
+- **OPEN_ITEMS L10: a SQL-only deploy no longer sits unapplied.** The probe
+  fingerprint now includes the report YAML and every view's SQL, so any
+  deployed config change runs in full. On the first run after this deploy,
+  Label Design will run in full once even if no release moved. That is
+  expected.
+- **A BigQuery error while reading `probe_log` failed the whole run.** It now
+  counts as an inconclusive probe and runs the full extraction (fail open).
+  So does any unexpected error in the probe block, including a cursor error or
+  a stray brace in a filter. `log_probe` no longer raises on an insert API
+  error.
+- **A run that crashed after loading its config emailed under the config
+  filename** (`Sales Orders` rather than `Sales: Orders`), which started a
+  Gmail thread of its own. It now keeps the pipeline's category and name, and
+  its "why it ran" line no longer claims every table was extracted.
+- **Explicit probe queries on the same view and columns** are now numbered in
+  the snapshot, so they cannot overwrite each other.
+
+### Measured
+- On Plex test: 82 generated probe queries, 0 failed, 12.4 s in total. Sales
+  Orders, the largest at 27 tables, took 4.0 s. A 235,550-row table counts in
+  0.27 s against 6.5 s to pull it.
+
 ## 2026-10-19 - Label Design cutover: the prod push to Monday is live
 
 ### Changed
@@ -250,6 +316,22 @@ All 37 checked views exist - **0 missing, 2 empty**.
   - `safety_incidents` (Operations | Safe days). It has no view - Looker
     computes Safe Days from the table's latest date - so it is counted
     alongside the goal tables, like `scorecard_goals_app`.
+
+## 2026-10-02 - The retry path is verified end to end (OPEN_ITEMS D2 closed)
+
+### Fixed
+- Deployed the `plexEtlRunWithOverrides` role (below) and **proved the retry
+  path works, rather than trusting the clean apply.** Before: the live
+  `plex-sales-orders-sync-test-retry` read `state: ENABLED` with
+  `status: {code: 7}` and `lastAttemptTime 2026-10-02T03:45:05Z` — tonight's
+  9:45 PM firing, rejected like every one before it. After a forced firing:
+  `status: {}`, execution `plex-etl-sales-orders-test-tlgnd` started and
+  carried `RUN_MODE=retry` in its container env, and `PlexTest.job_run_log`
+  gained its **first-ever `run_mode='retry'` row** (`skipped`, 05:43:42 — the
+  daily run had succeeded, so there was nothing to re-run, which is the
+  correct outcome). That table had 0 such rows since 2026-07-21.
+- The binding is project-level on the ETL service account, so prod inherits it;
+  tonight's 9:45 PM prod firing is the confirmation, with nothing left to change.
 
 ## 2026-10-02 (sandbox) - Goal tables seeded so every goal tile has a number
 

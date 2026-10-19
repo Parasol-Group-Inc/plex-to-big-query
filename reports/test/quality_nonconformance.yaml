@@ -4,6 +4,10 @@ description: "Quality non-conformance (NC) records — TEST environment (vox.tes
 
 # Same extraction list as reports/quality_nonconformance.yaml.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Classic problem table — 0 rows on this tenant, kept for the contrast.
   # See reports/quality_nonconformance.yaml (prod) for the full rationale.
@@ -11,6 +15,7 @@ extractions:
     bq_table: raw_Quality_v_Problem
     filter: ""
     date_col: ""
+    probe: [Problem_Key]
 
   # ── Added 2026-09-22 — the UX table Vox actually writes to, plus its form
   # lookup. Every quality view now reads these. Same extraction list as prod.
@@ -18,11 +23,13 @@ extractions:
     bq_table: raw_Quality_v_Problem_2
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   - plex_view: Quality_v_Problem_Form
     bq_table: raw_Quality_v_Problem_Form
     filter: ""
     date_col: ""
+    probe: [Problem_Form_Key]
 
   # ── Added 2026-08-18 for quality_deviation_report — see reports/quality_nonconformance.yaml
   # (prod) for the full rationale. Same extraction list, test tenant.
@@ -30,36 +37,43 @@ extractions:
     bq_table: raw_Quality_v_Deviation
     filter: ""
     date_col: ""
+    probe: [Update_Date, Deviation_Key]
 
   - plex_view: Quality_v_Deviation_Job
     bq_table: raw_Quality_v_Deviation_Job
     filter: ""
     date_col: ""
+    probe: [Deviation_Job_Key]
 
   - plex_view: Quality_v_Deviation_Problem
     bq_table: raw_Quality_v_Deviation_Problem
     filter: ""
     date_col: ""
+    probe: [Update_Date, Deviation_Problem_Key]
 
   - plex_view: Quality_v_Deviation_Part
     bq_table: raw_Quality_v_Deviation_Part
     filter: ""
     date_col: ""
+    probe: [Deviation_Part_Key]
 
   - plex_view: Quality_v_Deviation_Workcenter
     bq_table: raw_Quality_v_Deviation_Workcenter
     filter: ""
     date_col: ""
+    probe: [Deviation_Workcenter_Key]
 
   - plex_view: Quality_v_Deviation_Type
     bq_table: raw_Quality_v_Deviation_Type
     filter: ""
     date_col: ""
+    probe: [Deviation_Type_Key]
 
   - plex_view: Quality_v_Deviation_Status
     bq_table: raw_Quality_v_Deviation_Status
     filter: ""
     date_col: ""
+    probe: [Deviation_Status_Key]
 
   # ── Added 2026-09-09 — DISPOSITION VALUE LISTS, to answer "where are
   # destructions logged?"
@@ -97,6 +111,7 @@ extractions:
     bq_table: raw_Quality_v_Disposition_Type
     filter: ""
     date_col: ""
+    probe: [Disposition_Type_Key]
 
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).
 # raw_Part_v_Job and raw_Part_v_Workcenter are owned by the work_orders

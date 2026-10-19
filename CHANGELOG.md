@@ -14,6 +14,39 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (scorecard) - Prod views audit: sales order values and inventory snapshot fixed
+
+All 80 PlexProd views were audited on go-live day, by five read-only agents
+plus checks by hand. The full results are in
+`docs/PROD_VIEWS_AUDIT_2026-10-19.md`.
+
+### Fixed
+- **Order values were blank in 8 sales views in prod** (`sales_orders`,
+  `_open`, `_aging`, `_pending_approval`, `_pending_accounting_approval`,
+  `_rush_open`, `_over_10k`, `sales_revenue_by_rep`). They priced only from
+  the customer price list, which is empty in Plex prod (and matches no current
+  part in test). They now use the order line's agreed price (`Sales_v_Price`)
+  first, then the list, as `sales_order_value_by_status_view.sql` already did.
+  - Row counts are unchanged.
+  - Priced rows in prod went from 0 to 583, 574, 305, 40, 308 and 2 (one
+    figure per view).
+  - `sales_orders_over_10k_report` went from 0 to 81 orders, in both prod and
+    test.
+- **`inventory_snapshot_report` was empty in prod and test.** It INNER JOINed
+  Plex's snapshot pointer table, which real Plex never fills. It now uses the
+  valuation summary's "cost rows in force" steps, copied verbatim: pointer
+  rows when present, otherwise the latest history row on or before the
+  snapshot date. It returns about 1.49M rows over 35 snapshots.
+  - Columns are kept. `cost_model_key` falls back to the history row's model.
+  - `cost_source` and `part_operation_key` are added at the end.
+
+### Docs
+- The nine report docs note the fix. The snapshot doc's stale "join confirmed
+  live" claim is corrected.
+- OPEN_ITEMS: S2 gets the current goals state; new S14 holds four decisions
+  (Quote status in open orders, the orphan `v2_*` views, the labeling filter,
+  and the empty customer price list).
+
 ## 2026-10-19 (dev) - Audit - Part Info and Routing (Container Types): second view on part_routing
 
 ### Added

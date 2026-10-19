@@ -19,6 +19,8 @@ Reuses the same computed revenue used by the "Orders over $10k" report — each 
 
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
+- **An order can be understated.** An order's total sums its priced lines only; a line with no price (23 of 606 in prod on 2026-10-19) adds nothing, so an order with an unpriced line can read below its real value, or miss the $10,000 cut.
 - **The revenue figure is a best-criteria computed total, not NetSuite-confirmed.** It's the same base-tier price × quantity calculation used by the Orders over $10k report, chosen because Plex has no real dollar-total field to read directly. It excludes tax and freight. The SQL file itself flags this for data-scientist review before anyone treats these totals as ground truth.
 - **Rep assignment is per-order, not a standing customer relationship.** Plex has no field that says "this customer belongs to this rep" — a rep only shows up because they're listed on that specific order. Same caveat that applies to Customer List by Sales Rep.
 - **"Unassigned" is a real bucket, size unknown.** Any order without a rep row rolls up into an "Unassigned" total rather than disappearing — nobody has checked yet how much revenue lands there once real order volume is flowing.

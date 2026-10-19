@@ -11,6 +11,17 @@
 
 ---
 
+## UPDATE — 2026-10-19 (cutover): prod push released
+
+PlexProd → "Plex Import" is live. The prod push scheduler is resumed and the
+test push scheduler is paused, because both target the team's board. The board
+was emptied that morning. A prod dry run showed 38 new items, 22/22 columns
+and no duplicates. The first real push is the 9:35 MT scheduled run.
+Afterwards, check that 38 items exist and that the Plex links open
+`vox.on.plex.com`. Open item L3; CHANGELOG 2026-10-19.
+
+---
+
 ## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
 
 The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second

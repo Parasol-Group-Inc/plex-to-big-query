@@ -21,6 +21,7 @@ Starts from the exact same sales order data as the main [Sales Orders report](sa
 
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 - **⚠ Fixed 2026-09-24 — `product_group` was always blank.** It joined `Part_v_Part.Part_Group_Key` to `Part_v_Part_Product_Group`, which is empty in test and prod. It now reads Plex's **Part Group** (`Part_v_Part_Group`: Capsule, Softgel, Label, Packaging, ...), which is what that key actually points at; the column keeps its `product_group` name. `raw_Part_v_Part_Group` is newly extracted by this pipeline, and the fix was **deployed 2026-09-25** — the names show in PlexTest now, and in PlexProd from the first scheduled Sales Orders run after the deploy.
 - Otherwise none known. The "open" filter logic was confirmed with the report requester and cross-checked against Plex's status-code reference before deployment, and the report was verified against a real Cloud Run execution (3 open orders out of 4 total on the test tenant) rather than just a schema-level check.
 

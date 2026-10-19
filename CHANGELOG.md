@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 - Label Design cutover: the prod push to Monday is live
+
+### Changed
+- **`plex-label-design-push-sync` (PlexProd → "Plex Import" `18432111755`)
+  resumed; `plex-label-design-push-sync-test` paused.** Done live with
+  `gcloud scheduler jobs resume/pause` ahead of the 9:35 MT run, so test items
+  would not land on the team's freshly cleared board. `terraform/main.tf`
+  records the same states, so the next `deploy.sh` keeps them (the
+  plan shows only the description changes).
+- **Before releasing:**
+  - The prod ETL (`plex-etl-label-design`, hourly 5:00–17:00 weekdays,
+    PlexProd) succeeded on every run that morning.
+  - A prod push dry run read 38 rows (orders dated 5–15 Oct), found 22/22
+    board columns and would create 38 items, under the 60-item alarm.
+  - The board held 0 items (cleared 2026-10-19 14:23 UTC), so nothing could
+    be pushed twice. The planned dedupe fallback for hand-typed items is moot.
+- **Not yet done:** the first real prod push. A manual run was declined at
+  the permission prompt, so it happens on the 9:35 MT schedule.
+
+### Note
+- The next `deploy.sh` also **destroys `plex-etl-plex-api-test`** (Cloud Run
+  job). That is already on `main` from the 2026-10-13 move of the API
+  extractor to a Cloud Function; it is not part of this change.
+
 ## 2026-10-13 (label-design) - Plex API extractor: Cloud Run job -> Cloud Function
 
 ### Changed

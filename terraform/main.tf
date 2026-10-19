@@ -5576,10 +5576,15 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
 
 resource "google_cloud_scheduler_job" "label_design_push_test" {
   name        = "plex-label-design-push-sync-test"
-  description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board"
+  description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board — PAUSED since the 2026-10-19 cutover"
   schedule    = "35 5-17 * * 1-5" # 30 min after plex-label-design-sync-test (:05), Mon-Fri; last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
+
+  # PAUSED at cutover (2026-10-19). Test and prod both target "Plex Import",
+  # the team's live board, so test orders must not land there. Run the job by
+  # hand when needed, or repoint MONDAY_BOARD_ID to a sandbox board first.
+  paused = true
 
   http_target {
     http_method = "POST"
@@ -5650,14 +5655,15 @@ resource "google_cloud_run_v2_job" "label_design_push" {
 
 resource "google_cloud_scheduler_job" "label_design_push" {
   name        = "plex-label-design-push-sync"
-  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board — PAUSED until cutover"
-  schedule    = "35 5-17 * * 1-5" # mirrors the test push cadence; inert while paused
+  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board"
+  schedule    = "35 5-17 * * 1-5" # 35 min after plex-label-design-sync (:00), Mon-Fri; last push 5:35 PM
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
-  # NOT RELEASED. Built so the resource exists and can be un-paused by hand at
-  # cutover; fires nothing until then.
-  paused = true
+  # RELEASED 2026-10-19 (cutover). Before the first scheduled run, the board
+  # had been emptied, and a dry run showed 38 new items and no hand-typed
+  # duplicates.
+  paused = false
 
   http_target {
     http_method = "POST"

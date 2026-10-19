@@ -108,6 +108,14 @@ function tryPush_(datasetKey) {
 /** Push every dataset. The hourly trigger's entry point, and a manual repair. */
 function pushAll() {
   var out = {};
+  // A reseeded scorecard_goals reaches the sheet before the push below
+  // carries it across. Never let it stop the push itself.
+  try {
+    out.goalSeed = seedGoals_(false);
+  } catch (e) {
+    out.goalSeed = { error: String(e) };
+    Logger.log('pushAll: goal seed failed: %s', e);
+  }
   Object.keys(DATASETS).forEach(function (k) {
     try {
       out[k] = pushDataset(k);

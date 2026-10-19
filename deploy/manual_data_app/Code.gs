@@ -592,72 +592,136 @@ function lastIncident_() {
 }
 
 /**
- * ONE-TIME MIGRATION: copy the legacy goals into this app's sheet.
+ * GOAL SEED: copy `scorecard_goals` into this app's sheet, newest edit wins.
  * ───────────────────────────────────────────────────────────────────────────
- * Run this once from the Apps Script editor, then never again.
+ * `scorecard_goals` (in BQ_DATASET) is the seed table. It was the old Apps
+ * Script's table; since 2026-10-19 it is reseeded by hand from the originals
+ * (rep goals from VoxScorecardsLive.sales_goals, the company-wide goal from
+ * the live Looker view vw_sales_mtd_vs_goal) whenever those change outside
+ * this app.
  *
  * WHY IT HAS TO GO THROUGH THE SHEET. `scorecard_goals_app` is rebuilt from
- * the sheet tab on every push (WRITE_TRUNCATE), so writing the legacy rows
- * straight into BigQuery would work until the next save and then vanish. The
- * sheet is the record; the table is its mirror.
+ * the sheet tab on every push (WRITE_TRUNCATE), so writing rows straight into
+ * BigQuery would work until the next push and then vanish. The sheet is the
+ * record; the table is its mirror.
  *
- * WHAT IT DOES. Reads `scorecard_goals` — the table the old, separate Apps
- * Script used to fill from a different Google Sheet — and appends every row
- * to this app's goals tab, marked so its origin stays visible. Keys this app
- * already has are SKIPPED, so a goal somebody has since edited here is never
- * overwritten by the older figure, and re-running it is harmless.
+ * THE RULE IS THE RESOLVER'S: per (metric, month, scope) the row with the
+ * newest updated_at wins. So a seed row is appended only when it would change
+ * the answer:
+ *   - the app has no row for that key;            → append
+ *   - the app's newest row is OLDER and differs;   → append (the seed wins)
+ *   - the app's newest row is the same figure;     → skip (nothing changes)
+ *   - the app's newest row is NEWER, or a newer    → skip (an edit made in
+ *     retraction;                                     this app always wins)
+ * The appended row keeps the seed's own updated_at, so re-running is harmless
+ * and an edit made here after the seed stays on top.
  *
- * AFTERWARDS: check `SELECT COUNT(*) FROM scorecard_goals_resolved WHERE
- * goal_source = 'sheet'` reads 0, then the legacy branch can be deleted from
- * scorecard_goals_resolved_view.sql and `scorecard_goals` dropped. Until this
- * has run, that table is the ONLY copy of 68 real sales goals.
+ * RUNS BY ITSELF. pushAll() (the hourly trigger) calls seedGoals_(false)
+ * first, and it acts only when the seed table carries a newer updated_at than
+ * the last seed it applied for this BQ_DATASET (Script Property
+ * GOALS_SEEDED_<dataset>). So a reseed lands within the hour, and pointing the
+ * app at PlexProd seeds there on its first push. Run importLegacyGoals() from
+ * the editor to apply it immediately.
  *
- * Also: disable the old Apps Script project itself. Deleting
+ * Disable the old Apps Script project too, if it still exists: deleting
  * deploy/goals_sheet_to_bigquery.gs from the repo does not stop a deployed
- * trigger from still truncating `scorecard_goals` on a schedule.
+ * trigger from truncating `scorecard_goals` on a schedule.
  */
 function importLegacyGoals() {
+  var r = seedGoals_(true);
+  // One push at the end rather than one per row — a load job per goal would
+  // be slow and pointlessly rate-limited.
+  if (r.imported) pushDataset('goals');
+  return r;
+}
+
+/** Appends the seed rows that change the answer. Does not push. */
+function seedGoals_(force) {
   var ds = DATASETS.goals;
+  var props = PropertiesService.getScriptProperties();
+  var flag = 'GOALS_SEEDED_' + dataset_();
+
+  // Timestamps as ISO text: the BigQuery service otherwise returns epoch
+  // seconds in scientific notation, and the sheet stores ISO strings.
   var rows = query_(
-    'SELECT metric, period_month, scope, goal_value, unit, note, updated_by, updated_at ' +
+    "SELECT metric, CAST(period_month AS STRING), scope, goal_value, unit, note, updated_by, " +
+    "FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', updated_at) " +
     'FROM ' + fqn_('scorecard_goals') + ' ORDER BY metric, period_month, scope');
 
   if (!rows.length) {
-    Logger.log('Nothing to import: scorecard_goals is empty.');
+    Logger.log('Nothing to seed: scorecard_goals is empty.');
     return { imported: 0, skipped: 0 };
   }
 
-  // What this app already knows, so an existing entry always wins.
-  var have = {};
-  (recentRows_(100000).goals || []).forEach(function (r) {
-    have[keyOf_(ds, r)] = true;
-  });
+  var seedAt = '';
+  rows.forEach(function (r) { if ((r[7] || '') > seedAt) seedAt = r[7]; });
+  if (!force && props.getProperty(flag) === seedAt) {
+    return { imported: 0, skipped: rows.length, alreadySeeded: seedAt };
+  }
 
+  var newest = newestGoals_(ds);
   var imported = 0, skipped = 0;
   rows.forEach(function (r) {
+    var metric = String(r[0] || '').toLowerCase();
     var values = {
-      metric:       String(r[0] || '').toLowerCase(),
+      metric:       metric,
       period_month: normalizeMonth_(r[1]),
       scope:        r[2] == null ? '' : String(r[2]),
       goal_value:   Number(r[3] || 0),
-      unit:         r[4] || METRIC_UNITS[String(r[0] || '').toLowerCase()] || '',
-      note:         'Imported from the legacy goals sheet on ' + nowIso_().slice(0, 10) +
-                    (r[5] ? ' — ' + r[5] : ''),
-      updated_by:   'legacy-import (was: ' + (r[6] || 'unknown') + ')',
-      updated_at:   nowIso_(),
+      unit:         r[4] || METRIC_UNITS[metric] || '',
+      note:         r[5] || '',
+      updated_by:   r[6] || 'seed',
+      updated_at:   r[7] || nowIso_(),
       is_deleted:   false
     };
-    if (have[keyOf_(ds, values)]) { skipped++; return; }
+    var cur = newest[keyOf_(ds, values)];
+    var seedTime = Date.parse(values.updated_at);
+    if (cur && (cur.at >= seedTime ||
+                (!cur.deleted && cur.goal_value === values.goal_value))) {
+      skipped++;
+      return;
+    }
     appendToSheet_(ds, values);
     imported++;
   });
 
-  // One push at the end rather than one per row — a load job per goal would
-  // be slow and pointlessly rate-limited.
-  if (imported) pushDataset('goals');
+  props.setProperty(flag, seedAt);
+  Logger.log('Goal seed %s into %s: appended %s, skipped %s.', seedAt, dataset_(), imported, skipped);
+  return { imported: imported, skipped: skipped, seededAt: seedAt };
+}
 
-  Logger.log('Imported %s legacy goals, skipped %s already present.', imported, skipped);
-  return { imported: imported, skipped: skipped };
+/** The newest row per key on the goals tab, the way the resolver picks it. */
+function newestGoals_(ds) {
+  var out = {};
+  var ss = sheet_();
+  var tab = ss.getSheetByName(ds.tab);
+  if (!tab || tab.getLastRow() < 2) return out;
+  var range = tab.getRange(1, 1, tab.getLastRow(), tab.getLastColumn());
+  var raw = range.getValues();
+  var headers = raw.shift();
+  var tz = ss.getSpreadsheetTimeZone();
+  raw.forEach(function (row) {
+    // Sheets may have turned "2026-10-01" into a Date; key on the calendar
+    // day as the sheet shows it, which is what the push sends.
+    var obj = {};
+    headers.forEach(function (h, c) {
+      if (!h) return;
+      var v = row[c];
+      obj[h] = v instanceof Date
+        ? (h === 'updated_at' ? v.toISOString() : Utilities.formatDate(v, tz, 'yyyy-MM-dd'))
+        : v;
+    });
+    if (!obj.metric) return;
+    var at = Date.parse(obj.updated_at) || new Date(obj.updated_at).getTime() || 0;
+    var k = keyOf_(ds, obj);
+    if (out[k] && out[k].at > at) return;
+    out[k] = {
+      at: at,
+      goal_value: Number(String(obj.goal_value).replace(/[^0-9.\-]/g, '')),
+      deleted: String(obj.is_deleted).toLowerCase() === 'true'
+    };
+  });
+  return out;
 }
 
 /** The dedupe key for a dataset row, as a single comparable string. */

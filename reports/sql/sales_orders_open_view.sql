@@ -178,5 +178,10 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
   ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 -- "Open" = not Closed (2074) and not Cancelled (2076), confirmed with the
--- report requester as the intended definition (2026-08-10).
+-- report requester as the intended definition (2026-08-10) — and not a QUOTE
+-- (added 2026-10-19, Jennilyn: quote-stage orders do not count as open orders).
+-- Plex keeps quotes as POs in a status flagged Is_Quote = 1 ("Quote", 2653 on
+-- this tenant; 78 POs / 136 lines in prod on go-live day). Matched on Plex's own
+-- flag rather than the key, so a renamed or added quote status is still excluded.
 WHERE po.PO_Status_Key NOT IN (2074, 2076)
+  AND COALESCE(SAFE_CAST(sts.Is_Quote AS INT64), 0) = 0

@@ -230,6 +230,21 @@ before touching it:
   fixes found there (rep resolution, Deposit Review, scrap flag). Production
   still runs `reports/sql/`. When a fix lands there, delete its override.
 
+## Prod ETL times move to a table, not Cloud Scheduler (probe phase 2)
+
+**From stage B** of probe phase 2 (`docs/PROBE_BUILD_PLAN.md`; see the CHANGELOG
+for whether it is live yet), `PlexOps.etl_schedule` holds every
+prod job's run times: 1 PM / 6 PM / 11 PM `probe`, plus a 4 AM `full` run. The
+`etl-dispatcher` Cloud Function (called every 5 min by `plex-etl-dispatcher`)
+starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
+- **Change a time with SQL, not Terraform.**
+- **No retries:** a failed run gets ONE follow-up probe 15 min later.
+- **Test jobs still use their own nightly schedulers.**
+
+To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.
+The function is deployed with `gcloud functions deploy` (command in
+`terraform/main.tf`), not Cloud Build.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers

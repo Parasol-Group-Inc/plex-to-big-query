@@ -480,6 +480,36 @@ def test_real_main_fills_run_context_before_a_crash():
         m._RUN_CONTEXT.clear()
 
 
+def test_dispatch_outcome_goes_to_the_dispatchers_dataset():
+    """The dispatcher passes DISPATCH_LOG_TABLE=PlexOps.etl_dispatch_log; the
+    job's own dataset (PlexProd/PlexTest) must not be prefixed onto it."""
+    seen = []
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def query(self, sql, job_config=None):
+            seen.append(sql)
+            return type("J", (), {"result": lambda self: []})()
+
+    saved = (m.DISPATCH_ID, m.DISPATCH_LOG_TABLE, m.OUTPUT_MODE, m.bigquery.Client)
+    m.bigquery.Client = FakeClient
+    try:
+        m.DISPATCH_ID, m.OUTPUT_MODE = "abc", "bigquery"
+        m.DISPATCH_LOG_TABLE = "PlexOps.etl_dispatch_log"
+        m.record_dispatch_outcome("success")
+        m.DISPATCH_LOG_TABLE = "etl_dispatch_log"
+        m.record_dispatch_outcome("success")
+        m.DISPATCH_ID = ""
+        m.record_dispatch_outcome("success")          # no dispatch id: no query at all
+    finally:
+        m.DISPATCH_ID, m.DISPATCH_LOG_TABLE, m.OUTPUT_MODE, m.bigquery.Client = saved
+    assert len(seen) == 2, seen
+    assert f"`{m.GCP_PROJECT}.PlexOps.etl_dispatch_log`" in seen[0]
+    assert f"`{m.GCP_PROJECT}.{m.BQ_DATASET}.etl_dispatch_log`" in seen[1]
+
+
 def test_failed_email_shows_errors_first():
     _, body, _ = render({**BASE_REPORT, "status": "failed", "run_mode": "full",
                          "errors": ["ODBC connection failed: (2404) session refused by service"]})

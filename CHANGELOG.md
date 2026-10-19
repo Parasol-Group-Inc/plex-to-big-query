@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-19 (dev) - Vox Nutrition Item List with Shelf Life Details: third view on part_routing
+
+### Added
+- **`part_shelf_life_report`** rebuilds the Plex SQL Development Environment
+  report *Vox Nutrition Item List with Shelf Life Details* (2025-04-02). It
+  answers whether shelf life is configured on every item.
+  - **Pipeline:** the third view on `part_routing`. `Part_v_Part` is already
+    pulled there, so it adds two extractions:
+    - `Part_v_Part_Shelf_Life`: 35,342 rows, paged by `Part_Shelf_Life_Key`;
+      its probe SUMs the shelf-life values.
+    - `Part_v_Shelf_Life_Type`: 4 rows.
+  - **Matches Plex:** the same LEFT JOINs and columns. The query's
+    commented-out "missing shelf life" filter is exposed as
+    `shelf_life_missing`.
+  - **On PlexTest:** 35,370 rows over all 15,701 parts (Best By 15,667, Use By
+    9,839, Sell By 9,836). **28 parts have no shelf life configured.**
+- **Terraform:** one GCS object (the SQL).
+- **Docs:** new `docs/reports/part_shelf_life_report.md`; REPORT_CATALOG (73),
+  EMAIL_SCHEDULE (71 views), `reports-list/production.md`, OPEN_ITEMS D10.
+
 ## 2026-10-19 (scorecard) - Open orders exclude quotes; audit decisions recorded
 
 ### Changed

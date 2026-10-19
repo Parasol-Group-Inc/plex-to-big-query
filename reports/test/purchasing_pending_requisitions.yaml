@@ -6,21 +6,28 @@ description: "Vox | Purchasing | Pending Order Requisitions — TEST environment
 # that file and reports/sql/purchasing_pending_requisitions_view.sql for
 # schema confirmation notes and deployment status (not yet deployed).
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Purchasing_v_Requisition
     bq_table: raw_Purchasing_v_Requisition
     filter: ""
     date_col: ""
+    probe: [Requisition_Key]
 
   - plex_view: Purchasing_v_Requisition_Status
     bq_table: raw_Purchasing_v_Requisition_Status
     filter: ""
     date_col: ""
+    probe: [Requisition_Status_Key]
 
   - plex_view: Purchasing_v_Requisition_Type
     bq_table: raw_Purchasing_v_Requisition_Type
     filter: ""
     date_col: ""
+    probe: [Requisition_Type_Key]
 
   - plex_view: Purchasing_v_Req_PO_Release
     bq_table: raw_Purchasing_v_Req_PO_Release

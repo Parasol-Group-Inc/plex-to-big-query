@@ -79,7 +79,16 @@ Add a new entry to the `extractions[]` list, in both YAMLs:
     bq_table: raw_Sales_v_PO_Type     # ← BigQuery table name (choose anything)
     filter: ""                         # ← WHERE clause, or "" for all rows
     date_col: ""                       # ← timestamp column for incremental, or ""
+    probe: [Update_Date, PO_Type_Key]  # ← optional: change-probe columns (MAX each; sum:Col for SUM)
+    page_key: PO_Type_Key              # ← optional: pull in keyset pages by this integer column
+    page_size: 25000                   # ← optional with page_key (default 25,000 rows per call)
 ```
+
+`probe:` is filled for you by `python scripts/generate_probe_columns.py --write`.
+Add `sum:` columns by hand, for rates, quantities and lead times only. Never use
+`sum:` on a key: Plex's 32-bit SUM overflows. Use `page_key` only for a large
+view (tens of thousands of rows or more). Paging and probing are explained in
+`docs/TECHNICAL_REFERENCE.md` § "Change probe".
 
 Check the pair still matches before committing:
 
@@ -354,8 +363,17 @@ Every run sends an email with one of three status badges:
 | Badge | Color | Meaning |
 |---|---|---|
 | **SUCCESS** | Green | All extractions completed, all rows written |
-| **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check Events and Errors sections |
+| **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check the Errors and Notes sections, and the failed rows in the extraction table |
 | **FAILED** | Red | Job crashed before completing — ODBC connection refused, config load failed, BigQuery unreachable |
+| **NO CHANGES** | Grey | A probe run found nothing changed in Plex since the last clean run, so nothing was extracted and BigQuery is unchanged. Short template, same subject. |
+
+Since 2026-10-19:
+- **Times are Mountain,** and the subject's date is the Mountain date, so an
+  11 PM run threads with that day.
+- **A "why it ran" line** sits under the stats: which tables changed, a config
+  update, or the scheduled full run.
+- **Errors come first.**
+- **Per-table detail** sits in a compact table at the bottom.
 
 For known error signatures (e.g. a specific ODBC error code), the Errors section adds a short 💡 hint in blue explaining what it means and whether it needs Plex Support or a config fix on our side — see `_KNOWN_ERROR_HINTS` in `email_utils.py` to add more as new error patterns get diagnosed.
 
@@ -363,32 +381,43 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 
 ---
 
-## Change Probe (hourly pipelines only)
+## Change Probe
 
-Most pipelines run once a night, so there is always something new to pull.
-Label Design runs **hourly**, where that is not true — most hours nothing has
-moved. Since 2026-10-01 it starts each run with a cheap question instead of a
-full extraction.
+Every pipeline can start a run with a cheap question to Plex: has anything I
+read changed since my last clean run? If not, it skips the extraction.
 
-**What happens on an hourly run:**
+- **Label Design** has asked it every hour since 2026-10-01: an *explicit*
+  probe on the release lines sitting in `Label Design` status.
+- **Every nightly pipeline** got an *automatic* probe on 2026-10-19: one
+  `COUNT(*)` plus `MAX(change date / key)` per table. Plex answers those on its
+  side in well under a second per table.
+- Prod moves to four runs a day (1 PM, 6 PM, 11 PM probe; 4 AM always full)
+  in phase 2 of [PROBE_BUILD_PLAN.md](PROBE_BUILD_PLAN.md). Until then, nightly
+  runs are full exactly as before.
 
-1. Two small `SELECT`s ask Plex which release lines are sitting on the
-   `Label Design` status. The answer is sorted and hashed into a 32-character
-   fingerprint.
-2. If that fingerprint matches the last clean run's, the job **stops there** —
-   no extractions, no view rebuild, no email — and writes a `skipped` row to
-   `probe_log`.
-3. If it differs, the run proceeds exactly as it always did.
+**What happens on a probe run:**
 
-A typical day is ~10 probes costing seconds each and 1-3 real runs.
+1. The probe queries run. Their answers, together with a hash of the report's
+   own YAML and SQL, make a fingerprint.
+2. If it matches the last clean run's fingerprint, the job **stops there**. It
+   writes a `skipped` row to `probe_log` and sends the short **"Probe ran —
+   nothing to update"** email with the usual subject. Label Design stays
+   silent, because it uses `EMAIL_MODE=on_error`.
+3. Otherwise the run proceeds in full, and the email says which tables changed.
+
+**A YAML or SQL deploy always runs in full.** Both are part of the
+fingerprint, so a view-only deploy is never skipped. The old "trigger the job
+by hand after a view-only deploy" step is gone (OPEN_ITEMS L10). **A code-only
+(Cloud Build) change is not in the fingerprint.** It reaches a quiet
+pipeline's tables at its next extracting run. To apply it now, start the job
+by hand: a hand start of a nightly pipeline is always a full run.
 
 **The fingerprint only advances after a `success` run.** A failed or partial
-run leaves the stored value alone, so the next hourly probe sees a difference
-and runs again. That is why Label Design has **no `-retry` scheduler** — the
-probe is its retry, and a faster one (within the hour, not at 9:45 PM). This
-only works hourly; a nightly pipeline must keep its retry trigger.
+run leaves the stored value alone, so the next probe sees a difference and runs
+again. The probe is the retry, so probe-driven jobs have no `-retry`
+scheduler.
 
-**The push has its own gate.** `plex-etl-label-design-push-test` counts, in
+**The push has its own gate.** `plex-etl-label-design-push` counts, in
 BigQuery, the view rows whose LCR the audit table has never recorded. If that
 is 0 it returns before reading the Monday API key or paging the board, so a
 quiet hour costs no Monday API calls at all. It can over-count (a hand-typed
@@ -398,30 +427,26 @@ final authority.
 ### Checking it is actually working
 
 The probe **fails open**: anything that stops it being evaluated runs the full
-extraction and logs `inconclusive`. That is the right default, but it means a
+extraction and logs `inconclusive`. That is the right default, but a
 permanently broken probe looks like success while doing the full work every
-hour. Two queries worth running occasionally:
+time. Two queries worth running now and then:
 
 ```sql
 -- Should be empty. Rows here mean the probe is not gating anything.
-SELECT * FROM `voxdatalake.PlexTest.probe_log`
+SELECT report_name, probed_at, detail FROM `voxdatalake.PlexProd.probe_log`
 WHERE outcome = 'inconclusive' ORDER BY probed_at DESC LIMIT 20;
 
--- A healthy day: a few `applied`, many `skipped`.
-SELECT outcome, COUNT(*) AS n
-FROM `voxdatalake.PlexTest.probe_log`
-WHERE DATE(probed_at) = CURRENT_DATE()
-GROUP BY outcome;
+-- Today, per pipeline: how often it skipped vs ran.
+SELECT report_name, outcome, COUNT(*) AS n
+FROM `voxdatalake.PlexProd.probe_log`
+WHERE DATE(probed_at, 'America/Denver') = CURRENT_DATE('America/Denver')
+GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
-The most likely cause of `inconclusive` is the `Label Design` release status
-being renamed in Plex — the match is an exact string. Adding a probe to another
-pipeline is a YAML change only: see `docs/TECHNICAL_REFERENCE.md` §
-"Change probe".
-
-**One gap to know:** the probe runs before view creation, so a deploy that
-changes only a view's SQL will not reach BigQuery until the underlying data
-changes. After a view-only deploy, trigger the job by hand.
+**Adding the probe to a new pipeline:** put `probe_mode: auto` above
+`extractions:`, then run `python scripts/generate_probe_columns.py --write`.
+It fills `probe: [...]` for any extraction that lacks one, in both the prod
+and test YAML. Review the dry run first.
 
 ---
 

@@ -44,6 +44,208 @@ don't need an entry.
 Apps Script project, then Deploy → Manage deployments → New version. Nothing
 in Terraform or the ETL changes.
 
+## 2026-10-19 (scorecard) - Prod views audit: sales order values and inventory snapshot fixed
+
+All 80 PlexProd views were audited on go-live day, by five read-only agents
+plus checks by hand. The full results are in
+`docs/PROD_VIEWS_AUDIT_2026-10-19.md`.
+
+### Fixed
+- **Order values were blank in 8 sales views in prod** (`sales_orders`,
+  `_open`, `_aging`, `_pending_approval`, `_pending_accounting_approval`,
+  `_rush_open`, `_over_10k`, `sales_revenue_by_rep`). They priced only from
+  the customer price list, which is empty in Plex prod (and matches no current
+  part in test). They now use the order line's agreed price (`Sales_v_Price`)
+  first, then the list, as `sales_order_value_by_status_view.sql` already did.
+  - Row counts are unchanged.
+  - Priced rows in prod went from 0 to 583, 574, 305, 40, 308 and 2 (one
+    figure per view).
+  - `sales_orders_over_10k_report` went from 0 to 81 orders, in both prod and
+    test.
+- **`inventory_snapshot_report` was empty in prod and test.** It INNER JOINed
+  Plex's snapshot pointer table, which real Plex never fills. It now uses the
+  valuation summary's "cost rows in force" steps, copied verbatim: pointer
+  rows when present, otherwise the latest history row on or before the
+  snapshot date. It returns about 1.49M rows over 35 snapshots.
+  - Columns are kept. `cost_model_key` falls back to the history row's model.
+  - `cost_source` and `part_operation_key` are added at the end.
+
+### Docs
+- The nine report docs note the fix. The snapshot doc's stale "join confirmed
+  live" claim is corrected.
+- OPEN_ITEMS: S2 gets the current goals state; new S14 holds four decisions
+  (Quote status in open orders, the orphan `v2_*` views, the labeling filter,
+  and the empty customer price list).
+
+## 2026-10-19 (dev) - Audit - Part Info and Routing (Container Types): second view on part_routing
+
+### Added
+- **`part_info_routing_container_report`** rebuilds the Plex stored procedure
+  *Audit - Part_Info_and_Routing_wContainerType* (Shannon Hadley). It is a
+  **second view on the `part_routing` pipeline**, not a new pipeline: every
+  table it reads is already pulled for report 1, except two that are new:
+  - **`Part_v_Part_Operation_Approved_Container`:** 24,937 rows. It's set to
+    page by `Approved_Container_Key` once it passes 25,000 (one call today).
+    Its probe SUMs the pack quantities.
+  - **`Part_v_Container_Type`:** 15 rows.
+
+  Same job, schedule, probe and email. Terraform adds one GCS object, the SQL
+  file.
+  - **The procedure's `CROSS APPLY` / `OUTER APPLY` counts** become two
+    pre-aggregated CTEs.
+  - **Same inner joins, `MATL` exclusion and `Shippable = 1` filter.**
+  - **`Part_Op_Type` and `Location` are left out:** the procedure LEFT JOINs
+    them but never selects them. Both keys were checked unique on PlexTest
+    (0 duplicates), so leaving them out can't change a row.
+  - **Two added columns,** `standard_pack_quantity` and
+    `containers_per_master`, because the request asked for quantities per
+    container.
+  - **Checked on PlexTest:** 32,482 rows over 15,676 shippable operations;
+    8,131 primary containers, the same count Plex returns. `is_primary`
+    never disagrees with `primary`. A sampled bottling part shows its four
+    boxes, with the 12x12x20 box as primary, as in Plex.
+- **Found on Plex while building it:**
+  - **`SUM()` on a bit column is refused** (they land in BigQuery as 0/1 INT64) ("Operand data type bit is invalid
+    for sum"), so `Primary` / `Shippable` can't be probe sums. A
+    primary-flag flip alone waits for the 4 AM full run.
+  - **`Primary` is a reserved word** in Plex SQL.
+
+  Both are in TECHNICAL_REFERENCE.
+- Docs:
+  - new `docs/reports/part_info_routing_container_report.md`;
+  - rows in REPORT_CATALOG (72), EMAIL_SCHEDULE (70 views) and
+    `reports-list/production.md`;
+  - OPEN_ITEMS D10, PROBE_BUILD_PLAN.
+
+## 2026-10-19 (dev) - Audit - Part Info and Routing (stored procedure rebuild); paging and sum: probes
+
+### Added
+- **New pipeline `part_routing`, view `part_info_routing_report`.** It rebuilds
+  the Plex stored procedure *Audit - Part_Info_and_Routing* (Shannon Hadley).
+  - The procedure's 14-table join runs in BigQuery
+    (`reports/sql/part_info_routing_view.sql`), with the same join types,
+    `MATL` filter and column order. Each table is pulled on its own: about
+    110k rows in all, the largest about 65k. The `@PCN_Keys` parameter isn't
+    needed (one PCN on this connection), and `@Building_Codes` becomes a
+    Looker filter on `main_building`.
+  - Checked on PlexTest: 66,768 rows over 15,676 parts. A sampled bottling
+    part matches Plex's routing screen (SCHED - Bottling, Bottling 1-6, Bulk
+    Room Bottling, with their rates).
+  - Jobs `plex-etl-part-routing` / `-test` run nightly at 11:00 / 11:10 PM
+    Mountain, with **no `-retry` scheduler and `max_retries = 0`** (the probe
+    is the retry), and a 900 s timeout. Prod moves to the dispatcher in
+    phase 2.
+  - Both jobs are added to Cloud Build's `_ALL_JOBS` (30 jobs, checked
+    against Terraform).
+- **`page_key` / `page_size` on an extraction** (`query_plex_paged`): count
+  first, then `SELECT TOP n … WHERE key > last ORDER BY key` pages.
+  - A full page's boundary key is re-fetched as one group, so a non-unique
+    key is never split across pages.
+  - Rows with a NULL key are fetched at the end; a count mismatch (rows added
+    or removed mid-pull) is a WARNING, not a failure.
+  - The filter must start with `WHERE` and carry no `ORDER BY`/`GROUP BY`;
+    `date_col` is refused with `page_key`.
+  - Plex accepts `TOP` and rejects `LIMIT`; equal key ranges were rejected
+    because the keys cluster (pages of 4 and 15,624 rows).
+  - On Plex test, `Part_v_Approved_Workcenter` came back as 64,942 rows in 3
+    pages, 12.4 s, every row once.
+- **`sum:<col>` probe columns** make edits visible on views with no change
+  date (rates, crew size, lead time). A `sum:` on a `*_Key`/`*_No` column is
+  refused: `SUM(Workcenter_Key)` overflows Plex's 32-bit integer (about 5.6
+  billion) and fails the query, as measured. Float sums are rounded to 4
+  places in the snapshot, so they can't flap between runs.
+- **Text joins and filters normalised for Plex's collation:**
+  `UPPER(RTRIM())` on the Part_Status join and the `MATL` filter, since SQL
+  Server ignores case and trailing spaces. The `BIT` casts became `<> 0`.
+- Tests: 23 in `tests/test_probe.py` (paging, the boundary group, the
+  mismatch warning, validation, `sum:` and the key-sum guard).
+- Docs:
+  - new `docs/reports/part_info_routing_report.md`;
+  - rows in REPORT_CATALOG, EMAIL_SCHEDULE and `reports-list/production.md`;
+  - TECHNICAL_REFERENCE (paging, `sum:`), OPERATIONS (extraction keys) and
+    PROBE_BUILD_PLAN.
+
+## 2026-10-19 (label-design) - Go-live cutoff: no order before 18 Oct reaches BigQuery or Monday
+
+### Changed
+- **`label_design_view.sql`: `AND po.order_date_resolved >= DATE '2026-10-18'`**,
+  next to the 14-day window (Emilio). Prod Plex holds cutover-migrated orders
+  dated back to 5 Oct, and the team handles those by hand.
+  - Checked against PlexProd before shipping: the live view's 38 rows (all
+    dated 5-15 Oct) drop to 0. Orders dated 18 Oct or later pass as before.
+  - The view SQL is shared, so test and prod both get the cutoff.
+- **Not changed:** the 38 items already pushed to "Plex Import" on 2026-10-19
+  stay there. The cutoff only stops new items.
+- **The line becomes a no-op from 2026-11-01,** when the 14-day window is the
+  stricter of the two. Delete it then.
+- Docs: `docs/reports/label_design_report.md` and `label-design/STATUS.md`.
+
+## 2026-10-19 (dev) - Change probe for every pipeline, phase 1: engine, emails, probe columns
+
+Plan, decisions and measurements: [docs/PROBE_BUILD_PLAN.md](docs/PROBE_BUILD_PLAN.md).
+This phase changes **no schedule**. Prod keeps its one nightly run until phase 2
+(the dispatcher) starts jobs in `probe` and `full` mode.
+
+### Added
+- **`probe_mode: auto`** (`main.py`). One aggregate per extraction,
+  `SELECT COUNT(*), MAX(<cols>) FROM <view> <filter>`, using the same view and
+  filter as the pull. All 12 nightly pipelines (prod + test YAMLs) now have it,
+  with each extraction's `probe: [...]` columns picked from the catalog by the
+  new `scripts/generate_probe_columns.py` (idempotent, line-based, keeps
+  comments). Per environment, 71 of 82 extractions have a list; the 11 small
+  lookup tables without one probe by `COUNT(*)` only. **The report-level key
+  is `probe_mode: auto`, not `probe: auto`**, because images from before this
+  change crash on a string `probe:`. Either deploy order, and an image
+  rollback, stay safe.
+- **Run modes `probe` and `full`** next to `scheduled` and `retry`
+  (`probe_may_skip`). A plain scheduled or hand-started run of a nightly
+  pipeline stays a full run. The probe only skips when the dispatcher asks for
+  it. Label Design's explicit probe behaves as before.
+- **Per-table probe snapshot**, stored in new `probe_log` columns `snapshot`
+  and `run_mode`, which are added in place to existing tables. The email names
+  the tables that changed.
+- **`record_dispatch_outcome()`**. A dispatcher-started run (`DISPATCH_ID`)
+  writes its outcome back for the 15-minute follow-up probe in phase 2.
+- **`templates/probe_nochange.html`**: "Probe ran — nothing to update", with
+  the same subject as a full run.
+- **`tests/test_probe.py`**: 16 tests covering the probe rules and SQL, the
+  fingerprint, fail-open, the explicit probe, all three email shapes, and a
+  real mid-run crash keeping its subject.
+- **`tzdata` pinned** in `requirements.txt`, so email dates can never silently
+  fall back to UTC.
+
+### Changed
+- **Run emails** (`templates/report.html`, `email_utils.py`):
+  - Times show in Mountain (`REPORT_TIME_ZONE`), and the subject's date is
+    the Mountain date, so an 11 PM run no longer files under tomorrow's
+    thread. The subject format itself is unchanged.
+  - A "why it ran" line sits under the stats, and errors come first.
+  - Only WARNING/ERROR events are listed; the per-table fetch/write lines
+    became a compact extraction table at the bottom.
+
+### Fixed
+- **OPEN_ITEMS L10: a SQL-only deploy no longer sits unapplied.** The probe
+  fingerprint now includes the report YAML and every view's SQL, so any
+  deployed config change runs in full. On the first run after this deploy,
+  Label Design will run in full once even if no release moved. That is
+  expected.
+- **A BigQuery error while reading `probe_log` failed the whole run.** It now
+  counts as an inconclusive probe and runs the full extraction (fail open).
+  So does any unexpected error in the probe block, including a cursor error or
+  a stray brace in a filter. `log_probe` no longer raises on an insert API
+  error.
+- **A run that crashed after loading its config emailed under the config
+  filename** (`Sales Orders` rather than `Sales: Orders`), which started a
+  Gmail thread of its own. It now keeps the pipeline's category and name, and
+  its "why it ran" line no longer claims every table was extracted.
+- **Explicit probe queries on the same view and columns** are now numbered in
+  the snapshot, so they cannot overwrite each other.
+
+### Measured
+- On Plex test: 82 generated probe queries, 0 failed, 12.4 s in total. Sales
+  Orders, the largest at 27 tables, took 4.0 s. A 235,550-row table counts in
+  0.27 s against 6.5 s to pull it.
+
 ## 2026-10-19 - Label Design cutover: the prod push to Monday is live
 
 ### Changed
@@ -280,6 +482,22 @@ All 37 checked views exist - **0 missing, 2 empty**.
   - `safety_incidents` (Operations | Safe days). It has no view - Looker
     computes Safe Days from the table's latest date - so it is counted
     alongside the goal tables, like `scorecard_goals_app`.
+
+## 2026-10-02 - The retry path is verified end to end (OPEN_ITEMS D2 closed)
+
+### Fixed
+- Deployed the `plexEtlRunWithOverrides` role (below) and **proved the retry
+  path works, rather than trusting the clean apply.** Before: the live
+  `plex-sales-orders-sync-test-retry` read `state: ENABLED` with
+  `status: {code: 7}` and `lastAttemptTime 2026-10-02T03:45:05Z` — tonight's
+  9:45 PM firing, rejected like every one before it. After a forced firing:
+  `status: {}`, execution `plex-etl-sales-orders-test-tlgnd` started and
+  carried `RUN_MODE=retry` in its container env, and `PlexTest.job_run_log`
+  gained its **first-ever `run_mode='retry'` row** (`skipped`, 05:43:42 — the
+  daily run had succeeded, so there was nothing to re-run, which is the
+  correct outcome). That table had 0 such rows since 2026-07-21.
+- The binding is project-level on the ETL service account, so prod inherits it;
+  tonight's 9:45 PM prod firing is the confirmation, with nothing left to change.
 
 ## 2026-10-02 (sandbox) - Goal tables seeded so every goal tile has a number
 

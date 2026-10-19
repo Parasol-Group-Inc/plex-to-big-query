@@ -1,0 +1,113 @@
+report_name: part_routing_test
+category: Production
+description: "Vox | Audit - Part Info and Routing (+ Container Types) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+probe_mode: auto
+
+extractions:
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Part_Key]
+
+  - plex_view: Part_v_Part_Status
+    bq_table: raw_Part_v_Part_Status
+    filter: ""
+    date_col: ""
+    probe: [Part_Status_Key]
+
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
+    filter: ""
+    date_col: ""
+    probe: [Part_Group_Key]
+
+  - plex_view: Common_v_Building
+    bq_table: raw_Common_v_Building
+    filter: ""
+    date_col: ""
+    probe: [Building_Key]
+
+  - plex_view: Part_v_Part_Operation
+    bq_table: raw_Part_v_Part_Operation
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Key]
+
+  - plex_view: Part_v_Operation
+    bq_table: raw_Part_v_Operation
+    filter: ""
+    date_col: ""
+    probe: [Operation_Key]
+
+  - plex_view: Part_v_Approved_Workcenter
+    bq_table: raw_Part_v_Approved_Workcenter
+    filter: ""
+    date_col: ""
+    probe: [Part_Operation_Key, sum:Standard_Production_Rate, sum:Ideal_Rate, sum:Target_Rate, sum:Crew_Size]
+    page_key: Part_Operation_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Workcenter
+    bq_table: raw_Part_v_Workcenter
+    filter: ""
+    date_col: ""
+    probe: [Workcenter_Key]
+
+  - plex_view: Part_v_Part_Op_Type
+    bq_table: raw_Part_v_Part_Op_Type
+    filter: ""
+    date_col: ""
+    probe: [Part_Op_Type_Key]
+
+  - plex_view: Common_v_Location
+    bq_table: raw_Common_v_Location
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Location_Key]
+
+  - plex_view: Plexus_Control_v_Plexus_User
+    bq_table: raw_Plexus_Control_v_Plexus_User
+    filter: ""
+    date_col: ""
+    probe: [Plexus_User_No]
+
+  - plex_view: Part_v_Approved_Supplier
+    bq_table: raw_Part_v_Approved_Supplier
+    filter: ""
+    date_col: ""
+    probe: [Approved_Supplier_Key, sum:Lead_Time]
+
+  - plex_view: Common_v_Supplier
+    bq_table: raw_Common_v_Supplier
+    filter: ""
+    date_col: ""
+    probe: [Supplier_No]
+
+  - plex_view: Plexus_Control_v_Customer_Group_Member
+    bq_table: raw_Plexus_Control_v_Customer_Group_Member
+    filter: ""
+    date_col: ""
+
+  - plex_view: Part_v_Part_Operation_Approved_Container
+    bq_table: raw_Part_v_Part_Operation_Approved_Container
+    filter: ""
+    date_col: ""
+    probe: [Approved_Container_Key, sum:Standard_Pack_Quantity, sum:Containers_Per_Master]
+    page_key: Approved_Container_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Container_Type
+    bq_table: raw_Part_v_Container_Type
+    filter: ""
+    date_col: ""
+    probe: [Container_Type_Key]
+
+bq_view:
+  - name: part_info_routing_report
+    display_name: "Audit - Part Info and Routing"
+    sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_view.sql
+  - name: part_info_routing_container_report
+    display_name: "Audit - Part Info and Routing (Container Types)"
+    sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_container_view.sql

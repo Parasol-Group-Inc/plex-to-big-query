@@ -52,6 +52,32 @@ rep2 AS (
   WHERE SAFE_CAST(Sort_Order AS INT64) = 2
 ),
 
+-- line_price (added 2026-10-19): the price agreed on the ORDER LINE (Sales_v_Price),
+-- preferred over the customer price list below, exactly as in
+-- sales_order_value_by_status_view.sql (Jennilyn, Sep-4: "it needs to be the line
+-- item price"). Prod Plex has NO customer-price-list rows (raw_Part_v_Customer_Part_Price
+-- 0 rows since go-live) but 583 of 606 order lines carry a line price, so without
+-- this every value in this view was NULL in PlexProd.
+line_price AS (
+  SELECT
+    PO_Line_Key,
+    Price
+  FROM (
+    SELECT
+      SAFE_CAST(PO_Line_Key AS INT64)             AS PO_Line_Key,
+      SAFE_CAST(Price AS FLOAT64)                 AS Price,
+      ROW_NUMBER() OVER (
+        PARTITION BY SAFE_CAST(PO_Line_Key AS INT64)
+        ORDER BY
+          COALESCE(SAFE_CAST(Primary_Price AS INT64), 0) DESC,
+          SAFE_CAST(Breakpoint_Quantity AS FLOAT64) ASC,
+          SAFE_CAST(CAST(Effective_Date AS STRING) AS STRING) DESC
+      ) AS rn
+    FROM `{gcp_project}.{dataset}.raw_Sales_v_Price`
+    WHERE COALESCE(SAFE_CAST(Active AS INT64), 1) != 0
+  )
+  WHERE rn = 1
+),
 base_price AS (
   SELECT
     SAFE_CAST(Customer_Part_Key AS INT64)      AS Customer_Part_Key,
@@ -99,9 +125,9 @@ SELECT
   rel.Quantity                                          AS qty_ordered,
   rel.Quantity_Unit                                     AS qty_unit,
 
-  bp.Price                                              AS price_ea,
-  bp.Breakpoint_Quantity                                AS price_breakpoint_qty,
-  (bp.Price * rel.Quantity)                             AS price_total,
+  COALESCE(lp.Price, bp.Price)                                              AS price_ea,
+  IF(lp.Price IS NULL, bp.Breakpoint_Quantity, NULL)                                AS price_breakpoint_qty,
+  (COALESCE(lp.Price, bp.Price) * rel.Quantity)                             AS price_total,
   po.Master_Price                                       AS order_total,
 
   ptype.Product_Type                                    AS product_type,
@@ -139,6 +165,10 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
 
 LEFT JOIN base_price bp
   ON pol.Customer_Part_Key = bp.Customer_Part_Key
+
+LEFT JOIN line_price lp
+
+  ON lp.PO_Line_Key = SAFE_CAST(pol.PO_Line_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` ptype
   ON p.Product_Type_Key = ptype.Product_Type_Key

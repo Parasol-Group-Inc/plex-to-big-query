@@ -5,11 +5,16 @@ description: "VOX | Products to be discontinued — TEST environment (vox.odbc.p
 # Same extraction list as reports/part_obsolescence.yaml — see that file for
 # schema confirmation notes and the Obsolete/Phase Out filter question.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Part_v_Part
     bq_table: raw_Part_v_Part_Obsolescence
     filter: "WHERE Part_Status IN ('Obsolete', 'Phase Out')"
     date_col: ""
+    probe: [Updated_Date, Part_Key]
 
 bq_view:
   name: part_obsolescence_report

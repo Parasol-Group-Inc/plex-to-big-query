@@ -5718,3 +5718,328 @@ resource "google_secret_manager_secret" "plex_api_consumer_secret" {
     auto {}
   }
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Audit - Part Info and Routing — added 2026-10-19. Rebuilds the Plex stored
+# procedure Audit - Part_Info_and_Routing (Shannon Hadley) from 14 raw tables;
+# the join runs in BigQuery (reports/sql/part_info_routing_view.sql).
+# Part_v_Approved_Workcenter (~65k rows) is pulled in keyset pages (page_key).
+#
+# Nightly for now, 11:00 PM prod / 11:10 PM test (after the 10:50 PM end of the
+# cascade). Phase 2 of docs/PROBE_BUILD_PLAN.md moves the PROD job onto the
+# dispatcher (1/6/11 PM probe + 4 AM full) and removes its scheduler. No
+# -retry schedulers: the probe is the retry.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "part_routing_config_prod" {
+  name         = "reports/part_routing.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/part_routing.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_routing_config_test" {
+  name         = "test/part_routing.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/part_routing.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_info_routing_view_sql" {
+  name         = "sql/part_info_routing_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_info_routing_view.sql"
+  content_type = "text/plain"
+}
+
+# Second view on the same pipeline (2026-10-19): the wContainerType procedure.
+resource "google_storage_bucket_object" "part_info_routing_container_view_sql" {
+  name         = "sql/part_info_routing_container_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_info_routing_container_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Part Info and Routing — prod (PlexProd, 11:00 PM Mountain) ──────────────
+
+resource "google_cloud_run_v2_job" "etl_part_routing" {
+  name     = "plex-etl-part-routing"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/part_routing.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_routing" {
+  name        = "plex-part-routing-sync"
+  description = "Triggers Plex to BigQuery Part Info and Routing ETL job"
+  schedule    = "0 23 * * *" # 11:00 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_routing.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Part Info and Routing — test (PlexTest, 11:10 PM Mountain) ──────────────
+
+resource "google_cloud_run_v2_job" "etl_part_routing_test" {
+  name     = "plex-etl-part-routing-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/part_routing.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "900s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_routing_test" {
+  name        = "plex-part-routing-sync-test"
+  description = "Triggers Plex to BigQuery Part Info and Routing ETL job (test)"
+  schedule    = "10 23 * * *" # 11:10 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_routing_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}

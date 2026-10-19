@@ -19,16 +19,22 @@ description: "VOX | Part on-hand inventory (Available Inventory) — prod (PlexP
 #   Change SQL    → edit reports/sql/part_on_hand_inventory_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Part_v_Container
     bq_table: raw_Part_v_Container
     filter: ""
     date_col: ""
+    probe: [Update_Date, Container_Key]
 
   - plex_view: Part_v_Container_Status
     bq_table: raw_Part_v_Container_Status
     filter: ""
     date_col: ""
+    probe: [Container_Status_Key]
 
   # Added 2026-09-11 — cycle counting. Warehouse_v_Cycle_Count / _Line do NOT
   # exist on this tenant (confirmed live: "Base table ... not found"); cycle
@@ -39,6 +45,7 @@ extractions:
     bq_table: raw_Part_v_Cycle_Inventory
     filter: ""
     date_col: ""
+    probe: [Update_Date, Cycle_Inventory_Key]
 
   # Carries Accuracy_Threshold — the per-part target a count is judged against.
   # Not joined by part_cycle_count_view yet: the join key is unconfirmed until
@@ -48,6 +55,7 @@ extractions:
     bq_table: raw_Part_v_Cycle_Frequency
     filter: ""
     date_col: ""
+    probe: [Cycle_Frequency_Key]
 
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).

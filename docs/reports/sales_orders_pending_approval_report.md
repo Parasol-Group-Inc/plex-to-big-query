@@ -19,6 +19,7 @@ Plex's sales order workflow has a literal status called "Pending Sales Approval"
 
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 None known for this report itself — the "Pending Sales Approval" status and its meaning are confirmed live, not guessed.
 
 One adjacent item worth knowing about: a second report, **Orders Pending Approval by Sales Rep**, was built as a thin alias directly on top of this one rather than as separate logic, because nobody had confirmed whether NetSuite's two report names actually describe different searches or the same data under two labels. If that ever turns out to be a genuinely different scope, that alias (not this report) is what would need to change.

@@ -43,7 +43,16 @@ new order does the full job.
 
 Takes every sales-order release whose status is **Label Design**, keeps only
 those on an order that is **Pending Fulfillment** (approved), and limits it to
-orders placed in the **last 14 days**. Each row is joined to the customer, the
+orders placed in the **last 14 days** and **on or after 18 October 2026**.
+
+The second date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
+orders migrated in for cutover, dated back to early October, and the team works
+those by hand, so they must not appear on Monday. The 38 items pushed on the
+morning of the 19th stay on the board, because the cutoff only stops new ones.
+From 1 November the 14-day window is stricter anyway, so the cutoff stops
+mattering.
+
+Each row is joined to the customer, the
 customer part number and description, the job note, and the sales reps on the
 order.
 

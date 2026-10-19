@@ -11,6 +11,16 @@
 
 ---
 
+## UPDATE — 2026-10-19 (later): go-live cutoff at 18 October
+
+`label_design_view.sql` now also requires `order_date >= 2026-10-18`, so the
+cutover-migrated orders (dated 5-15 Oct) never reach BigQuery or Monday. The
+team works those by hand. The 38 pushed that morning stay on the board. The
+live prod view's 38 rows drop to 0 with the cutoff; new orders pass. Delete the
+line after 2026-11-01, when the 14-day window covers it. CHANGELOG 2026-10-19.
+
+---
+
 ## UPDATE — 2026-10-19 (cutover): prod push released
 
 PlexProd → "Plex Import" is live. The prod push scheduler is resumed and the

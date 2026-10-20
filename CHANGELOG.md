@@ -14,6 +14,49 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
+
+### Verified, the first three prod rounds (`PlexOps.etl_dispatch_log`)
+
+| Round (Mountain) | Mode | Jobs | Ran in full | Skipped (probe: no change) | Problems | Follow-ups |
+|---|---|---|---|---|---|---|
+| Oct 19, 6 PM | probe | 13 | 12 | 1 | 0 | 0 |
+| Oct 19, 11 PM | probe | 13 | 4 | 9 | 0 | 0 |
+| Oct 20, 4 AM | full | 13 | 13 | n/a | 0 | 0 |
+
+- **First round.** Stage B was enabled at 18:20, so the 6 PM slots already due
+  started together at 18:25. Only part_routing skipped: it was the one job
+  with a stored fingerprint.
+- **By 11 PM, 9 of 13 pipelines skipped.** The busiest (sales orders, work
+  orders, purchasing open orders, plus one other) ran in full.
+- **The 4 AM full round refreshed all 13.**
+- **No failures, follow-ups or stuck runs, and no dispatcher errors in 24
+  hours.** The tick summary now reaches Cloud Logging as `jsonPayload`.
+- **Monitoring interruption.** Session-side monitoring was blind from midnight
+  to ~08:30, because gcloud reauthentication is required by org policy. The
+  dispatcher was unaffected; it runs as the ETL service account.
+
+### Verified, the production reports now that prod has production (Oct 19)
+- **`encap_daily_report`, `packaging_daily_report` and
+  `labeling_daily_report` reconcile exactly with `raw_Part_v_Production`:**
+  - Encapsulating: 29 records, 1,888,086 good + 854,684 scrap = 2,742,770.
+  - Bottling: 71 records, 9,000.
+  - Labeling: 14 records, 1,471.
+- **The work-centre groups match,** and every group finds its goal in
+  `production_vs_goal_report` (no `goal_without_production` /
+  `production_without_goal` flags).
+- **Two data findings for the production team** (OPEN_ITEMS S16):
+  - **Encapsulation 2:** all 11 records from 03:34 to 08:19 on Oct 19 are
+    flagged `Rejected` in Plex (normal ~92-100k runs). That's 854,684 counted
+    as scrap, putting Encapsulating's October scrap rate at 31%. The report
+    rule (`Rejected != 0` = scrap) is correct; the data needs confirming.
+  - **No production recorded after 08:24 Oct 19.** The 4 AM full run found
+    nothing newer.
+
+### Report 3 in prod
+- **`PlexProd.part_shelf_life_report`:** 35,382 rows; 28 parts have no shelf
+  life, the same as test.
+
 ## 2026-10-19 (dev) - Change probe phase 2, stage B: prod runs move to the dispatcher
 
 ### Verified first: stage A end to end, on test jobs (17:26-17:41 MT)

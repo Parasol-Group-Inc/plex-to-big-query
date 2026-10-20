@@ -10,6 +10,8 @@ changes and open items. Clicking a card opens:
 - **Pipeline:** jobs, prod/test YAML count check, views, tables and the prod YAML.
 - **Scorecard tile** (Scorecard tab): the question it answers, today's source and its audit verdict, the replacing view(s) linked to their report modals, raw tables, the Field Manual's "why it is built this way" and "watch out", and the view's Plex and BigQuery SQL. Report modals link back to the tiles that read them.
 
+- **Scorecard figure** (Scorecard view tab): a replica of the Looker Studio board as of 31 Jul 2026. Each of its 32 figures opens the Lineage Navigator's chart-level audit (Looker source, origin, freshness, verdict, data structure), then the board tile that replaces it with that tile's Plex and BigQuery SQL. The figures are that day's values, not live data.
+
 The Scorecard tab also carries the open decisions, the manual-data forms and hand-edited tables, vocabulary traps, "what might not be true", both glossaries (scorecard terms and Plex field names) and recent scorecard changes. It merges two artifacts that stay where they are: the Vox Migration Board (shared with Jennilyn, still published from `scripts/board/`) and the Scorecard Field Manual.
 
 Published as an artifact: https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt
@@ -34,6 +36,7 @@ Edit the page in `scripts/hub/template.html`, never `index.html`.
 | `catalog/full_schema_catalog.csv` | columns and types of each Plex view |
 | `docs/hub/platform.json` | jobs, schedules, probe, functions, ops tables, Mermaid, changelog, open items, traps |
 | `scripts/board/board_data.py` | scorecard tiles, open decisions, forms, glossary, recent changes: imported, so the hub and the Migration Board never disagree |
+| `score-card-reference/vox_scorecard_navigator.html` | the per-figure Looker audit, read from its `tile-data` JSON; `FIGURE_TILES` in `build_hub.py` ties each figure to a board tile |
 | `docs/hub/field_manual.json` | per-tile teardowns (matched to tiles by view name), traps, risks, the 93-term Plex glossary |
 
 `field_manual.json` is a one-time snapshot of the Field Manual artifact

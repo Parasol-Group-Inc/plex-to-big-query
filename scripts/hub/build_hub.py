@@ -84,6 +84,38 @@ def tile_views(v):
     return [n[3:] if n.startswith("v2_") else n for n in names if n]
 
 
+# Lineage Navigator figure (data-id) -> Migration Board tile title it maps to
+FIGURE_TILES = {
+    "rev-mtd": "MTD Revenue", "rev-into-month": "% into month & run rate",
+    "rev-goal": "Revenue goal & % to goal", "rev-to-goal": "Revenue goal & % to goal",
+    "shipping": "Total in Shipping / Ready to Ship", "safe-days": "Safe days", "oos": "Out of stock", "wip": "WIP",
+    "sales-mtd": "Sales MTD / YTD", "sales-ytd": "Sales MTD / YTD",
+    "sales-to-goal": "Sales goal & % to goal", "sales-goal": "Sales goal & % to goal",
+    "pipeline-funnel": "Opportunities & forecast stages", "pipeline-total": "Total pipeline",
+    "reworks": "Reworks", "deviations": "Deviations", "destruction": "Destruction $ / Rework $",
+    "tat": "30-day rolling TAT", "open-caps": "Open caps", "open-bottles": "Open bottles",
+    **{f"{s}-bar": "Actual vs goal — all areas" for s in ("encap", "bottling", "labeling")},
+    **{f"{s}-yday": "Encapsulation / Bottling / Labeling — yesterday" for s in ("encap", "bottling", "labeling")},
+    **{f"{s}-goal": "Production goals & % to goal" for s in ("encap", "bottling", "labeling")},
+    **{f"fpy-{s}": "FPY by area" for s in ("encap", "bottling", "labeling")},
+}
+
+
+def load_figures(tiles):
+    """The Lineage Navigator's chart-level Looker audit, read from its HTML (owned by
+    the scorecard project), each figure tied to the board tile that replaces it."""
+    m = re.search(r'<script type="application/json" id="tile-data">(.*?)</script>',
+                  read(ROOT / "score-card-reference" / "vox_scorecard_navigator.html") or "", re.S)
+    by_title = {t["tile"]: t["id"] for t in tiles}
+    figures = {}
+    for f in json.loads(m.group(1)) if m else []:
+        tile = by_title.get(FIGURE_TILES.get(f["id"], ""))
+        if not tile:
+            print(f"navigator figure {f['id']} maps to no board tile")
+        figures[f["id"]] = {**f, "tile_id": tile}
+    return figures
+
+
 def load_scorecard(reports, other_inputs):
     """The Migration Board's content, imported from its own data file so the two
     pages can't disagree, plus the Field Manual snapshot matched by view name."""
@@ -111,6 +143,7 @@ def load_scorecard(reports, other_inputs):
             if v in reports:
                 reports[v].setdefault("tiles", []).append(tile["id"])
     return {
+        "figures": load_figures(tiles),
         "board_url": "https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9",
         "manual_url": manual.get("source", ""),
         "manual_snapshot": manual.get("snapshot", ""),

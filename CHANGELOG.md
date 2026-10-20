@@ -50,6 +50,12 @@ new `reports/plex_sql/` folder never reaches GCS.
   imported from `scripts/board/board_data.py` (unchanged, still owned by the
   scorecard project); the Field Manual has no generator, so it is snapshotted to
   `docs/hub/field_manual.json`. Both original artifacts stay published.
+- **Scorecard view tab in the hub.** A replica of the Looker Studio board (31 Jul
+  2026 values, not live) where each of the 32 figures opens the Lineage
+  Navigator's chart-level audit and then the board tile that replaces it, with its
+  Plex and BigQuery SQL. Figures the audit flagged, and figures with no built Plex
+  view behind them, are marked. The audit is read from
+  `score-card-reference/vox_scorecard_navigator.html` (unchanged).
 
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 

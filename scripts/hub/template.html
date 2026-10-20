@@ -185,6 +185,38 @@ pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 .gloss span { color: var(--muted); font-size: 13px; }
 .gloss em { font-style: normal; font-size: 12.5px; }
 
+/* scorecard view: a replica of the Looker board; every figure is a button */
+.vb { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.vb-title { text-align: center; font-family: var(--f-cond); font-weight: 600; font-size: 18px; letter-spacing: .12em; padding: 8px; border-radius: 6px; background: var(--ink); color: var(--surface); }
+.vb-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.vb-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; align-content: start; min-width: 0; background: var(--bg); }
+.vb-card > h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.fig { position: relative; display: grid; gap: 2px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; min-width: 0; transition: border-color .15s; }
+.fig:hover { border-color: var(--accent); }
+.fig .v { font-family: var(--f-cond); font-weight: 600; font-size: 20px; font-variant-numeric: tabular-nums; }
+.fig.big .v { font-size: 30px; }
+.fig .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.fig.flag::after { content: ""; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.fig.gap::before { content: ""; position: absolute; top: 7px; right: 18px; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); }
+.figs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
+.fig ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+.fig li { display: flex; justify-content: space-between; gap: 10px; }
+.fig li b { font-variant-numeric: tabular-nums; }
+.stage { display: grid; gap: 6px; }
+.stage > b { font-size: 13px; }
+.hbar { height: 16px; border-radius: 3px; background: var(--code-bg); position: relative; overflow: hidden; }
+.hbar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.hbar.goal i { background: var(--line); }
+.hbar span { position: absolute; right: 6px; top: 0; font-size: 11px; line-height: 16px; font-family: var(--f-mono); }
+.hbar:not(.goal) span { color: var(--surface); }
+.tat { display: flex; align-items: flex-end; gap: 6px; height: 110px; }
+.tat i { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; font-style: normal; font-size: 11px; color: var(--surface); text-align: center; padding-top: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.legend .lf::before { background: var(--warn); }
+.legend .lg::before { background: var(--bad); }
+pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; border-radius: 6px; font-size: 12.5px; margin: 0; }
+
 .empty { padding: 40px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
 .toast { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; z-index: 20; }
 @media (max-width: 560px) {
@@ -220,6 +252,68 @@ pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 
   <section id="s-pipelines" data-tab="pipelines" hidden>
     <div class="grid" id="pipeline-grid"></div>
+  </section>
+
+  <section id="s-board" data-tab="board" hidden>
+    <div class="ref">
+      <div class="block">
+        <p class="lede" id="vb-lede"></p>
+        <div class="legend"><span class="lf">Looker audit flagged this figure</span><span class="lg">No built Plex view replaces it</span></div>
+        <div class="vb">
+          <div class="vb-title">VOX NUTRITION MTD SCORECARD</div>
+          <div class="vb-row">
+            <div class="vb-card"><h3>Revenue</h3>
+              <button class="fig big" data-fig="rev-mtd"><span class="v">$4,109,322</span><span class="k">Revenue MTD</span></button>
+              <div class="figs">
+                <button class="fig" data-fig="rev-into-month"><span class="v">94%</span><span class="k">into month</span></button>
+                <button class="fig" data-fig="rev-goal"><span class="v">$4.7M</span><span class="k">Goal</span></button>
+                <button class="fig" data-fig="rev-to-goal"><span class="v">88%</span><span class="k">to Goal</span></button>
+              </div></div>
+            <div class="vb-card"><h3>Operational Health</h3>
+              <button class="fig big" data-fig="shipping"><span class="v">$1,044,808</span><span class="k">Total in Shipping</span></button>
+              <div class="figs">
+                <button class="fig" data-fig="safe-days"><span class="v">8</span><span class="k">Safe Days</span></button>
+                <button class="fig" data-fig="oos"><span class="v">6</span><span class="k">OOS</span></button>
+                <button class="fig" data-fig="wip"><span class="v">$4.92M</span><span class="k">WIP</span></button>
+              </div></div>
+            <div class="vb-card"><h3>Sales</h3>
+              <button class="fig big" data-fig="sales-mtd"><span class="v">$4,880,519</span><span class="k">Sales MTD</span></button>
+              <div class="figs">
+                <button class="fig" data-fig="sales-to-goal"><span class="v">103%</span><span class="k">to Goal</span></button>
+                <button class="fig" data-fig="sales-goal"><span class="v">$4.8M</span><span class="k">Goal</span></button>
+                <button class="fig" data-fig="sales-ytd"><span class="v">$28.7M</span><span class="k">YTD</span></button>
+              </div></div>
+          </div>
+          <div class="vb-row">
+            <div class="vb-card"><h3>Pipeline</h3>
+              <button class="fig" data-fig="pipeline-funnel"><ul>
+                <li><span>Opportunities (35%)</span><b>$33.69M</b></li><li><span>Forecast (70%)</span><b>$12.31M</b></li>
+                <li><span>NS Quotes (80%)</span><b>$63.04K</b></li><li><span>NS Pending SOs (95%)</span><b>$821.62K</b></li></ul></button>
+              <button class="fig" data-fig="pipeline-total"><span class="v">$46,888,545</span><span class="k">Total pipeline</span></button></div>
+            <div class="vb-card"><h3>Production</h3><div id="vb-stages" class="stage" style="gap:14px"></div></div>
+          </div>
+          <div class="vb-row">
+            <div class="vb-card"><h3>Quality Metrics</h3>
+              <div class="figs">
+                <button class="fig" data-fig="reworks"><span class="v">18</span><span class="k">Reworks</span></button>
+                <button class="fig" data-fig="deviations"><span class="v">19</span><span class="k">Deviations</span></button>
+                <button class="fig" data-fig="destruction"><span class="v" style="font-size:15px">No data</span><span class="k">Destruction $</span></button>
+                <button class="fig" data-fig="fpy-encap"><span class="v">91.06%</span><span class="k">FPY · Encap</span></button>
+                <button class="fig" data-fig="fpy-bottling"><span class="v">99.88%</span><span class="k">FPY · Bottling</span></button>
+                <button class="fig" data-fig="fpy-labeling"><span class="v">99.38%</span><span class="k">FPY · Labeling</span></button>
+              </div></div>
+            <div class="vb-card"><h3>Operations</h3>
+              <button class="fig" data-fig="tat"><span class="k">30 day rolling TAT (updated weekly)</span>
+                <div class="tat"><i style="height:100%">10.7</i><i style="height:80%">8.6</i><i style="height:43%">4.6</i><i style="height:40%">4.3</i><i style="height:37%">4</i></div>
+                <span class="k" style="text-transform:none;letter-spacing:0">Labeled custom / stock bottle · Blank custom / stock bottle · Bulk case</span></button>
+              <div class="figs">
+                <button class="fig" data-fig="open-caps"><span class="v">219.7M</span><span class="k">Open caps</span></button>
+                <button class="fig" data-fig="open-bottles"><span class="v">1.2M</span><span class="k">Open bottles</span></button>
+              </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section id="s-scorecard" data-tab="scorecard" hidden>
@@ -335,7 +429,7 @@ $("#built").textContent = `voxdatalake · built ${D.built}`;
 /* ---------- tabs ---------- */
 const SC = D.scorecard || { tiles: [] };
 const TL = byName(SC.tiles, "id");
-const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["platform", "Schedules & probe", ""], ["history", "History", ""]];
+const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["board", "Scorecard view", Object.keys(SC.figures || {}).length], ["platform", "Schedules & probe", ""], ["history", "History", ""]];
 $("#tabs").innerHTML = TABS.map(([k, l, n]) => `<button role="tab" data-k="${k}" aria-selected="false">${l}${n !== "" ? `<span class="n">${n}</span>` : ""}</button>`).join("");
 function show(k) {
   document.querySelectorAll("main section").forEach(s => s.hidden = s.dataset.tab !== k);
@@ -486,6 +580,39 @@ function renderScorecard() {
   $("#sc-risks").innerHTML = tbl([["what", "What", "", v => `<b>${v}</b>`], ["why", "Why it is uncertain", "", v => v], ["where", "Where that leaves it", "", v => v]], SC.risks || []);
   $("#sc-recent").innerHTML = (SC.recent || []).map(c => `<div class="tl"><time>${esc(c.date)}</time><h3>${esc(c.title)}</h3><p>${esc(c.summary)}</p></div>`).join("");
   glossFilters(); renderGloss();
+}
+const FIG = SC.figures || {};
+const figFlagged = f => /flag|naming gap/i.test(f.confidence || "");
+function renderBoard() {
+  $("#vb-lede").innerHTML = `The Looker Studio scorecard as it looked on 31 Jul 2026, with the chart-level audit from the Lineage Navigator (<code>score-card-reference/vox_scorecard_navigator.html</code>). The numbers are a picture of that day, not live data. Click a figure for its Looker source and audit verdict, then the Plex tile and view that replace it.`;
+  const stage = (name, key, act, goal, pct, yday, toGoal) => `<div class="stage"><b>${name}</b>
+    <button class="fig" data-fig="${key}-bar"><div class="hbar"><i style="width:100%"></i><span>${act}</span></div><div class="hbar goal"><i style="width:${pct}%"></i><span>${goal} goal</span></div></button>
+    <div class="figs"><button class="fig" data-fig="${key}-yday"><span class="v">${yday}</span><span class="k">Y-day</span></button><button class="fig" data-fig="${key}-goal"><span class="v">${toGoal}</span><span class="k">% to goal</span></button></div></div>`;
+  $("#vb-stages").innerHTML = stage("Encapsulation", "encap", "106.65M", "100.00M", 94, "6.5M", "107%") +
+    stage("Bottling", "bottling", "1.67M", "1.50M", 90, "86.6K", "111%") + stage("Labeling", "labeling", "892.17K", "700.00K", 78, "43.8K", "127%");
+  document.querySelectorAll("#s-board [data-fig]").forEach(b => {
+    const f = FIG[b.dataset.fig], t = f && TL[f.tile_id];
+    if (!f) return;
+    b.dataset.open = `fig:${b.dataset.fig}`;
+    b.title = f.tile;
+    b.classList.toggle("flag", figFlagged(f));
+    b.classList.toggle("gap", !!(t && (t.missing.length || !t.views.length)));
+  });
+}
+function figModal(f) {
+  const t = TL[f.tile_id];
+  const audit = () => kv([
+    ["Looker source", esc(f.source)],
+    ["Origin", `${esc(f.origin_type)} <span class="tag">${esc(f.connector)}</span>`],
+    ["Freshness", esc(f.freshness)],
+    ["Verdict", `<span class="pill ${figFlagged(f) ? "warn" : "ok"}">${esc(f.confidence)}</span> ${esc(f.basis)}`],
+    ["Next step", f.next_step && f.next_step !== "—" ? esc(f.next_step) : ""],
+    ["Replaced by", t ? link("tile", t.id, t.tile) : "no board tile"],
+  ]) + (f.structure ? `<h3 style="margin:22px 0 10px">Data structure</h3><pre class="struct">${esc(f.structure)}</pre>` : "") +
+    (f.structure_note ? `<div class="callout watch" style="margin-top:12px"><b class="l">Structure note</b>${esc(f.structure_note)}</div>` : "");
+  const m = t ? tileModal(t) : { tabs: [] };
+  return { title: f.tile, sub: `<span class="tag">${esc(f.section)}</span><span class="pill ${figFlagged(f) ? "warn" : "ok"}">${esc(f.confidence)}</span>`,
+    tabs: [["Looker audit", audit], ...m.tabs.map(([l, fn]) => [l === "Overview" ? "Plex tile" : l, fn])] };
 }
 const gstate = { set: "ours", q: "" };
 function glossFilters() {
@@ -657,7 +784,7 @@ function tileModal(t) {
   if (reps.length === 1 && reps[0].doc) tabs.push(["Business doc", () => md(reps[0].doc.markdown)]);
   return { title: t.tile, sub: `<span class="tag">${esc(t.section)}</span>${pill(TODAY, t.today_status)}${pill(KIND, t.kind)}`, tabs };
 }
-const BUILDERS = { report: n => R[n] && reportModal(R[n]), table: n => T[n] && tableModal(T[n]), pipeline: n => PL[n] && pipelineModal(PL[n]), input: n => OI[n] && inputModal(OI[n]), tile: n => TL[n] && tileModal(TL[n]) };
+const BUILDERS = { report: n => R[n] && reportModal(R[n]), table: n => T[n] && tableModal(T[n]), pipeline: n => PL[n] && pipelineModal(PL[n]), input: n => OI[n] && inputModal(OI[n]), tile: n => TL[n] && tileModal(TL[n]), fig: n => FIG[n] && figModal(FIG[n]) };
 function open(ref) {
   const i = ref.indexOf(":"), m = BUILDERS[ref.slice(0, i)]?.(ref.slice(i + 1));
   if (!m) return;
@@ -689,13 +816,13 @@ document.addEventListener("click", e => {
 dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
 
 /* ---------- boot ---------- */
-reportFilters(); tableFilters(); tileFilters(); renderReports(); renderTables(); renderPipelines(); renderTiles(); renderScorecard(); renderPlatform();
+reportFilters(); tableFilters(); tileFilters(); renderReports(); renderTables(); renderPipelines(); renderTiles(); renderScorecard(); renderBoard(); renderPlatform();
 const h = location.hash.slice(1);
 let first = "reports";
 try { first = localStorage.getItem("hub-tab") || first; } catch (e) {}
 if (TABS.some(t => t[0] === h)) first = h;
 show(first);
-const deep = h.match(/^(report|table|pipeline|tile)\.(.+)$/);
+const deep = h.match(/^(report|table|pipeline|tile|fig)\.(.+)$/);
 if (deep) open(`${deep[1]}:${deep[2]}`);
 })();
 </script>

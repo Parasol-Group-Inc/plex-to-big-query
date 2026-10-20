@@ -5,36 +5,46 @@ description: "Vox | Open Purchase Orders — TEST environment (vox.odbc.plex.com
 # Same extraction list as reports/purchasing_open_orders.yaml — see that file
 # for schema confirmation notes and deployment status (not yet deployed).
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Purchasing_v_PO
     bq_table: raw_Purchasing_v_PO
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Key]
 
   - plex_view: Purchasing_v_PO_Status
     bq_table: raw_Purchasing_v_PO_Status
     filter: ""
     date_col: ""
+    probe: [PO_Status_Key]
 
   - plex_view: Purchasing_v_PO_Type
     bq_table: raw_Purchasing_v_PO_Type
     filter: ""
     date_col: ""
+    probe: [Add_Date, PO_Type_Key]
 
   - plex_view: Purchasing_v_Release
     bq_table: raw_Purchasing_v_Release
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   - plex_view: Purchasing_v_Line_Item
     bq_table: raw_Purchasing_v_Line_Item
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Line_Item_Key]
 
   - plex_view: Common_v_Supplier
     bq_table: raw_Common_v_Supplier
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
 bq_view:
   - name: purchasing_open_orders_report

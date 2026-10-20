@@ -43,12 +43,17 @@ description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ 
 #   Change SQL    → edit reports/sql/inventory_snapshot_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Snapshot header — one row per costing snapshot event (roughly hourly + daily)
   - plex_view: Part_v_Snapshot
     bq_table: raw_Part_v_Snapshot
     filter: ""
     date_col: Snapshot_Date
+    probe: [Snapshot_Date, Snapshot_Key]
 
   # Pointer table — (Snapshot_Key, Change_Key), no inline values
   - plex_view: Part_v_Snapshot_Cost_Sub_Type_Breakdown
@@ -61,6 +66,7 @@ extractions:
     bq_table: raw_Part_v_Cost_Sub_Type_Breakdown_History
     filter: ""
     date_col: Change_Date
+    probe: [Change_Date]
 
 # Part_v_Part is intentionally NOT extracted here — it's owned by the
 # sales_orders pipeline. Reuse raw_Part_v_Part in the JOIN view instead of

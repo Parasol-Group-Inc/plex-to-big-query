@@ -3,8 +3,10 @@ import re
 import base64
 import html
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (
@@ -154,6 +156,85 @@ def _logo_attachment() -> Optional[Attachment]:
     return attachment
 
 
+def _local_start(report: Dict[str, object]):
+    """(date 'YYYY-MM-DD', time 'HH:MM:SS', zone label) in the report's zone.
+
+    The subject's date comes from here too: with UTC dates, an 11 PM Mountain
+    run filed itself under tomorrow's thread."""
+    raw = str(report.get("start_time", ""))
+    zone_name = str(report.get("time_zone") or os.environ.get("REPORT_TIME_ZONE", "America/Denver"))
+    try:
+        local = datetime.fromisoformat(raw).astimezone(ZoneInfo(zone_name))
+        return local.strftime("%Y-%m-%d"), local.strftime("%H:%M:%S"), local.strftime("%Z")
+    except Exception:
+        return raw[:10], raw[11:19], "UTC"
+
+
+_RUN_MODE_LABELS = {
+    "probe":     "Scheduled probe",
+    "full":      "Scheduled full run (daily safety net)",
+    "scheduled": "Scheduled run",
+    "retry":     "Retry",
+}
+
+
+def _why_it_ran(report: Dict[str, object]) -> str:
+    """One plain sentence on what triggered this run and what the probe saw."""
+    mode = str(report.get("run_mode", "scheduled"))
+    probe = report.get("probe") or {}
+    label = _RUN_MODE_LABELS.get(mode, mode)
+    status = str(report.get("status", ""))
+    if status == "failed":
+        return f"{label}. The run stopped before it finished; see Errors. BigQuery may still hold the previous run's data."
+    if probe.get("inconclusive"):
+        return f"{label}. The change probe could not be checked ({probe['inconclusive']}), so everything was extracted to be safe."
+    if not probe:
+        return f"{label}. Every table was extracted." if status == "success" else f"{label}. See Errors for the tables that did not load."
+    checked = probe.get("sources_checked", 0)
+    changed = probe.get("changed") or []
+    if report.get("status") == "no_changes":
+        return (f"{label}. The probe checked {checked} table(s) in {probe.get('seconds', '?')}s and "
+                f"nothing has changed in Plex since the last full run, so nothing was extracted.")
+    if not probe.get("may_skip"):
+        if status != "success":
+            return f"{label}. Every table was attempted; see Errors for the ones that did not load."
+        return f"{label}. Every table was extracted. The probe recorded today's state for the next check."
+    if probe.get("first_run"):
+        return f"{label}. First probe for this pipeline, so everything was extracted."
+    reasons = []
+    if changed:
+        shown = ", ".join(changed[:6]) + (f" and {len(changed) - 6} more" if len(changed) > 6 else "")
+        reasons.append(f"{len(changed)} of {checked} table(s) changed in Plex ({shown})")
+    if probe.get("config_changed"):
+        reasons.append("the report's configuration or SQL was updated")
+    return f"{label}. Extracted because " + " and ".join(reasons or ["the probe saw a change"]) + "."
+
+
+def _extractions_to_html(items: List[Dict[str, object]]) -> str:
+    """Compact two-column table at the bottom of the email: table, rows."""
+    if not items:
+        return ""
+    cells = []
+    for e in items:
+        rows = e.get("rows")
+        value = f"{rows:,}" if isinstance(rows, int) else "failed"
+        style = "" if e.get("ok", True) else ' style="color:#991b1b;font-weight:bold;"'
+        cells.append(f'<tr><td class="x-name">{html.escape(str(e.get("table", "?")))}</td>'
+                     f'<td class="x-rows"{style}>{value}</td></tr>')
+    total = sum(e["rows"] for e in items if isinstance(e.get("rows"), int))
+    ok = sum(1 for e in items if e.get("ok", True))
+    return (f'<tr><td colspan="2" class="section-label">Extractions &mdash; {ok} of {len(items)} tables, '
+            f'{total:,} rows</td></tr>'
+            f'<tr><td colspan="2" style="padding:6px 10px 10px;"><table class="x-table" role="presentation">'
+            f'{"".join(cells)}</table></td></tr>')
+
+
+def _notes(events: List[str]) -> List[str]:
+    """Only the events a reader needs; the per-table fetch/write lines are in
+    the extraction table instead."""
+    return [e for e in events if e.startswith(("WARNING", "ERROR"))]
+
+
 def send_report(report: Dict[str, object]) -> bool:
     enabled = os.environ.get("SENDGRID_ENABLED", "false").lower() == "true"
     if not enabled:
@@ -175,7 +256,9 @@ def send_report(report: Dict[str, object]) -> bool:
                 log.warning("Could not fetch SendGrid key from Secret Manager: %s", e)
     to_emails_raw = os.environ.get("REPORT_TO_EMAILS", "")
     from_email = os.environ.get("REPORT_FROM_EMAIL")
-    template_name = os.environ.get("REPORT_TEMPLATE", "report.html")
+    status = str(report.get("status", "unknown")).lower()
+    no_changes = status == "no_changes"
+    template_name = "probe_nochange.html" if no_changes else os.environ.get("REPORT_TEMPLATE", "report.html")
 
     if not api_key or not to_emails_raw or not from_email:
         log.warning("SendGrid config incomplete; skipping email report.")
@@ -186,19 +269,21 @@ def send_report(report: Dict[str, object]) -> bool:
         log.warning("No report recipients configured; skipping email report.")
         return False
 
-    status = str(report.get("status", "unknown")).lower()
     status_class = (
         "badge-success" if status == "success" else
         "badge-warning" if status == "partial" else
+        "badge-neutral" if no_changes else
         "badge-error"
     )
+    status_label = "NO CHANGES" if no_changes else status.upper()
 
     events = [str(item) for item in report.get("events", [])]
     errors = [str(item) for item in report.get("errors", [])]
 
-    start_time_raw = str(report.get("start_time", ""))
-    run_date = start_time_raw[:10] if len(start_time_raw) >= 10 else start_time_raw
-    run_time = start_time_raw[11:19] if len(start_time_raw) >= 19 else start_time_raw
+    run_date, run_time, zone_label = _local_start(report)
+    extractions = [e for e in (report.get("extractions") or []) if isinstance(e, dict)]
+    probe = report.get("probe") or {}
+    notes = _notes(events)
 
     gcp_project    = str(report.get("gcp_project", os.environ.get("GCP_PROJECT", "")))
     bq_dataset     = str(report.get("bq_dataset",  os.environ.get("BQ_DATASET",  "")))
@@ -343,10 +428,19 @@ def send_report(report: Dict[str, object]) -> bool:
         reports_section_text = ""
 
     context = {
-        "status": status.upper(),
+        "status": status_label,
         "status_class": status_class,
         "run_date": run_date,
         "run_time": run_time,
+        "zone_label": zone_label,
+        "why_it_ran": _why_it_ran(report),
+        "run_mode_label": _RUN_MODE_LABELS.get(str(report.get("run_mode", "scheduled")), "Run"),
+        "pipeline_label": subject_label or report_name_display,
+        "tables_checked": str(probe.get("sources_checked", len(extractions))),
+        "probe_seconds": str(probe.get("seconds", "")),
+        "table_count": str(len(extractions)),
+        "extractions_html": _extractions_to_html(extractions),
+        "notes_html": _list_to_html(notes) if notes else '<span class="none-text">None</span>',
         "duration_seconds": str(report.get("duration_seconds", "")),
         "rows_fetched": str(report.get("rows_fetched", "0")),
         "rows_written": str(report.get("rows_written", "0")),
@@ -370,25 +464,22 @@ def send_report(report: Dict[str, object]) -> bool:
     html_template = _load_template(template_name)
     html_content = _render_template(html_template, context)
     environment_line = f"Environment: {environment}\n" if environment else ""
+    extraction_text = "".join(
+        f"  {e.get('table', '?')}: {e['rows'] if isinstance(e.get('rows'), int) else 'failed'}\n"
+        for e in extractions)
     text_content = (
         f"Status: {context['status']}\n"
         f"{environment_line}"
-        f"Date: {context['run_date']}  Time: {context['run_time']} UTC\n"
+        f"Date: {context['run_date']}  Time: {context['run_time']} {zone_label}\n"
         f"Duration: {context['duration_seconds']} seconds\n\n"
-        f"{reports_section_text}"
-        f"SOURCE\n"
-        f"  Host:         {context['plex_host']}\n"
-        f"  View/Report:  {context['plex_view']}\n"
-        f"  Filter:       {context['plex_filter']}\n"
-        f"  Rows fetched: {context['rows_fetched']}\n\n"
-        f"DESTINATION\n"
-        f"  Project:      {context['gcp_project']}\n"
-        f"  Dataset:      {context['bq_dataset']}\n"
-        f"  Table:        {context['bq_table']}\n"
-        f"  Rows written: {context['rows_written']}\n\n"
-        f"EVENTS\n{_list_to_text(events)}\n\n"
+        f"{context['why_it_ran']}\n\n"
         f"ERRORS\n{_errors_to_text(errors)}\n\n"
-        f"Logs:  {context['logs_url']}\n"
+        f"NOTES\n{_list_to_text(notes)}\n\n"
+        f"{reports_section_text}"
+        f"SOURCE: {context['plex_host']}  ->  DESTINATION: {context['gcp_project']}.{context['bq_dataset']}\n"
+        f"Rows fetched: {context['rows_fetched']}  Rows written: {context['rows_written']}\n\n"
+        + (f"EXTRACTIONS\n{extraction_text}\n" if extraction_text else "")
+        + f"Logs:  {context['logs_url']}\n"
         f"Repo:  {context['repo_url']}\n"
     )
 

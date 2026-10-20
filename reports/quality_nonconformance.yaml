@@ -35,6 +35,10 @@ description: "VOX | Quality non-conformance (NC) records — prod (PlexProd data
 #   Change SQL    → edit reports/sql/quality_nonconformance_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # ── THE CLASSIC PROBLEM TABLE. Kept, but it is NOT what the reports read.
   # Verified live 2026-09-22: 0 rows, while the Problem Control UI showed 19
@@ -47,6 +51,7 @@ extractions:
     bq_table: raw_Quality_v_Problem
     filter: ""
     date_col: ""
+    probe: [Problem_Key]
 
   # ── Added 2026-09-22 — THE TABLE VOX ACTUALLY WRITES TO.
   #
@@ -64,6 +69,7 @@ extractions:
     bq_table: raw_Quality_v_Problem_2
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   # The form lookup for Problem_Form_Key — 26 rows, and the reason "Material
   # Destruction" is findable at all. Note it carries both the new forms and
@@ -72,6 +78,7 @@ extractions:
     bq_table: raw_Quality_v_Problem_Form
     filter: ""
     date_col: ""
+    probe: [Problem_Form_Key]
 
   # ── Added 2026-08-18 for quality_deviation_report (see bq_view list below) ──
   # The Deviation record itself: type/status keys, pieces affected, reason,
@@ -81,30 +88,35 @@ extractions:
     bq_table: raw_Quality_v_Deviation
     filter: ""
     date_col: ""
+    probe: [Update_Date, Deviation_Key]
 
   # Deviation ↔ Job junction — the actual fix for the NC-to-job gap.
   - plex_view: Quality_v_Deviation_Job
     bq_table: raw_Quality_v_Deviation_Job
     filter: ""
     date_col: ""
+    probe: [Deviation_Job_Key]
 
   # Deviation ↔ Problem (NC) junction.
   - plex_view: Quality_v_Deviation_Problem
     bq_table: raw_Quality_v_Deviation_Problem
     filter: ""
     date_col: ""
+    probe: [Update_Date, Deviation_Problem_Key]
 
   # Deviation ↔ Part junction.
   - plex_view: Quality_v_Deviation_Part
     bq_table: raw_Quality_v_Deviation_Part
     filter: ""
     date_col: ""
+    probe: [Deviation_Part_Key]
 
   # Deviation ↔ Workcenter junction.
   - plex_view: Quality_v_Deviation_Workcenter
     bq_table: raw_Quality_v_Deviation_Workcenter
     filter: ""
     date_col: ""
+    probe: [Deviation_Workcenter_Key]
 
   # Deviation_Type_Key / Deviation_Status_Key are real FKs (unlike
   # Quality_v_Problem's inline text columns) — both lookups needed.
@@ -112,11 +124,13 @@ extractions:
     bq_table: raw_Quality_v_Deviation_Type
     filter: ""
     date_col: ""
+    probe: [Deviation_Type_Key]
 
   - plex_view: Quality_v_Deviation_Status
     bq_table: raw_Quality_v_Deviation_Status
     filter: ""
     date_col: ""
+    probe: [Deviation_Status_Key]
 
   # ── Added 2026-09-09 — DISPOSITION VALUE LISTS, to answer "where are
   # destructions logged?"
@@ -154,6 +168,7 @@ extractions:
     bq_table: raw_Quality_v_Disposition_Type
     filter: ""
     date_col: ""
+    probe: [Disposition_Type_Key]
 
 # Part_v_Part is intentionally NOT extracted here — reuse raw_Part_v_Part
 # from the sales_orders pipeline (same shared-table rule as work_orders.yaml).

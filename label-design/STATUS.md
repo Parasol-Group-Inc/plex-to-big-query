@@ -11,7 +11,28 @@
 
 ---
 
-## UPDATE — 2026-10-13 (latest): API push to Monday + BOM + report view
+## UPDATE — 2026-10-19 (later, latest): go-live cutoff at 18 October
+
+`label_design_view.sql` now also requires `order_date >= 2026-10-18`, so the
+cutover-migrated orders (dated 5-15 Oct) never reach BigQuery or Monday. The
+team works those by hand. The 38 pushed that morning stay on the board. The
+live prod view's 38 rows drop to 0 with the cutoff; new orders pass. Delete the
+line after 2026-11-01, when the 14-day window covers it. CHANGELOG 2026-10-19.
+
+---
+
+## UPDATE — 2026-10-19 (cutover): prod push released
+
+PlexProd → "Plex Import" is live. The prod push scheduler is resumed and the
+test push scheduler is paused, because both target the team's board. The board
+was emptied that morning. A prod dry run showed 38 new items, 22/22 columns
+and no duplicates. The first real push is the 9:35 MT scheduled run.
+Afterwards, check that 38 items exist and that the Plex links open
+`vox.on.plex.com`. Open item L3; CHANGELOG 2026-10-19.
+
+---
+
+## UPDATE — 2026-10-13: API push to Monday + BOM + report view
 
 Built the full pipeline from Plex REST API → BigQuery → Monday:
 
@@ -33,6 +54,8 @@ Built the full pipeline from Plex REST API → BigQuery → Monday:
 
 **Not deployed yet.** Next: deploy updated extractor, run it, verify the
 view returns rows, deploy the push function, run it, check Monday.
+
+---
 
 ---
 

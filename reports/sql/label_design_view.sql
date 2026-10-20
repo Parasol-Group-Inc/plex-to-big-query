@@ -510,6 +510,14 @@ release_lines AS (
     -- two weeks or something"; widen here rather than in the Apps Script, since
     -- the sheet's own dedupe stops a widened window re-adding old rows.
     AND po.order_date_resolved >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+    -- Addition 4 (2026-10-19, Emilio): nothing ordered before the cutover
+    -- weekend reaches BigQuery or Monday. Prod Plex holds orders migrated in
+    -- with order dates back to early October. The team works those by hand, so
+    -- the push must not create items for them. The 38 already pushed on
+    -- 2026-10-19 stay on the board; this only stops new ones. Once the 14-day
+    -- window passes 2026-11-01, it is the stricter filter and this line is a
+    -- no-op that can be deleted.
+    AND po.order_date_resolved >= DATE '2026-10-18'
 )
 
 -- ── Collapse to one row per order + customer part ───────────────────────────

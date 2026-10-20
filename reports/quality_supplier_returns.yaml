@@ -23,11 +23,16 @@ description: "Vox | Approve Vendor Return Authorizations (NetSuite parity) — p
 #   Change SQL    → edit reports/sql/quality_supplier_returns_pending_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Quality_v_Supplier_Return
     bq_table: raw_Quality_v_Supplier_Return
     filter: ""
     date_col: ""
+    probe: [Update_Date]
 
   - plex_view: Quality_v_Supplier_Return_Status
     bq_table: raw_Quality_v_Supplier_Return_Status

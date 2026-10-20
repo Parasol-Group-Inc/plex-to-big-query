@@ -2,16 +2,22 @@ report_name: sales_returns_test
 category: Sales
 description: "Vox | Open RMA's — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Sales_v_Return
     bq_table: raw_Sales_v_Return
     filter: ""
     date_col: ""
+    probe: [Update_Date, Return_Key]
 
   - plex_view: Sales_v_Return_Status
     bq_table: raw_Sales_v_Return_Status
     filter: ""
     date_col: ""
+    probe: [Return_Status_Key]
 
 bq_view:
   name: sales_returns_open_report

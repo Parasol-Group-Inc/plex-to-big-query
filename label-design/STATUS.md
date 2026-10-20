@@ -11,13 +11,33 @@
 
 ---
 
-## UPDATE — 2026-10-19 (later, latest): go-live cutoff at 18 October
+## UPDATE — 2026-10-20 (latest): 14-day window removed; Plex API push archived
+
+1. **The view's 14-day window on the order date is gone.** It dropped orders
+   that reached Pending Fulfillment more than 14 days after their order date:
+   prod has Quote and Pending Sales Approval orders 25+ days old. The
+   2026-10-18 cutoff is now the permanent floor. Dedupe (board LCRs plus
+   `label_design_push_log`) keeps an order from being pushed twice. On
+   2026-10-20 the 14 orders dated 10-19 with Label Design releases were all
+   still in Deposit Review, Pending Sales Approval or Quote, which is why the
+   board got nothing new. They arrive as they are approved. **Ships with
+   `./scripts/deploy.sh` (SQL only).**
+2. **The Plex REST API → Monday push is ARCHIVED** (`deploy/plex_api_function/push.py`
+   and `views.sql`). It is in `main` (PR #42) but never deployed, and must not be
+   deployed as is. A 2026-10-20 review found the problems, listed in
+   `deploy/plex_api_function/ARCHIVED.md`. The ODBC push stays the only path to
+   Monday. The API extractor (`plex_api_*` tables in BigQuery) is unchanged.
+
+---
+
+## UPDATE — 2026-10-19 (later): go-live cutoff at 18 October
 
 `label_design_view.sql` now also requires `order_date >= 2026-10-18`, so the
 cutover-migrated orders (dated 5-15 Oct) never reach BigQuery or Monday. The
 team works those by hand. The 38 pushed that morning stay on the board. The
-live prod view's 38 rows drop to 0 with the cutoff; new orders pass. Delete the
-line after 2026-11-01, when the 14-day window covers it. CHANGELOG 2026-10-19.
+live prod view's 38 rows drop to 0 with the cutoff; new orders pass. CHANGELOG
+2026-10-19. (Superseded 2026-10-20: the 14-day window is removed and this
+cutoff is now permanent, see above.)
 
 ---
 

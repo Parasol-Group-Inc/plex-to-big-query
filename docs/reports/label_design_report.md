@@ -43,14 +43,19 @@ new order does the full job.
 
 Takes every sales-order release whose status is **Label Design**, keeps only
 those on an order that is **Pending Fulfillment** (approved), and limits it to
-orders placed in the **last 14 days** and **on or after 18 October 2026**.
+orders placed **on or after 18 October 2026**.
 
-The second date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
+That date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
 orders migrated in for cutover, dated back to early October, and the team works
 those by hand, so they must not appear on Monday. The 38 items pushed on the
 morning of the 19th stay on the board, because the cutoff only stops new ones.
-From 1 November the 14-day window is stricter anyway, so the cutoff stops
-mattering.
+
+There used to be a 14-day window on the order date as well. It was removed on
+2026-10-20 because it dropped orders that sales approved more than two weeks
+after they were entered, and nothing flagged them. An order now reaches Monday
+whenever it becomes approved, however long that takes. It still appears only
+once: the push skips anything already on the board or in its log, including
+items the team has deleted.
 
 Each row is joined to the customer, the
 customer part number and description, the job note, and the sales reps on the

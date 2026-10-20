@@ -29,7 +29,7 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-13 pipelines, 27 Cloud Run jobs (prod + test, plus the Label Design push
+14 pipelines, 30 Cloud Run jobs (prod + test, plus the two Label Design push
 job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
@@ -237,7 +237,7 @@ complete single-view pipeline — and rename them. A pipeline is nine resources:
 |---|---|---|
 | `google_storage_bucket_object` × 3 | `sales_quotes_config_prod`, `sales_quotes_config_test`, `sales_quotes_open_view_sql` | object `name` and `source` — one per YAML, plus **one per SQL file** the YAML lists (Terraform doesn't infer SQL files from `bq_view`; a missing one means that view's SQL never reaches GCS) |
 | `google_cloud_run_v2_job` × 2 | `etl_sales_quotes`, `etl_sales_quotes_test` | `name` (`plex-etl-<pipeline>` / `plex-etl-<pipeline>-test`) and the `REPORT_CONFIG_GCS_PATH` value (`reports/…` vs `test/…`) |
-| `google_cloud_scheduler_job` × 4 | `etl_sales_quotes`, `etl_sales_quotes_retry`, `etl_sales_quotes_test`, `etl_sales_quotes_test_retry` | `name` (`plex-<pipeline>-sync[-test][-retry]`), the job reference in `uri`, and the two main `schedule` crons (Mountain time, `var.scheduler_time_zone`) — pick a free 10-minute slot from [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Retries keep `var.retry_scheduler_cron`. |
+| `google_cloud_scheduler_job` × 2 | `etl_sales_quotes_test`, `etl_sales_quotes_test_retry` | `name` (`plex-<pipeline>-sync-test[-retry]`), the job reference in `uri`, and the test `schedule` cron (Mountain time, `var.scheduler_time_zone`) — pick a free 10-minute slot from [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). The retry keeps `var.retry_scheduler_cron`. **Prod has no scheduler:** add the new prod job's rows to `PlexOps.etl_schedule` instead (see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule)). |
 
 Keep the `lifecycle { ignore_changes = [...image...] }` block on both jobs.
 
@@ -319,10 +319,10 @@ never in the subject — check the body for those.
 
 | Setting | Production | Test |
 |---|---|---|
-| Cloud Run jobs (13 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (7:00 PM Mountain) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
-| Schedulers | `plex-<pipeline>-sync` | `plex-<pipeline>-sync-test` |
+| Cloud Run jobs (14 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
+| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (hourly) and `plex-label-design-push-sync` (live) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
-| Failure retry (24 jobs — every one but Label Design and its push) | 9:45 PM Mountain daily (`plex-<pipeline>-sync[-test]-retry`) — see [Failure Retry](#failure-retry-945-pm-mountain) below | |
+| Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report config (YAML) | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -518,18 +518,17 @@ curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 > follow-up probe 15 minutes later from the dispatcher (§ ETL schedule above).
 > What follows describes the **test** jobs, which keep it.
 
-Originally 24 jobs had a second Cloud Scheduler trigger that fires daily at **9:45 PM
-`America/Denver`** (handles the MST/MDT switch automatically — no manual
-adjustment needed). The naming is uniform — `plex-<pipeline>-sync-retry`
-retries `plex-etl-<pipeline>`, `plex-<pipeline>-sync-test-retry` retries
-`plex-etl-<pipeline>-test`:
+The 12 test jobs that have a retry carry a second Cloud Scheduler trigger that
+fires daily at **9:45 PM `America/Denver`** (handles the MST/MDT switch
+automatically — no manual adjustment needed). The naming is uniform —
+`plex-<pipeline>-sync-test-retry` retries `plex-etl-<pipeline>-test`. (The prod
+`plex-<pipeline>-sync-retry` schedulers were removed 2026-10-19.)
 
 | Retry scheduler | Retries |
 |---|---|
-| `plex-sales-orders-sync-retry` | `plex-etl-sales-orders` (prod) |
 | `plex-sales-orders-sync-test-retry` | `plex-etl-sales-orders-test` (test) |
-| `plex-work-orders-sync-retry` | `plex-etl-work-orders` (prod) |
-| … one pair per pipeline except Label Design, 51 schedulers in all | |
+| `plex-work-orders-sync-test-retry` | `plex-etl-work-orders-test` (test) |
+| … one per test pipeline except Label Design and Part Routing | |
 
 **Label Design has no retry trigger** (both were removed 2026-10-01). It runs
 hourly behind a change probe, and a failed or partial run leaves the stored
@@ -578,7 +577,7 @@ treated as "the run needs to happen again."
 > returns:
 >
 > ```bash
-> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+> gcloud scheduler jobs describe plex-sales-orders-sync-test-retry --location=us-central1 --project=voxdatalake
 > ```
 >
 > Until that is answered, **do not rely on the retry for any pipeline.** The
@@ -601,8 +600,8 @@ is `scheduled` or `retry`; `status` is `success`/`partial`/`failed`, or
 **Pausing a retry temporarily** (e.g. during planned maintenance), without
 touching Terraform:
 ```bash
-gcloud scheduler jobs pause plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
-gcloud scheduler jobs resume plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs pause plex-sales-orders-sync-test-retry --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-sales-orders-sync-test-retry --location=us-central1 --project=voxdatalake
 ```
 
 **Changing the retry time/timezone:** edit `retry_scheduler_cron` /

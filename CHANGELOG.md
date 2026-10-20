@@ -29,9 +29,19 @@ new `reports/plex_sql/` folder never reaches GCS.
   These were translated from the BigQuery SQL and **have not been run in Plex SQL
   Developer yet.** Goal inputs (`scorecard_goals*`) have no Plex source, so those
   queries return NULL goals from a placeholder.
+  All 71 report views are covered (`scorecard_goals_resolved` is shared by two
+  pipelines): 56 high confidence, 10 medium, 5 low. Verifying them in Plex is
+  D12 in `docs/OPEN_ITEMS.md`.
 - **`scripts/hub/build_hub.py`** generates `docs/hub/index.html` from the YAML
   configs, both SQL folders, `docs/reports/`, `catalog/full_schema_catalog.csv`
-  and `docs/hub/platform.json`. Re-run it after any report change.
+  and `docs/hub/platform.json`. Re-run it after any report change. The page has
+  report, raw-table and pipeline cards, each opening a modal with lineage, Plex SQL,
+  BigQuery SQL, columns and docs, plus schedules, probe and dispatcher diagrams,
+  jobs, datasets, deploy guards, recent changes and open items. Published at
+  https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt; see `docs/hub/README.md`.
+- **`docs/hub/platform.json`**: jobs, schedules, probe logic, functions, ops
+  tables and Mermaid diagrams, compiled by hand from the docs and Terraform. It
+  does not update itself.
 
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 

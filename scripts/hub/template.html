@@ -287,7 +287,7 @@ $("#tabs").addEventListener("click", e => { const b = e.target.closest("button")
 
 /* ---------- stats ---------- */
 const translated = D.reports.filter(r => r.plex_sql).length;
-const prodRuns = (P.prod_schedule || []).length;
+const prodRuns = (P.prod_schedule || []).filter(s => /^\d{1,2}:\d\d [AP]M$/.test(s.time)).length;  // fixed dispatcher rounds only
 $("#stats").innerHTML = [
   [D.reports.length, "BigQuery report views"],
   [`${translated}/${D.reports.length}`, "with a Plex SQL equivalent"],

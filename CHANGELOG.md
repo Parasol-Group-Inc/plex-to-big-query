@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Plex Data Hub and Plex SQL Developer equivalents
+
+Nothing here deploys. Terraform uploads `reports/` files one by one, so the
+new `reports/plex_sql/` folder never reaches GCS.
+
+### Added
+
+- **`reports/plex_sql/`** holds one Plex SQL Developer query per BigQuery report
+  view, with the same file name as its `reports/sql/` source. Each one is T-SQL
+  over the Plex ODBC views, aliases every table as Plex requires, and inlines any
+  report view it reads so it runs standalone. A parsed header gives
+  `plex_equivalent_of`, `confidence` (high/medium/low), `plex_views` and `notes`.
+  These were translated from the BigQuery SQL and **have not been run in Plex SQL
+  Developer yet.** Goal inputs (`scorecard_goals*`) have no Plex source, so those
+  queries return NULL goals from a placeholder.
+- **`scripts/hub/build_hub.py`** generates `docs/hub/index.html` from the YAML
+  configs, both SQL folders, `docs/reports/`, `catalog/full_schema_catalog.csv`
+  and `docs/hub/platform.json`. Re-run it after any report change.
+
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 
 ### Verified, the first three prod rounds (`PlexOps.etl_dispatch_log`)

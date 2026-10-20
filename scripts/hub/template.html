@@ -169,6 +169,22 @@ pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 .md table { margin: 8px 0; border: 1px solid var(--line); }
 .md pre { background: var(--code-bg); padding: 10px; border-radius: 6px; overflow-x: auto; }
 
+/* scorecard */
+.card .q { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.flagmark { color: var(--warn); font-weight: 600; font-size: 12px; white-space: nowrap; }
+.quote { font-style: italic; color: var(--muted); font-size: 15px; margin: 0 0 14px; }
+.callout { border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 12px; }
+.callout b.l, .panel .l { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+.callout.why { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.callout.watch { border-left: 3px solid var(--warn); background: var(--warn-soft); }
+.callout code, .panel code, td code { background: var(--code-bg); padding: 1px 4px; border-radius: 3px; }
+.gloss { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.gloss > div { background: var(--surface); padding: 10px 14px; display: grid; gap: 3px; }
+.gloss b { font-family: var(--f-cond); font-size: 15px; }
+.gloss .mono { color: var(--accent); }
+.gloss span { color: var(--muted); font-size: 13px; }
+.gloss em { font-style: normal; font-size: 12.5px; }
+
 .empty { padding: 40px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
 .toast { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; z-index: 20; }
 @media (max-width: 560px) {
@@ -204,6 +220,48 @@ pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 
   <section id="s-pipelines" data-tab="pipelines" hidden>
     <div class="grid" id="pipeline-grid"></div>
+  </section>
+
+  <section id="s-scorecard" data-tab="scorecard" hidden>
+    <div class="ref">
+      <div class="block">
+        <p class="lede" id="sc-lede"></p>
+        <div class="toolbar" id="tile-filters"></div>
+        <div class="grid" id="tile-grid"></div>
+      </div>
+      <div class="block">
+        <h2>Open decisions</h2>
+        <p class="lede">Questions only the business can answer. Each one holds a tile back or decides what it means.</p>
+        <div class="grid" id="sc-flags"></div>
+      </div>
+      <div class="block">
+        <h2>Typed by people, not Plex</h2>
+        <p class="lede">The manual-data app's forms and the tables edited by hand. Every report that reads one fails to create if the table is missing, and the failure looks like a broken view.</p>
+        <div class="two" id="sc-forms"></div>
+      </div>
+      <div class="block">
+        <h2>Questions that come up</h2>
+        <div class="grid" id="sc-asks"></div>
+      </div>
+      <div class="block">
+        <h2>Vocabulary traps</h2>
+        <p class="lede">Where the words disagree. Each one cost real time, and each makes a report wrong without an error.</p>
+        <div class="grid" id="sc-traps"></div>
+      </div>
+      <div class="block">
+        <h2>What might not be true</h2>
+        <div class="tbl-wrap"><table id="sc-risks"></table></div>
+      </div>
+      <div class="block">
+        <h2>Glossary</h2>
+        <div class="toolbar" id="gloss-filters"></div>
+        <div class="gloss" id="sc-gloss"></div>
+      </div>
+      <div class="block">
+        <h2>Recent scorecard changes</h2>
+        <div class="timeline" id="sc-recent"></div>
+      </div>
+    </div>
   </section>
 
   <section id="s-platform" data-tab="platform" hidden>
@@ -275,12 +333,14 @@ const conf = r => (r.plex_meta && r.plex_meta.confidence) || (r.plex_sql ? "none
 $("#built").textContent = `voxdatalake · built ${D.built}`;
 
 /* ---------- tabs ---------- */
-const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["platform", "Schedules & probe", ""], ["history", "History", ""]];
+const SC = D.scorecard || { tiles: [] };
+const TL = byName(SC.tiles, "id");
+const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["platform", "Schedules & probe", ""], ["history", "History", ""]];
 $("#tabs").innerHTML = TABS.map(([k, l, n]) => `<button role="tab" data-k="${k}" aria-selected="false">${l}${n !== "" ? `<span class="n">${n}</span>` : ""}</button>`).join("");
 function show(k) {
   document.querySelectorAll("main section").forEach(s => s.hidden = s.dataset.tab !== k);
   document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.k === k));
-  $("#q").disabled = !["reports", "tables", "pipelines"].includes(k);
+  $("#q").disabled = !["reports", "tables", "pipelines", "scorecard"].includes(k);
   try { localStorage.setItem("hub-tab", k); } catch (e) {}
 }
 $("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) show(b.dataset.k); });
@@ -374,7 +434,76 @@ function renderPipelines() {
   }).join("") || `<div class="empty">No pipeline matches.</div>`;
 }
 
-$("#q").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); renderReports(); renderTables(); renderPipelines(); });
+/* ---------- scorecard ---------- */
+// todayst/kind come from scripts/board/board_data.py; the Migration Board uses the same words
+const TODAY = { clean: ["ok", "Clean source"], flagged: ["warn", "Flagged in audit"], broken: ["bad", "Broken today"], monday: ["none", "Monday-fed"], manual: ["none", "Typed by hand"] };
+const KIND = { real: ["ok", "Real rows"], injected: ["warn", "Test rows"], mixed: ["warn", "Mixed rows"], empty: ["bad", "Empty"] };
+const pill = (map, k) => { const [c, l] = map[k] || ["none", k]; return `<span class="pill ${c}">${esc(l)}</span>`; };
+const viewLink = v => R[v] ? link("report", v, R[v].display_name) : OI[v] ? link("input", v)
+  : (SC.manual_tables || []).includes(v) ? `<span class="lk static" title="Written by the manual-data app">${esc(v)} · manual</span>`
+  : `<span class="lk static" title="No pipeline creates this view">${esc(v)} ⚠</span>`;
+const sstate = { sec: "", src: "" };
+const secs = [...new Set(SC.tiles.map(t => t.section))];
+function tileFilters() {
+  const n = (k, v) => SC.tiles.filter(t => t[k] === v).length;
+  $("#tile-filters").innerHTML = `<span class="lbl">Section</span>` +
+    [["", "All", SC.tiles.length], ...secs.map(s => [s, s, n("section", s)])].map(([v, l, k]) =>
+      `<button class="chip" data-sec="${esc(v)}" aria-pressed="${sstate.sec === v}">${esc(l)} <span class="mono">${k}</span></button>`).join("") +
+    `<span class="lbl" style="margin-left:12px">Source today</span>` +
+    [["", "Any"], ...Object.entries(TODAY).map(([k, [, l]]) => [k, l])].map(([v, l]) =>
+      `<button class="chip" data-src="${v}" aria-pressed="${sstate.src === v}">${esc(l)}</button>`).join("") +
+    `<span class="count" id="tile-count"></span>`;
+}
+$("#tile-filters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.sec !== undefined) sstate.sec = b.dataset.sec;
+  if (b.dataset.src !== undefined) sstate.src = b.dataset.src;
+  tileFilters(); renderTiles();
+});
+function renderTiles() {
+  const list = SC.tiles.filter(t => (!sstate.sec || t.section === sstate.sec) && (!sstate.src || t.today_status === sstate.src) &&
+    hit(state.q, t.tile, t.question, t.today, t.views, t.views.flatMap(v => (R[v] || {}).raw_tables || [])));
+  $("#tile-count").textContent = `${list.length} shown`;
+  $("#tile-grid").innerHTML = list.length ? list.map(t => `<button class="card" data-open="tile:${t.id}">
+      <div class="top"><h3>${esc(t.tile)}</h3>${t.open ? `<span class="flagmark" title="Open question">● open</span>` : ""}</div>
+      <div class="q">${esc(t.question)}</div>
+      <div class="id">${t.views.length ? esc(t.views.join(" · ")) : "no Plex view"}</div>
+      <div class="meta"><span class="tag">${esc(t.section)}</span>${pill(TODAY, t.today_status)}${pill(KIND, t.kind)}
+        ${t.missing.length ? `<span class="pill bad">view not built</span>` : ""}</div>
+    </button>`).join("") : `<div class="empty">No tile matches.</div>`;
+}
+function renderScorecard() {
+  $("#sc-lede").innerHTML = `Every scorecard tile, the question it answers, where the number comes from today, and the Plex view that replaces it. Content comes from the <a href="${esc(SC.board_url)}" target="_blank" rel="noopener">Vox Migration Board</a> (<code>scripts/board/board_data.py</code>) and the <a href="${esc(SC.manual_url)}" target="_blank" rel="noopener">Scorecard Field Manual</a> (snapshot ${esc(SC.manual_snapshot)}). Row counts were read from PlexTest, so they prove the plumbing, not the business.`;
+  // board/manual text is repo-authored and carries <b>/<code>, so it is rendered as HTML
+  $("#sc-flags").innerHTML = (SC.flags || []).map(f => `<div class="panel"><span class="l">${esc(f.who)} · ${esc(f.tag)}</span><h3>${esc(f.q)}</h3><p style="margin:0;color:var(--muted)">${f.c}</p></div>`).join("");
+  const formRow = f => `<div class="panel"><span class="l">Form · writes <code>${esc(f.table)}</code> · key ${esc(f.key)}</span><h3>${esc(f.label)}</h3><p style="margin-top:0;color:var(--muted)">${esc(f.blurb)}</p>
+    <div class="tbl-wrap"><table>${tbl([["0", "Field", "", v => esc(v)], ["1", "Kind", "", mono], ["2", "Rule"]], f.fields.map(x => ({ 0: x[0], 1: x[1], 2: x[2] })))}</table></div>
+    <p style="margin-bottom:0;font-size:13px">${esc(f.note)}</p>${OI[f.table] ? `<div class="links" style="margin-top:8px">${link("input", f.table)}</div>` : ""}</div>`;
+  const tableRow = t => `<div class="panel"><span class="l">Table · edited by ${esc(t.who)}</span><h3><code>${esc(t.name)}</code></h3><p style="margin-top:0">${esc(t.what)}</p><p style="color:var(--muted)">${t.state}</p><div class="note" style="margin:0">${esc(t.warn)}</div>${OI[t.name] ? `<div class="links" style="margin-top:8px">${link("input", t.name)}</div>` : ""}</div>`;
+  $("#sc-forms").innerHTML = (SC.forms || []).map(formRow).join("") + (SC.tables || []).map(tableRow).join("");
+  $("#sc-asks").innerHTML = (SC.asks || []).map(a => `<div class="panel"><h3>${a.ask}</h3><p style="margin:0;color:var(--muted)">${a.ans}</p></div>`).join("");
+  $("#sc-traps").innerHTML = (SC.traps || []).map(t => `<div class="panel"><h3>${t.title}</h3><p style="margin-top:0">${t.body}</p><p style="margin:0;color:var(--muted);font-size:13px">${t.note}</p></div>`).join("");
+  $("#sc-risks").innerHTML = tbl([["what", "What", "", v => `<b>${v}</b>`], ["why", "Why it is uncertain", "", v => v], ["where", "Where that leaves it", "", v => v]], SC.risks || []);
+  $("#sc-recent").innerHTML = (SC.recent || []).map(c => `<div class="tl"><time>${esc(c.date)}</time><h3>${esc(c.title)}</h3><p>${esc(c.summary)}</p></div>`).join("");
+  glossFilters(); renderGloss();
+}
+const gstate = { set: "ours", q: "" };
+function glossFilters() {
+  $("#gloss-filters").innerHTML = [["ours", "Scorecard terms", (SC.glossary || []).length], ["plex", "Plex field names", (SC.plex_glossary || []).length]].map(([v, l, n]) =>
+    `<button class="chip" data-gset="${v}" aria-pressed="${gstate.set === v}">${l} <span class="mono">${n}</span></button>`).join("") +
+    `<label class="search" style="flex:1 1 200px"><input id="gq" type="search" placeholder="Search the glossary…" aria-label="Search the glossary" value="${esc(gstate.q)}"></label>`;
+}
+$("#gloss-filters").addEventListener("click", e => { const b = e.target.closest("[data-gset]"); if (b) { gstate.set = b.dataset.gset; glossFilters(); renderGloss(); } });
+$("#gloss-filters").addEventListener("input", e => { if (e.target.id === "gq") { gstate.q = e.target.value.trim().toLowerCase(); renderGloss(); } });
+function renderGloss() {
+  const q = gstate.q;
+  const html = gstate.set === "ours"
+    ? (SC.glossary || []).filter(g => hit(q, g.term, g.meaning, g.why)).map(g => `<div><b>${esc(g.term)}</b><span>${esc(g.meaning)}</span><em>${esc(g.why)}</em></div>`)
+    : (SC.plex_glossary || []).filter(g => hit(q, g.term, g.d)).map(g => `<div><b class="mono">${esc(g.term)}</b><span>${esc(g.d)}</span></div>`);
+  $("#sc-gloss").innerHTML = html.join("") || `<div><span>No term matches. It may be one this repo named itself; Plex does not define view or column aliases.</span></div>`;
+}
+
+$("#q").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); renderReports(); renderTables(); renderPipelines(); renderTiles(); });
 
 /* ---------- platform + history ---------- */
 const tbl = (cols, rows) => `<thead><tr>${cols.map(c => `<th>${esc(c[1])}</th>`).join("")}</tr></thead><tbody>${rows.map(r =>
@@ -439,6 +568,7 @@ function reportModal(r) {
     ["Plex SQL", r.plex_sql_path ? `${mono(r.plex_sql_path)} <span class="pill ${conf(r)}">${esc(conf(r))}</span>` : "not translated"],
     ["Plex views", `<div class="links">${(meta.plex_views || plexViews).map(v => `<span class="lk static">${esc(v)}</span>`).join("")}</div>`],
     ["Status", r.doc ? esc(r.doc.status) : ""],
+    ["Scorecard tiles", (r.tiles || []).length ? `<div class="links">${r.tiles.map(id => link("tile", id, TL[id].tile)).join("")}</div>` : ""],
   ]);
   return {
     title: r.display_name, sub: `<code>${esc(r.name)}</code><span class="cat">${catDot(r.category)}${esc(r.category)}</span>${conf(r) ? `<span class="pill ${conf(r)}">Plex ${conf(r)}</span>` : ""}`,
@@ -499,7 +629,35 @@ function inputModal(o) {
       kv([["Read by", `<div class="links">${o.used_by.map(v => link("report", v)).join("")}</div>`]]) + (o.doc ? `<h3 style="margin:22px 0 10px">Doc</h3>` + md(o.doc.markdown) : "")]],
   };
 }
-const BUILDERS = { report: n => R[n] && reportModal(R[n]), table: n => T[n] && tableModal(T[n]), pipeline: n => PL[n] && pipelineModal(PL[n]), input: n => OI[n] && inputModal(OI[n]) };
+function tileModal(t) {
+  const reps = t.views.filter(v => R[v]).map(v => R[v]);
+  const raw = [...new Set(reps.flatMap(r => r.raw_tables))];
+  const td = t.teardown;
+  const overview = () => `<p class="quote">“${esc(t.question)}”</p>` +
+    (t.open ? `<div class="callout watch"><b class="l">Still open</b>${esc(t.open)}</div>` : "") +
+    kv([
+      ["Section", esc(t.section)],
+      ["Source today", `${esc(t.today)} ${pill(TODAY, t.today_status)}`],
+      ["Replaced by", t.views.length ? `<div class="links">${t.views.map(viewLink).join("")}</div>` : "nothing in Plex, by design"],
+      ["In PlexTest", `${esc(t.rows)} ${pill(KIND, t.kind)}`],
+      ["Raw tables", raw.length ? `<div class="links">${raw.map(x => link("table", x)).join("")}</div>` : ""],
+      ["Other inputs", `<div class="links">${[...new Set(reps.flatMap(r => r.other_inputs))].map(o => link("input", o)).join("")}</div>`],
+      ["Pipelines", `<div class="links">${[...new Set(reps.flatMap(r => r.pipelines))].map(p => link("pipeline", p)).join("")}</div>`],
+    ].filter(p => !/^<div class="links"><\/div>$/.test(p[1]))) +
+    (t.missing.length ? `<div class="note" style="margin-top:14px">No pipeline creates <code>${esc(t.missing.join(", "))}</code>. The board names a view the hub can't find in any <code>reports/*.yaml</code>.</div>` : "") +
+    (td ? `<h3 style="margin:22px 0 10px">From the Field Manual</h3>` +
+      (td.why ? `<div class="callout why"><b class="l">Why it is built this way</b>${td.why}</div>` : "") +
+      (td.watch ? `<div class="callout watch"><b class="l">Watch out</b>${td.watch}</div>` : "") : "");
+  const tabs = [["Overview", overview]];
+  reps.forEach(r => {
+    const label = reps.length > 1 ? ` · ${r.name.replace(/_report$/, "")}` : "";
+    tabs.push([`Plex SQL${label}`, () => code(r.plex_sql, "sql", r.plex_sql_path, "No Plex SQL Developer equivalent yet.")]);
+    tabs.push([`BigQuery SQL${label}`, () => code(r.bq_sql, "sql", r.bq_sql_path)]);
+  });
+  if (reps.length === 1 && reps[0].doc) tabs.push(["Business doc", () => md(reps[0].doc.markdown)]);
+  return { title: t.tile, sub: `<span class="tag">${esc(t.section)}</span>${pill(TODAY, t.today_status)}${pill(KIND, t.kind)}`, tabs };
+}
+const BUILDERS = { report: n => R[n] && reportModal(R[n]), table: n => T[n] && tableModal(T[n]), pipeline: n => PL[n] && pipelineModal(PL[n]), input: n => OI[n] && inputModal(OI[n]), tile: n => TL[n] && tileModal(TL[n]) };
 function open(ref) {
   const i = ref.indexOf(":"), m = BUILDERS[ref.slice(0, i)]?.(ref.slice(i + 1));
   if (!m) return;
@@ -531,13 +689,13 @@ document.addEventListener("click", e => {
 dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
 
 /* ---------- boot ---------- */
-reportFilters(); tableFilters(); renderReports(); renderTables(); renderPipelines(); renderPlatform();
+reportFilters(); tableFilters(); tileFilters(); renderReports(); renderTables(); renderPipelines(); renderTiles(); renderScorecard(); renderPlatform();
 const h = location.hash.slice(1);
 let first = "reports";
 try { first = localStorage.getItem("hub-tab") || first; } catch (e) {}
 if (TABS.some(t => t[0] === h)) first = h;
 show(first);
-const deep = h.match(/^(report|table|pipeline)\.(.+)$/);
+const deep = h.match(/^(report|table|pipeline|tile)\.(.+)$/);
 if (deep) open(`${deep[1]}:${deep[2]}`);
 })();
 </script>

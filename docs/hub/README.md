@@ -8,6 +8,9 @@ changes and open items. Clicking a card opens:
 - **Report:** overview and lineage (Plex view → raw table → upstream view → report → readers), the Plex SQL Developer query, the BigQuery SQL and the business doc.
 - **Raw table:** extraction settings (filter, probe columns), column list from the schema catalog, the reports that read it, and an aliased `SELECT TOP 100` for Plex.
 - **Pipeline:** jobs, prod/test YAML count check, views, tables and the prod YAML.
+- **Scorecard tile** (Scorecard tab): the question it answers, today's source and its audit verdict, the replacing view(s) linked to their report modals, raw tables, the Field Manual's "why it is built this way" and "watch out", and the view's Plex and BigQuery SQL. Report modals link back to the tiles that read them.
+
+The Scorecard tab also carries the open decisions, the manual-data forms and hand-edited tables, vocabulary traps, "what might not be true", both glossaries (scorecard terms and Plex field names) and recent scorecard changes. It merges two artifacts that stay where they are: the Vox Migration Board (shared with Jennilyn, still published from `scripts/board/`) and the Scorecard Field Manual.
 
 Published as an artifact: https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt
 (private to its owner until shared from the page's Share menu).
@@ -30,6 +33,15 @@ Edit the page in `scripts/hub/template.html`, never `index.html`.
 | `docs/reports/*.md` | status line and business doc |
 | `catalog/full_schema_catalog.csv` | columns and types of each Plex view |
 | `docs/hub/platform.json` | jobs, schedules, probe, functions, ops tables, Mermaid, changelog, open items, traps |
+| `scripts/board/board_data.py` | scorecard tiles, open decisions, forms, glossary, recent changes: imported, so the hub and the Migration Board never disagree |
+| `docs/hub/field_manual.json` | per-tile teardowns (matched to tiles by view name), traps, risks, the 93-term Plex glossary |
+
+`field_manual.json` is a one-time snapshot of the Field Manual artifact
+(https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a), which has
+no generator in the repo. Edit the JSON when a teardown changes. The board's
+content is owned by the scorecard project: change it on `dev-scorecard`, not here.
+A tile whose view no pipeline creates shows a red "view not built" pill, and the
+build prints it.
 
 `platform.json` is hand-curated, compiled from CLAUDE.md, CHANGELOG.md,
 `docs/PROBE_BUILD_PLAN.md`, `docs/OPEN_ITEMS.md` and `terraform/main.tf` on

@@ -11,9 +11,12 @@ Reads only what's in the repo, so re-run it after any report change:
   docs/reports/*.md                     business-facing report docs
   catalog/full_schema_catalog.csv       column names/types of every Plex view
   docs/hub/platform.json                jobs, schedules, probe, infra, history
+  scripts/board/board_data.py           scorecard tiles, decisions, forms, glossary (the Migration Board's content)
+  docs/hub/field_manual.json            scorecard teardowns, traps, risks, Plex glossary (Field Manual snapshot)
   scripts/hub/template.html             the page; data is injected as JSON
 """
 import csv
+import importlib.util
 import json
 import re
 from collections import defaultdict
@@ -73,6 +76,56 @@ def load_columns(views):
             if row["view_name"] in views and not row["column_name"].startswith("__ERROR__"):
                 cols[row["view_name"]].append([row["column_name"], row["data_type"]])
     return cols
+
+
+def tile_views(v):
+    # "a · b · c", "safety_incidents (manual form)", "v2_x_report" -> view names
+    names = [re.sub(r"\s*\(.*\)$", "", n).strip() for n in v.split("·")]
+    return [n[3:] if n.startswith("v2_") else n for n in names if n]
+
+
+def load_scorecard(reports, other_inputs):
+    """The Migration Board's content, imported from its own data file so the two
+    pages can't disagree, plus the Field Manual snapshot matched by view name."""
+    spec = importlib.util.spec_from_file_location("board_data", ROOT / "scripts" / "board" / "board_data.py")
+    board = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(board)
+    manual = json.loads(read(ROOT / "docs" / "hub" / "field_manual.json") or "{}")
+    teardowns = {}
+    for td in manual.get("teardowns", []):
+        for v in td["views"]:
+            for n in tile_views(v):
+                teardowns.setdefault(n, td)
+
+    manual_tables = sorted({f["table"] for f in board.FORMS} | {t["name"] for t in board.TABLES})
+    tiles = []
+    for i, t in enumerate(board.TILES):
+        views = tile_views(t["v"])
+        tile = {"id": f"t{i}", "section": t["s"], "tile": t["t"], "question": t["q"],
+                "today": t["today"], "today_status": t["todayst"], "rows": t["rows"],
+                "kind": t["kind"], "open": t["open"], "views": views,
+                "missing": [v for v in views if v not in reports and v not in other_inputs and v not in manual_tables],
+                "teardown": next((teardowns[v] for v in views if v in teardowns), None)}
+        tiles.append(tile)
+        for v in views:
+            if v in reports:
+                reports[v].setdefault("tiles", []).append(tile["id"])
+    return {
+        "board_url": "https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9",
+        "manual_url": manual.get("source", ""),
+        "manual_snapshot": manual.get("snapshot", ""),
+        "tiles": tiles,
+        "manual_tables": manual_tables,
+        "flags": board.FLAGS,
+        "forms": board.FORMS,
+        "tables": board.TABLES,
+        "recent": [{"date": d, "title": t, "summary": s} for d, t, s in board.RECENT],
+        "glossary": [{"term": t, "meaning": m, "why": w} for t, m, w in board.GLOSSARY],
+        "asks": manual.get("asks", []),
+        "traps": manual.get("traps", []),
+        "risks": manual.get("risks", []),
+        "plex_glossary": manual.get("plex_glossary", []),
+    }
 
 
 def main():
@@ -155,6 +208,7 @@ def main():
             other_inputs[o]["used_by"].append(r["name"])
 
     platform = json.loads(read(ROOT / "docs" / "hub" / "platform.json") or "{}")
+    scorecard = load_scorecard(reports, other_inputs)
 
     data = {
         "built": date.today().isoformat(),
@@ -163,6 +217,7 @@ def main():
         "tables": sorted(tables.values(), key=lambda t: t["plex_view"]),
         "other_inputs": sorted(other_inputs.values(), key=lambda o: o["name"]),
         "platform": platform,
+        "scorecard": scorecard,
     }
 
     template = read(ROOT / "scripts" / "hub" / "template.html")
@@ -177,6 +232,8 @@ def main():
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]
     print(f"{rel(OUT)}: {len(reports)} reports, {len(tables)} raw tables, {len(pipelines)} pipelines, "
           f"{len(html) // 1024} KB; Plex SQL missing for {len(missing)}: {', '.join(missing) or '-'}")
+    unmatched = sorted({v for t in scorecard["tiles"] for v in t["missing"]})
+    print(f"scorecard: {len(scorecard['tiles'])} tiles; views not in any pipeline: {', '.join(unmatched) or '-'}")
 
 
 if __name__ == "__main__":

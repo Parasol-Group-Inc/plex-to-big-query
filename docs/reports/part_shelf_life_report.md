@@ -1,6 +1,6 @@
 # Vox Nutrition Item List with Shelf Life Details
 
-> **Status:** 🔬 Built 2026-10-19, checked on PlexTest data (35,370 rows, 15,701 parts), not yet deployed · **Category:** Production · **Runs:** with Audit - Part Info and Routing (same pipeline, `part_routing`)
+> **Status:** ✅ Live in prod (PlexProd) since 2026-10-19. On 2026-10-20 it held 35,382 rows over 15,705 parts, 28 of them with no shelf life · **Category:** Production · **Runs:** with Audit - Part Info and Routing (same pipeline, `part_routing`)
 
 ## What this tells you
 
@@ -27,6 +27,10 @@ are kept, with the shelf-life columns empty.
 There is **one row per part per shelf-life record**:
 - A part configured with Best By, Use By and Sell By appears **three times**.
 - A part with **no shelf life appears once**, flagged `shelf_life_missing = true`.
+  The flag means "no shelf-life value": it is also true on a record whose
+  value is blank. On 2026-10-20 there were none of those, so the 28 flagged
+  rows were exactly the parts with no record at all. To tell the two apart,
+  check `shelf_life_type`: it is empty only when there is no record.
 
 On PlexTest, 2026-10-19:
 

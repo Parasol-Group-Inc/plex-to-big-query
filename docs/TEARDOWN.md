@@ -12,12 +12,12 @@ Last reviewed: 2026-09-25
 
 ## What gets deleted
 
-As of 2026-10-01 there are **27 Cloud Run jobs** (13 pipelines × prod/test, plus the Label Design push job), **51 Cloud Scheduler jobs** (one daily per Cloud Run job + a 9:45 PM Mountain retry trigger on each except Label Design and its push), **94** GCS objects (every file under `reports/`), **6** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (189 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
+As of 2026-10-20 there are **30 Cloud Run jobs** (14 pipelines × prod/test, plus the two Label Design push jobs), **30 Cloud Scheduler jobs** (the ETL dispatcher, a nightly trigger per test job + a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines have none of their own), **94** GCS objects (every file under `reports/`), **6** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (189 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
 
 | Resource | Managed by | Deleted how |
 |---|---|---|
-| All 27 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
-| All 51 Cloud Scheduler jobs (27 daily + 24 retry) | Terraform | `terraform destroy` |
+| All 30 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
+| All 30 Cloud Scheduler jobs (dispatcher, test nightly + 12 retry, Label Design) | Terraform | `terraform destroy` |
 | BigQuery datasets `PlexProd` + `PlexTest` + all tables/views in both | Terraform | `terraform destroy` (after unlocking — see Step 2) |
 | `report_configs` GCS bucket (`voxdatalake-report-configs`) and its 94 YAML/SQL objects | Terraform | `terraform destroy` |
 | Artifact Registry repo (`plex-pipeline`) | Terraform | `terraform destroy` (after clearing images) |
@@ -43,7 +43,7 @@ for job in $(gcloud scheduler jobs list --location=us-central1 --project=voxdata
 done
 ```
 
-That pauses all 52 `plex-*` schedulers (daily and retry) and leaves the unrelated `monday-daily-sync*` ones alone.
+That pauses all 30 `plex-*` schedulers — including `plex-etl-dispatcher`, which is what stops the prod pipelines (they have no schedulers of their own since 2026-10-19), plus the test and Label Design ones — and leaves the unrelated `monday-daily-sync*` ones alone.
 
 ---
 
@@ -113,7 +113,7 @@ cd C:/F/Parasol/plex-to-big-query/terraform
 terraform destroy -var-file=terraform.tfvars
 ```
 
-Read the plan it prints, then type `yes`. This takes several minutes and removes everything Terraform created — **about 200 resources** as of 2026-10-01 (27 Cloud Run jobs + 51 Cloud Scheduler jobs + 94 GCS objects + 2 BigQuery datasets + 6 secrets + the report-configs bucket + IAM/service-account resources + more).
+Read the plan it prints, then type `yes`. This takes several minutes and removes everything Terraform created — **about 200 resources** as of 2026-10-01 (27 Cloud Run jobs + 30 Cloud Scheduler jobs + 94 GCS objects + 2 BigQuery datasets + 6 secrets + the report-configs bucket + IAM/service-account resources + more).
 
 **Expected output at the end:**
 ```
@@ -123,7 +123,7 @@ Destroy complete! Resources: N destroyed.
 
 **Verify in GCP Console:**
 - **Secret Manager** → all 6 secrets should be gone
-- **Cloud Run** → **Jobs** → all 27 jobs should be gone
+- **Cloud Run** → **Jobs** → all 30 jobs should be gone
 - **BigQuery** → both `PlexProd` and `PlexTest` datasets should be gone
 - **Cloud Storage** → the `voxdatalake-report-configs` bucket should be gone
 - **Artifact Registry** → `plex-pipeline` repo should be gone
@@ -173,7 +173,7 @@ image_url   = "us-central1-docker.pkg.dev/your-new-project-id/plex-pipeline/etl:
 gcloud config set project your-new-project-id
 gcloud auth application-default login
 
-# Deploy infrastructure (creates all 27 jobs, referencing image_url above —
+# Deploy infrastructure (creates all 30 jobs, referencing image_url above —
 # they fail "image not found" until the image is pushed below; expected)
 cd terraform
 terraform init -reconfigure     # -reconfigure if the backend bucket changed

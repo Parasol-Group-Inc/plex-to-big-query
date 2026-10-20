@@ -131,6 +131,34 @@ def test_seed_sql_keeps_every_slot_inside_its_hour():
     assert (jobs - 1) * 4 < 60, "the last staggered slot must stay inside the hour"
 
 
+
+def test_a_failed_log_insert_starts_nothing_and_keeps_the_pass_going():
+    """A BigQuery error on one job's dispatch row must not abort the tick, and
+    must not start a run that has no row (it would be started again)."""
+    rows = [ROW, dict(ROW, job_name="plex-etl-work-orders")]
+    started = []
+
+    def fake_query(bq, sql, params=None):
+        if "INSERT INTO" in sql:
+            job = next(p for p in params if p.name == "job").value
+            if job == ROW["job_name"]:
+                raise RuntimeError("streaming buffer busy")
+            return []
+        if "FROM" in sql and "run_time" in sql:
+            return rows
+        return []
+
+    saved = d._bq, d._session, d._query, d.start_job
+    d._bq, d._session, d._query = (lambda: None), (lambda: None), fake_query
+    d.start_job = lambda session, job, mode, dispatch_id: started.append(job) or "exec-1"
+    try:
+        summary = d.tick(now_utc=mt(2026, 10, 19, 13, 3))
+    finally:
+        d._bq, d._session, d._query, d.start_job = saved
+    assert started == ["plex-etl-work-orders"], started
+    assert any(e.startswith(f"log {ROW['job_name']}") for e in summary["errors"]), summary["errors"]
+    assert [x["job_name"] for x in summary["dispatched"]] == ["plex-etl-work-orders"], summary["dispatched"]
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

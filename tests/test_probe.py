@@ -527,6 +527,24 @@ def save(name, body):
         (Path(out) / f"{name}.html").write_text(body, encoding="utf-8")
 
 
+# ── retry after an unclean run ─────────────────────────────────────────────────
+def test_last_run_unclean_reads_latest_working_run():
+    class FakeBQ:
+        def __init__(self, statuses):
+            self.statuses = statuses
+            self.sql = ""
+
+        def query(self, sql, job_config=None):
+            self.sql = sql
+            rows = [type("Row", (), {"status": s})() for s in self.statuses]
+            return type("Job", (), {"result": lambda _self: rows})()
+
+    for statuses, expected in ((["partial"], True), (["failed"], True),
+                               (["success"], False), ([], False)):
+        bq = FakeBQ(statuses)
+        assert m.last_run_unclean(bq, "plex-etl-x") is expected, statuses
+    assert "!= 'skipped'" in bq.sql, "a skipped run did no work and must not hide a failure"
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

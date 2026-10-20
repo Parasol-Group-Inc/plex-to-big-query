@@ -212,7 +212,7 @@ Either order is safe, and so is rolling the image back:
 ## Status
 
 - **Phase 1:** built 2026-10-19 on `dev`. PR open.
-- **Phase 2:** stage A deployed and tested end to end on test jobs 2026-10-19; **stage B** (prod rows enabled, the 25 prod nightly/`-retry` schedulers removed, prod `max_retries = 0`) in the PR that follows. See CHANGELOG.
+- **Phase 2: live in prod since 2026-10-19 18:20 MT.** Stage A was tested end to end on test jobs. Stage B removed the 25 prod schedulers (prod `max_retries = 0`). First rounds: 6 PM 12 ran / 1 skipped; 11 PM 4 ran / 9 skipped; 4 AM full, 13 ran; no failures or follow-ups. CHANGELOG 2026-10-20.
 - **First new pipeline on the probe: `part_routing`** (Audit - Part Info and
   Routing, built 2026-10-19). It added two engine features:
   - **`page_key` keyset paging** for large views;

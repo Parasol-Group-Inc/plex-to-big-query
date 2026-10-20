@@ -449,6 +449,27 @@ This phase changes **no schedule**. Prod keeps its one nightly run until phase 2
   item S11. The Lineage Navigator artifact shows the same setups with copy
   buttons. Docs only; nothing deployed.
 
+## 2026-10-13 (label-design) - Plex API: Monday push function + BOM + report view
+
+### Added
+
+- **`deploy/plex_api_function/push.py` — Monday push Cloud Function (Gen 2).**
+  Reads `plex_api_label_design_report` (BigQuery view), creates items on
+  board 18432111755 group "API_Test". LCR hash dedupe (same pattern as the
+  ODBC push), audit table `plex_api_push_log`, partial-create fallback.
+  Columns pushed: Customer Name, Date, Sales Order, Customer PO, Email,
+  Phone, Bottle Material, Label Part #, Description, Item, LCR.
+
+- **`deploy/plex_api_function/views.sql` — `plex_api_label_design_report`
+  view.** Joins releases (status='Label Design') → lines → orders →
+  customers → parts → BOM label parts (73*) and bottle parts (53*).
+  Bottle material parsed from FG part name. Dedupe key =
+  `order_number|Lline_id`.
+
+- **BOM resource in the extractor** (`main.py`): fetches
+  `/engineering/v1/boms?PartId=<uuid>` per unique `partId` from order lines.
+  Typed fields for all resources (orders, releases, lines, boms, customers)
+  so `_latest` views have proper columns instead of raw JSON only.
 
 ## 2026-10-13 (label-design) - Plex API extractor: Cloud Run job -> Cloud Function
 

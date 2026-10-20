@@ -42,6 +42,14 @@ new `reports/plex_sql/` folder never reaches GCS.
 - **`docs/hub/platform.json`**: jobs, schedules, probe logic, functions, ops
   tables and Mermaid diagrams, compiled by hand from the docs and Terraform. It
   does not update itself.
+- **Scorecard tab in the hub.** The hub absorbs the Vox Migration Board and the
+  Scorecard Field Manual: 34 tile cards, each opening a modal with today's source,
+  the replacing view (linked to its report, raw tables and SQL) and the Field
+  Manual's teardown, plus open decisions, manual forms, traps, risks and both
+  glossaries. Report modals list the tiles that read them. The board's content is
+  imported from `scripts/board/board_data.py` (unchanged, still owned by the
+  scorecard project); the Field Manual has no generator, so it is snapshotted to
+  `docs/hub/field_manual.json`. Both original artifacts stay published.
 
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 

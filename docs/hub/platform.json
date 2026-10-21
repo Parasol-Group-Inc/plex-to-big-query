@@ -355,97 +355,113 @@
       "scheduler": "plex-sales-orders-sync-test",
       "cron": "not in git (tfvars scheduler_cron_test); EMAIL_SCHEDULE.md says 7:10 PM Mountain - unconfirmed",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-sales-orders-test"
+      "target_job": "plex-etl-sales-orders-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-work-orders-sync-test",
       "cron": "30 19 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-work-orders-test"
+      "target_job": "plex-etl-work-orders-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-purchasing-open-orders-sync-test",
       "cron": "50 19 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-purchasing-open-orders-test"
+      "target_job": "plex-etl-purchasing-open-orders-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-part-obsolescence-sync-test",
       "cron": "10 20 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-part-obsolescence-test"
+      "target_job": "plex-etl-part-obsolescence-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-inventory-activity-sync-test",
       "cron": "30 20 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-inventory-activity-test"
+      "target_job": "plex-etl-inventory-activity-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-inventory-snapshot-sync-test",
       "cron": "50 20 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-inventory-snapshot-test"
+      "target_job": "plex-etl-inventory-snapshot-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-quality-nonconformance-sync-test",
       "cron": "10 21 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-quality-nonconformance-test"
+      "target_job": "plex-etl-quality-nonconformance-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-part-on-hand-inventory-sync-test",
       "cron": "30 21 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-part-on-hand-inventory-test"
+      "target_job": "plex-etl-part-on-hand-inventory-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-purchasing-pending-requisitions-sync-test",
       "cron": "50 21 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-purchasing-pending-requisitions-test"
+      "target_job": "plex-etl-purchasing-pending-requisitions-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-sales-quotes-sync-test",
       "cron": "10 22 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-sales-quotes-test"
+      "target_job": "plex-etl-sales-quotes-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-sales-returns-sync-test",
       "cron": "30 22 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-sales-returns-test"
+      "target_job": "plex-etl-sales-returns-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-quality-supplier-returns-sync-test",
       "cron": "50 22 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-quality-supplier-returns-test"
+      "target_job": "plex-etl-quality-supplier-returns-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-part-routing-sync-test",
       "cron": "10 23 * * *",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-part-routing-test"
+      "target_job": "plex-etl-part-routing-test",
+      "mode": "scheduled: full, probe logged, never skips"
     },
     {
       "scheduler": "plex-label-design-sync-test",
       "cron": "5 5-17 * * 1-5",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-label-design-test"
+      "target_job": "plex-etl-label-design-test",
+      "mode": "explicit probe, may skip"
     },
     {
       "scheduler": "plex-label-design-push-sync-test",
       "cron": "35 5-17 * * 1-5 (paused = true)",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-label-design-push-test"
+      "target_job": "plex-etl-label-design-push-test",
+      "mode": "push, no probe"
     },
     {
       "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing and label_design)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
-      "target_job": "the matching -test job, POST with RUN_MODE=retry override (needs role plexEtlRunWithOverrides)"
+      "target_job": "the matching -test job, POST with RUN_MODE=retry override (needs role plexEtlRunWithOverrides)",
+      "mode": "retry: full, only if today's run failed"
     }
   ],
   "functions": [
@@ -551,7 +567,8 @@
       "Busy tables (Part_v_Production, Part_v_Container) mean Work Orders and inventory usually run in full at 1 PM and 6 PM; that is correct.",
       "A short email does not mean views were rebuilt, and job exit 0 does not mean the view exists; query it.",
       "The first run after a fingerprint format change always runs in full."
-    ]
+    ],
+    "prod_vs_test": "Only prod uses the probe to skip work. The dispatcher starts prod jobs with RUN_MODE=probe at 1 PM, 6 PM and 11 PM, and an unchanged fingerprint skips the run; the 4 AM run is RUN_MODE=full and never skips. Test jobs are started by Cloud Scheduler with no override, so RUN_MODE is scheduled: the probe still runs and its fingerprint is logged as the reference, but probe_may_skip returns false and the job extracts everything, every night. That keeps test a full nightly rehearsal of every query. The one exception is Label Design, whose explicit probe skips on scheduled runs in both environments."
   },
   "deploy": {
     "steps": [
@@ -576,10 +593,11 @@
     ]
   },
   "mermaid": {
-    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC prod host and test host\"]\n  Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n  Disp[\"Cloud Function<br/>etl-dispatcher\"]\n  Ops[(\"BigQuery PlexOps<br/>etl_schedule and etl_dispatch_log\")]\n  ProdJobs[\"13 prod Cloud Run jobs<br/>plex-etl-pipeline\"]\n  LDSch[\"Cloud Scheduler<br/>plex-label-design-sync hourly\"]\n  LDJob[\"Cloud Run job<br/>plex-etl-label-design\"]\n  TestSch[\"Cloud Scheduler<br/>nightly test schedulers and retry\"]\n  TestJobs[\"14 test Cloud Run jobs<br/>plex-etl-pipeline-test\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>YAML config and view SQL\"]\n  AR[\"Artifact Registry<br/>plex-pipeline etl image\"]\n  Prod[(\"BigQuery PlexProd<br/>raw tables, views, probe_log\")]\n  Test[(\"BigQuery PlexTest\")]\n  Mail[\"SendGrid report emails\"]\n  Push[\"Cloud Run job<br/>plex-etl-label-design-push\"]\n  Monday[\"Monday board<br/>Plex Import\"]\n  Apps[\"Apps Script<br/>manual data app hourly\"]\n  Plex -->|\"ODBC probe and extract\"| ProdJobs\n  Plex -->|\"ODBC\"| LDJob\n  Plex -->|\"ODBC\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"YAML and SQL\"| ProdJobs\n  GCS --> TestJobs\n  AR -->|\"same image\"| ProdJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  ProdJobs -->|\"writes outcome\"| Ops\n  Prod --> Push\n  Push --> Monday\n  Apps -->|\"goals and safety incidents\"| Prod",
+    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>hourly :00, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push :35\"]\n    Monday[\"Monday board Plex Import\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  Prod --> Push --> Monday\n  Apps -->|\"goals and safety incidents\"| Prod",
     "probe_flow": "flowchart TD\n  Start[\"Job starts<br/>RUN_MODE probe, full, scheduled or retry\"]\n  Load[\"Load YAML from GCS<br/>open Plex ODBC connection\"]\n  Kind{\"probe_kind<br/>auto, explicit or none\"}\n  Full[\"Full extraction<br/>WRITE_TRUNCATE every raw table\"]\n  Ref[\"Read last applied fingerprint<br/>from probe_log\"]\n  Run[\"run_probe<br/>COUNT and MAX or SUM per table<br/>plus YAML and SQL hash\"]\n  Inc[\"Inconclusive<br/>log inconclusive row, fail open\"]\n  Same{\"May skip and<br/>fingerprint unchanged\"}\n  Skip[\"Log skipped<br/>short Probe ran email<br/>outcome skipped\"]\n  Views[\"Create or replace bq_views<br/>retry a failed view once\"]\n  Ok{\"Clean run\"}\n  Applied[\"probe_log applied<br/>fingerprint is new reference\"]\n  Failed[\"probe_log failed<br/>reference unchanged\"]\n  Disp[\"record_dispatch_outcome<br/>full email\"]\n  Follow[\"Dispatcher follow-up probe<br/>15 min later, once\"]\n  Start --> Load --> Kind\n  Kind -->|\"none\"| Full\n  Kind -->|\"auto or explicit\"| Ref\n  Ref -->|\"unreadable\"| Inc\n  Ref --> Run\n  Run -->|\"error\"| Inc\n  Run --> Same\n  Inc --> Full\n  Same -->|\"yes\"| Skip\n  Same -->|\"no, or full run\"| Full\n  Full --> Views --> Ok\n  Ok -->|\"yes\"| Applied --> Disp\n  Ok -->|\"no\"| Failed --> Disp\n  Disp -->|\"failed, partial or lost\"| Follow",
     "dispatch_sequence": "sequenceDiagram\n  participant CS as Cloud Scheduler\n  participant D as etl-dispatcher\n  participant BQ as PlexOps in BigQuery\n  participant CR as Cloud Run job\n  participant PX as Plex ODBC\n  CS->>D: HTTP tick every 5 minutes\n  D->>BQ: read etl_schedule and open etl_dispatch_log rows\n  D->>CR: reconcile open runs from execution status\n  D->>BQ: record failed, succeeded-unrecorded or lost\n  D->>BQ: insert dispatch row for each due slot first\n  D->>CR: run job with RUN_MODE, DISPATCH_ID, DISPATCH_LOG_TABLE\n  CR->>PX: probe aggregates\n  alt fingerprint unchanged and mode is probe\n    CR->>BQ: probe_log skipped, outcome skipped\n  else changed or full mode\n    CR->>PX: full extraction\n    CR->>BQ: write raw tables and views, probe_log applied\n    CR->>BQ: outcome success, partial or failed\n  end\n  D->>BQ: next tick finds failed, partial or lost run\n  D->>CR: one follow-up probe 15 minutes after it finished",
-    "deploy_flow": "flowchart LR\n  Dev[\"dev branch worktree<br/>ptbq-dev and project folders\"]\n  Hook[\"pre-commit and pre-push hooks\"]\n  PR[\"Pull request into main\"]\n  Main[\"primary folder<br/>clean main equals origin main\"]\n  Deploy[\"scripts/deploy.sh\"]\n  Guard[\"tf_guard.py<br/>runs inside every plan\"]\n  Review[\"plan_review.py<br/>type the change count\"]\n  TF[\"terraform apply<br/>of the reviewed plan\"]\n  GCS[\"GCS configs and SQL<br/>jobs and schedulers\"]\n  Tag[\"git tag deploy timestamp\"]\n  CB[\"gcloud builds submit<br/>deploy/cloudbuild.yaml\"]\n  Img[\"image to Artifact Registry<br/>deploy-all then smoke test on test job\"]\n  GF[\"gcloud functions deploy<br/>dispatcher and plex api\"]\n  Dev --> Hook --> PR --> Main\n  Main --> Deploy --> Guard --> Review --> TF --> GCS\n  TF --> Tag\n  Main -->|\"code changes\"| CB --> Img\n  Main -->|\"function changes\"| GF"
+    "deploy_flow": "flowchart LR\n  Dev[\"dev branch worktree<br/>ptbq-dev and project folders\"]\n  Hook[\"pre-commit and pre-push hooks\"]\n  PR[\"Pull request into main\"]\n  Main[\"primary folder<br/>clean main equals origin main\"]\n  Deploy[\"scripts/deploy.sh\"]\n  Guard[\"tf_guard.py<br/>runs inside every plan\"]\n  Review[\"plan_review.py<br/>type the change count\"]\n  TF[\"terraform apply<br/>of the reviewed plan\"]\n  GCS[\"GCS configs and SQL<br/>jobs and schedulers\"]\n  Tag[\"git tag deploy timestamp\"]\n  CB[\"gcloud builds submit<br/>deploy/cloudbuild.yaml\"]\n  Img[\"image to Artifact Registry<br/>deploy-all then smoke test on test job\"]\n  GF[\"gcloud functions deploy<br/>dispatcher and plex api\"]\n  Dev --> Hook --> PR --> Main\n  Main --> Deploy --> Guard --> Review --> TF --> GCS\n  TF --> Tag\n  Main -->|\"code changes\"| CB --> Img\n  Main -->|\"function changes\"| GF",
+    "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X"
   },
   "changelog_recent": [
     {
@@ -1021,6 +1039,68 @@
     {
       "title": "Deploy the dispatcher function first",
       "detail": "etl-dispatcher is deployed with gcloud functions deploy before deploy.sh or the scheduler gets 404s."
+    }
+  ],
+  "env_compare": [
+    {
+      "aspect": "Plex source",
+      "prod": "vox.odbc.plex.com (DSN PlexProduction): the real business",
+      "test": "vox.test.odbc.plex.com: Plex's test company, partly synthetic"
+    },
+    {
+      "aspect": "BigQuery dataset",
+      "prod": "PlexProd (Looker Studio and the scorecard read this)",
+      "test": "PlexTest (report names get a _test suffix on the pipeline; raw tables and views keep their names)"
+    },
+    {
+      "aspect": "Config in GCS",
+      "prod": "gs://voxdatalake-report-configs/reports/<pipeline>.yaml",
+      "test": "gs://voxdatalake-report-configs/test/<pipeline>.yaml (git: reports/test/), hand-maintained, change both"
+    },
+    {
+      "aspect": "Who starts the job",
+      "prod": "etl-dispatcher Cloud Function, every 5 min tick, reading PlexOps.etl_schedule",
+      "test": "One Cloud Scheduler entry per pipeline (plex-<pipeline>-sync-test)"
+    },
+    {
+      "aspect": "When",
+      "prod": "1 PM, 6 PM, 11 PM probe + 4 AM full, America/Denver, 4 min apart per job",
+      "test": "Once a night, 7:10 PM to 11:10 PM Mountain, 20 min apart, + a 9:45 PM -retry fire"
+    },
+    {
+      "aspect": "RUN_MODE",
+      "prod": "probe (1 PM, 6 PM, 11 PM, follow-ups) or full (4 AM)",
+      "test": "scheduled (the default; Cloud Scheduler sends no override); retry on the -retry fire"
+    },
+    {
+      "aspect": "Probe",
+      "prod": "Evaluated, and an unchanged fingerprint SKIPS extraction and views (probe_may_skip is true for RUN_MODE=probe)",
+      "test": "Evaluated and written to probe_log as the next reference, but NEVER skips: probe_may_skip is false for a scheduled auto-probe run, so every test run is a full extraction"
+    },
+    {
+      "aspect": "Failures",
+      "prod": "max_retries 0, no -retry scheduler; ONE dispatcher follow-up probe 15 min after a failed, partial or lost run",
+      "test": "max_retries 1, plus the -retry scheduler (does work only if today's scheduled run failed, per job_run_log)"
+    },
+    {
+      "aspect": "Run record",
+      "prod": "PlexOps.etl_dispatch_log (did prod run?) + PlexProd.probe_log + job_run_log",
+      "test": "PlexTest.job_run_log + probe_log; nothing in PlexOps"
+    },
+    {
+      "aspect": "Email",
+      "prod": "Full report email on a run; short 'Probe ran - nothing to update' on a skip",
+      "test": "Full report email every night, TEST badge; same subject so it threads with prod"
+    },
+    {
+      "aspect": "Label Design (exception)",
+      "prod": "Own scheduler hourly :00, 5 AM-5 PM Mon-Fri; explicit probe skips on scheduled runs; push to Monday at :35",
+      "test": "Own scheduler hourly :05; the explicit probe DOES skip here too; push job paused since the 2026-10-19 cutover"
+    },
+    {
+      "aspect": "Changing a time",
+      "prod": "SQL on PlexOps.etl_schedule, no deploy",
+      "test": "Terraform (scheduler cron), via ./scripts/deploy.sh"
     }
   ]
 }

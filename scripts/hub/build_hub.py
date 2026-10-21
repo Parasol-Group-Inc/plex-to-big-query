@@ -2,7 +2,12 @@
 """Build the Plex Data Hub: one self-contained HTML page over every report,
 raw table, pipeline, schedule and the probe/dispatcher logic.
 
-    python scripts/hub/build_hub.py          # writes docs/hub/index.html
+    python scripts/hub/build_hub.py          # writes docs/hub/index.html (+ index_live.html)
+
+index.html carries no BigQuery data and is committed. When data_snapshot.json
+exists, the same page is also written with it embedded to index_live.html:
+that is the one published as the artifact. data_snapshot.json and
+index_live.html are gitignored because they hold real PlexProd rows.
 
 Reads only what's in the repo, so re-run it after any report change:
   reports/*.yaml, reports/test/*.yaml   pipelines, extractions, bq_view lists
@@ -13,6 +18,7 @@ Reads only what's in the repo, so re-run it after any report change:
   docs/hub/platform.json                jobs, schedules, probe, infra, history
   scripts/board/board_data.py           scorecard tiles, decisions, forms, glossary (the Migration Board's content)
   docs/hub/field_manual.json            scorecard teardowns, traps, risks, Plex glossary (Field Manual snapshot)
+  docs/hub/data_snapshot.json           (optional, gitignored) row counts, sample rows, run logs, figure values (scripts/hub/snapshot_data.py)
   scripts/hub/template.html             the page; data is injected as JSON
 """
 import csv
@@ -28,6 +34,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / "reports"
 OUT = ROOT / "docs" / "hub" / "index.html"
+OUT_LIVE = ROOT / "docs" / "hub" / "index_live.html"
 
 RAW_RE = re.compile(r"\{dataset\}\.(raw_[A-Za-z0-9_]+)")
 VIEW_RE = re.compile(r"\{dataset\}\.([A-Za-z0-9_]+)")
@@ -251,17 +258,24 @@ def main():
         "other_inputs": sorted(other_inputs.values(), key=lambda o: o["name"]),
         "platform": platform,
         "scorecard": scorecard,
+        "snapshot": {},
     }
+    # live data, refreshed only by scripts/hub/snapshot_data.py; never in the committed page
+    snapshot = json.loads(read(ROOT / "docs" / "hub" / "data_snapshot.json") or "{}")
 
     template = read(ROOT / "scripts" / "hub" / "template.html")
-    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     mermaid = platform.get("mermaid", {})
-    html = template.replace("/*__HUB_DATA__*/", payload)
-    for key in ("architecture", "probe_flow", "dispatch_sequence", "deploy_flow"):
+    for key in ("architecture", "env_paths", "probe_flow", "dispatch_sequence", "deploy_flow"):
         src = mermaid.get(key, "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        html = html.replace(f"<!--MERMAID:{key}-->", src)
+        template = template.replace(f"<!--MERMAID:{key}-->", src)
+    page = lambda d: template.replace("/*__HUB_DATA__*/", json.dumps(d, ensure_ascii=False).replace("</", "<\\/"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    html = page(data)
     OUT.write_text(html, encoding="utf-8", newline="\n")
+    if snapshot:
+        live = page({**data, "snapshot": snapshot})
+        OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
+        print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]
     print(f"{rel(OUT)}: {len(reports)} reports, {len(tables)} raw tables, {len(pipelines)} pipelines, "
           f"{len(html) // 1024} KB; Plex SQL missing for {len(missing)}: {', '.join(missing) or '-'}")

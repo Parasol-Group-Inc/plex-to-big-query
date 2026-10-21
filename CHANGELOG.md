@@ -56,6 +56,32 @@ new `reports/plex_sql/` folder never reaches GCS.
   Plex and BigQuery SQL. Figures the audit flagged, and figures with no built Plex
   view behind them, are marked. The audit is read from
   `score-card-reference/vox_scorecard_navigator.html` (unchanged).
+- **Expected/Current toggle on the Scorecard view.** Expected is the Looker value
+  on 31 Jul 2026. Current recomputes each figure from our report views in Prod or
+  Test. `scripts/hub/figure_queries.py` holds one BigQuery query per figure, and a
+  figure with no Plex source shows "n/a" along with the reason. The figure modal
+  puts the expected and current values side by side and shows the query.
+- **Live data in the hub's modals.** `scripts/hub/snapshot_data.py` (read-only)
+  saves `docs/hub/data_snapshot.json` with the following:
+  - every report view's row count, columns and first 25 rows, in PlexProd and
+    PlexTest;
+  - every raw table's row count and last change;
+  - the newest rows of `etl_dispatch_log`, `job_run_log` and `probe_log`.
+
+  Report, tile and raw-table modals get a Data tab. Pipeline modals list Prod and
+  Test row counts and recent runs. The Schedules tab gains a "Recent runs" table.
+  It is a snapshot with a timestamp, not live data: re-run the script, then the
+  build. **The snapshot holds real PlexProd rows, so it never goes into git.**
+  `data_snapshot.json` is gitignored. The build writes the committed
+  `index.html` without data and a gitignored `index_live.html` with it, and the
+  artifact is published from `index_live.html`.
+- **Prod vs Test, made explicit in the hub.** There is a side-by-side table (who
+  starts the jobs, when, RUN_MODE, probe, failures, run record), a Mermaid
+  diagram of both run paths, a "How it runs" column on the test schedulers, and
+  architecture drawn as two lanes. The rule it documents: prod uses the probe to
+  skip unchanged runs. Test computes and logs the probe on its nightly run
+  (RUN_MODE `scheduled`), but `probe_may_skip` never lets it skip. Label Design's
+  explicit probe is the one exception, in both environments.
 
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 

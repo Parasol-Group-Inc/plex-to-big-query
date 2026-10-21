@@ -67,3 +67,8 @@ monday_board_snapshot_*.csv
 # scripts/deploy.sh plan artifacts (it deletes them on exit; never commit a plan)
 terraform/deploy.tfplan
 terraform/deploy.plan.json
+
+# Plex Data Hub live data: real PlexProd rows, published to the org-only
+# artifact but never committed. scripts/hub/snapshot_data.py regenerates them.
+docs/hub/data_snapshot.json
+docs/hub/index_live.html

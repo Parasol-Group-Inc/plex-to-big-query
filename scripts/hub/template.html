@@ -215,6 +215,18 @@ pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .legend .lf::before { background: var(--warn); }
 .legend .lg::before { background: var(--bad); }
+.vb-tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 6px 12px; cursor: pointer; color: var(--muted); font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.vb:not(.cur) .cv, .vb.cur .exp { display: none; }
+.fig .was { font-size: 11px; color: var(--muted); font-family: var(--f-mono); }
+.vb:not(.cur) .was { display: none; }
+.fig .cv.na { font-size: 14px; color: var(--muted); }
+details.env { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+details.env summary { cursor: pointer; font-weight: 600; }
+details.env .tbl-wrap { margin-top: 10px; max-height: 420px; overflow: auto; }
+table.data td { font-family: var(--f-mono); font-size: 12px; white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; border-radius: 6px; font-size: 12.5px; margin: 0; }
 
 .empty { padding: 40px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
@@ -259,6 +271,7 @@ pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; b
       <div class="block">
         <p class="lede" id="vb-lede"></p>
         <div class="legend"><span class="lf">Looker audit flagged this figure</span><span class="lg">No built Plex view replaces it</span></div>
+        <div class="vb-tools" id="vb-tools"></div>
         <div class="vb">
           <div class="vb-title">VOX NUTRITION MTD SCORECARD</div>
           <div class="vb-row">
@@ -366,8 +379,15 @@ pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; b
         <div class="diagram"><pre class="mermaid"><!--MERMAID:architecture--></pre></div>
       </div>
       <div class="block">
+        <h2>Prod vs Test</h2>
+        <p class="lede">Same image, same code, two environments that run differently. <b>Prod</b> is started by the dispatcher and uses the probe to skip runs when Plex has not changed. <b>Test</b> is started once a night by Cloud Scheduler and always extracts in full: its probe is computed and logged but never allowed to skip.</p>
+        <div class="callout why" id="env-note"></div>
+        <div class="tbl-wrap"><table id="envs"></table></div>
+        <div class="diagram"><pre class="mermaid"><!--MERMAID:env_paths--></pre></div>
+      </div>
+      <div class="block">
         <h2>Schedules</h2>
-        <p class="lede">Prod times live in <code>PlexOps.etl_schedule</code> and are started by the <code>etl-dispatcher</code> function. Change a prod time with SQL, not Terraform. Test jobs keep their own nightly Cloud Scheduler entries.</p>
+        <p class="lede">Prod times live in <code>PlexOps.etl_schedule</code> and are started by the <code>etl-dispatcher</code> function. Change a prod time with SQL, not Terraform. Test jobs keep their own nightly Cloud Scheduler entries and never go through the dispatcher.</p>
         <div class="two" id="schedules"></div>
         <div class="diagram"><pre class="mermaid"><!--MERMAID:dispatch_sequence--></pre></div>
       </div>
@@ -375,6 +395,12 @@ pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; b
         <h2>Probe logic</h2>
         <div class="two" id="probe"></div>
         <div class="diagram"><pre class="mermaid"><!--MERMAID:probe_flow--></pre></div>
+      </div>
+      <div class="block">
+        <h2>Recent runs</h2>
+        <p class="lede" id="runs-lede"></p>
+        <div class="toolbar" id="runs-filters"></div>
+        <div class="tbl-wrap"><table id="runs"></table></div>
       </div>
       <div class="block">
         <h2>Cloud Run jobs</h2>
@@ -583,6 +609,52 @@ function renderScorecard() {
 }
 const FIG = SC.figures || {};
 const figFlagged = f => /flag|naming gap/i.test(f.confidence || "");
+
+/* ---------- live data snapshot (scripts/hub/snapshot_data.py) ---------- */
+const SNAP = D.snapshot || {};
+const ENVS = Object.keys(SNAP.envs || {});
+const SPEC = SNAP.figure_specs || {};
+const ENV_LABEL = { PlexProd: "Prod", PlexTest: "Test" };
+const snapAt = SNAP.taken_at ? SNAP.taken_at.replace("T", " ").replace(/\+00:00$/, " UTC") : "";
+const short = n => { const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(2) + "B" : a >= 1e6 ? (n / 1e6).toFixed(a >= 1e8 ? 1 : 2) + "M" : a >= 1e3 ? (n / 1e3).toFixed(1) + "K" : String(Math.round(n * 10) / 10); };
+function fmtFig(spec, v) {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  switch ((spec || {}).format) {
+    case "usd": return "$" + Math.round(n).toLocaleString("en-US");
+    case "usd_short": return "$" + short(n);
+    case "pct": return (n * (spec.pct_scale === 100 ? 1 : 100)).toFixed(1) + "%";
+    case "int": return Math.round(n).toLocaleString("en-US");
+    case "short": return short(n);
+    case "days": return n.toFixed(1) + " d";
+    default: return n.toLocaleString("en-US");
+  }
+}
+// current value of a figure in one environment: {text, extra} or {err}
+function figNow(id, env) {
+  const spec = SPEC[id], r = ((SNAP.envs || {})[env] || {}).figures?.[id];
+  if (!spec || !spec.sql) return { err: "No Plex query: " + ((spec && spec.note) || "not built") };
+  if (!r) return { err: "Not in snapshot" };
+  if (r.error) return { err: r.error };
+  return { text: fmtFig(spec, r.value), extra: [r.value2 != null ? fmtFig(spec, r.value2) : "", r.detail || ""].filter(Boolean).join(" · ") };
+}
+const rowsPill = n => `<span class="pill ${n ? "ok" : "bad"}">${n == null ? "?" : Number(n).toLocaleString("en-US")} rows</span>`;
+// a report view or raw table in each environment, as the snapshot captured it
+function dataFor(name) {
+  if (!ENVS.length) return `<div class="empty">No data snapshot in this build. Run <code>python scripts/hub/snapshot_data.py</code>, then rebuild.</div>`;
+  return `<p class="lede">Read from BigQuery at ${esc(snapAt)}: a picture of that moment, not live data. Prod is what the business sees; Test is the nightly copy from the Plex test host.</p>` +
+    ENVS.map((env, i) => {
+      const e = SNAP.envs[env], v = e.views[name], raw = e.raw[name];
+      const nm = `<b>${esc(ENV_LABEL[env] || env)}</b> <code>${esc(env)}.${esc(name)}</code>`;
+      if (raw) return `<details class="env"><summary>${nm} ${rowsPill(raw.rows)} <span class="tag">changed ${esc(raw.modified)}</span></summary></details>`;
+      if (!v) return `<details class="env"><summary>${nm} <span class="pill none">not in ${esc(env)}</span></summary></details>`;
+      if (v.error) return `<details class="env" open><summary>${nm} <span class="pill bad">query failed</span></summary><div class="note" style="margin-top:10px">${esc(v.error)}</div></details>`;
+      return `<details class="env" ${i ? "" : "open"}><summary>${nm} ${rowsPill(v.rows)} <span class="tag">${v.columns.length} cols</span></summary>` +
+        (v.sample.length ? `<div class="tbl-wrap"><table class="data">${tbl(v.columns.map((c, j) => [j, c]), v.sample)}</table></div><p style="font-size:12px;color:var(--muted);margin:6px 0 0">First ${v.sample.length} of ${Number(v.rows).toLocaleString("en-US")} rows, in no particular order.</p>` : `<div class="empty">The view returns no rows.</div>`) + `</details>`;
+    }).join("");
+}
+const countsFor = name => ENVS.map(env => { const e = SNAP.envs[env], x = e.views[name] || e.raw[name]; return `<span class="tag">${esc(ENV_LABEL[env] || env)}: ${x ? (x.error ? "error" : Number(x.rows).toLocaleString("en-US")) : "—"}</span>`; }).join(" ");
 function renderBoard() {
   $("#vb-lede").innerHTML = `The Looker Studio scorecard as it looked on 31 Jul 2026, with the chart-level audit from the Lineage Navigator (<code>score-card-reference/vox_scorecard_navigator.html</code>). The numbers are a picture of that day, not live data. Click a figure for its Looker source and audit verdict, then the Plex tile and view that replace it.`;
   const stage = (name, key, act, goal, pct, yday, toGoal) => `<div class="stage"><b>${name}</b>
@@ -592,13 +664,45 @@ function renderBoard() {
     stage("Bottling", "bottling", "1.67M", "1.50M", 90, "86.6K", "111%") + stage("Labeling", "labeling", "892.17K", "700.00K", 78, "43.8K", "127%");
   document.querySelectorAll("#s-board [data-fig]").forEach(b => {
     const f = FIG[b.dataset.fig], t = f && TL[f.tile_id];
+    // number figures swap their text; charts (funnel, bars, TAT) swap their whole body
+    const v = b.querySelector(".v");
+    EXP[b.dataset.fig] = (v || b).textContent.replace(/\s+/g, " ").trim();
+    if (v) { v.classList.add("exp"); v.insertAdjacentHTML("afterend", `<span class="v cv"></span>`); b.insertAdjacentHTML("beforeend", `<span class="was">Looker ${esc(v.textContent)}</span>`); }
+    else { b.innerHTML = `<div class="exp">${b.innerHTML}</div><div class="cv"></div>`; }
     if (!f) return;
     b.dataset.open = `fig:${b.dataset.fig}`;
     b.title = f.tile;
     b.classList.toggle("flag", figFlagged(f));
     b.classList.toggle("gap", !!(t && (t.missing.length || !t.views.length)));
   });
+  boardTools(); boardValues();
 }
+const EXP = {};  // the Looker value each figure shows, read off the board markup
+const bstate = { mode: "exp", env: ENVS[0] || "PlexProd" };
+try { Object.assign(bstate, JSON.parse(localStorage.getItem("hub-board") || "{}")); } catch (e) {}
+if (!ENVS.includes(bstate.env)) bstate.env = ENVS[0] || "PlexProd";
+function boardTools() {
+  const seg = (k, opts) => `<span class="seg" data-seg="${k}">${opts.map(([v, l]) => `<button data-v="${v}" aria-pressed="${bstate[k] === v}">${l}</button>`).join("")}</span>`;
+  $("#vb-tools").innerHTML = seg("mode", [["exp", "Expected value"], ["cur", "Current value"]]) +
+    (bstate.mode === "cur" ? seg("env", ENVS.map(e => [e, ENV_LABEL[e] || e])) : "") +
+    `<span class="count">${bstate.mode === "exp" ? "Looker Studio, 31 Jul 2026" : ENVS.length ? `${esc(bstate.env)} report views, snapshot ${esc(snapAt)}` : "no snapshot in this build"}</span>`;
+  document.querySelector("#s-board .vb").classList.toggle("cur", bstate.mode === "cur");
+}
+function boardValues() {
+  document.querySelectorAll("#s-board [data-fig]").forEach(b => {
+    const n = figNow(b.dataset.fig, bstate.env), cv = b.querySelector(".cv");
+    if (!cv) return;
+    cv.classList.toggle("na", !!n.err);
+    if (cv.tagName === "SPAN") { cv.textContent = n.err ? "n/a" : n.text; cv.title = n.err || n.extra || ""; }
+    else cv.innerHTML = n.err ? `<span class="v na" title="${esc(n.err)}">n/a</span>` : `<span class="v">${esc(n.text)}</span>${n.extra ? `<span class="k" style="text-transform:none;letter-spacing:0">${esc(n.extra)}</span>` : ""}`;
+  });
+}
+$("#vb-tools").addEventListener("click", e => {
+  const b = e.target.closest("[data-v]"); if (!b) return;
+  bstate[b.parentElement.dataset.seg] = b.dataset.v;
+  try { localStorage.setItem("hub-board", JSON.stringify(bstate)); } catch (e) {}
+  boardTools(); boardValues();
+});
 function figModal(f) {
   const t = TL[f.tile_id];
   const audit = () => kv([
@@ -610,9 +714,18 @@ function figModal(f) {
     ["Replaced by", t ? link("tile", t.id, t.tile) : "no board tile"],
   ]) + (f.structure ? `<h3 style="margin:22px 0 10px">Data structure</h3><pre class="struct">${esc(f.structure)}</pre>` : "") +
     (f.structure_note ? `<div class="callout watch" style="margin-top:12px"><b class="l">Structure note</b>${esc(f.structure_note)}</div>` : "");
+  const spec = SPEC[f.id] || {};
+  const values = () => `<p class="lede">Expected is what Looker Studio showed on 31 Jul 2026. Current is the same figure computed from our report views at the snapshot (${esc(snapAt || "none in this build")}). Test reads the Plex test host, so its numbers prove the query, not the business.</p>` +
+    `<div class="tbl-wrap"><table>${tbl([["w", "Where"], ["v", "Value", "", v => v], ["x", "Detail"]], [
+      { w: "Expected (Looker)", v: `<b>${esc(EXP[f.id] || "—")}</b>`, x: f.source || "" },
+      ...ENVS.map(env => { const n = figNow(f.id, env); return { w: `Current · ${ENV_LABEL[env] || env}`, v: n.err ? `<span class="pill bad">n/a</span>` : `<b>${esc(n.text)}</b>`, x: n.err || n.extra || "" }; }),
+    ])}</table></div>` +
+    (spec.note ? `<div class="callout why" style="margin-top:12px"><b class="l">How the current value is computed</b>${esc(spec.note)}</div>` : "") +
+    (spec.view ? `<div class="links" style="margin:12px 0">${viewLink(spec.view)}</div>` : "") +
+    (spec.sql ? code(spec.sql.replaceAll("{ds}", "PlexProd"), "sql", "scripts/hub/figure_queries.py · PlexProd (PlexTest for Test)") : "");
   const m = t ? tileModal(t) : { tabs: [] };
   return { title: f.tile, sub: `<span class="tag">${esc(f.section)}</span><span class="pill ${figFlagged(f) ? "warn" : "ok"}">${esc(f.confidence)}</span>`,
-    tabs: [["Looker audit", audit], ...m.tabs.map(([l, fn]) => [l === "Overview" ? "Plex tile" : l, fn])] };
+    tabs: [["Looker audit", audit], ["Expected vs current", values], ...m.tabs.map(([l, fn]) => [l === "Overview" ? "Plex tile" : l, fn])] };
 }
 const gstate = { set: "ours", q: "" };
 function glossFilters() {
@@ -639,12 +752,16 @@ const mono = v => `<code>${esc(v)}</code>`;
 function renderPlatform() {
   $("#schedules").innerHTML =
     `<div class="panel"><h3>Prod (dispatcher)</h3><div class="tbl-wrap">${(P.prod_schedule || []).length ? `<table>${tbl([["time", "Time"], ["timezone", "Zone"], ["mode", "Mode", "", v => `<span class="pill ${v === "full" ? "warn" : "ok"}">${esc(v)}</span>`], ["notes", "Notes"]], P.prod_schedule)}</table>` : `<div class="empty">No schedule data.</div>`}</div></div>` +
-    `<div class="panel"><h3>Test (Cloud Scheduler)</h3><div class="tbl-wrap">${(P.test_schedulers || []).length ? `<table>${tbl([["scheduler", "Scheduler", "", mono], ["cron", "Cron", "", mono], ["timezone", "Zone"], ["target_job", "Job", "", mono]], P.test_schedulers)}</table>` : `<div class="empty">No test schedulers listed.</div>`}</div></div>`;
+    `<div class="panel"><h3>Test (Cloud Scheduler)</h3><div class="tbl-wrap">${(P.test_schedulers || []).length ? `<table>${tbl([["scheduler", "Scheduler", "", mono], ["cron", "Cron", "", mono], ["timezone", "Zone"], ["target_job", "Job", "", mono], ["mode", "How it runs"]], P.test_schedulers)}</table>` : `<div class="empty">No test schedulers listed.</div>`}</div></div>`;
+  $("#envs").innerHTML = tbl([["aspect", "", "", v => `<b>${esc(v)}</b>`], ["prod", "Prod"], ["test", "Test"]], P.env_compare || []);
+  $("#env-note").innerHTML = `<b class="l">The one-line difference</b>${esc((P.probe || {}).prod_vs_test || "")}`;
   const pr = P.probe || {};
   $("#probe").innerHTML =
+    `<div class="panel" style="grid-column:1/-1"><h3>Prod uses it, Test only logs it</h3><p style="margin:0">${esc(pr.prod_vs_test || "")}</p></div>` +
     `<div class="panel"><h3>What a probe run does</h3><p style="margin-top:0">${esc(pr.summary)}</p><ol class="steps">${(pr.steps || []).map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>` +
     `<div class="panel"><h3>Change detection</h3><p style="margin-top:0">${esc(pr.change_detection)}</p><h3 style="margin-top:14px">On failure</h3><p style="margin-top:0">${esc(pr.failure_policy)}</p>` +
     `${(pr.gotchas || []).length ? `<h3 style="margin-top:14px">Watch out</h3><ul class="plain">${pr.gotchas.map(g => `<li>${esc(g)}</li>`).join("")}</ul>` : ""}</div>`;
+  renderRuns();
   $("#jobs").innerHTML = tbl([["job", "Job", "", mono], ["pipeline", "Pipeline", "", (v) => PL[v] ? `<button class="lk" data-open="pipeline:${esc(v)}">${esc(v)}</button>` : esc(v)], ["env", "Env", "", v => `<span class="pill ${v === "prod" ? "warn" : "none"}">${esc(v)}</span>`], ["trigger", "Trigger"], ["schedule", "Schedule"]], P.jobs || []);
   $("#datasets").innerHTML = tbl([["name", "Dataset", "", mono], ["project", "Project", "", mono], ["purpose", "Purpose"], ["written_by", "Written by"]], P.datasets || []);
   $("#functions").innerHTML = tbl([["name", "Function / service", "", mono], ["kind", "Kind"], ["trigger", "Trigger"], ["purpose", "Purpose"], ["deployed_by", "Deployed by"]], P.functions || []);
@@ -656,6 +773,26 @@ function renderPlatform() {
   $("#changelog").innerHTML = (P.changelog_recent || []).map(c => `<div class="tl"><time>${esc(c.date)}</time><h3>${esc(c.title)}</h3><p>${esc(c.summary)}</p></div>`).join("") || `<div class="empty">No changelog data.</div>`;
   $("#open").innerHTML = tbl([["id", "ID", "", mono], ["title", "Item"], ["owner", "Owner"], ["next", "Next step"]], P.open_items || []);
 }
+
+/* ---------- recent runs (snapshot) ---------- */
+const rstate = { log: "dispatch", env: ENVS[0] || "PlexProd" };
+const RUN_LOGS = { dispatch: ["Prod dispatches", "PlexOps.etl_dispatch_log: every start the dispatcher made (prod only)"], job_run_log: ["Job runs", "job_run_log: one row per finished run, with its run_mode"], probe_log: ["Probe results", "probe_log: each report's fingerprint check and whether the run skipped"] };
+function renderRuns() {
+  if (!ENVS.length) { $("#runs-lede").textContent = "No data snapshot in this build."; return; }
+  $("#runs-lede").innerHTML = `The newest rows of each run log at the snapshot (${esc(snapAt)}). To answer "did prod run?", read the dispatch log, not the Cloud Scheduler list. Test runs never appear there: Cloud Scheduler starts them directly.`;
+  $("#runs-filters").innerHTML = Object.entries(RUN_LOGS).map(([k, [l]]) => `<button class="chip" data-log="${k}" aria-pressed="${rstate.log === k}">${l}</button>`).join("") +
+    (rstate.log === "dispatch" ? "" : `<span class="lbl" style="margin-left:12px">Env</span>` + ENVS.map(e => `<button class="chip" data-renv="${e}" aria-pressed="${rstate.env === e}">${ENV_LABEL[e] || e}</button>`).join("")) +
+    `<span class="count">${esc(RUN_LOGS[rstate.log][1])}</span>`;
+  const L = rstate.log === "dispatch" ? SNAP.dispatch_log : SNAP.envs[rstate.env][rstate.log];
+  $("#runs").className = "data";
+  $("#runs").innerHTML = !L ? "" : L.error ? `<tbody><tr><td>${esc(L.error)}</td></tr></tbody>` : tbl(L.columns.map((c, j) => [j, c]), L.rows);
+}
+$("#runs-filters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.log) rstate.log = b.dataset.log;
+  if (b.dataset.renv) rstate.env = b.dataset.renv;
+  renderRuns();
+});
 
 /* ---------- modal ---------- */
 const dlg = $("#modal");
@@ -705,6 +842,7 @@ function reportModal(r) {
         `<div class="note">Paste into Plex SQL Developer. Every table is aliased, as Plex requires. Translated from the BigQuery view and not yet run in Plex, so check it against the report before relying on it.</div>` +
         code(r.plex_sql, "sql", r.plex_sql_path, "No Plex SQL Developer equivalent yet.")],
       ["BigQuery SQL", () => code(r.bq_sql, "sql", r.bq_sql_path)],
+      ["Data", () => dataFor(r.name)],
       ["Business doc", () => md(r.doc && r.doc.markdown)],
     ],
   };
@@ -724,10 +862,12 @@ function tableModal(t) {
         ["Date column", ex.date_col ? mono(ex.date_col) : "none"],
         ["Probe columns", (ex.probe || []).length ? mono(ex.probe.join(", ")) : "none: this table is not fingerprinted"],
         ...Object.entries(ex).filter(([k]) => !["filter", "date_col", "probe"].includes(k)).map(([k, v]) => [k, mono(typeof v === "string" ? v : JSON.stringify(v))]),
+        ["Rows", ENVS.length ? countsFor(t.bq_table) : ""],
         ["Read by reports", `<div class="links">${t.used_by.map(v => link("report", v, (R[v] || {}).display_name || v)).join("") || "—"}</div>`],
       ])],
       [`Columns (${t.columns.length})`, () => t.columns.length ? `<div class="tbl-wrap"><table>${tbl([[0, "#", "num"], [1, "Column", "", mono], [2, "Type", "", mono]], t.columns.map((c, i) => [i + 1, c[0], c[1]]))}</table></div>` : `<div class="empty">Not in catalog/full_schema_catalog.csv.</div>`],
       ["Plex SQL", () => code(sample, "sql", "Plex SQL Developer")],
+      ["Data", () => dataFor(t.bq_table)],
     ],
   };
 }
@@ -745,9 +885,22 @@ function pipelineModal(p) {
         ["Report views", `<div class="links">${p.views.map(v => link("report", v, (R[v] || {}).display_name || v)).join("")}</div>`],
         ["Raw tables", `<div class="links">${p.tables.map(t => link("table", t)).join("")}</div>`],
       ])],
+      ["Data", () => pipeData(p)],
       ["Prod YAML", () => code(p.yaml_text, "yaml", p.yaml)],
     ],
   };
+}
+function pipeData(p) {
+  if (!ENVS.length) return dataFor("");
+  const cnt = (env, n) => { const e = SNAP.envs[env], x = e.views[n] || e.raw[n]; return x ? (x.error ? `<span class="pill bad" title="${esc(x.error)}">error</span>` : Number(x.rows).toLocaleString("en-US")) : "—"; };
+  const rows = [...p.views.map(n => ({ k: "report", n })), ...p.tables.map(n => ({ k: "table", n }))]
+    .map(x => ({ ...x, ...Object.fromEntries(ENVS.map(e => [e, cnt(e, x.n)])), mod: (SNAP.envs[ENVS[0]].raw[x.n] || {}).modified || "" }));
+  const jobs = new Set(jobsFor(p.name).map(j => j.job));
+  const runs = ENVS.flatMap(env => { const L = SNAP.envs[env].job_run_log || {}; const i = (L.columns || []).indexOf("job_name"); return (L.rows || []).filter(r => jobs.has(r[i])).map(r => Object.fromEntries(L.columns.map((c, j) => [c, r[j]]))); });
+  return `<p class="lede">Row counts at the snapshot (${esc(snapAt)}). A view empty in Prod but full in Test usually means the business has no such rows today, or a probe run has not landed the view yet.</p>` +
+    `<div class="tbl-wrap"><table>${tbl([["n", "Object", "", (v, r) => link(r.k, v, r.k === "report" ? (R[v] || {}).display_name || v : v)], ["k", "Kind"], ...ENVS.map(e => [e, ENV_LABEL[e] || e, "num", v => v]), ["mod", "Raw changed (Prod)"]], rows)}</table></div>` +
+    `<h3 style="margin:22px 0 10px">Recent runs of this pipeline's jobs</h3>` +
+    (runs.length ? `<div class="tbl-wrap"><table class="data">${tbl(Object.keys(runs[0]).map(c => [c, c]), runs)}</table></div>` : `<div class="empty">No run of ${esc([...jobs].join(", ") || "its jobs")} in the newest job_run_log rows.</div>`);
 }
 function inputModal(o) {
   return {
@@ -780,6 +933,7 @@ function tileModal(t) {
     const label = reps.length > 1 ? ` · ${r.name.replace(/_report$/, "")}` : "";
     tabs.push([`Plex SQL${label}`, () => code(r.plex_sql, "sql", r.plex_sql_path, "No Plex SQL Developer equivalent yet.")]);
     tabs.push([`BigQuery SQL${label}`, () => code(r.bq_sql, "sql", r.bq_sql_path)]);
+    tabs.push([`Data${label}`, () => dataFor(r.name)]);
   });
   if (reps.length === 1 && reps[0].doc) tabs.push(["Business doc", () => md(reps[0].doc.markdown)]);
   return { title: t.tile, sub: `<span class="tag">${esc(t.section)}</span>${pill(TODAY, t.today_status)}${pill(KIND, t.kind)}`, tabs };

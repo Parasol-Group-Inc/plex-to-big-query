@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-21 - Part Lot specs view: cast Reference before TRIM
+
+### Fixed
+- **`part_lot_attribute_specs_report` failed to create on its first test run**
+  (`No matching signature for function TRIM ... INT64`).
+  `Part_v_Part_Lot_Attribute_Test_Method.Reference` lands as INT64, so it is
+  now cast to STRING first. Dry run and counts checked on PlexTest: 150,027
+  rows, 7,431 parts. The inheritance view was created on that run: 15,694
+  rows, not the ~7.4k estimated (nearly every part is Active). Docs updated.
+  Ships with `./scripts/deploy.sh`; no image change.
+
 ## 2026-10-21 - Part Lot Attributes and lot inheritance
 
 ### Added

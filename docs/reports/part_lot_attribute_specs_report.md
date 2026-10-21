@@ -27,8 +27,9 @@ of it is pulled from Plex and joined in BigQuery.
 ## What a row is
 
 **One row per active part per active lot attribute**, in the screen's order
-(`sort_order`). Part 12149-01VOXNU-1 Rev 00 has 34 rows, matching its screen on
-2026-10-21. Expect about 150,000 rows in total.
+(`sort_order`). On PlexTest, 2026-10-21: 150,027 rows over 7,431 parts. Part 12149-01VOXNU-1
+Rev 00 has 33 rows there; its screen showed 34 on the same day, to be checked
+against prod.
 
 ## Things to know before trusting it
 

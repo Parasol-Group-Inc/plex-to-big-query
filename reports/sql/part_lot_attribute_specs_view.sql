@@ -81,7 +81,8 @@ test_methods AS (
   SELECT
     SAFE_CAST(ptm.Part_Lot_Attribute_Key AS INT64) AS pla_key,
     STRING_AGG(DISTINCT tm.Description, ', ')       AS test_method,
-    STRING_AGG(DISTINCT NULLIF(TRIM(ptm.Reference), ''), ', ') AS test_method_reference,
+    -- Reference lands as INT64 (numeric-only values), so cast before TRIM.
+    STRING_AGG(DISTINCT NULLIF(TRIM(CAST(ptm.Reference AS STRING)), ''), ', ') AS test_method_reference,
     LOGICAL_OR(LOWER(CAST(ptm.Required AS STRING)) IN ('1', 'true')) AS test_method_required
   FROM `{gcp_project}.{dataset}.raw_Part_v_Part_Lot_Attribute_Test_Method` AS ptm
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Lot_Attribute_Test_Method` AS tm

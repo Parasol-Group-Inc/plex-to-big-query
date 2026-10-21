@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-21 - Part Lot Attributes and lot inheritance
+
+### Added
+- **New pipeline `part_lot`** (`plex-etl-part-lot`, test `plex-etl-part-lot-test`),
+  asked for by Jennilyn on 2026-10-21. 22 Plex views; the six large ones (part
+  lot attributes, their list, numeric, text, test-method and COA tables, and
+  attribute inheritance) are pulled in 25k keyset pages. Probe mode `auto`.
+  Two views:
+  - `part_lot_attribute_specs_report`: the Part Lot Attributes screen for
+    every active part, one row per part x active attribute. The attribute name
+    comes through the template (`Lot_Attribute_Template.Attribute_Key` ->
+    `Common_v_Attribute.Attribute_Code`). Checked against the screen for
+    12149-01VOXNU-1 Rev 00 (34 attributes).
+  - `part_lot_inheritance_report`: the Lot Management box, one row per active
+    part: lot required, lot format, and the Lot No / Best By / attribute
+    inheritance sources, with a `lot_no_matches_best_by` check.
+- Terraform: both jobs, the four GCS objects and the test scheduler (11:20 PM).
+  Prod runs need four `PlexOps.etl_schedule` rows after deploy (SQL in
+  `docs/reports/part_lot_inheritance_report.md`). `_ALL_JOBS` in
+  `deploy/cloudbuild.yaml` lists both jobs.
+- Worktree `ptbq-part-lot` on `dev-part-lot`: a row in `CLAUDE.md` and the
+  project's paths in `.githooks/hooks.py`.
+- Plex SQL Developer equivalents of both views in `reports/plex_sql/`.
+
 ## 2026-10-20 - Label Design probe watches order approval
 
 ### Fixed

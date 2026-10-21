@@ -1,0 +1,160 @@
+report_name: part_lot_test
+category: Quality
+description: "Vox | Part Lot Attribute specs + Lot inheritance settings — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+
+probe_mode: auto
+
+extractions:
+  - plex_view: Part_v_Part
+    bq_table: raw_Part_v_Part
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Part_Key]
+
+  - plex_view: Part_v_Part_Group
+    bq_table: raw_Part_v_Part_Group
+    filter: ""
+    date_col: ""
+    probe: [Part_Group_Key]
+
+  - plex_view: Part_v_Part_Lot_Attribute
+    bq_table: raw_Part_v_Part_Lot_Attribute
+    filter: "WHERE Active = 1"
+    date_col: ""
+    probe: [Update_Date, Part_Lot_Attribute_Key]
+    page_key: Part_Lot_Attribute_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Lot_Attribute_Template
+    bq_table: raw_Part_v_Lot_Attribute_Template
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Lot_Attribute_Template_Key]
+
+  - plex_view: Common_v_Attribute
+    bq_table: raw_Common_v_Attribute
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Attribute_Key]
+
+  - plex_view: Part_v_Lot_Attribute_Group
+    bq_table: raw_Part_v_Lot_Attribute_Group
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Lot_Attribute_Group_Key]
+
+  - plex_view: Part_v_Part_Lot_Attribute_Display_Type
+    bq_table: raw_Part_v_Part_Lot_Attribute_Display_Type
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Lot_Attribute_Display_Type_Key]
+
+  - plex_view: Part_v_Part_Lot_Attribute_List_Specification
+    bq_table: raw_Part_v_Part_Lot_Attribute_List_Specification
+    filter: ""
+    date_col: ""
+    probe: [Add_Date, Part_Lot_Attribute_List_Specification_Key]
+    page_key: Part_Lot_Attribute_List_Specification_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Part_Lot_Attribute_Numeric_Specification
+    bq_table: raw_Part_v_Part_Lot_Attribute_Numeric_Specification
+    filter: ""
+    date_col: ""
+    probe: [Add_Date, Part_Lot_Attribute_Numeric_Specification_Key]
+    page_key: Part_Lot_Attribute_Numeric_Specification_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Part_Lot_Attribute_Text_Specification
+    bq_table: raw_Part_v_Part_Lot_Attribute_Text_Specification
+    filter: ""
+    date_col: ""
+    probe: [Add_Date, Part_Lot_Attribute_Text_Specification_Key]
+    page_key: Part_Lot_Attribute_Text_Specification_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Part_Lot_Attribute_Test_Method
+    bq_table: raw_Part_v_Part_Lot_Attribute_Test_Method
+    filter: ""
+    date_col: ""
+    probe: [Add_Date, Part_Lot_Attribute_Test_Method_Key]
+    page_key: Part_Lot_Attribute_Test_Method_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Lot_Attribute_Test_Method
+    bq_table: raw_Part_v_Lot_Attribute_Test_Method
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Lot_Attribute_Test_Method_Key]
+
+  - plex_view: Part_v_Part_Lot_Attribute_Report
+    bq_table: raw_Part_v_Part_Lot_Attribute_Report
+    filter: ""
+    date_col: ""
+    probe: [Add_Date, Part_Lot_Attribute_Report_Key]
+    page_key: Part_Lot_Attribute_Report_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Lot_Attribute_Report_Display_Type
+    bq_table: raw_Part_v_Lot_Attribute_Report_Display_Type
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Lot_Attribute_Report_Display_Type_Key]
+
+  - plex_view: Common_v_Unit
+    bq_table: raw_Common_v_Unit
+    filter: ""
+    date_col: ""
+    probe: [Unit_Key]
+
+  - plex_view: Part_v_Part_Operation_Lot_No_Inheritance_Override
+    bq_table: raw_Part_v_Part_Operation_Lot_No_Inheritance_Override
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Lot_No_Inheritance_Override_Key]
+
+  - plex_view: Part_v_Part_Operation_Lot_No_Inheritance_Override_Component_Part
+    bq_table: raw_Part_v_Part_Operation_Lot_No_Inheritance_Override_Component_Part
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Lot_No_Inheritance_Override_Component_Part_Key]
+
+  - plex_view: Part_v_Part_Operation_Lot_Date_Inheritance
+    bq_table: raw_Part_v_Part_Operation_Lot_Date_Inheritance
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Lot_Date_Inheritance_Key]
+
+  - plex_view: Part_v_Part_Operation_Lot_Attribute_Inheritance
+    bq_table: raw_Part_v_Part_Operation_Lot_Attribute_Inheritance
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Part_Operation_Lot_Attribute_Inheritance_Key]
+    page_key: Part_Operation_Lot_Attribute_Inheritance_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Part_Inventory_Attributes
+    bq_table: raw_Part_v_Part_Inventory_Attributes
+    filter: ""
+    date_col: ""
+    probe: [Part_Key]
+
+  - plex_view: Part_v_Part_Lot_Format
+    bq_table: raw_Part_v_Part_Lot_Format
+    filter: ""
+    date_col: ""
+    probe: [Part_Lot_Format_Key]
+
+  - plex_view: Part_v_Lot_Format
+    bq_table: raw_Part_v_Lot_Format
+    filter: ""
+    date_col: ""
+    probe: [Update_Date, Lot_Format_Key]
+
+bq_view:
+  - name: part_lot_attribute_specs_report
+    display_name: "Part Lot Attribute Specs"
+    sql_file: gs://voxdatalake-report-configs/sql/part_lot_attribute_specs_view.sql
+  - name: part_lot_inheritance_report
+    display_name: "Part Lot Inheritance"
+    sql_file: gs://voxdatalake-report-configs/sql/part_lot_inheritance_view.sql

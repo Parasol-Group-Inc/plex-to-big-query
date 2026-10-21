@@ -51,6 +51,7 @@ or `sql/` paths:** that is how prod diverged and a fix got rolled back
   | `ptbq-scorecard` | `dev-scorecard` | Vox Scorecard |
   | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
   | `ptbq-label-design` | `dev-label-design` | Label Design |
+  | `ptbq-part-lot` | `dev-part-lot` | Part Lot Attributes + inheritance |
   | `ptbq-dev` | `dev` | shared tooling |
 
   Work in the folder of the project you were asked about. Never

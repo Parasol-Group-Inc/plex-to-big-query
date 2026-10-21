@@ -24,7 +24,7 @@ the way the screen shows it, "part no-revision name".
 
 ## What a row is
 
-**One row per active part** (about 7,400). Checked against Plex on 2026-10-21:
+**One row per active part**: 15,694 on PlexTest, 2026-10-21. Nearly every part is Active (7 Obsolete, 5 Initial Setup), and about half have no lot attributes of their own. Checked against Plex on 2026-10-21:
 
 | Part | Lot No | Best By | Attributes |
 |---|---|---|---|

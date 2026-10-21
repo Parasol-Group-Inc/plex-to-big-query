@@ -47,7 +47,7 @@ One item the push service tried to create on the board (normally
   `before_go_live_floor = false` to measure normal operation.
 - **The hourly check watches release status, not order status** (as of
   2026-10-20). An order approved while its release status stays the same can
-  wait until something else changes. Order 373 waited 4.3 h this way on
+  wait until something else changes. Order 373 waited 5.3 h this way on
   2026-10-20.
 
 ## Columns

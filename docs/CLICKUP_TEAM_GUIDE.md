@@ -43,8 +43,8 @@ Console: https://console.cloud.google.com/home/dashboard?project=voxdatalake
 
 Each pipeline is one YAML config in `reports/`, and each runs as **two** Cloud
 Run jobs — `plex-etl-<pipeline>` writing `PlexProd`, and
-`plex-etl-<pipeline>-test` writing `PlexTest` ten minutes later. 27 jobs in all
-(the extra one pushes Label Design to Monday.com).
+`plex-etl-<pipeline>-test` writing `PlexTest`. 30 jobs in all: the extra two
+push Label Design to Monday.com (prod live, test paused).
 
 | Category | Pipeline | Reports it produces |
 |---|---|---|
@@ -73,7 +73,7 @@ this table is a map, not a schedule.
 
 ### The report views (what analysts should query)
 
-68 views across the 13 pipelines, all in `voxdatalake.PlexProd` (and
+68 views across the 14 pipelines, all in `voxdatalake.PlexProd` (and
 `voxdatalake.PlexTest` for the test copies). Every one has a plain-English,
 business-facing page in **[docs/reports/](reports/)** — what it tells you,
 who asked for it, and what each column means.

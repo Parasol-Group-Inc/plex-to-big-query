@@ -71,7 +71,7 @@ scheduler time zone, the Sales Orders test cron) are taken from the docs.
 Every table is aliased (`FROM Sales_v_PO AS po`), as Plex SQL Developer
 requires even for single-table queries. A report view that reads another
 report view has the upstream logic inlined as CTEs, so each file runs on its
-own. None has been run in Plex yet: see D12 in `docs/OPEN_ITEMS.md`.
+own. None has been run in Plex yet: see D13 in `docs/OPEN_ITEMS.md`.
 
 ## Prod vs Test
 

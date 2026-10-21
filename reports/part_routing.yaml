@@ -149,9 +149,9 @@ extractions:
   # (procedure Audit - Part_Info_and_Routing_wContainerType). Every other table
   # that view reads is already pulled above.
   #
-  # Approved containers per part operation, with pack quantities. 24,937 rows
-  # on 2026-10-19 — just under one page, so paged by its unique key now rather
-  # than the night it outgrows a single call. No change date: the probe SUMs the
+  # Approved containers per part operation, with pack quantities. 48,398 rows
+  # on 2026-10-20 (the 24,937 noted on 10-19 was wrong), so two pages, paged by
+  # its unique key. No change date: the probe SUMs the
   # quantities. It cannot SUM [Primary] (Plex refuses SUM on a bit column, and
   # Primary is a reserved word there), so a primary-flag flip alone waits for
   # the 4 AM full run.

@@ -287,12 +287,18 @@ def tick(now_utc=None, dry_run=False):
         summary["reconciled"].append({"dispatch_id": row["dispatch_id"], "job_name": row["job_name"],
                                       "outcome": outcome})
         if not dry_run:
-            _query(bq, f"""
-                UPDATE {_fq(LOG_TABLE)}
-                SET outcome = @outcome, finished_at = @finished, detail = @detail
-                WHERE dispatch_id = @id AND outcome IS NULL""",
-                   [_param("outcome", outcome), _param("finished", finished, "TIMESTAMP"),
-                    _param("detail", detail), _param("id", row["dispatch_id"])])
+            try:
+                _query(bq, f"""
+                    UPDATE {_fq(LOG_TABLE)}
+                    SET outcome = @outcome, finished_at = @finished, detail = @detail
+                    WHERE dispatch_id = @id AND outcome IS NULL""",
+                       [_param("outcome", outcome), _param("finished", finished, "TIMESTAMP"),
+                        _param("detail", detail), _param("id", row["dispatch_id"])])
+            except Exception as exc:
+                # The row stays open and is settled on the next tick. The job
+                # counts as busy meanwhile, so it is not started twice.
+                summary["errors"].append(f"settle {row['dispatch_id']}: {exc}")
+                busy.add(row["job_name"])
 
     # 2. Scheduled slots.
     schedule = _query(bq, f"SELECT job_name, run_time, mode, enabled FROM {_fq(SCHEDULE_TABLE)}")
@@ -330,13 +336,15 @@ def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action
     entry = {"dispatch_id": dispatch_id, "job_name": job, "mode": mode, "reason": reason,
              "scheduled_for": scheduled_for, "followup_of": followup_of}
     bucket = "followups" if reason == "follow-up" else ("dispatched" if action == "dispatch" else "skipped")
-    summary[bucket].append({**entry, "action": action})
+    record = {**entry, "action": action}
     if dry_run:
+        summary[bucket].append(record)
         return
     # The row goes in BEFORE the run starts: a crash between the two leaves a
     # row the next tick reconciles as lost, never a run with no row (which
     # would be started again).
-    _query(bq, f"""
+    try:
+        _query(bq, f"""
         INSERT INTO {_fq(LOG_TABLE)}
           (dispatch_id, job_name, mode, reason, scheduled_for, followup_of, dispatched_at, outcome, finished_at, detail)
         VALUES (@id, @job, @mode, @reason, @slot, @followup_of, CURRENT_TIMESTAMP(),
@@ -346,6 +354,15 @@ def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action
             _param("followup_of", followup_of),
             _param("outcome", None if action == "dispatch" else action),
             _param("detail", None if action == "dispatch" else "previous dispatch of this job still running")])
+    except Exception as exc:
+        # No row, so no run: the slot is still unlogged and the next tick, five
+        # minutes later, tries it again. One failed insert must not end the pass
+        # for every other job.
+        summary["errors"].append(f"log {job}: {exc} — not started, retried next tick")
+        return
+    # Listed only once its row exists, so the summary never reports a run that
+    # was not logged.
+    summary[bucket].append(record)
     if action != "dispatch":
         return
     import requests
@@ -360,11 +377,16 @@ def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action
         return
     except Exception as exc:
         # jobs.run itself refused (HTTP error): no execution exists.
+        record["action"] = "dispatch-failed"
         summary["errors"].append(f"start {job}: {exc}")
-        _query(bq, f"""
-            UPDATE {_fq(LOG_TABLE)}
-            SET outcome = 'dispatch-failed', finished_at = CURRENT_TIMESTAMP(), detail = @d
-            WHERE dispatch_id = @id AND outcome IS NULL""", [_param("d", str(exc)[:1000]), _param("id", dispatch_id)])
+        try:
+            _query(bq, f"""
+                UPDATE {_fq(LOG_TABLE)}
+                SET outcome = 'dispatch-failed', finished_at = CURRENT_TIMESTAMP(), detail = @d
+                WHERE dispatch_id = @id AND outcome IS NULL""", [_param("d", str(exc)[:1000]), _param("id", dispatch_id)])
+        except Exception as exc2:
+            # Left open, the row is reconciled as lost after LOST_AFTER_MINUTES.
+            summary["errors"].append(f"could not mark {job} dispatch-failed: {exc2}")
         return
     try:
         # Bookkeeping only. If it fails the run still stands: the job writes its

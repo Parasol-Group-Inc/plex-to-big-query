@@ -5,7 +5,7 @@ Last reviewed: 2026-09-25
 > **Read this first if you're new:** the project started as one Cloud Run
 > job pulling one Plex view (`Part_v_Part`) into one BigQuery table — the
 > "legacy single-view mode" described below. It has since grown into **27
-> Cloud Run jobs** (13 pipelines × prod/test plus the Label Design push job, 68 BigQuery views) running a **multi-report YAML config mode**, each
+> Cloud Run jobs** (14 pipelines × prod/test plus the two Label Design push jobs, 68 BigQuery views) running a **multi-report YAML config mode**, each
 > producing one or more named BigQuery views from a shared set of raw
 > extractions. Both modes are real, live code paths in `main.py` — legacy
 > mode still works and is what you get by default if `REPORT_CONFIG_GCS_PATH`
@@ -219,8 +219,14 @@ Some things to know:
   last key are fetched again as one group, so no key is split across pages.
 - **NULL keys are covered.** The keyset walk cannot reach rows whose key is
   NULL, so they are fetched with one extra `… IS NULL` query at the end.
-- **A count mismatch is a WARNING, not a failure.** It happens when rows are
-  added or removed during the pull.
+- **A count mismatch keeps yesterday's table (since 2026-10-20).** It happens
+  when rows are added or removed during the pull, and such a pull may hold a
+  key twice or miss one. The table is not written, the run ends `partial`, and
+  the next probe retries it. (Before, it was only a warning and the pull was
+  written.)
+- **The key column is matched case-insensitively** and must hold integers on
+  every page. A text or decimal key stops the pull before its value is pasted
+  into the next page's SQL.
 - **A paged extraction's `filter` must start with `WHERE`** (any case or
   whitespace). It is combined with the page condition, so it may not carry
   `ORDER BY` / `GROUP BY`. `date_col` is refused with `page_key`, because
@@ -247,6 +253,7 @@ Then, before the extraction loop and only when `OUTPUT_MODE=bigquery`:
 2. **Equal and allowed to skip:** log a `skipped` row, close ODBC and return. There are no extractions and no views (the config is in the fingerprint, so nothing deployed is being skipped). The "nothing to update" email goes out unless `EMAIL_MODE=on_error`.
 3. **Otherwise:** the run proceeds in full.
 4. In `run_and_report()`, the fingerprint and snapshot are stored as `applied` **only if the run finished `success`**, otherwise `failed`. A failed or partial run leaves the reference where it was, so the next probe runs again. **The probe is the retry.**
+5. **The retry also covers a failure on unchanged data (since 2026-10-20).** When a full run fails while Plex is quiet, the fingerprint never moved, so step 1 alone would skip the next probe and leave the failure in place. Before comparing, `last_run_unclean()` reads this job's latest `job_run_log` row that is not `skipped`. If it is `failed` or `partial`, the run is not allowed to skip. That row is also written when `main()` raised and no probe row exists.
 
 ### Fail-open
 
@@ -407,7 +414,7 @@ When Plex releases a new driver version (e.g. from `ivoa27` to `ivoa28`):
    ```bash
    gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
    ```
-   or (after `./scripts/deploy_preflight.sh`) run `deploy/cloudbuild.yaml`, whose `deploy-all` step loops over all 27 jobs from one build.
+   or (after `./scripts/deploy_preflight.sh`) run `deploy/cloudbuild.yaml`, whose `deploy-all` step loops over all 30 jobs from one build.
 6. Run a `-test` job to verify connectivity before trusting prod on the new driver
 
 ### Driver license
@@ -483,7 +490,7 @@ echo -n 'SG.new-key' | gcloud secrets versions add sendgrid-api-key \
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
 
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 27 jobs from one build (see its `_ALL_JOBS` substitution) — run `./scripts/deploy_preflight.sh` first and pass `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)`. Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 30 jobs from one build (see its `_ALL_JOBS` substitution) — run `./scripts/deploy_preflight.sh` first and pass `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)`. Always use a commit-SHA tag, never `:latest` — see `terraform/variables.tf`'s `image_url` description for the full reasoning.
 
 ---
 
@@ -535,7 +542,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **13 pipelines × prod/test = 26 Cloud Run jobs, plus the Label Design push job = 27** (68 BigQuery views). Twelve run once a day on a 10-minute-staggered 7:00 PM–10:50 PM Mountain (`America/Denver`) evening cascade — chosen specifically so nothing lands in early-morning inboxes; Label Design runs hourly, 5 AM - 5 PM Mountain (prod at :00, test at :05, push at :35), gated by a change probe. Every job except Label Design and its push also has a retry trigger at 9:45 PM Mountain (51 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **14 pipelines × prod/test = 28 Cloud Run jobs, plus the two Label Design push jobs = 30** (68 BigQuery views). Prod pipelines run from the ETL dispatcher (`PlexOps.etl_schedule`: 1 / 6 / 11 PM probe + 4 AM full); the test jobs run once a day on an evening cascade (`America/Denver`); Label Design runs hourly, 5 AM - 5 PM Mountain (prod at :00, test at :05, push at :35), gated by a change probe. Twelve test jobs also have a retry trigger at 9:45 PM Mountain (30 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
 Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl-sales-orders`/`sales_orders.yaml`, since expanded to 27 extractions + 27 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 
@@ -590,7 +597,7 @@ Terraform state lives remotely in `gs://voxdatalake-terraform-state/plex-to-big-
 | `google_artifact_registry_repository.etl` | Docker image repository |
 | `google_secret_manager_secret.access_token` / `.sendgrid_api_key` / etc. | Plex IAM token, ODBC creds, SendGrid key |
 | `google_cloud_run_v2_job.etl*` (× 26, one per pipeline × prod/test) | Each job's `containers.image` has `lifecycle { ignore_changes = [image, client, client_version] }` — Terraform intentionally doesn't manage the deployed image; `deploy/cloudbuild.yaml` or a manual `gcloud run jobs update` does |
-| `google_cloud_scheduler_job.etl*` (× 27 scheduled + 24 retry = 51) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
+| `google_cloud_scheduler_job.etl*` (30: the ETL dispatcher, the test nightly schedulers + 12 retry, Label Design) | HTTP triggers on cron schedules — see `docs/EMAIL_SCHEDULE.md` for the full enumerated list |
 
 ---
 
@@ -639,14 +646,14 @@ plex-to-big-query/
 ├── spreadsheets/                  Google Sheet → BigQuery mapping docs (MFG Job Schedule, etc.)
 │
 ├── terraform/
-│   ├── main.tf                    All GCP resources — 27 Cloud Run jobs, 51 schedulers, GCS objects, IAM, deploy guard
+│   ├── main.tf                    All GCP resources — 27 Cloud Run jobs, 30 schedulers, GCS objects, IAM, deploy guard
 │   ├── variables.tf                Input variable definitions
 │   ├── outputs.tf                  Post-apply copy-paste commands
 │   ├── terraform.tfvars.example    Template for your tfvars (tracked in git)
 │   └── terraform.tfvars            Your real values (gitignored — back up to GCS, see its header)
 │
 ├── deploy/
-│   └── cloudbuild.yaml             Cloud Build — builds once, deploys to all 27 jobs
+│   └── cloudbuild.yaml             Cloud Build — builds once, deploys to all 30 jobs
 │
 ├── docs/
 │   ├── QUICKSTART.md               Step-by-step from zero to deployed (original single-pipeline walkthrough)

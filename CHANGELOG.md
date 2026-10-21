@@ -14,6 +14,86 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Label Design 14-day window removed; Plex API push archived; probe, dispatcher and paging hardening
+
+Fixes from a review of every commit from 2026-10-16 to 2026-10-20. Nothing
+below is deployed yet. The SQL and YAML ship with `./scripts/deploy.sh`. The
+`main.py` changes need a new ETL image (Cloud Build). The dispatcher is
+redeployed with the `gcloud functions deploy etl-dispatcher` command in
+`terraform/main.tf`.
+
+### Changed
+- **`label_design_view.sql`: the 14-day rolling window on the order date is
+  removed.** An order that reached Pending Fulfillment more than 14 days after
+  its order date was dropped for good. Prod has Quote and Pending Sales Approval
+  orders 25+ days old. The 2026-10-18 go-live floor stays, permanently. Dedupe
+  (board LCRs plus `label_design_push_log`) still stops a repeat push. On
+  2026-10-20 the board was empty because none of the 14 orders dated since the
+  floor was Pending Fulfillment yet. Docs: `docs/reports/label_design_report.md`,
+  `label-design/STATUS.md`.
+
+### Fixed
+- **The probe no longer skips the retry after a failed run on unchanged data**
+  (`main.py`, `last_run_unclean`). A full run that failed or ended partial while
+  Plex was quiet left the fingerprint unchanged, so the next probe skipped and
+  the failure stood until the 4 AM full run. A run whose latest non-skipped
+  `job_run_log` row is `failed` or `partial` now may not skip.
+  **Side effect:** a failure that persists (Plex down, a broken view) now makes
+  every probe a full run, each with its failure email, until it is fixed:
+  three a day for prod pipelines, hourly for Label Design.
+  The probe reads and writes under one job identity (`run_identity()`).
+- **ETL dispatcher: one failed BigQuery write no longer ends the tick**
+  (`deploy/etl_dispatcher/main.py`). The reconcile UPDATE, the dispatch-log
+  INSERT and the dispatch-failed UPDATE are each caught and reported in the
+  tick's `errors`. A failed INSERT starts nothing, because a run with no row
+  would be started again, and the slot is retried on the next tick. The
+  tick summary lists a job only once its row is written, and marks a refused
+  start `dispatch-failed`.
+- **Paged pulls** (`query_plex_paged`, used by `part_routing`):
+  - **A count mismatch is pulled once more, then keeps the previous table.**
+    If the second pull does not add up either, the table is not written and
+    the run ends partial. Before, it was only a warning, and a pull that
+    could hold a key twice or miss one was written.
+  - **`page_key` is matched case-insensitively.**
+  - **The key's integer type is checked on every page,** before the value goes
+    into SQL.
+- **The `sum:` overflow guard covers every identifier-like column**
+  (`…_Key`, `…_No`, `…_Id`, `…_Number`, a bare `Key`), not only `_key`/`_no`.
+- **`reports/part_routing.yaml`:** the approved-container comment said 24,937
+  rows ("under one page"). There are 48,398. Comment only, though it changes
+  the config fingerprint, so the next run is a full one.
+
+### Deprecated
+- **The Plex REST API → Monday push is ARCHIVED** (`deploy/plex_api_function/push.py`,
+  view `plex_api_label_design_report`). It was merged in PR #42 and never
+  deployed. It lacks the order-status and go-live filters, would create
+  duplicate items, and would write to the team's live board under a second
+  dedupe key. The list is in `deploy/plex_api_function/ARCHIVED.md`. The
+  extractor `plex-api-extract-test` is unaffected. OPEN_ITEMS L13.
+
+### Docs
+- **Live vs paused, aligned:**
+  - Prod ETL runs from the dispatcher (`PlexOps.etl_schedule`), not per-job
+    schedulers. The exception is Label Design, which keeps its hourly `plex-label-design-sync`.
+    Test keeps `-sync-test` and `-test-retry`. Files: `OPERATIONS`, `API_REFERENCE`, `DEPLOYMENT_GUIDE`,
+    `QUICKSTART`, `CHEATSHEET`, `EMAIL_SCHEDULE`, `TEARDOWN`, `TECHNICAL_REFERENCE`,
+    `FRONTEND_GUIDE`, `TROUBLESHOOTING`.
+  - Label Design: the prod push is live, the test push is paused.
+  - The Plex API push is archived.
+  - The three part-routing reports are live in prod
+    (`docs/reports/part_*`, `reports-list/production.md`).
+- `part_shelf_life_report.md`: `shelf_life_missing` is also true on a record
+  with a blank value; `shelf_life_type` tells the two apart.
+- `docs/TECHNICAL_REFERENCE.md`: the retry rule and the paging changes.
+- `scripts/backup_to_bucket.ps1` now also backs up:
+  - the two Plex API secrets;
+  - `ptbq-label-design/.env` and `ptbq-sandbox/.env.clickup`;
+  - a copy of the remote Terraform state.
+- Job and pipeline counts corrected everywhere: 14 pipelines, 30 Cloud Run
+  jobs (prod + test each, plus the two Label Design push jobs).
+- OPEN_ITEMS: D12 is new (deploy, alerting, dispatch cap). L3 and L13 are
+  rewritten.
+
 ## 2026-10-20 - Plex Data Hub and Plex SQL Developer equivalents
 
 Nothing here deploys. Terraform uploads `reports/` files one by one, so the
@@ -31,7 +111,7 @@ new `reports/plex_sql/` folder never reaches GCS.
   queries return NULL goals from a placeholder.
   All 71 report views are covered (`scorecard_goals_resolved` is shared by two
   pipelines): 56 high confidence, 10 medium, 5 low. Verifying them in Plex is
-  D12 in `docs/OPEN_ITEMS.md`.
+  D13 in `docs/OPEN_ITEMS.md`.
 - **`scripts/hub/build_hub.py`** generates `docs/hub/index.html` from the YAML
   configs, both SQL folders, `docs/reports/`, `catalog/full_schema_catalog.csv`
   and `docs/hub/platform.json`. Re-run it after any report change. The page has

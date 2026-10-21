@@ -4,7 +4,7 @@ Last reviewed: 2026-09-25
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **27** live jobs (13 pipelines × prod/test, plus `plex-etl-label-design-push-test`: `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; schedulers `plex-<pipeline>-sync[-test][-retry]`). Substitute any other job name in the commands below the same way.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **30** jobs (14 pipelines × prod/test, plus the Label Design push jobs `plex-etl-label-design-push` (live) and `plex-etl-label-design-push-test` (paused): `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; test schedulers `plex-<pipeline>-sync-test[-retry]`; prod runs come from the ETL dispatcher via `PlexOps.etl_schedule`, except Label Design). Substitute any other job name in the commands below the same way.
 >
 > **Deploys:** anything Terraform manages ships with `./scripts/deploy.sh` from the primary folder (`C:\F\Parasol\plex-to-big-query`) on a clean, pushed `main`; images ship with `./scripts/deploy_preflight.sh` + `gcloud builds submit` (§9). See `CONTRIBUTING.md`.
 
@@ -191,35 +191,47 @@ gcloud scheduler jobs list \
   --project=voxdatalake
 ```
 
+> **Prod jobs have no scheduler of their own (since 2026-10-19).** The ETL dispatcher (`plex-etl-dispatcher`, every 5 minutes) starts them from `PlexOps.etl_schedule`. The commands below use a **test** job's scheduler. Label Design is the prod exception (`plex-label-design-sync`, `plex-label-design-push-sync`).
+
 ### Trigger the job immediately (same as the scheduled trigger)
 
 ```bash
-gcloud scheduler jobs run plex-sales-orders-sync \
+gcloud scheduler jobs run plex-sales-orders-sync-test \
   --location=us-central1 \
   --project=voxdatalake
 ```
+
+For a prod job, run it directly: `gcloud run jobs execute plex-etl-sales-orders --region=us-central1 --project=voxdatalake`.
 
 ### Pause the schedule (stops auto-runs, keeps everything deployed)
 
 ```bash
-gcloud scheduler jobs pause plex-sales-orders-sync \
+gcloud scheduler jobs pause plex-sales-orders-sync-test \
   --location=us-central1 \
   --project=voxdatalake
 ```
 
-> **Every job also has a separate 9:45 PM Mountain retry scheduler** (e.g. `plex-sales-orders-sync-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
+> **Most test jobs also have a separate 9:45 PM Mountain retry scheduler** (e.g. `plex-sales-orders-sync-test-retry`, `RUN_MODE=retry`) that fires independently of the one above. Pausing the daily trigger does NOT pause its retry counterpart — pause both if you want a job fully quiet:
 > ```bash
-> gcloud scheduler jobs pause plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+> gcloud scheduler jobs pause plex-sales-orders-sync-test-retry --location=us-central1 --project=voxdatalake
 > ```
+
+**Pause a prod pipeline** (no deploy, effective within 5 minutes):
+
+```sql
+UPDATE `voxdatalake.PlexOps.etl_schedule`
+SET enabled = FALSE, updated_by = 'your-name', updated_at = CURRENT_TIMESTAMP()
+WHERE job_name = 'plex-etl-sales-orders';
+```
 
 ### Resume the schedule
 
 ```bash
-gcloud scheduler jobs resume plex-sales-orders-sync \
+gcloud scheduler jobs resume plex-sales-orders-sync-test \
   --location=us-central1 \
   --project=voxdatalake
 ```
-Resume the paired `-retry` scheduler too, if you paused it.
+Resume the paired `-test-retry` scheduler too, if you paused it. For a prod pipeline, set `enabled = TRUE` on its `PlexOps.etl_schedule` rows.
 
 ### Change the cron schedule (via Terraform)
 
@@ -451,7 +463,7 @@ terraform output
 
 ## 9. Docker
 
-> **Building and pushing an image is not a complete deploy by itself.** Every `google_cloud_run_v2_job` has `lifecycle { ignore_changes = [image, ...] }` — no job ever auto-picks up a new image, not per-execution and not via `terraform apply`. After pushing, you must explicitly redeploy (see the last command below), or use `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 26 jobs from one build (the normal route — see the end of this section).
+> **Building and pushing an image is not a complete deploy by itself.** Every `google_cloud_run_v2_job` has `lifecycle { ignore_changes = [image, ...] }` — no job ever auto-picks up a new image, not per-execution and not via `terraform apply`. After pushing, you must explicitly redeploy (see the last command below), or use `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 30 jobs from one build (the normal route — see the end of this section).
 
 ### Build the image
 
@@ -605,7 +617,14 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 ### Is the scheduler enabled?
 
 ```bash
-gcloud scheduler jobs describe plex-sales-orders-sync \
+# Prod: is the pipeline enabled in the dispatcher's table, and did it run today?
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT job_name, run_time, mode, enabled FROM \`voxdatalake.PlexOps.etl_schedule\` WHERE job_name = 'plex-etl-sales-orders'"
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "SELECT mode, reason, dispatched_at, outcome FROM \`voxdatalake.PlexOps.etl_dispatch_log\` WHERE job_name = 'plex-etl-sales-orders' ORDER BY dispatched_at DESC LIMIT 5"
+
+# Test: the job's own scheduler
+gcloud scheduler jobs describe plex-sales-orders-sync-test \
   --location=us-central1 --project=voxdatalake
 # Look for "state: ENABLED" or "state: PAUSED"
 ```
@@ -617,6 +636,6 @@ echo "=== Token ===" && \
 gcloud secrets versions list plex-access-token --project=voxdatalake && \
 echo "=== Last 3 executions ===" && \
 gcloud run jobs executions list --job=plex-etl-sales-orders --region=us-central1 --project=voxdatalake --limit=3 && \
-echo "=== Scheduler state ===" && \
-gcloud scheduler jobs describe plex-sales-orders-sync --location=us-central1 --project=voxdatalake --format="value(state)"
+echo "=== Scheduler state (test job) ===" && \
+gcloud scheduler jobs describe plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake --format="value(state)"
 ```

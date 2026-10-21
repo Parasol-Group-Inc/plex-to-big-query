@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Plex API → Monday push — reads plex_api_label_design_report, creates items.
 
+ARCHIVED 2026-10-20 — NEVER DEPLOYED, DO NOT DEPLOY AS IS. It would write to the
+team's live board. See ARCHIVED.md in this folder for what must change first.
+The extractor (main.py) is unaffected and stays live.
+
 Cloud Function (Gen 2), companion to main.py (the extractor). Same board as the
 ODBC push (18432111755 "Plex Import"), different group (API_Test). Same dedupe
 pattern (LCR hash), own audit table (plex_api_push_log).

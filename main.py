@@ -269,7 +269,9 @@ def validate_bq_view(view_cfg) -> str:
 # THE FINGERPRINT IS STORED ONLY AFTER A CLEAN RUN (in run_and_report). A failed
 # or partial run leaves the last applied fingerprint untouched, so the next
 # probe still sees a difference and runs again: the probe IS the retry, which is
-# why probe-driven pipelines have no `-retry` scheduler.
+# why probe-driven pipelines have no `-retry` scheduler. When the fingerprint did
+# NOT move (a full run failed on unchanged data), last_run_unclean() turns the
+# skip off, so the retry still happens.
 PROBE_LOG_TABLE = os.environ.get("PROBE_LOG_TABLE", "probe_log")
 _PROBE_BIND_RE  = re.compile(r"^\d+$")
 # An auto-probe column: `Update_Date` -> MAX(Update_Date), `sum:Ideal_Rate` ->
@@ -277,6 +279,9 @@ _PROBE_BIND_RE  = re.compile(r"^\d+$")
 # date: a run rate typed over keeps the count and the keys but moves the sum.
 _PROBE_COLUMN_RE = re.compile(r"^(sum:)?[A-Za-z0-9_]+$")
 _CONFIG_SNAPSHOT_KEY = "(config + SQL)"
+# Identifier-like columns (`Part_Key`, `PO_No`, `Customer_Id`, a bare `Key`)
+# hold large integers that overflow Plex's 32-bit SUM; they belong in MAX().
+_PROBE_KEYLIKE_RE = re.compile(r"(?i)(^|_)(key|no|id|number)$")
 
 
 class ProbeInconclusive(Exception):
@@ -407,7 +412,7 @@ def _auto_probe_parts(conn, config: dict) -> dict:
         if not isinstance(cols, list) or not all(isinstance(c, str) and _PROBE_COLUMN_RE.match(c) for c in cols):
             raise ProbeInconclusive(
                 f"probe column list for '{view}' must be identifiers or sum:<identifier>: {cols!r}")
-        keys_summed = [c for c in cols if c.startswith("sum:") and c.lower().endswith(("_key", "_no"))]
+        keys_summed = [c for c in cols if c.startswith("sum:") and _PROBE_KEYLIKE_RE.search(c[4:])]
         if keys_summed:
             # Plex sums integers in 32 bits: SUM(Workcenter_Key) over 65k rows
             # (~5.6 billion) fails the whole query (measured 2026-10-19). Key
@@ -683,6 +688,36 @@ def get_todays_run_status(bq: bigquery.Client, job_name: str) -> Optional[str]:
     return rows[0].status if rows else None
 
 
+def run_identity() -> str:
+    """The job_name this run logs under in job_run_log (and reads back)."""
+    return os.environ.get("CLOUD_RUN_JOB") or REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+
+
+def last_run_unclean(bq: bigquery.Client, job_name: str) -> bool:
+    """Whether this job's latest run that did any work ended failed or partial.
+
+    Skipped runs are passed over: they did nothing. An unchanged fingerprint
+    proves Plex is quiet, not that BigQuery holds a good copy of it, so after an
+    unclean run the probe must not skip (2026-10-20 review). The job_run_log row
+    is written even when main() raised, which leaves no probe row at all."""
+    query = f"""
+        SELECT status
+        FROM `{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`
+        WHERE job_name = @job_name
+          AND status != 'skipped'
+        ORDER BY logged_at DESC
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("job_name", "STRING", job_name)]
+    )
+    try:
+        rows = list(bq.query(query, job_config=job_config).result())
+    except gcp_exceptions.NotFound:
+        return False   # no run log yet: nothing has failed
+    return bool(rows) and rows[0].status in ("failed", "partial")
+
+
 def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str):
     """Record this run's outcome so a future retry trigger can check it."""
     now = datetime.now(timezone.utc)
@@ -832,7 +867,8 @@ def query_plex_paged(
     split across pages. Rows with a NULL key, which a keyset walk cannot reach,
     are fetched at the end. The total is checked against the count; a
     difference (rows added or removed mid-pull) is reported in
-    df.attrs["page_note"] rather than failing the run.
+    df.attrs["page_note"], and the caller then keeps the previous table and
+    marks the run partial instead of writing a pull that may be torn.
     """
     where = re.sub(r"(?i)^\s*WHERE\s", "", plex_filter).strip() if plex_filter else ""
     base = f"({where}) AND " if where else ""
@@ -849,16 +885,22 @@ def query_plex_paged(
         return df
 
     log.info(f"[{plex_view}] {expected} rows — paging by {page_key}, {page_size} per page.")
-    columns, odbc_schema, rows, last, pages = None, None, [], None, 0
+    columns, odbc_schema, rows, last, pages, k = None, None, [], None, 0, None
 
     def fetch(sql):
-        nonlocal columns, odbc_schema
+        nonlocal columns, odbc_schema, k
         cur = conn.cursor()
         try:
             cur.execute(sql)
             if columns is None:
                 columns = [c[0] for c in cur.description]
                 odbc_schema = {c[0]: _bq_type_for_odbc(c[1]) for c in cur.description}
+                # Plex is case-insensitive about the name in SQL, so the YAML's
+                # spelling may not match the column's: find it the same way.
+                matches = [i for i, c in enumerate(columns) if c.lower() == page_key.lower()]
+                if not matches:
+                    raise RuntimeError(f"page_key {page_key} is not a column of {plex_view}")
+                k = matches[0]
             return cur.fetchall()
         finally:
             cur.close()
@@ -867,13 +909,15 @@ def query_plex_paged(
         cond = f"{page_key} > {last}" if last is not None else f"{page_key} IS NOT NULL"
         page = fetch(f"SELECT TOP {page_size} * FROM {plex_view} WHERE {base}{cond} ORDER BY {page_key}")
         pages += 1
+        # Checked on every page, not only full ones: `> {last}` is pasted into
+        # SQL, so a non-integer key must stop the pull before it is used.
+        bad = next((r[k] for r in page if not isinstance(r[k], int) or isinstance(r[k], bool)), None)
+        if bad is not None:
+            raise RuntimeError(f"page_key {page_key} on {plex_view} is not an integer ({bad!r}) — cannot page")
         if len(page) < page_size:
             rows.extend(page)
             break
-        k = columns.index(page_key)
         boundary = page[-1][k]
-        if not isinstance(boundary, int):
-            raise RuntimeError(f"page_key {page_key} on {plex_view} is not an integer ({boundary!r}) — cannot page")
         rows.extend(r for r in page if r[k] != boundary)
         rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} = {boundary}"))
         last = boundary
@@ -1028,7 +1072,9 @@ def main():
         # Retry trigger (6 AM Mountain): only do real work if today's
         # scheduled run actually failed. A success/partial already covers
         # today, so a bare retry fire is a clean no-op, not a failure.
-        job_identity = os.environ.get("CLOUD_RUN_JOB") or report_name
+        # Same identity the run-log writer at the bottom of this file uses,
+        # so the retry and probe reads find the rows it wrote.
+        job_identity = run_identity()
         if RUN_MODE == "retry":
             todays_status = get_todays_run_status(bq, job_identity)
             if todays_status in ("success", "partial"):
@@ -1117,6 +1163,11 @@ def main():
                 try:
                     ensure_probe_log_table(bq)
                     previous, previous_snapshot = last_applied_probe(bq, report_name)
+                    if may_skip and last_run_unclean(bq, job_identity):
+                        may_skip = False
+                        log.info("The last run that did work was failed or partial — "
+                                 "running in full even if the probe is unchanged.")
+                        events.append("Full run: the previous run was failed or partial")
                 except Exception as exc:
                     # A BigQuery problem here used to fail the whole run. It is
                     # an inconclusive probe like any other: run in full.
@@ -1217,6 +1268,14 @@ def main():
                         df = query_plex_paged(conn, plex_view=view, plex_filter=filt,
                                               page_key=extraction["page_key"],
                                               page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
+                        if df.attrs.get("page_note"):
+                            # Usually a row added or removed mid-pull: pull once
+                            # more before giving up on this table.
+                            log.warning(f"{df.attrs['page_note']} — pulling {view} once more.")
+                            events.append(f"Paged pull of {view} did not add up; pulled once more")
+                            df = query_plex_paged(conn, plex_view=view, plex_filter=filt,
+                                                  page_key=extraction["page_key"],
+                                                  page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
                     else:
                         df = query_plex(conn, plex_view=view, plex_filter=filt, plex_date_col=date_col)
                 except Exception as exc:
@@ -1241,7 +1300,13 @@ def main():
                 pages = df.attrs.get("pages", 1)
                 events.append(f"Fetched {len(df)} rows from {view}" + (f" in {pages} pages" if pages > 1 else ""))
                 if df.attrs.get("page_note"):
-                    events.append(f"WARNING: {df.attrs['page_note']}")
+                    # A paged pull that did not add up twice may hold a key twice
+                    # or miss one. Keep yesterday's table; the run goes partial, so
+                    # the next probe retries it (last_run_unclean).
+                    events.append(f"ERROR: {df.attrs['page_note']} — {table} not written")
+                    partial_errors.append(f"{table} paging: {df.attrs['page_note']}")
+                    extraction_rows.append({"table": table, "rows": len(df), "ok": False})
+                    continue
                 extraction_rows.append({"table": table, "rows": len(df), "ok": True})
 
                 if OUTPUT_MODE == "bigquery":
@@ -1476,7 +1541,7 @@ def run_and_report():
         "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
     }
 
-    job_identity = os.environ.get("CLOUD_RUN_JOB") or REPORT_CONFIG_GCS_PATH or PLEX_VIEW
+    job_identity = run_identity()
 
     try:
         result = main()

@@ -280,6 +280,22 @@
       "schedule": "nightly 11:10 PM Mountain; no -retry scheduler"
     },
     {
+      "job": "plex-etl-part-lot",
+      "pipeline": "part_lot",
+      "env": "prod",
+      "config": "gs://voxdatalake-report-configs/reports/part_lot.yaml",
+      "trigger": "dispatcher (scheduler plex-etl-dispatcher -> etl-dispatcher function, rows in PlexOps.etl_schedule)",
+      "schedule": "13:52, 18:52, 23:52 probe plus 04:52 full, America/Denver (rows added 2026-10-21); max_retries 0"
+    },
+    {
+      "job": "plex-etl-part-lot-test",
+      "pipeline": "part_lot",
+      "env": "test",
+      "config": "gs://voxdatalake-report-configs/test/part_lot.yaml",
+      "trigger": "scheduler plex-part-lot-sync-test",
+      "schedule": "nightly 11:20 PM Mountain; no -retry scheduler"
+    },
+    {
       "job": "plex-etl-label-design",
       "pipeline": "label_design",
       "env": "prod",
@@ -317,19 +333,19 @@
       "time": "1:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "13 prod jobs, one every 4 minutes (13:00 to 13:48), rows in PlexOps.etl_schedule; a quiet probe skips the run."
+      "notes": "14 prod jobs, one every 4 minutes (13:00 to 13:52; part_lot joined 2026-10-21), rows in PlexOps.etl_schedule; a quiet probe skips the run."
     },
     {
       "time": "6:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "18:00 to 18:48. First live round (2026-10-19, after stage B was enabled 18:20): 12 ran, 1 skipped."
+      "notes": "18:00 to 18:52. First live round (2026-10-19, after stage B was enabled 18:20): 12 ran, 1 skipped."
     },
     {
       "time": "11:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "23:00 to 23:48. First live round: 4 ran, 9 skipped. A slot is dispatched up to 30 minutes late, even across midnight."
+      "notes": "23:00 to 23:52. First live round: 4 ran, 9 skipped. A slot is dispatched up to 30 minutes late, even across midnight."
     },
     {
       "time": "4:00 AM",
@@ -443,6 +459,13 @@
       "mode": "scheduled: full, probe logged, never skips"
     },
     {
+      "scheduler": "plex-part-lot-sync-test",
+      "cron": "20 23 * * *",
+      "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
+      "target_job": "plex-etl-part-lot-test",
+      "mode": "scheduled: full, probe logged, never skips"
+    },
+    {
       "scheduler": "plex-label-design-sync-test",
       "cron": "5 5-17 * * 1-5",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
@@ -457,7 +480,7 @@
       "mode": "push, no probe"
     },
     {
-      "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing and label_design)",
+      "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing, part_lot and label_design)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
       "target_job": "the matching -test job, POST with RUN_MODE=retry override (needs role plexEtlRunWithOverrides)",
@@ -832,6 +855,12 @@
       "title": "Probe audit gaps: requisition status, rep reassignment, Flat_BOM negative MAX, last_run_unclean unproven",
       "owner": "Claude / Emilio",
       "next": "Decide on the main.py SUM allowlist (needs an image); watch probe_log."
+    },
+    {
+      "id": "D15",
+      "title": "Part Lot reports: screen spot-checks",
+      "owner": "Emilio",
+      "next": "Check 12149-01VOXNU-1 (33 vs 34 attributes) and 93001 (14 vs 13 inherited) in prod; confirm 'active parts' = Part_Status Active with Jennilyn."
     },
     {
       "id": "S1",

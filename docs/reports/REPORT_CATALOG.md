@@ -55,7 +55,8 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Sales Order Allocation | Sales | ✅ Built | [sales_order_allocation_report.md](sales_order_allocation_report.md) |
 | Open Quotes | Sales | ✅ Built and deployed 2026-08-23 | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
 | Open RMAs | Sales | ✅ Built and deployed 2026-08-23 | [sales_returns_open_report.md](sales_returns_open_report.md) |
-| Label Design Queue | Sales | ✅ Deployed; Monday push live in test, prod paused until 19 Oct cutover (BDM + Inside Sales Rep split 2026-10-08) | [label_design_report.md](label_design_report.md) |
+| Label Design Queue | Sales | ✅ Deployed; Monday push live in prod since the 2026-10-19 cutover (test push paused) | [label_design_report.md](label_design_report.md) |
+| Label Design Push Latency | Sales | 🛠 Built 2026-10-20, not deployed yet | [label_design_push_latency.md](label_design_push_latency.md) |
 | Work Orders | Production | ✅ Built | [work_orders_report.md](work_orders_report.md) |
 | MFG Job Schedule | Production | ✅ Built | [mfg_job_schedule_report.md](mfg_job_schedule_report.md) |
 | Labeling \| Open WO: Results | Production | ✅ Built | [labeling_open_work_orders_report.md](labeling_open_work_orders_report.md) |

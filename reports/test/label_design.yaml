@@ -128,3 +128,6 @@ bq_view:
   - name: label_design_report
     display_name: "Label Design Queue"
     sql_file: gs://voxdatalake-report-configs/sql/label_design_view.sql
+  - name: label_design_push_latency
+    display_name: "Label Design Push Latency"
+    sql_file: gs://voxdatalake-report-configs/sql/label_design_push_latency_view.sql

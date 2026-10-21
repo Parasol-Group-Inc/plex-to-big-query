@@ -11,7 +11,21 @@
 
 ---
 
-## UPDATE — 2026-10-20 (latest): 14-day window removed; Plex API push archived
+## UPDATE — 2026-10-20 (latest): push latency view; probe gap found
+
+- **New view `label_design_push_latency`** (built, not deployed): each pushed
+  item's Plex entry time, last order edit (≈ approval) and board time. Doc:
+  `docs/reports/label_design_push_latency.md`.
+- **Post-floor orders so far:** 355, 363 and 340 reached the board under 1 h
+  after approval; 373 waited 4.3 h because the probe ignores order status
+  (OPEN_ITEMS L14, fix proposed). Most of the wait is on the sales side
+  (20 to 30 h from entry to approval).
+- **Correction:** the 2026-10-19 09:22 MT prod push created the 38 cutover
+  items (OPEN_ITEMS L3 had said 0).
+- The 15:02/15:04 MT failures on 2026-10-20 were Plex ODBC connection resets,
+  transient.
+
+## UPDATE — 2026-10-20: 14-day window removed; Plex API push archived
 
 1. **The view's 14-day window on the order date is gone.** It dropped orders
    that reached Pending Fulfillment more than 14 days after their order date:

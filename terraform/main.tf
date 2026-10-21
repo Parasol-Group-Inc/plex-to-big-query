@@ -4727,6 +4727,13 @@ resource "google_storage_bucket_object" "label_design_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "label_design_push_latency_view_sql" {
+  name         = "sql/label_design_push_latency_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/label_design_push_latency_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Label Design queue — prod (PlexProd, 9:30 AM & 1:30 PM Mountain, daily) ─
 
 resource "google_cloud_run_v2_job" "etl_label_design" {

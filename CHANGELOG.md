@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-21 - Probe coverage audit
+
+### Changed
+- **Probe columns hardened on six pipelines, after a runtime and static audit
+  of every probe** (both prod and test YAMLs). The runtime audit found no
+  wrong skip in prod: 65 of 65 dispatch slots ran, every skip was followed by
+  an identical snapshot, and every 4 AM run was full. The static audit found
+  edits the probe could not see; these now move the fingerprint:
+  - `sales_orders`: shipper line quantity/price, container `Loaded_Date`,
+    allocation quantities and `Add_Date`, customer price `Price_Updated_Date`.
+  - `work_orders`: job distribution and production quantities; checksheets
+    now probe `Checksheet_No`, `Inspection_Date` (count only before).
+  - `inventory_activity`: cell production and depletion quantities.
+  - `quality_nonconformance`: problem `Closed_Date`, `Entered_Date`.
+  - `purchasing_pending_requisitions`: quantity, unit price, `Requested_Date`.
+  Every column was checked against `catalog/full_schema_catalog.csv`; every
+  summed column is a float. Ships with `./scripts/deploy.sh`; no image change.
+  The first run after the deploy runs in full (the YAML is in the fingerprint).
+
 ## 2026-10-20 - Label Design probe watches order approval
 
 ### Fixed

@@ -14,6 +14,18 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-21 - Part Lot inheritance: lot format reads as its name
+
+### Fixed
+- **`part_lot_inheritance_report.lot_format` showed raw XML**
+  (`<ArrayOfLotFormatToken ...>`). `Part_v_Lot_Format.Lot_Format` holds the
+  format's token definition; the readable format (`AABYYMMDD`, `PreWeigh`) is
+  `Lot_Format_Description`, which the view and its Plex SQL equivalent now
+  use. Found by a column profile of the first prod load (PlexProd: 151,070
+  spec rows, 15,788 parts). The same profile confirmed that `target_value`,
+  `test_method_reference`, `test_method_required` and `note` are constant
+  because Plex stores them that way, not because of a mapping error.
+
 ## 2026-10-21 - Part Lot specs view: cast Reference before TRIM
 
 ### Fixed

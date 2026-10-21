@@ -12,7 +12,7 @@ SELECT
   p.Name                                      AS part_name,
   ia.Lot_Required                             AS lot_required,
   ia.Lot_Replenishable                        AS lot_replenishable,
-  (SELECT STRING_AGG(lf.Lot_Format, ', ')
+  (SELECT STRING_AGG(lf.Lot_Format_Description, ', ')
      FROM Part_v_Part_Lot_Format AS plf
      JOIN Part_v_Lot_Format AS lf ON lf.Lot_Format_Key = plf.Lot_Format_Key
     WHERE plf.Part_Key = p.Part_Key)          AS lot_format,

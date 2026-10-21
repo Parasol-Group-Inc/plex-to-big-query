@@ -86,7 +86,8 @@ own_attr AS (
 lot_format AS (
   SELECT
     SAFE_CAST(plf.Part_Key AS INT64)          AS part_key,
-    STRING_AGG(DISTINCT lf.Lot_Format, ', ')  AS lot_format
+    -- Lot_Format holds the token XML; the readable format (AABYYMMDD) is the description.
+    STRING_AGG(DISTINCT lf.Lot_Format_Description, ', ')  AS lot_format
   FROM `{gcp_project}.{dataset}.raw_Part_v_Part_Lot_Format` AS plf
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Lot_Format` AS lf
     ON SAFE_CAST(lf.Lot_Format_Key AS INT64) = SAFE_CAST(plf.Lot_Format_Key AS INT64)

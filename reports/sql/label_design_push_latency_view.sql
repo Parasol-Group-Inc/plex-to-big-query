@@ -15,11 +15,14 @@
 --                       order_updated_after_push flags (then it means nothing).
 --   pushed_at           the item was created on the board (push log, UTC)
 --
--- PLEX CLOCK: Plex dates are naive local times on a UTC-7 clock. Measured
--- 2026-10-20 from the probe log: a release Plex stamped 11:58 changed the
--- probe between 12:02 and 13:03 MT (MDT, UTC-6), and one stamped 15:51 between
--- 16:02 and 17:04 MT. UTC-7 is both PDT and fixed MST, so whether it moves to
--- UTC-8 on 2026-11-01 is not known yet: re-check then (OPEN_ITEMS L14).
+-- PLEX CLOCK: Plex dates are naive Mountain wall-clock times. Checked
+-- 2026-10-20: SELECT GETDATE() in Plex SQL Developer returned 19:39 when it
+-- was 19:40 MDT (01:40 UTC). America/Denver handles the DST change.
+--
+-- ODBC LAG: the prod ODBC source runs about an hour behind Plex. Order 373 was
+-- last edited (approved) at 12:16 MT, yet the 13:03 MT full run still read it
+-- as Deposit Review; releases stamped 11:58 and 15:51 MT first showed up at
+-- 13:03 and 17:04. So hours_update_to_board includes that hour (OPEN_ITEMS L14).
 --
 -- Raw date columns land as INT64 nanoseconds (see label_design_view.sql,
 -- "Dates"). SAFE_CAST on both sides of every join (CLAUDE.md).
@@ -49,11 +52,11 @@ plex AS (
   SELECT
     push.*,
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.PO_Date     AS STRING) AS INT64), 0), 1000))) AS order_date,
-    -- naive Plex wall-clock time, then pinned to the Plex clock's UTC-7
-    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(l.Add_Date     AS STRING) AS INT64), 0), 1000))), '-07:00') AS line_added_at,
-    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(ra.add_ns, 0), 1000))), '-07:00')                                           AS release_added_at,
-    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.Add_Date    AS STRING) AS INT64), 0), 1000))), '-07:00') AS order_added_at,
-    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.Update_Date AS STRING) AS INT64), 0), 1000))), '-07:00') AS order_updated_at
+    -- naive Plex wall-clock time, read as Mountain time
+    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(l.Add_Date     AS STRING) AS INT64), 0), 1000))), 'America/Denver') AS line_added_at,
+    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(ra.add_ns, 0), 1000))), 'America/Denver')                                           AS release_added_at,
+    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.Add_Date    AS STRING) AS INT64), 0), 1000))), 'America/Denver') AS order_added_at,
+    TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.Update_Date AS STRING) AS INT64), 0), 1000))), 'America/Denver') AS order_updated_at
   FROM push
   LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Line` AS l
     ON SAFE_CAST(l.PO_Line_Key AS INT64) = push.po_line_key

@@ -70,7 +70,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Line
     filter: ""
     date_col: ""
-    probe: [Shipper_Line_Key]
+    probe: [Shipper_Line_Key, sum:Quantity, sum:Price]
 
   - plex_view: Sales_v_Shipper_Status
     bq_table: raw_Sales_v_Shipper_Status
@@ -82,7 +82,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Container
     filter: ""
     date_col: ""
-    probe: [Shipper_Container_Key]
+    probe: [Shipper_Container_Key, Loaded_Date]
 
   - plex_view: Sales_v_Shipper_AR_Invoice
     bq_table: raw_Sales_v_Shipper_AR_Invoice
@@ -100,7 +100,7 @@ extractions:
     bq_table: raw_Sales_v_Release_Allocation
     filter: ""
     date_col: ""
-    probe: [Add_Date, Release_Allocation_Key]
+    probe: [Add_Date, Release_Allocation_Key, sum:Quantity_Allocated, sum:Quantity_Needed]
 
   # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
   # Jennilyn: "No, it'll always have a price in there. So it needs to be the
@@ -125,7 +125,7 @@ extractions:
     bq_table: raw_Part_v_Customer_Part_Price
     filter: ""
     date_col: ""
-    probe: [Customer_Part_Price_Key]
+    probe: [Customer_Part_Price_Key, Price_Updated_Date]
 
   - plex_view: Part_v_Part
     bq_table: raw_Part_v_Part

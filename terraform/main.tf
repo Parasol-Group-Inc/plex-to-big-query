@@ -5585,6 +5585,313 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Part Lot — added 2026-10-21 (Jennilyn). Two views from 22 raw tables:
+# part_lot_attribute_specs_report (the Part Lot Attributes screen for every
+# active part) and part_lot_inheritance_report (the Lot Management box).
+# Four tables are 250k-325k rows and are pulled in keyset pages (page_key),
+# hence the 1800s timeout instead of part_routing's 900s.
+#
+# PROD has no Cloud Scheduler job: it runs from PlexOps.etl_schedule through
+# the dispatcher (rows added by SQL after the first deploy, see
+# docs/reports/part_lot_inheritance_report.md). Test keeps its own nightly
+# scheduler, 11:20 PM, after part_routing's 11:10 PM.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "part_lot_config_prod" {
+  name         = "reports/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_config_test" {
+  name         = "test/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_attribute_specs_view_sql" {
+  name         = "sql/part_lot_attribute_specs_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_attribute_specs_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_inheritance_view_sql" {
+  name         = "sql/part_lot_inheritance_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_inheritance_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Part Lot — prod (PlexProd; run times are rows in PlexOps.etl_schedule) ──
+
+resource "google_cloud_run_v2_job" "etl_part_lot" {
+  name     = "plex-etl-part-lot"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+# ── Part Lot — test (PlexTest, 11:20 PM Mountain) ──────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_part_lot_test" {
+  name     = "plex-etl-part-lot-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = var.image_url
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_lot_test" {
+  name        = "plex-part-lot-sync-test"
+  description = "Triggers Plex to BigQuery Part Lot ETL job (test)"
+  schedule    = "20 23 * * *" # 11:20 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_lot_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ETL DISPATCHER — probe rollout phase 2 (docs/PROBE_BUILD_PLAN.md), 2026-10-19
 #
 # The prod schedule moves from per-job Cloud Scheduler crons into a TABLE,

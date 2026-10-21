@@ -45,10 +45,10 @@ One item the push service tried to create on the board (normally
 - **The first 38 items** (pushed 2026-10-19 at 9:22 AM) were the cutover
   backlog, from orders entered before go-live. Filter on
   `before_go_live_floor = false` to measure normal operation.
-- **The hourly check watches release status, not order status** (as of
-  2026-10-20). An order approved while its release status stays the same can
-  wait until something else changes. Order 373 waited 5.3 h this way on
-  2026-10-20.
+- **Until the 2026-10-20 fix, the hourly check ignored order status.** An
+  order approved while its release status stayed the same waited until
+  something else changed: order 373 waited 5.3 h this way. Pushes before the
+  fix can show that kind of wait.
 
 ## Columns
 

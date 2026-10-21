@@ -37,6 +37,15 @@ probe:
       columns: [Release_Key, PO_Line_Key]
       filter: "WHERE t.Release_Status_Key IN ({status_keys})"
 
+    - plex_view: Sales_v_PO_Status
+      columns: [PO_Status_Key]
+      filter: "WHERE t.PO_Status = 'Pending Fulfillment'"
+      bind: po_status_keys
+
+    - plex_view: Sales_v_PO
+      columns: [PO_Key]
+      filter: "WHERE t.PO_Status_Key IN ({po_status_keys}) AND t.PO_Date >= '2026-10-18' AND t.PO_Key IN (SELECT pl.PO_Key FROM Sales_v_PO_Line AS pl JOIN Sales_v_Release AS r ON r.PO_Line_Key = pl.PO_Line_Key WHERE r.Release_Status_Key IN ({status_keys}))"
+
 extractions:
   - plex_view: Sales_v_PO
     bq_table: raw_Sales_v_PO

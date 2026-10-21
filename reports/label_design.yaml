@@ -23,21 +23,28 @@ description: "VOX | Label Design queue for the Monday holding board — prod (Pl
 # ─────────────────────────────────────────────────────────────────────────────
 # CHANGE PROBE — added 2026-10-01, so this pipeline can run HOURLY.
 #
-# Two tiny queries that fingerprint the only thing that can produce a new
-# Monday item: the set of release lines sitting on the 'Label Design' release
-# status. When the fingerprint matches the last clean run's, main.py skips all
-# 15 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
+# Tiny queries that fingerprint the view's whole filter, the only thing that can
+# produce a new Monday item: (2) the release lines sitting on the 'Label Design'
+# release status, and (4) the orders that hold such a line, are Pending
+# Fulfillment and are dated on or after the 2026-10-18 go-live floor. When the
+# fingerprint matches the last clean run's, main.py skips all 15 extractions
+# below. Typical day: ~10 probes costing seconds, 1-3 real runs.
+#
+# (3)/(4) were added 2026-10-20 (OPEN_ITEMS L14). Before, an order approved
+# while its release status stayed put was invisible to the probe: order 373
+# waited 4 hours for an unrelated release change. Keep (4) in step with the
+# view's WHERE clause in label_design_view.sql.
 #
 # Why the key SET and not a count or a MAX(Update_Date): a count misses
 # one-in-one-out, and nothing guarantees Plex stamps Update_Date on a status
 # change. A line entering the set changes the fingerprint; a line leaving it
 # changes it too, which costs one needless run and no correctness.
 #
-# Why probing the release status is enough: the push only ever CREATES Monday
-# items, never updates them, so a note or part attribute edited after an order
-# was pushed could not reach the board anyway.
+# Why probing the filter is enough: the push only ever CREATES Monday items,
+# never updates them, so a note or part attribute edited after an order was
+# pushed could not reach the board anyway.
 #
-# The status label is matched exactly. If Plex ever renames it, the bind
+# The status labels are matched exactly. If Plex ever renames it, the bind
 # resolves to nothing, the probe is INCONCLUSIVE, and the full extraction runs
 # — the probe can slow things down, never drop a change. Watch for that with:
 #   SELECT * FROM <dataset>.probe_log WHERE outcome = 'inconclusive'
@@ -52,6 +59,15 @@ probe:
     - plex_view: Sales_v_Release
       columns: [Release_Key, PO_Line_Key]
       filter: "WHERE t.Release_Status_Key IN ({status_keys})"
+
+    - plex_view: Sales_v_PO_Status
+      columns: [PO_Status_Key]
+      filter: "WHERE t.PO_Status = 'Pending Fulfillment'"
+      bind: po_status_keys
+
+    - plex_view: Sales_v_PO
+      columns: [PO_Key]
+      filter: "WHERE t.PO_Status_Key IN ({po_status_keys}) AND t.PO_Date >= '2026-10-18' AND t.PO_Key IN (SELECT pl.PO_Key FROM Sales_v_PO_Line AS pl JOIN Sales_v_Release AS r ON r.PO_Line_Key = pl.PO_Line_Key WHERE r.Release_Status_Key IN ({status_keys}))"
 
 extractions:
   - plex_view: Sales_v_PO

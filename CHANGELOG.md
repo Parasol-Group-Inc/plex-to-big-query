@@ -94,6 +94,75 @@ redeployed with the `gcloud functions deploy etl-dispatcher` command in
 - OPEN_ITEMS: D12 is new (deploy, alerting, dispatch cap). L3 and L13 are
   rewritten.
 
+## 2026-10-20 - Plex Data Hub and Plex SQL Developer equivalents
+
+Nothing here deploys. Terraform uploads `reports/` files one by one, so the
+new `reports/plex_sql/` folder never reaches GCS.
+
+### Added
+
+- **`reports/plex_sql/`** holds one Plex SQL Developer query per BigQuery report
+  view, with the same file name as its `reports/sql/` source. Each one is T-SQL
+  over the Plex ODBC views, aliases every table as Plex requires, and inlines any
+  report view it reads so it runs standalone. A parsed header gives
+  `plex_equivalent_of`, `confidence` (high/medium/low), `plex_views` and `notes`.
+  These were translated from the BigQuery SQL and **have not been run in Plex SQL
+  Developer yet.** Goal inputs (`scorecard_goals*`) have no Plex source, so those
+  queries return NULL goals from a placeholder.
+  All 71 report views are covered (`scorecard_goals_resolved` is shared by two
+  pipelines): 56 high confidence, 10 medium, 5 low. Verifying them in Plex is
+  D13 in `docs/OPEN_ITEMS.md`.
+- **`scripts/hub/build_hub.py`** generates `docs/hub/index.html` from the YAML
+  configs, both SQL folders, `docs/reports/`, `catalog/full_schema_catalog.csv`
+  and `docs/hub/platform.json`. Re-run it after any report change. The page has
+  report, raw-table and pipeline cards, each opening a modal with lineage, Plex SQL,
+  BigQuery SQL, columns and docs, plus schedules, probe and dispatcher diagrams,
+  jobs, datasets, deploy guards, recent changes and open items. Published at
+  https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt; see `docs/hub/README.md`.
+- **`docs/hub/platform.json`**: jobs, schedules, probe logic, functions, ops
+  tables and Mermaid diagrams, compiled by hand from the docs and Terraform. It
+  does not update itself.
+- **Scorecard tab in the hub.** The hub absorbs the Vox Migration Board and the
+  Scorecard Field Manual: 34 tile cards, each opening a modal with today's source,
+  the replacing view (linked to its report, raw tables and SQL) and the Field
+  Manual's teardown, plus open decisions, manual forms, traps, risks and both
+  glossaries. Report modals list the tiles that read them. The board's content is
+  imported from `scripts/board/board_data.py` (unchanged, still owned by the
+  scorecard project); the Field Manual has no generator, so it is snapshotted to
+  `docs/hub/field_manual.json`. Both original artifacts stay published.
+- **Scorecard view tab in the hub.** A replica of the Looker Studio board (31 Jul
+  2026 values, not live) where each of the 32 figures opens the Lineage
+  Navigator's chart-level audit and then the board tile that replaces it, with its
+  Plex and BigQuery SQL. Figures the audit flagged, and figures with no built Plex
+  view behind them, are marked. The audit is read from
+  `score-card-reference/vox_scorecard_navigator.html` (unchanged).
+- **Expected/Current toggle on the Scorecard view.** Expected is the Looker value
+  on 31 Jul 2026. Current recomputes each figure from our report views in Prod or
+  Test. `scripts/hub/figure_queries.py` holds one BigQuery query per figure, and a
+  figure with no Plex source shows "n/a" along with the reason. The figure modal
+  puts the expected and current values side by side and shows the query.
+- **Live data in the hub's modals.** `scripts/hub/snapshot_data.py` (read-only)
+  saves `docs/hub/data_snapshot.json` with the following:
+  - every report view's row count, columns and first 25 rows, in PlexProd and
+    PlexTest;
+  - every raw table's row count and last change;
+  - the newest rows of `etl_dispatch_log`, `job_run_log` and `probe_log`.
+
+  Report, tile and raw-table modals get a Data tab. Pipeline modals list Prod and
+  Test row counts and recent runs. The Schedules tab gains a "Recent runs" table.
+  It is a snapshot with a timestamp, not live data: re-run the script, then the
+  build. **The snapshot holds real PlexProd rows, so it never goes into git.**
+  `data_snapshot.json` is gitignored. The build writes the committed
+  `index.html` without data and a gitignored `index_live.html` with it, and the
+  artifact is published from `index_live.html`.
+- **Prod vs Test, made explicit in the hub.** There is a side-by-side table (who
+  starts the jobs, when, RUN_MODE, probe, failures, run record), a Mermaid
+  diagram of both run paths, a "How it runs" column on the test schedulers, and
+  architecture drawn as two lanes. The rule it documents: prod uses the probe to
+  skip unchanged runs. Test computes and logs the probe on its nightly run
+  (RUN_MODE `scheduled`), but `probe_may_skip` never lets it skip. Label Design's
+  explicit probe is the one exception, in both environments.
+
 ## 2026-10-20 - Probe rollout live in prod; first rounds and production reports checked
 
 ### Verified, the first three prod rounds (`PlexOps.etl_dispatch_log`)

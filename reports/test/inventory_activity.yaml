@@ -14,13 +14,13 @@ extractions:
     bq_table: raw_Part_v_Cell_Production
     filter: ""
     date_col: Production_Date
-    probe: [Production_Date, Cell_Production_Key]
+    probe: [Production_Date, Cell_Production_Key, sum:Quantity]
 
   - plex_view: Part_v_Cell_Depletion
     bq_table: raw_Part_v_Cell_Depletion
     filter: ""
     date_col: Production_Date
-    probe: [Production_Date, Cell_Depletion_Key]
+    probe: [Production_Date, Cell_Depletion_Key, sum:Quantity]
 
 bq_view:
   - name: inventory_activity_report

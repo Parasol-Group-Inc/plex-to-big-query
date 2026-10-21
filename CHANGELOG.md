@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Label Design Push Latency: Plex times read as Mountain
+
+### Fixed
+- **`label_design_push_latency_view.sql` read Plex times as UTC-7, one hour
+  off.** `SELECT GETDATE()` in Plex SQL Developer shows Plex runs on Mountain
+  time; the hour seen in the probe log is prod ODBC lagging Plex by about
+  50 minutes. The view now uses `America/Denver`. Every Plex time moves one
+  hour earlier, so "our side" grows by an hour (373: 5.3 h; 355, 363 and 340:
+  about 1.5 h). Ships with `./scripts/deploy.sh`.
+
 ## 2026-10-20 - Label Design Push Latency view
 
 ### Added

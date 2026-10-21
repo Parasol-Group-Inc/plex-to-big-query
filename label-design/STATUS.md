@@ -16,9 +16,11 @@
 - **New view `label_design_push_latency`** (built, not deployed): each pushed
   item's Plex entry time, last order edit (≈ approval) and board time. Doc:
   `docs/reports/label_design_push_latency.md`.
-- **Post-floor orders so far:** 355, 363 and 340 reached the board under 1 h
-  after approval; 373 waited 4.3 h because the probe ignores order status
-  (OPEN_ITEMS L14, fix proposed). Most of the wait is on the sales side
+- **Post-floor orders so far:** 355, 363 and 340 reached the board about
+  1.5 h after approval; 373 waited 5.3 h because the probe ignores order
+  status (OPEN_ITEMS L14, fix proposed).
+- **Plex's clock is Mountain time; prod ODBC lags Plex by about 50 min**
+  (`GETDATE()` checked 2026-10-20). The view first assumed UTC-7; fixed. Most of the wait is on the sales side
   (20 to 30 h from entry to approval).
 - **Correction:** the 2026-10-19 09:22 MT prod push created the 38 cutover
   items (OPEN_ITEMS L3 had said 0).

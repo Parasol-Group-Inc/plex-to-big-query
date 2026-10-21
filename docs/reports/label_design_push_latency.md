@@ -37,15 +37,17 @@ One item the push service tried to create on the board (normally
   `order_updated_after_push` is true: ignore the split for that row (the total
   is still right). An edit *after* approval but before the push makes "our
   side" look shorter than it was.
-- **Plex's clock is UTC-7**, one hour behind Mountain in summer. The view
-  converts it. Whether Plex moves to UTC-8 on 2026-11-01 is not known yet and
-  will be checked then.
+- **Plex's clock is Mountain time** (checked 2026-10-20 in SQL Developer).
+- **Our copy of Plex runs about 50 minutes behind it.** The prod ODBC source
+  lags Plex, so a change made at noon is first visible to the hourly check
+  around 1 PM. "Our side" includes that delay, so about 1.5 h is normal
+  there.
 - **The first 38 items** (pushed 2026-10-19 at 9:22 AM) were the cutover
   backlog, from orders entered before go-live. Filter on
   `before_go_live_floor = false` to measure normal operation.
 - **The hourly check watches release status, not order status** (as of
   2026-10-20). An order approved while its release status stays the same can
-  wait until something else changes. Order 373 waited 4.3 h this way on
+  wait until something else changes. Order 373 waited 5.3 h this way on
   2026-10-20.
 
 ## Columns

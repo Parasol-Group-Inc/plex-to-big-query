@@ -1,6 +1,6 @@
 # Part Lot Inheritance
 
-> **Status:** 🔬 Built 2026-10-21, not yet deployed · **Category:** Quality · **Runs:** with Part Lot Attribute Specs (same pipeline, `part_lot`)
+> **Status:** ✅ Live 2026-10-21 · **Category:** Quality · **Runs:** with Part Lot Attribute Specs (same pipeline, `part_lot`)
 
 ## What this tells you
 
@@ -44,6 +44,8 @@ the way the screen shows it, "part no-revision name".
 - **`own_lot_attribute_count = 0`** on a part that should carry specs is a gap.
 - **Open question:** 93001 counts 14 inherited attributes here and 13 on its
   screen. The likely cause is one retired template still listed; to be checked.
+- **`lot_format`** is the format's name as Plex lists it (e.g. `AABYYMMDD`,
+  `PreWeigh`); blank when the part has none (5,917 parts in prod).
 - **Freshness.** It refreshes with its pipeline.
 
 ## Columns

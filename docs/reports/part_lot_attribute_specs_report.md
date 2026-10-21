@@ -1,6 +1,6 @@
 # Part Lot Attribute Specs
 
-> **Status:** 🔬 Built 2026-10-21, not yet deployed · **Category:** Quality · **Runs:** with Part Lot Inheritance (same pipeline, `part_lot`)
+> **Status:** ✅ Live 2026-10-21 · **Category:** Quality · **Runs:** with Part Lot Inheritance (same pipeline, `part_lot`)
 
 ## What this tells you
 
@@ -39,6 +39,10 @@ against prod.
 - **`success_values`** are the passing answers for a list attribute, joined
   with " | ". For a numeric attribute it shows the limits instead, as
   `<= high | => low | target x`. `fail_values` lists the failing answers.
+- **Always the same in Plex today:** `target_value` (no numeric spec has a
+  target), `test_method_reference` (0), `test_method_required` (true) and
+  `note` (blank). Checked against the raw Plex tables on 2026-10-21; they are
+  kept in case Plex starts using them.
 - **`attachment`** says "Required" for a Document attribute whose test method
   is required. Plex works this out on screen; no field stores it.
 - **`inherited_from`** names the component the part takes this attribute from,

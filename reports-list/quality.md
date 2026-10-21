@@ -10,7 +10,7 @@ that don't exist yet. That's a ready-made roadmap, not a discovery task.
 
 | Report | Source | Status | Notes |
 |---|---|---|---|
-| Part Lot Attributes + Lot inheritance (not on the CSV; Jennilyn, 2026-10-21) | Plex Part > Part Lot Attributes and the part's Lot Management box | 🛠 Built 2026-10-21 on `dev-part-lot`, not yet deployed | New `part_lot` pipeline, two views: `part_lot_attribute_specs_report` (part x attribute, ~150k rows) and `part_lot_inheritance_report` (one row per active part). Docs: `docs/reports/part_lot_attribute_specs_report.md`, `docs/reports/part_lot_inheritance_report.md` |
+| Part Lot Attributes + Lot inheritance (not on the CSV; Jennilyn, 2026-10-21) | Plex Part > Part Lot Attributes and the part's Lot Management box | ✅ Live 2026-10-21 (prod: 151,070 spec rows, 15,788 parts; lot_format fixed same day) | New `part_lot` pipeline, two views: `part_lot_attribute_specs_report` (part x attribute, ~150k rows) and `part_lot_inheritance_report` (one row per active part). Docs: `docs/reports/part_lot_attribute_specs_report.md`, `docs/reports/part_lot_inheritance_report.md` |
 | Quality \| Bottling Production Search | NS / Google Log for QA | ✅ Already built (mislabeled) | Link is actually the **Bottling Job Schedule** Google Sheet, not NetSuite. See `spreadsheets/bottling_job_schedule.md` |
 | Quality \| Encapsulation Production Search | NS / Google Log for QA | ✅ Already built (mislabeled) | Link is actually a tab of the **MFG Job Schedule** Google Sheet (`gid=430198532`). See `spreadsheets/mfg_job_schedule.md` |
 | Quality \| Label Production Search | Data Ninja by job | ❌ Out of scope | Different BI tool |

@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Label Design Push Latency view
+
+### Added
+- **`label_design_push_latency`** (new `bq_view` in both Label Design configs,
+  `reports/sql/label_design_push_latency_view.sql`, Terraform object
+  `label_design_push_latency_view_sql`). One row per item the push service
+  created, joined back to Plex: when the line was entered, when the order was
+  last edited (the stand-in for approval; Plex keeps no status history) and
+  when the item reached the board, split into a sales side and our side. Reads
+  `label_design_push_log`, so the Monday board needs no new column. Plex times
+  are pinned to a UTC-7 clock (OPEN_ITEMS L14). Doc:
+  `docs/reports/label_design_push_latency.md`. Ships with
+  `./scripts/deploy.sh`; the view is created on the next Label Design run.
+
+### Found
+- The Label Design probe watches release status only, so order 373's approval
+  waited 4.3 h for an unrelated change before the push picked it up. Fix
+  proposed in OPEN_ITEMS L14, not built. The 2026-10-20 15:02/15:04 MT run
+  failures were Plex ODBC connection resets at login (`08S01`), transient.
+
 ## 2026-10-20 - Label Design 14-day window removed; Plex API push archived; probe, dispatcher and paging hardening
 
 Fixes from a review of every commit from 2026-10-16 to 2026-10-20. Nothing

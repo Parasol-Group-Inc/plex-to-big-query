@@ -11,7 +11,12 @@
 
 ---
 
-## UPDATE — 2026-10-20 (latest): push latency view; probe gap found
+## UPDATE — 2026-10-20 (latest): push latency view; probe gap fixed
+
+- **Probe now watches order approval** (OPEN_ITEMS L14). It fingerprints the
+  same filter the view applies, so an approval alone triggers the next hourly
+  run. Expect about 2 h from approval to board (≈50 min ODBC lag + up to 1 h
+  to the next run + the :35 push).
 
 - **New view `label_design_push_latency`** (built, not deployed): each pushed
   item's Plex entry time, last order edit (≈ approval) and board time. Doc:

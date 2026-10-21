@@ -14,6 +14,21 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-20 - Label Design probe watches order approval
+
+### Fixed
+- **The Label Design change probe now covers the view's whole filter**
+  (OPEN_ITEMS L14). Two queries were added to `probe:` in both
+  `label_design.yaml` files. One binds the `Pending Fulfillment` status key.
+  The other fingerprints the orders that hold a Label Design release, are
+  Pending Fulfillment and are dated on or after 2026-10-18. Before, an order
+  approved while its release status stayed put was invisible: order 373 waited
+  4 h for an unrelated change. A renamed status still fails open (full run).
+  Test: `test_label_design_probe_watches_order_status`. Ships with
+  `./scripts/deploy.sh`; no image change.
+- `docs/reports/label_design_report.md`: the "10:20 on the board by 10:35"
+  claim ignored the ~50 min ODBC lag; it now says about 2 hours.
+
 ## 2026-10-20 - Label Design Push Latency: Plex times read as Mountain
 
 ### Fixed

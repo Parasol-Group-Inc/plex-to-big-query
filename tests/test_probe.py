@@ -172,6 +172,25 @@ def test_explicit_probe_still_binds():
     assert snap["2. Sales_v_Release(Release_Key,PO_Line_Key)"].startswith("2 rows:")
 
 
+def test_label_design_probe_watches_order_status():
+    """The real configs: an approval alone (order enters Pending Fulfillment,
+    release status unchanged) must move the fingerprint (OPEN_ITEMS L14)."""
+    import yaml
+    root = Path(__file__).resolve().parent.parent / "reports"
+    for path in (root / "label_design.yaml", root / "test" / "label_design.yaml"):
+        # bq_view dropped: its SQL fingerprint reads GCS, not what this checks.
+        cfg = dict(yaml.safe_load(path.read_text(encoding="utf-8")), _config_sha="x", bq_view=[])
+        base = {"FROM Sales_v_Release_Status": [(7,)], "FROM Sales_v_Release AS t": [(1, 10)],
+                "FROM Sales_v_PO_Status": [(3,)]}
+        before = FakeConn(dict(base, **{"FROM Sales_v_PO AS t": []}))
+        after = FakeConn(dict(base, **{"FROM Sales_v_PO AS t": [(500,)]}))
+        fp_before, _ = m.run_probe(before, cfg)
+        fp_after, _ = m.run_probe(after, cfg)
+        assert fp_before != fp_after, path
+        po_sql = next(s for s in after.seen if "FROM Sales_v_PO AS t" in s)
+        assert "PO_Status_Key IN (3)" in po_sql and "Release_Status_Key IN (7)" in po_sql, po_sql
+
+
 def test_explicit_queries_on_same_view_do_not_collide():
     q = {"plex_view": "Sales_v_Release", "columns": ["Release_Key"]}
     cfg = {"_config_sha": "x", "probe": {"queries": [dict(q, filter="WHERE t.A = 1"), dict(q, filter="WHERE t.A = 2")]}}

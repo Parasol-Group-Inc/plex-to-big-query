@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-10-21",
+  "as_of": "2026-10-22",
   "sources": [
     "CLAUDE.md",
     "CHANGELOG.md",
@@ -625,6 +625,21 @@
   },
   "changelog_recent": [
     {
+      "date": "2026-10-22",
+      "title": "Bottling 9-parts no longer count as production (scorecard)",
+      "summary": "Jennilyn: a Bottling job on a part starting with 9 is double credit for its 5 part. Dropped from production_monthly_by_workcenter_group (and so production_vs_goal), packaging_daily and weekly_production_update, BigQuery and Plex SQL alike; Labeling untouched. Bulk cases (9xxxx-BK) are exempt and still count (Jennilyn). October Bottling 126,756; 14,055 left out (Slim Complex FG, a true double credit of its 5 part)."
+    },
+    {
+      "date": "2026-10-22",
+      "title": "Plex outages: breaker, canary, recovery; hard connect deadline",
+      "summary": "After two runs fail to connect, due slots are logged held-outage, one canary probe tries every 10 min (its first failure is the only email), and once one connects each held job gets ONE recovery run. A hard ODBC connect deadline, digest health and drift alerts, and new jobs start on the image plex-etl-sales-orders runs live (local.etl_image)."
+    },
+    {
+      "date": "2026-10-21",
+      "title": "Batch emails: first job, then one digest",
+      "summary": "In each prod dispatcher batch and the nightly test cascade only the first job emails its report and the last sends one digest; a failed or partial job always emails. Roles come from EMAIL_ROLE."
+    },
+    {
       "date": "2026-10-21",
       "title": "Probe coverage audit",
       "summary": "Runtime audit: no wrong skip in prod (65/65 dispatch slots ran, every skip matched the next snapshot, every 4 AM run full). Static audit: sum: and change-date probe columns added on sales_orders, work_orders, inventory_activity, quality_nonconformance and purchasing_pending_requisitions (prod and test). Unfixed gaps logged as D14."
@@ -861,6 +876,12 @@
       "title": "Part Lot reports: screen spot-checks",
       "owner": "Emilio",
       "next": "Check 12149-01VOXNU-1 (33 vs 34 attributes) and 93001 (14 vs 13 inherited) in prod; confirm 'active parts' = Part_Status Active with Jennilyn."
+    },
+    {
+      "id": "D16",
+      "title": "Batch emails (2026-10-21): confirm the first live batches",
+      "owner": "Emilio",
+      "next": "Check that a prod batch sends 2 emails, not 14: SELECT batch_id, COUNT(*) FROM PlexProd.job_run_log WHERE batch_id IS NOT NULL GROUP BY 1."
     },
     {
       "id": "S1",

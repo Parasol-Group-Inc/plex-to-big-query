@@ -13,6 +13,7 @@ WITH prod AS (
     pr.Quantity,
     pr.Rejected,
     pr.Workcenter_Key,
+    pr.Part_Key,
     CAST(pr.Record_Date AS date) AS production_date
   FROM Part_v_Production AS pr
 ),
@@ -28,8 +29,14 @@ monthly AS (
   FROM prod AS pd
   JOIN Part_v_Workcenter AS wc
     ON pd.Workcenter_Key = wc.Workcenter_Key
+  LEFT JOIN Part_v_Part AS pp
+    ON pd.Part_Key = pp.Part_Key
   WHERE pd.production_date IS NOT NULL
     AND wc.Workcenter_Group IS NOT NULL
+  -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
+  -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+    AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%'
+           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%')
   GROUP BY DATEFROMPARTS(YEAR(pd.production_date), MONTH(pd.production_date), 1), wc.Workcenter_Group
 ),
 

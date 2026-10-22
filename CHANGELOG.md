@@ -14,6 +14,28 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (scorecard) - Bottling bulk cases (9xxxx-BK) stay counted; Plex SQL equivalents
+
+### Changed
+- **Bulk cases are exempt from the Bottling 9-part rule** (Jennilyn, same
+  day): a part matching `^9[0-9]{4}-BK` (all 95 "BULK CASE" parts in Plex,
+  e.g. `93336-BKVOXNU-1`) has no 5-part job, so it still counts. Views:
+  `production_monthly_by_workcenter_group_report` (and through it
+  `production_vs_goal_report`), `packaging_daily_report`,
+  `weekly_production_update_report`. SQL only.
+- **Plex SQL Developer equivalents** (`reports/plex_sql/`) now apply the rule
+  and the exemption: `production_monthly_by_workcenter_group_view`,
+  `production_vs_goal_view`, `packaging_daily_report_view`,
+  `weekly_production_update_view`.
+
+### Verified
+- PR #55's rule was live in prod after its deploy: October Bottling read
+  126,601 with 14,210 left out, 155 of them the Omega 3 bulk case
+  `93336-BKVOXNU-1` (no 5-part job). With the exemption, run against
+  PlexProd before deploy: **126,756**. Only the Slim Complex FG
+  `93323-10REDRO-0` (14,055, recorded 10-22) stays out, a true double credit
+  of its 5 part `53323-10REDRO-0` (10-19 to 10-20). No other group moved.
+
 ## 2026-10-22 (scorecard) - Bottling 9-parts no longer count as production
 
 ### Changed

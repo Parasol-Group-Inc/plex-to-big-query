@@ -1301,11 +1301,23 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
     )
 
     log.info(f"Writing {len(df)} rows to {table_ref}...")
-    job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-    job.result()
-
-    if job.errors:
-        raise RuntimeError(f"BigQuery load job failed: {job.errors}")
+    # ONE RETRY (2026-10-22): a load can fail on Google's side with "Failed
+    # to expand table ... matched no files" (its staged upload went missing).
+    # It hit raw_Sales_v_PO_Line when Label Design and Sales Orders loaded it
+    # in the same minute. WRITE_TRUNCATE makes a second try safe; a real
+    # schema error just fails twice.
+    for attempt in (1, 2):
+        try:
+            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
+            job.result()
+            if job.errors:
+                raise RuntimeError(f"BigQuery load job failed: {job.errors}")
+            break
+        except Exception as e:
+            if attempt == 2:
+                raise
+            log.warning(f"BigQuery load of {table_name} failed ({e}) — retrying once in 30s.")
+            sleep(30)
 
     log.info(f"Successfully wrote {len(df)} rows to {table_ref}.")
     return len(df)

@@ -41,6 +41,17 @@
 -- `!= 0`, which holds whichever value Plex uses. Check real rows, never
 -- the family (docs/CHEATSHEET.md, Booleans).
 --
+-- BOTTLING 9-PARTS ARE NOT PRODUCTION (Jennilyn, 2026-10-22): when Bottling
+-- completes a job for a part starting with 9 (the finished-good version),
+-- the same output was already counted on the job for its 5 part (the
+-- bottled-bulk version). Counting both is double credit, so Bottling
+-- records for 9-parts are dropped, good and scrap alike. Bottling only:
+-- Labeling's output is all 9-parts and stays counted. Matched on the
+-- part the production record itself names (Part_v_Production.Part_Key),
+-- not the job's, so a record with no job is still judged.
+-- BULK CASES STAY COUNTED (Jennilyn, 2026-10-22): 9xxxx-BK parts ("BULK
+-- CASE", e.g. 93336-BKVOXNU-1) have no 5-part job, so they are exempt.
+--
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml, same raw
 -- tables the 4 daily reports already use.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
@@ -51,6 +62,7 @@ WITH prod AS (
     p.Quantity,
     p.Rejected,
     p.Workcenter_Key,
+    p.Part_Key,
     -- DATE CONVERSION PATTERN: raw date columns arrive as INT64 nanoseconds,
     -- TIMESTAMP, or STRING depending on how the table was loaded. Every
     -- branch routes through CAST(col AS STRING) first because that cast is
@@ -92,8 +104,14 @@ FROM prod
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
   ON SAFE_CAST(prod.Workcenter_Key AS INT64) = SAFE_CAST(wc.Workcenter_Key AS INT64)
 
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
+  ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
+
 WHERE prod.production_date IS NOT NULL
   AND wc.Workcenter_Group IS NOT NULL
+  AND NOT (wc.Workcenter_Group = 'Bottling'
+           AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9')
+           AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
 
 GROUP BY production_month, workcenter_group
 ORDER BY production_month DESC, workcenter_group

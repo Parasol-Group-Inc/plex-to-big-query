@@ -39,9 +39,14 @@ SELECT COUNT(*), MAX(Update_Date), MAX(PO_Line_Key) FROM Sales_v_PO_Line
 - The `MAX` columns come from the extraction's `probe: [...]` list: a change
   date and/or the view's own key. They make an **edit** visible.
   `scripts/generate_probe_columns.py` picked them from the schema catalog.
-  Of the 82 extractions per environment, 71 have a list. The 11 without one
-  are all small status/type lookups with neither column, so they probe by
-  count only.
+  As of the 2026-10-21 audit, 88 of the 100 `auto` extractions per
+  environment (13 pipelines) have a list. The 12 without one are small
+  status/type lookups with neither column, so they probe by count only.
+  The audit added `sum:` columns where an edit changes a quantity or price
+  but no date (shipper lines, allocations, job distribution, production,
+  cell production/depletion, requisitions) and change dates the generator
+  had missed (`Loaded_Date`, `Price_Updated_Date`, `Closed_Date`,
+  `Inspection_Date`).
 - The report's **YAML and SQL files are part of the fingerprint**, so a
   `deploy.sh` that changes either always runs in full. That fixes OPEN_ITEMS **L10**, where
   a SQL-only deploy sat unapplied for as long as Plex stayed quiet.
@@ -62,7 +67,10 @@ SELECT COUNT(*), MAX(Update_Date), MAX(PO_Line_Key) FROM Sales_v_PO_Line
   start is a `scheduled` run, which is always full for a nightly pipeline.
 - **Edits without a change date.** On a table with no change date, an edit to an existing row
 keeps the same count and keys, so the probe cannot see it. The 4 AM full run
-bounds that at one day.
+bounds that at one day. Two known cases (2026-10-21 audit): a requisition's
+status flip (`Requisition_Status_Key` is refused by the key-like SUM rule;
+needs an allowlist in `main.py`, so an image) and a rep reassignment in
+`Sales_v_Order_Salesperson` (only key columns).
 
 **What to expect.** Busy tables such as `Part_v_Production` and
 `Part_v_Container` move all day, so Work Orders and inventory will usually run

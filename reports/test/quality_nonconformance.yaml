@@ -15,7 +15,7 @@ extractions:
     bq_table: raw_Quality_v_Problem
     filter: ""
     date_col: ""
-    probe: [Problem_Key]
+    probe: [Problem_Key, Closed_Date, Entered_Date]
 
   # ── Added 2026-09-22 — the UX table Vox actually writes to, plus its form
   # lookup. Every quality view now reads these. Same extraction list as prod.

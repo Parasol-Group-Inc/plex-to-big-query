@@ -14,6 +14,198 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (dev) - BigQuery loads retry once
+
+### Fixed
+- **A failed BigQuery load now retries once, 30 s later** (`write_to_bigquery`
+  in `main.py`). The 1 PM prod Label Design run went PARTIAL on
+  `raw_Sales_v_PO_Line`: `400 ... Failed to expand table ... matched no
+  files`, a Google-side error where the staged upload goes missing. Sales
+  Orders' 1 PM probe loaded the same table in the same minute (13:00:49 vs
+  13:02:43), and Label Design runs on the hour 5 AM-5 PM, so this can recur
+  at 1 PM on weekdays. No data was lost: Sales Orders' load landed (715 rows,
+  same unfiltered pull). `WRITE_TRUNCATE` makes the retry safe. A real error
+  (schema, permissions) fails twice and is reported as before, 30 s later.
+  Code change: ships via Cloud Build.
+
+## 2026-10-22 (scorecard) - Bottling bulk cases (9xxxx-BK) stay counted; Plex SQL equivalents
+
+### Changed
+- **Bulk cases are exempt from the Bottling 9-part rule** (Jennilyn, same
+  day): a part matching `^9[0-9]{4}-BK` (all 95 "BULK CASE" parts in Plex,
+  e.g. `93336-BKVOXNU-1`) has no 5-part job, so it still counts. Views:
+  `production_monthly_by_workcenter_group_report` (and through it
+  `production_vs_goal_report`), `packaging_daily_report`,
+  `weekly_production_update_report`. SQL only.
+- **Plex SQL Developer equivalents** (`reports/plex_sql/`) now apply the rule
+  and the exemption: `production_monthly_by_workcenter_group_view`,
+  `production_vs_goal_view`, `packaging_daily_report_view`,
+  `weekly_production_update_view`.
+
+### Verified
+- PR #55's rule was live in prod after its deploy: October Bottling read
+  126,601 with 14,210 left out, 155 of them the Omega 3 bulk case
+  `93336-BKVOXNU-1` (no 5-part job). With the exemption, run against
+  PlexProd before deploy: **126,756**. Only the Slim Complex FG
+  `93323-10REDRO-0` (14,055, recorded 10-22) stays out, a true double credit
+  of its 5 part `53323-10REDRO-0` (10-19 to 10-20). No other group moved.
+
+## 2026-10-22 (scorecard) - Bottling 9-parts no longer count as production
+
+### Changed
+- **Bottling production on a part starting with 9 is left out of production
+  totals** (Jennilyn: the job for the 5 part is what counts; the 9 version of
+  the same part is double credit). Bottling only: Labeling's output is all
+  9-parts and still counts. Matched on the production record's own
+  `Part_Key`, good and scrap alike.
+  - Views: `production_monthly_by_workcenter_group_report` (and through it
+    `production_vs_goal_report`), `packaging_daily_report`,
+    `weekly_production_update_report`. SQL only, no new extraction:
+    `raw_Part_v_Part` is already in the dataset (sales_orders pipeline).
+  - Prod on 2026-10-22: Bottling 112,120 → 111,965 (one part,
+    `93336-BKVOXNU-1`, bulk case, 155 units). No other group moved.
+## 2026-10-22 - Plex outages: breaker, canary, recovery; hard connect deadline
+
+A Plex prod ODBC outage (21 Oct, 11 PM to 4:30 AM, `08S01`) failed every
+scheduled run, mailed a failure per job plus a follow-up per job, and left
+the 4 AM full run undone until the next day.
+
+### Added
+- **Outage breaker in the dispatcher.** Two consecutive finished runs that
+  failed with `ODBC connection failed` (and no run that reached Plex since)
+  open it. While open, scheduled slots are logged `held-outage` and not
+  started, follow-ups stop, and one **canary** probe runs every 10 minutes
+  (`reason = 'canary'`; sales-quotes, quality-supplier-returns or
+  part-obsolescence, the fastest prod probes). The **first canary's failure
+  is the outage's one email**; later canaries are silent. The first run that
+  reaches Plex closes it.
+- **Recovery after an outage.** Each job with a held slot in the last 24 h
+  gets ONE run (`reason = 'recovery'`), full if any held slot was full, four
+  per tick, as one batch (`recovery-<id>`) with first/last roles and a
+  digest. A recovery run is the job's one try; a later run of the same job
+  (full covers anything, a probe covers a probe) makes it unnecessary, and
+  the same rule now replaces a follow-up that a later run already covered.
+- **Hard connect deadline.** The DataDirect driver ignores pyodbc's
+  `timeout`, so a dead host could hang a job until Cloud Run killed it. Each
+  connect now runs on a thread with a 60 s wall-clock deadline, three
+  attempts with 20 s / 40 s backoff (`CONNECT_DEADLINE_SECONDS`,
+  `CONNECT_ATTEMPTS`, `CONNECT_BACKOFF_SECONDS`). A refused login (`28xxx`)
+  is not retried.
+- **Digest health checks.** The batch digest now lists: jobs with no clean
+  run in 12 h (30 h in test), jobs whose last run was on a different build
+  than the digest's, and dispatcher outcomes in the last 24 h that need a
+  look (`succeeded-unrecorded`, `lost`, `dispatch-failed`, `held-outage`).
+  An all-OK batch with warnings is labelled so.
+- **`job_run_log.build`:** the image's git SHA (`GIT_SHA` build arg, set by
+  Cloud Build). Images built before this log `unknown`.
+
+### Changed
+- **New jobs start on the live image.** Terraform's `local.etl_image` reads
+  the image `plex-etl-sales-orders` runs now (`var.image_reference_job`)
+  instead of the hand-kept `var.image_url`, which was stale again
+  (`etl:6c33c51`). Existing jobs still ignore the field; a plan shows no job
+  change. `var.image_url` remains the fallback when `image_reference_job = ""`.
+
+Ships in three parts: Cloud Build for the image, `gcloud functions deploy
+etl-dispatcher` (command in `terraform/main.tf`) for the breaker, and
+`./scripts/deploy.sh` for the Terraform image local. Any order works: an old
+image fails outages with the same prefix the breaker reads, and an old
+dispatcher ignores the new columns.
+
+## 2026-10-21 - Batch emails: first job, then one digest
+
+### Changed
+- **Batches now mail only at their ends.** The prod dispatcher's four daily
+  batches (1 PM, 6 PM, 11 PM probe; 4 AM full) and the nightly test cascade
+  used to send one email per job: up to 56 a day in prod. Now the first job of
+  a batch sends its own report, the jobs in between stay silent, and the last
+  job sends one digest of every job's result (`templates/digest.html`, subject
+  `[Plex ETL] - Digest — <date>`). **A failed or partial job still emails its
+  own report**, wherever it sits. Follow-up probes, test retries and Label
+  Design keep their own rules.
+- **Roles:** the dispatcher sends `EMAIL_ROLE`, `BATCH_ID` and `BATCH_KIND`
+  on every start (`batch_for`: same mode and hour = one batch, ordered by
+  `run_time`). The 14 test jobs carry a fixed `EMAIL_ROLE` in Terraform
+  (`first` on sales-orders-test, `last` on part-lot-test).
+
+### Added
+- **`job_run_log` audit columns:** `report_name`, `batch_id`, `batch_kind`,
+  `email_role`, `started_at`, `duration_seconds`, `rows_fetched`,
+  `rows_written`, `tables_total`, `tables_failed`, `tables_changed`, `detail`,
+  `execution_name`. Added as NULLABLE by the job itself on its first run; the
+  digest reads them. Docs: `docs/OPERATIONS.md` § "Batch emails".
+
+Ships in three parts, in any order (an older image ignores the new env, and a
+job with no role mails as before): Cloud Build for the image, the
+`gcloud functions deploy etl-dispatcher` command in `terraform/main.tf`, and
+`./scripts/deploy.sh` for the test jobs' env.
+
+## 2026-10-21 - Part Lot inheritance: lot format reads as its name
+
+### Fixed
+- **`part_lot_inheritance_report.lot_format` showed raw XML**
+  (`<ArrayOfLotFormatToken ...>`). `Part_v_Lot_Format.Lot_Format` holds the
+  format's token definition; the readable format (`AABYYMMDD`, `PreWeigh`) is
+  `Lot_Format_Description`, which the view and its Plex SQL equivalent now
+  use. Found by a column profile of the first prod load (PlexProd: 151,070
+  spec rows, 15,788 parts). The same profile confirmed that `target_value`,
+  `test_method_reference`, `test_method_required` and `note` are constant
+  because Plex stores them that way, not because of a mapping error.
+
+## 2026-10-21 - Part Lot specs view: cast Reference before TRIM
+
+### Fixed
+- **`part_lot_attribute_specs_report` failed to create on its first test run**
+  (`No matching signature for function TRIM ... INT64`).
+  `Part_v_Part_Lot_Attribute_Test_Method.Reference` lands as INT64, so it is
+  now cast to STRING first. Dry run and counts checked on PlexTest: 150,027
+  rows, 7,431 parts. The inheritance view was created on that run: 15,694
+  rows, not the ~7.4k estimated (nearly every part is Active). Docs updated.
+  Ships with `./scripts/deploy.sh`; no image change.
+
+## 2026-10-21 - Part Lot Attributes and lot inheritance
+
+### Added
+- **New pipeline `part_lot`** (`plex-etl-part-lot`, test `plex-etl-part-lot-test`),
+  asked for by Jennilyn on 2026-10-21. 22 Plex views; the six large ones (part
+  lot attributes, their list, numeric, text, test-method and COA tables, and
+  attribute inheritance) are pulled in 25k keyset pages. Probe mode `auto`.
+  Two views:
+  - `part_lot_attribute_specs_report`: the Part Lot Attributes screen for
+    every active part, one row per part x active attribute. The attribute name
+    comes through the template (`Lot_Attribute_Template.Attribute_Key` ->
+    `Common_v_Attribute.Attribute_Code`). Checked against the screen for
+    12149-01VOXNU-1 Rev 00 (34 attributes).
+  - `part_lot_inheritance_report`: the Lot Management box, one row per active
+    part: lot required, lot format, and the Lot No / Best By / attribute
+    inheritance sources, with a `lot_no_matches_best_by` check.
+- Terraform: both jobs, the four GCS objects and the test scheduler (11:20 PM).
+  Prod runs need four `PlexOps.etl_schedule` rows after deploy (SQL in
+  `docs/reports/part_lot_inheritance_report.md`). `_ALL_JOBS` in
+  `deploy/cloudbuild.yaml` lists both jobs.
+- Worktree `ptbq-part-lot` on `dev-part-lot`: a row in `CLAUDE.md` and the
+  project's paths in `.githooks/hooks.py`.
+- Plex SQL Developer equivalents of both views in `reports/plex_sql/`.
+
+## 2026-10-21 - Probe coverage audit
+
+### Changed
+- **Probe columns hardened on six pipelines, after a runtime and static audit
+  of every probe** (both prod and test YAMLs). The runtime audit found no
+  wrong skip in prod: 65 of 65 dispatch slots ran, every skip was followed by
+  an identical snapshot, and every 4 AM run was full. The static audit found
+  edits the probe could not see; these now move the fingerprint:
+  - `sales_orders`: shipper line quantity/price, container `Loaded_Date`,
+    allocation quantities and `Add_Date`, customer price `Price_Updated_Date`.
+  - `work_orders`: job distribution and production quantities; checksheets
+    now probe `Checksheet_No`, `Inspection_Date` (count only before).
+  - `inventory_activity`: cell production and depletion quantities.
+  - `quality_nonconformance`: problem `Closed_Date`, `Entered_Date`.
+  - `purchasing_pending_requisitions`: quantity, unit price, `Requested_Date`.
+  Every column was checked against `catalog/full_schema_catalog.csv`; every
+  summed column is a float. Ships with `./scripts/deploy.sh`; no image change.
+  The first run after the deploy runs in full (the YAML is in the fingerprint).
+
 ## 2026-10-20 - Label Design probe watches order approval
 
 ### Fixed

@@ -4,8 +4,11 @@ import decimal
 import hashlib
 import json
 import logging
-from datetime import date, datetime, time, timezone
-from typing import Optional
+import threading
+from datetime import date, datetime, time, timedelta, timezone
+from time import monotonic, sleep
+from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 import pyodbc
 import pandas as pd
@@ -13,7 +16,7 @@ import yaml
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import bigquery, secretmanager, storage
 
-from email_utils import send_report
+from email_utils import send_digest, send_report
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -78,6 +81,56 @@ REPORT_TIME_ZONE  = os.environ.get("REPORT_TIME_ZONE", "America/Denver")
 # something. With "on_error" the run email is sent only for a partial or
 # failed run; a clean run is recorded in `job_run_log` / `probe_log` instead.
 EMAIL_MODE        = os.environ.get("EMAIL_MODE", "always").lower()
+
+# Batch emails (2026-10-21). Jobs that run as a batch — the prod dispatcher's
+# 1 PM / 6 PM / 11 PM probes and 4 AM full run, and the test cascade each
+# night — mail only at the two ends: the FIRST job sends its own report (the
+# batch has started), the LAST one sends one digest of every job in the batch,
+# and the ones in between stay silent unless they fail or end partial. Every
+# run is still recorded in `job_run_log`, which is what the digest reads.
+#   EMAIL_ROLE  first | middle | last — the dispatcher sets it per run for prod
+#               (from etl_schedule); Terraform sets it per test job. "only" is
+#               a batch of one, "followup" the dispatcher's follow-up probe;
+#               both mail their own report. Unset keeps EMAIL_MODE's behaviour.
+#   BATCH_ID / BATCH_KIND  which batch this run belongs to, e.g.
+#               "probe-1300-2026-10-21" / "probe-1300". The dispatcher sends
+#               both; a test job with a role and no BATCH_ID falls in the night's
+#               "nightly-<date>" batch.
+EMAIL_ROLE        = os.environ.get("EMAIL_ROLE", "").lower()
+BATCH_ID          = os.environ.get("BATCH_ID", "")
+BATCH_KIND        = os.environ.get("BATCH_KIND", "")
+BATCH_ROLES       = ("first", "middle", "last")
+# How long the last job waits for the rest of its batch to log a result before
+# sending the digest anyway (jobs still running are listed as "no result yet").
+# Prod jobs start 4 minutes apart and the slowest takes about 7.
+DIGEST_WAIT_SECONDS = int(os.environ.get("DIGEST_WAIT_SECONDS", "360"))
+DIGEST_POLL_SECONDS = int(os.environ.get("DIGEST_POLL_SECONDS", "20"))
+# A batch's expected members are the jobs that logged under its BATCH_KIND in
+# this many days, so a new pipeline joins the digest after its first run.
+DIGEST_LOOKBACK_DAYS = int(os.environ.get("DIGEST_LOOKBACK_DAYS", "7"))
+# A batch the dispatcher assembles on the spot — the re-runs after a Plex outage
+# (see deploy/etl_dispatcher/) — has no history to read its members from, so the
+# dispatcher names them: space-separated job names.
+BATCH_EXPECTED = os.environ.get("BATCH_EXPECTED", "").split()
+
+# Health checks in every digest (2026-10-22). A job whose last clean run
+# (success or no changes) is older than this is listed as stale. Prod runs at
+# least every 9 hours; a test job once a night.
+STALE_AFTER_HOURS = int(os.environ.get("STALE_AFTER_HOURS",
+                                       "30" if BQ_DATASET.lower().endswith("test") else "12"))
+# The commit this image was built from: the Dockerfile's GIT_SHA build arg,
+# which Cloud Build sets. Logged on every job_run_log row, so the digest can
+# name a job still running an old image.
+BUILD_SHA = os.environ.get("GIT_SHA", "") or "unknown"
+
+# Plex ODBC connect (2026-10-22). The driver ignores pyodbc's own timeout: on
+# the night of 2026-10-21 every connect hung about 3 minutes before Plex closed
+# it. Each attempt gets a hard wall-clock deadline, and a refused or hung
+# connect is tried CONNECT_ATTEMPTS times, CONNECT_BACKOFF_SECONDS apart
+# (doubling), before the run fails.
+CONNECT_DEADLINE_SECONDS = int(os.environ.get("CONNECT_DEADLINE_SECONDS", "60"))
+CONNECT_ATTEMPTS         = int(os.environ.get("CONNECT_ATTEMPTS", "3"))
+CONNECT_BACKOFF_SECONDS  = int(os.environ.get("CONNECT_BACKOFF_SECONDS", "20"))
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -650,11 +703,32 @@ def ensure_metadata_table(bq: bigquery.Client):
         bq.create_table(table)
 
 
+# What each run did, for the audit trail and the batch digest (2026-10-21).
+# Added to job_run_log as NULLABLE columns, so older rows simply hold NULLs.
+JOB_RUN_DETAIL_FIELDS = [
+    bigquery.SchemaField("report_name",      "STRING"),
+    bigquery.SchemaField("batch_id",         "STRING"),
+    bigquery.SchemaField("batch_kind",       "STRING"),
+    bigquery.SchemaField("email_role",       "STRING"),
+    bigquery.SchemaField("started_at",       "TIMESTAMP"),
+    bigquery.SchemaField("duration_seconds", "INTEGER"),
+    bigquery.SchemaField("rows_fetched",     "INTEGER"),
+    bigquery.SchemaField("rows_written",     "INTEGER"),
+    bigquery.SchemaField("tables_total",     "INTEGER"),
+    bigquery.SchemaField("tables_failed",    "INTEGER"),
+    bigquery.SchemaField("tables_changed",   "STRING"),
+    bigquery.SchemaField("detail",           "STRING"),
+    bigquery.SchemaField("execution_name",   "STRING"),
+    bigquery.SchemaField("build",            "STRING"),   # BUILD_SHA, 2026-10-22
+]
+
+
 def ensure_job_run_log_table(bq: bigquery.Client):
     """
     Create the job run log table if it doesn't exist yet. One row per
     completed run (scheduled or retry) — lets a retry trigger check whether
     today's scheduled run already succeeded/partial before doing real work.
+    Adds the per-run detail columns to a table created before they existed.
     """
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
     schema = [
@@ -663,11 +737,18 @@ def ensure_job_run_log_table(bq: bigquery.Client):
         bigquery.SchemaField("status",    "STRING",    mode="REQUIRED"),
         bigquery.SchemaField("run_mode",  "STRING",    mode="REQUIRED"),
         bigquery.SchemaField("logged_at", "TIMESTAMP", mode="REQUIRED"),
-    ]
+    ] + JOB_RUN_DETAIL_FIELDS
     try:
-        bq.get_table(table_ref)
+        table = bq.get_table(table_ref)
     except gcp_exceptions.NotFound:
         bq.create_table(bigquery.Table(table_ref, schema=schema))
+        return
+    existing = {field.name for field in table.schema}
+    missing = [f for f in JOB_RUN_DETAIL_FIELDS if f.name not in existing]
+    if missing:
+        table.schema = list(table.schema) + missing
+        bq.update_table(table, ["schema"])
+        log.info(f"Added {', '.join(f.name for f in missing)} to {JOB_RUN_LOG_TABLE}.")
 
 
 def get_todays_run_status(bq: bigquery.Client, job_name: str) -> Optional[str]:
@@ -718,20 +799,198 @@ def last_run_unclean(bq: bigquery.Client, job_name: str) -> bool:
     return bool(rows) and rows[0].status in ("failed", "partial")
 
 
-def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str):
-    """Record this run's outcome so a future retry trigger can check it."""
+def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str,
+                details: Optional[dict] = None):
+    """Record this run's outcome so a future retry trigger can check it.
+
+    `details` fills the JOB_RUN_DETAIL_FIELDS columns. If they are refused —
+    a run that crashed before ensure_job_run_log_table() added them, or a
+    column added seconds ago that streaming does not accept yet — the row is
+    written again without them: the status row is what the retry and the probe
+    read, and it must not be lost to the audit columns."""
     now = datetime.now(timezone.utc)
-    row = [{
+    base = {
         "job_name":  job_name,
         "run_date":  now.date().isoformat(),
         "status":    status,
         "run_mode":  run_mode,
         "logged_at": now.isoformat(),
-    }]
+    }
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
-    errors = bq.insert_rows_json(table_ref, row)
+    wanted = {k: v for k, v in (details or {}).items() if v is not None and v != ""}
+    if wanted:
+        try:
+            errors = bq.insert_rows_json(table_ref, [{**base, **wanted}])
+        except Exception as exc:
+            errors = [str(exc)]
+        if not errors:
+            return
+        log.warning(f"Job run detail refused ({errors}); logging the status alone.")
+    errors = bq.insert_rows_json(table_ref, [base])
     if errors:
         log.warning(f"Failed to log job run status: {errors}")
+
+
+def run_batch() -> tuple:
+    """(batch_id, batch_kind) this run belongs to, or ("", "") outside a batch.
+
+    The dispatcher names prod batches. A test job has only its static
+    EMAIL_ROLE, so its batch is the night's cascade: every test job runs
+    between 7 PM and midnight Mountain, so the local date names the night. A
+    test retry that does real work lands in the same night, and the digest
+    then shows its result instead of the failure it repaired."""
+    if BATCH_ID:
+        return BATCH_ID, BATCH_KIND or BATCH_ID
+    if EMAIL_ROLE in BATCH_ROLES:
+        night = datetime.now(ZoneInfo(REPORT_TIME_ZONE)).date().isoformat()
+        return f"nightly-{night}", "nightly"
+    return "", ""
+
+
+def email_plan(status: str, role: str, run_mode: str, email_mode: str) -> tuple:
+    """(send this run's own email, send the batch digest) for one finished run.
+
+    status is success | partial | failed | no_changes (a probe that skipped).
+    A run that ends partial or failed always mails its own report, whatever
+    its role. Outside a batch — no role, or a retry run, which only does work
+    after a failure — EMAIL_MODE decides as before: "on_error" mails only
+    unclean runs."""
+    unclean = status in ("partial", "failed")
+    # The dispatcher's outage canary (2026-10-22): every few minutes during a
+    # Plex outage, one light job tries to connect. It fails quietly — the
+    # failures that opened the outage have mailed already — except the first
+    # canary of an outage ("outage-alert"), whose failure email says that
+    # scheduled runs are now held. Recovery re-runs then mail as a batch.
+    if role == "canary":
+        return False, False
+    if role == "outage-alert":
+        return unclean, False
+    if role in BATCH_ROLES and run_mode != "retry":
+        return unclean or role == "first", role == "last"
+    if role in ("only", "followup"):
+        return True, False
+    return unclean or email_mode != "on_error", False
+
+
+def run_details(result: dict, errors: List[str], start_time: datetime,
+                end_time: datetime, batch: tuple) -> dict:
+    """The JOB_RUN_DETAIL_FIELDS values for this run's job_run_log row."""
+    extractions = [e for e in (result.get("extractions") or []) if isinstance(e, dict)]
+    probe = result.get("probe") or {}
+    changed = probe.get("changed") or []
+    return {
+        "report_name":      result.get("report_name"),
+        "batch_id":         batch[0],
+        "batch_kind":       batch[1],
+        "email_role":       EMAIL_ROLE,
+        "started_at":       start_time.isoformat(),
+        "duration_seconds": int((end_time - start_time).total_seconds()),
+        "rows_fetched":     int(result.get("rows_fetched") or 0),
+        "rows_written":     int(result.get("rows_written") or 0),
+        "tables_total":     len(extractions) if extractions else probe.get("sources_checked"),
+        "tables_failed":    sum(1 for e in extractions if not e.get("ok", True)),
+        "tables_changed":   ", ".join(str(c) for c in changed)[:1000] or None,
+        "detail":           "; ".join(errors)[:1000] if errors else None,
+        "execution_name":   result.get("execution_name") or os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        "build":            BUILD_SHA,
+    }
+
+
+def collect_batch(bq: bigquery.Client, batch_id: str, batch_kind: str,
+                  wait_seconds: int = DIGEST_WAIT_SECONDS) -> dict:
+    """Every job's latest result in this batch, once the batch has finished.
+
+    Waits up to wait_seconds for each expected member (a job that logged under
+    this batch_kind in the last DIGEST_LOOKBACK_DAYS days) to log a row for
+    this batch_id; whoever is still missing then is listed as such. A retry
+    that found nothing to do does not count as a result."""
+    table = f"`{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`"
+    cfg = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("batch_id", "STRING", batch_id),
+        bigquery.ScalarQueryParameter("batch_kind", "STRING", batch_kind),
+        bigquery.ScalarQueryParameter("days", "INT64", DIGEST_LOOKBACK_DAYS),
+    ])
+    expected_sql = f"""
+        SELECT DISTINCT job_name FROM {table}
+        WHERE batch_kind = @batch_kind
+          AND logged_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)"""
+    runs_sql = f"""
+        SELECT * FROM {table}
+        WHERE batch_id = @batch_id
+          AND NOT (run_mode = 'retry' AND status = 'skipped')
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY job_name ORDER BY logged_at DESC) = 1
+        ORDER BY started_at, logged_at"""
+    deadline = monotonic() + wait_seconds
+    while True:
+        expected = set(BATCH_EXPECTED) or {r.job_name for r in bq.query(expected_sql, job_config=cfg).result()}
+        runs = [dict(r) for r in bq.query(runs_sql, job_config=cfg).result()]
+        missing = sorted(expected - {r["job_name"] for r in runs})
+        if not missing or monotonic() >= deadline:
+            break
+        log.info(f"Digest for {batch_id}: waiting on {len(missing)} job(s): {', '.join(missing)}")
+        sleep(DIGEST_POLL_SECONDS)
+    return {"batch_id": batch_id, "batch_kind": batch_kind, "runs": runs, "missing": missing}
+
+
+def stale_jobs(latest: List[dict], now: datetime, hours: int) -> List[dict]:
+    """Jobs whose last clean run is more than `hours` old.
+
+    latest: one dict per job seen lately — job_name, last_clean (TIMESTAMP or
+    None when it has had no clean run in the lookback)."""
+    cutoff = now - timedelta(hours=hours)
+    return sorted((r for r in latest if r.get("last_clean") is None or r["last_clean"] < cutoff),
+                  key=lambda r: r["job_name"])
+
+
+def build_drift(latest: List[dict], current: str) -> List[dict]:
+    """Jobs whose latest run came from a different image than `current`.
+
+    latest: job_name, build (None for an image older than build tracking). A
+    sender that does not know its own build ("unknown") compares nothing."""
+    if current == "unknown":
+        return []
+    return sorted((r for r in latest if (r.get("build") or "unknown") != current),
+                  key=lambda r: r["job_name"])
+
+
+def batch_health(bq: bigquery.Client) -> dict:
+    """What every digest checks besides its own batch (2026-10-22): stale jobs,
+    jobs on another image, and dispatcher runs that ended without a word.
+    Each check is independent and fails soft: a digest with a check missing
+    beats no digest."""
+    table = f"`{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`"
+    health = {"stale": [], "drift": [], "dispatch": [], "stale_after_hours": STALE_AFTER_HOURS,
+              "build": BUILD_SHA, "errors": []}
+    try:
+        rows = [dict(r) for r in bq.query(f"""
+            SELECT job_name,
+                   MAX(IF(status IN ('success', 'skipped'), logged_at, NULL)) AS last_clean,
+                   ARRAY_AGG(build ORDER BY logged_at DESC LIMIT 1)[SAFE_OFFSET(0)] AS build,
+                   MAX(logged_at) AS last_run
+            FROM {table}
+            WHERE logged_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {DIGEST_LOOKBACK_DAYS} DAY)
+              AND run_mode != 'retry'
+            GROUP BY job_name""").result()]
+        now = datetime.now(timezone.utc)
+        health["stale"] = stale_jobs(rows, now, STALE_AFTER_HOURS)
+        # Only jobs that ran today can tell which image they are on.
+        recent = [r for r in rows if r["last_run"] > now - timedelta(hours=24)]
+        health["drift"] = build_drift(recent, BUILD_SHA)
+    except Exception as exc:
+        log.exception("Digest health: job_run_log check failed.")
+        health["errors"].append(f"job_run_log check failed: {exc}")
+    if DISPATCH_ID and "." in DISPATCH_LOG_TABLE:
+        try:
+            health["dispatch"] = [dict(r) for r in bq.query(f"""
+                SELECT job_name, outcome, reason, finished_at, detail
+                FROM `{GCP_PROJECT}.{DISPATCH_LOG_TABLE}`
+                WHERE outcome IN ('succeeded-unrecorded', 'lost', 'dispatch-failed', 'held-outage')
+                  AND finished_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+                ORDER BY finished_at""").result()]
+        except Exception as exc:
+            log.exception("Digest health: dispatch log check failed.")
+            health["errors"].append(f"dispatch log check failed: {exc}")
+    return health
 
 
 def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
@@ -781,9 +1040,71 @@ def get_odbc_connection(user: str, password: str, company_code: str, access_toke
             f"CustomProperties=CompanyCode={company_code};"
         )
         log.info(f"Connecting via DSN={PLEX_DSN} (username/password auth)")
-    conn = pyodbc.connect(conn_str, timeout=30)
-    log.info("ODBC connection established.")
-    return conn
+    last_exc = None
+    for attempt in range(1, CONNECT_ATTEMPTS + 1):
+        try:
+            conn = connect_with_deadline(lambda: pyodbc.connect(conn_str, timeout=30),
+                                         CONNECT_DEADLINE_SECONDS)
+            log.info(f"ODBC connection established (attempt {attempt}).")
+            return conn
+        except Exception as exc:
+            last_exc = exc
+            if not connect_retryable(exc) or attempt == CONNECT_ATTEMPTS:
+                break
+            wait = CONNECT_BACKOFF_SECONDS * 2 ** (attempt - 1)
+            log.warning(f"ODBC connect attempt {attempt} of {CONNECT_ATTEMPTS} failed ({exc}); "
+                        f"trying again in {wait}s.")
+            sleep(wait)
+    # Callers prefix "ODBC connection failed: ", which is what the dispatcher's
+    # outage breaker looks for.
+    raise ConnectionError(f"{attempt} attempt(s); last: {last_exc}") from last_exc
+
+
+def connect_retryable(exc: Exception) -> bool:
+    """Whether another connect attempt can help. A refused login (SQLSTATE
+    28xxx) fails the same way every time; anything else — a timeout, a dropped
+    socket (08S01), a refused connection — may be gone a minute later."""
+    state = exc.args[0] if isinstance(exc, pyodbc.Error) and exc.args else ""
+    return not str(state).startswith("28")
+
+
+def connect_with_deadline(connect, deadline_seconds: int):
+    """Run connect() (which returns a connection), but give up after
+    deadline_seconds. pyodbc releases the GIL while the driver connects, so
+    the attempt runs on a daemon thread and this thread just waits on it. A
+    connect that completes after the deadline is closed rather than leaked."""
+    box: dict = {}
+    lock = threading.Lock()
+    done = threading.Event()
+
+    def attempt():
+        try:
+            conn = connect()
+        except Exception as exc:
+            with lock:
+                box["error"] = exc
+            done.set()
+            return
+        with lock:
+            late = box.get("abandoned", False)
+            if not late:
+                box["conn"] = conn
+        done.set()
+        if late:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=attempt, name="odbc-connect", daemon=True).start()
+    done.wait(deadline_seconds)
+    with lock:
+        if "conn" in box:
+            return box["conn"]
+        if "error" in box:
+            raise box["error"]
+        box["abandoned"] = True
+    raise TimeoutError(f"no answer from Plex within {deadline_seconds}s")
 
 
 # Maps a pyodbc cursor.description type_code (a Python type object -- e.g.
@@ -980,11 +1301,23 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
     )
 
     log.info(f"Writing {len(df)} rows to {table_ref}...")
-    job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-    job.result()
-
-    if job.errors:
-        raise RuntimeError(f"BigQuery load job failed: {job.errors}")
+    # ONE RETRY (2026-10-22): a load can fail on Google's side with "Failed
+    # to expand table ... matched no files" (its staged upload went missing).
+    # It hit raw_Sales_v_PO_Line when Label Design and Sales Orders loaded it
+    # in the same minute. WRITE_TRUNCATE makes a second try safe; a real
+    # schema error just fails twice.
+    for attempt in (1, 2):
+        try:
+            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
+            job.result()
+            if job.errors:
+                raise RuntimeError(f"BigQuery load job failed: {job.errors}")
+            break
+        except Exception as e:
+            if attempt == 2:
+                raise
+            log.warning(f"BigQuery load of {table_name} failed ({e}) — retrying once in 30s.")
+            sleep(30)
 
     log.info(f"Successfully wrote {len(df)} rows to {table_ref}.")
     return len(df)
@@ -1008,7 +1341,8 @@ def write_to_csv(df: pd.DataFrame, output_dir: str, table_name: str) -> int:
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     sync_time   = datetime.now(timezone.utc)
-    log.info("=== Plex → BigQuery ETL job starting ===")
+    log.info(f"=== Plex → BigQuery ETL job starting (build {BUILD_SHA}, mode {RUN_MODE}"
+             f"{', role ' + EMAIL_ROLE if EMAIL_ROLE else ''}) ===")
     events         = []
     partial_errors = []   # extraction-level failures (not fatal, but flagged in email)
     rows_fetched   = 0
@@ -1542,24 +1876,29 @@ def run_and_report():
     }
 
     job_identity = run_identity()
+    batch = run_batch()
 
     try:
         result = main()
         if result.get("skipped"):
             probe_skip = result.get("skip_reason") == "probe"
             log.info(f"Run skipped ({'probe unchanged' if probe_skip else 'retry no-op'}) for {job_identity}.")
+            end_time = datetime.now(timezone.utc)
             if OUTPUT_MODE == "bigquery":
                 try:
-                    log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE)
+                    log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE,
+                                details=run_details(result, [], start_time, end_time, batch))
                 except Exception:
                     log.exception("Failed to log skipped run status.")
             record_dispatch_outcome("skipped")
             # A probe that found nothing still says so — with its own short
             # template and the SAME subject as a full run, so each pipeline's
-            # day stays one Gmail thread. A retry no-op stays silent, as before.
+            # day stays one Gmail thread — when email_plan() wants it: outside
+            # a batch, or as the batch's first run. A retry no-op stays silent.
             # EMAIL_MODE=on_error (label_design, hourly) keeps clean runs silent.
-            if probe_skip and OUTPUT_MODE == "bigquery" and EMAIL_MODE != "on_error":
-                end_time = datetime.now(timezone.utc)
+            own_email, digest = (email_plan("no_changes", EMAIL_ROLE, RUN_MODE, EMAIL_MODE)
+                                 if probe_skip else (False, False))
+            if own_email and OUTPUT_MODE == "bigquery":
                 try:
                     send_report({
                         **_report_identity(result),
@@ -1572,11 +1911,15 @@ def run_and_report():
                         "events":           result.get("events", []),
                         "errors":           [],
                         "run_mode":         RUN_MODE,
+                        "email_role":       EMAIL_ROLE,
+                        "batch_kind":       batch[1],
                         "probe":            result.get("probe", {}),
                         "extractions":      [],
                     })
                 except Exception:
                     log.exception("Failed to send probe no-change email.")
+            if digest and OUTPUT_MODE == "bigquery":
+                send_batch_digest(batch)
             return result
         partial_errors = result.get("partial_errors", [])
         if partial_errors:
@@ -1593,10 +1936,17 @@ def run_and_report():
         # main() raised, so `result` is still the defaults above. Use whatever
         # identity main() recorded before it failed (see _RUN_CONTEXT).
         result = {**result, **_RUN_CONTEXT}
+        if EMAIL_ROLE == "outage-alert":
+            # The one email of a Plex outage (see email_plan).
+            result["events"] = list(result.get("events") or []) + [
+                "PLEX OUTAGE: the dispatcher has held every scheduled run since Plex stopped "
+                "accepting connections. A canary job tries again every few minutes, quietly; "
+                "when one connects, each held job re-runs and a digest reports the recovery."]
 
     if OUTPUT_MODE == "bigquery":
         try:
-            log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE)
+            log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE,
+                        details=run_details(result, errors, start_time, datetime.now(timezone.utc), batch))
         except Exception:
             log.exception("Failed to log job run status.")
 
@@ -1634,22 +1984,46 @@ def run_and_report():
         "events":           result.get("events", []),
         "errors":           errors,
         "run_mode":         RUN_MODE,
+        "email_role":       EMAIL_ROLE,
+        "batch_kind":       batch[1],
         "probe":            result.get("probe", {}),
         "extractions":      result.get("extractions", []),
     }
 
+    # A failed attempt that Cloud Run retries has already mailed its failure;
+    # the retry mails only if it succeeds.
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))
-    email_wanted = EMAIL_MODE != "on_error" or status != "success"
-    if OUTPUT_MODE == "bigquery" and email_wanted and (status == "success" or task_attempt == 0):
+    own_email, digest = email_plan(status, EMAIL_ROLE, RUN_MODE, EMAIL_MODE)
+    if OUTPUT_MODE == "bigquery" and own_email and (status == "success" or task_attempt == 0):
         try:
             send_report(report)
         except Exception:
             log.exception("Failed to send report email.")
+    if OUTPUT_MODE == "bigquery" and digest:
+        send_batch_digest(batch)
 
     if error is not None:
         raise error
 
     return report
+
+
+def send_batch_digest(batch: tuple):
+    """The last job's digest of its whole batch. Never raises: the run's own
+    result is already logged, and a lost digest must not fail the run."""
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        digest = collect_batch(bq, *batch)
+        send_digest({
+            **digest,
+            "health":         batch_health(bq),
+            "gcp_project":    GCP_PROJECT,
+            "bq_dataset":     BQ_DATASET,
+            "time_zone":      REPORT_TIME_ZONE,
+            "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        })
+    except Exception:
+        log.exception(f"Failed to send the digest for batch {batch[0]}.")
 
 
 if __name__ == "__main__":

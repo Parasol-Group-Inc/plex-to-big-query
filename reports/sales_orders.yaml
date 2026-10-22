@@ -98,7 +98,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Line
     filter: ""
     date_col: ""
-    probe: [Shipper_Line_Key]
+    probe: [Shipper_Line_Key, sum:Quantity, sum:Price]
 
   # Shipper_Status_Key → status text + a literal `Shipped` boolean, the key
   # to distinguishing "actually shipped" from "ready/pending in shipping."
@@ -114,7 +114,7 @@ extractions:
     bq_table: raw_Sales_v_Shipper_Container
     filter: ""
     date_col: ""
-    probe: [Shipper_Container_Key]
+    probe: [Shipper_Container_Key, Loaded_Date]
 
   # Shipper_Line → AR invoice link + invoice date — candidate source for
   # "sorted by invoice date."
@@ -139,7 +139,7 @@ extractions:
     bq_table: raw_Sales_v_Release_Allocation
     filter: ""
     date_col: ""
-    probe: [Add_Date, Release_Allocation_Key]
+    probe: [Add_Date, Release_Allocation_Key, sum:Quantity_Allocated, sum:Quantity_Needed]
 
   # Customer master — Customer_No → customer name and info
   # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
@@ -166,7 +166,7 @@ extractions:
     bq_table: raw_Part_v_Customer_Part_Price
     filter: ""
     date_col: ""
-    probe: [Customer_Part_Price_Key]
+    probe: [Customer_Part_Price_Key, Price_Updated_Date]
 
   # Part master — Part_Key → part number, name, product classification
   - plex_view: Part_v_Part

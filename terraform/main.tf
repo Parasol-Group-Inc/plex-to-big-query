@@ -44,6 +44,36 @@ output "deployed_from" {
   value       = data.external.deploy_guard.result
 }
 
+# ── ETL image ────────────────────────────────────────────────────────────────
+# A job Terraform CREATES (new pipeline, or a rename, which is a destroy and
+# recreate) starts on local.etl_image. Existing jobs ignore it: Cloud Build
+# moves their image. It used to be var.image_url, which nothing kept current
+# (several deploys stale on 2026-09-04 and again on 2026-10-22), so a rename
+# would have rolled that job back. It now reads the image a live reference
+# job runs, which Cloud Build's deploy-all keeps on the newest build;
+# var.image_url is only the fallback for a project with no jobs yet
+# (image_reference_job = "").
+data "google_cloud_run_v2_job" "image_reference" {
+  count    = var.image_reference_job == "" ? 0 : 1
+  name     = var.image_reference_job
+  location = var.gcp_region
+}
+
+locals {
+  etl_image = (var.image_reference_job == "" ? var.image_url
+  : data.google_cloud_run_v2_job.image_reference[0].template[0].template[0].containers[0].image)
+}
+
+output "etl_image" {
+  description = "The image any job created by this apply starts on."
+  value       = local.etl_image
+
+  precondition {
+    condition     = can(regex("/plex-pipeline/etl[:@]", local.etl_image)) && !endswith(local.etl_image, ":latest")
+    error_message = "The ETL image must be a pinned build from the plex-pipeline/etl repository, not :latest."
+  }
+}
+
 data "google_project" "current" {
   project_id = var.gcp_project
 }
@@ -266,7 +296,7 @@ resource "google_cloud_run_v2_job" "etl" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -382,7 +412,8 @@ resource "google_cloud_run_v2_job" "etl" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -449,7 +480,7 @@ resource "google_cloud_run_v2_job" "etl_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -552,6 +583,14 @@ resource "google_cloud_run_v2_job" "etl_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "first"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -561,7 +600,8 @@ resource "google_cloud_run_v2_job" "etl_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -650,7 +690,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -758,7 +798,8 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -782,7 +823,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -879,6 +920,10 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -888,7 +933,8 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -989,7 +1035,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1097,7 +1143,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1121,7 +1168,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1218,6 +1265,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1227,7 +1278,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1316,7 +1368,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1424,7 +1476,8 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1448,7 +1501,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1545,6 +1598,10 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1554,7 +1611,8 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1643,7 +1701,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1751,7 +1809,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1775,7 +1834,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1872,6 +1931,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1881,7 +1944,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1981,7 +2045,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2089,7 +2153,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2111,7 +2176,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2208,6 +2273,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -2217,7 +2286,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2464,7 +2534,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2572,7 +2642,8 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2596,7 +2667,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2693,6 +2764,10 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -2702,7 +2777,8 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2802,7 +2878,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2910,7 +2986,8 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2934,7 +3011,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3031,6 +3108,10 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3040,7 +3121,8 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3221,7 +3303,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3329,7 +3411,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3353,7 +3436,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3450,6 +3533,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3459,7 +3546,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3557,7 +3645,7 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3681,7 +3769,7 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3777,6 +3865,10 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -3875,7 +3967,7 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3999,7 +4091,7 @@ resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4095,6 +4187,10 @@ resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -4198,7 +4294,7 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4322,7 +4418,7 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4418,6 +4514,10 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -4744,7 +4844,7 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4904,7 +5004,7 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5084,7 +5184,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         args  = ["python", "-m", "label_design_service.push"]
         env {
           name  = "GCP_PROJECT"
@@ -5166,7 +5266,7 @@ resource "google_cloud_run_v2_job" "label_design_push" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         args  = ["python", "-m", "label_design_service.push"]
         env {
           name  = "GCP_PROJECT"
@@ -5328,7 +5428,7 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5452,7 +5552,7 @@ resource "google_cloud_run_v2_job" "etl_part_routing_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5549,6 +5649,10 @@ resource "google_cloud_run_v2_job" "etl_part_routing_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
@@ -5576,6 +5680,321 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
   http_target {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_routing_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Part Lot — added 2026-10-21 (Jennilyn). Two views from 22 raw tables:
+# part_lot_attribute_specs_report (the Part Lot Attributes screen for every
+# active part) and part_lot_inheritance_report (the Lot Management box).
+# Four tables are 250k-325k rows and are pulled in keyset pages (page_key),
+# hence the 1800s timeout instead of part_routing's 900s.
+#
+# PROD has no Cloud Scheduler job: it runs from PlexOps.etl_schedule through
+# the dispatcher (rows added by SQL after the first deploy, see
+# docs/reports/part_lot_inheritance_report.md). Test keeps its own nightly
+# scheduler, 11:20 PM, after part_routing's 11:10 PM.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "part_lot_config_prod" {
+  name         = "reports/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_config_test" {
+  name         = "test/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_attribute_specs_view_sql" {
+  name         = "sql/part_lot_attribute_specs_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_attribute_specs_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_inheritance_view_sql" {
+  name         = "sql/part_lot_inheritance_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_inheritance_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Part Lot — prod (PlexProd; run times are rows in PlexOps.etl_schedule) ──
+
+resource "google_cloud_run_v2_job" "etl_part_lot" {
+  name     = "plex-etl-part-lot"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+# ── Part Lot — test (PlexTest, 11:20 PM Mountain) ──────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_part_lot_test" {
+  name     = "plex-etl-part-lot-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "last"
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_lot_test" {
+  name        = "plex-part-lot-sync-test"
+  description = "Triggers Plex to BigQuery Part Lot ETL job (test)"
+  schedule    = "20 23 * * *" # 11:20 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_lot_test.name}:run"
     body        = base64encode("{}")
 
     oauth_token {

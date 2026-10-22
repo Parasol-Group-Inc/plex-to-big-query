@@ -25,6 +25,17 @@
 -- UNCONFIRMED AGAINST REAL DATA — same caveat as the other 3 Daily Reports
 -- (see encap_daily_report_view.sql).
 --
+-- BOTTLING 9-PARTS ARE NOT PRODUCTION (Jennilyn, 2026-10-22): when Bottling
+-- completes a job for a part starting with 9 (the finished-good version),
+-- the same output was already counted on the job for its 5 part (the
+-- bottled-bulk version). Counting both is double credit, so Bottling
+-- records for 9-parts are dropped, good and scrap alike. Bottling only:
+-- Labeling's output is all 9-parts and stays counted. Matched on the
+-- part the production record itself names (Part_v_Production.Part_Key),
+-- not the job's, so a record with no job is still judged.
+-- BULK CASES STAY COUNTED (Jennilyn, 2026-10-22): 9xxxx-BK parts ("BULK
+-- CASE", e.g. 93336-BKVOXNU-1) have no 5-part job, so they are exempt.
+--
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per workcenter per production date.
@@ -35,6 +46,7 @@ WITH prod AS (
     p.Rejected,
     p.Job_Op_Key,
     p.Workcenter_Key,
+    p.Part_Key,
     p.Record_By,
     p.Report_Shift,
     COALESCE(
@@ -84,7 +96,13 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
 LEFT JOIN `{gcp_project}.{dataset}.raw_Personnel_v_Employee` emp
   ON SAFE_CAST(prod.Record_By AS INT64) = emp.Plexus_User_No
 
+-- The part the production record names, for the 9-part rule above.
+LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` prod_part
+  ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(prod_part.Part_Key AS INT64)
+
 WHERE wc.Workcenter_Group = 'Bottling'
+  AND (NOT STARTS_WITH(COALESCE(TRIM(prod_part.Part_No), ''), '9')
+       OR REGEXP_CONTAINS(COALESCE(TRIM(prod_part.Part_No), ''), r'^9[0-9]{4}-BK'))
 
 GROUP BY prod.production_date, workcenter, workcenter_group
 ORDER BY prod.production_date DESC, workcenter

@@ -64,6 +64,7 @@ extractions:
     bq_table: raw_Quality_v_Checksheet
     filter: ""
     date_col: ""
+    probe: [Checksheet_No, Inspection_Date]
 
   - plex_view: Quality_v_Checksheet_Status
     bq_table: raw_Quality_v_Checksheet_Status
@@ -94,7 +95,7 @@ extractions:
     bq_table: raw_Part_v_Job_Distribution
     filter: ""
     date_col: ""
-    probe: [Job_Distribution_Key]
+    probe: [Job_Distribution_Key, sum:Quantity]
 
   # Added 2026-08-21 for the 4 Daily Reports, corrected same day — see
   # reports/work_orders.yaml for the full story. Removed 2026-08-23: this
@@ -106,7 +107,7 @@ extractions:
     bq_table: raw_Part_v_Production
     filter: ""
     date_col: Record_Date
-    probe: [Record_Date]
+    probe: [Record_Date, sum:Quantity]
 
 # NOTE: Part_v_Part is intentionally NOT extracted here.
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:10 PM Mountain for test).

@@ -349,8 +349,9 @@ def test_auto_probe_sum_columns():
 
 
 # ── emails ─────────────────────────────────────────────────────────────────────
-def render(report):
-    """Run send_report with SendGrid replaced; return (subject, html, text)."""
+def render(report, sender="send_report"):
+    """Run send_report (or send_digest) with SendGrid replaced; return
+    (subject, html, text)."""
     captured = {}
 
     class FakeClient:
@@ -368,7 +369,7 @@ def render(report):
     original = email_utils.SendGridAPIClient
     email_utils.SendGridAPIClient = FakeClient
     try:
-        assert email_utils.send_report(report)
+        assert getattr(email_utils, sender)(report)
     finally:
         email_utils.SendGridAPIClient = original
         for k, v in saved.items():
@@ -563,6 +564,258 @@ def test_last_run_unclean_reads_latest_working_run():
         bq = FakeBQ(statuses)
         assert m.last_run_unclean(bq, "plex-etl-x") is expected, statuses
     assert "!= 'skipped'" in bq.sql, "a skipped run did no work and must not hide a failure"
+
+
+# ── batch emails: first job, digest at the end ─────────────────────────────────
+def test_email_plan_mails_only_the_ends_of_a_batch_and_every_failure():
+    plan = m.email_plan
+    for status in ("success", "no_changes"):
+        assert plan(status, "first", "probe", "always") == (True, False)
+        assert plan(status, "middle", "probe", "always") == (False, False)
+        assert plan(status, "last", "probe", "always") == (False, True)
+    for status in ("partial", "failed"):
+        assert plan(status, "middle", "scheduled", "always") == (True, False)
+        assert plan(status, "last", "full", "always") == (True, True), "the digest still goes out"
+    # Outside a batch EMAIL_MODE decides, as before.
+    assert plan("success", "", "probe", "always") == (True, False)
+    assert plan("success", "", "scheduled", "on_error") == (False, False)
+    assert plan("failed", "", "scheduled", "on_error") == (True, False)
+    # A test retry is outside the batch: the digest has gone by 9:45 PM.
+    assert plan("success", "last", "retry", "always") == (True, False)
+    assert plan("success", "followup", "probe", "always") == (True, False)
+    assert plan("success", "only", "probe", "always") == (True, False)
+
+
+def test_run_batch_names_the_night_for_test_jobs():
+    saved = m.BATCH_ID, m.BATCH_KIND, m.EMAIL_ROLE
+    try:
+        m.BATCH_ID, m.BATCH_KIND, m.EMAIL_ROLE = "probe-1300-2026-10-21", "probe-1300", "middle"
+        assert m.run_batch() == ("probe-1300-2026-10-21", "probe-1300")
+        m.BATCH_ID, m.BATCH_KIND, m.EMAIL_ROLE = "", "", "last"
+        batch_id, kind = m.run_batch()
+        assert kind == "nightly" and batch_id.startswith("nightly-20"), batch_id
+        m.EMAIL_ROLE = ""
+        assert m.run_batch() == ("", "")
+    finally:
+        m.BATCH_ID, m.BATCH_KIND, m.EMAIL_ROLE = saved
+
+
+def test_run_details_fill_the_audit_columns():
+    from datetime import datetime, timedelta, timezone
+    start = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
+    result = {"report_name": "sales_orders", "rows_fetched": 10, "rows_written": 9,
+              "extractions": [{"table": "a", "rows": 9, "ok": True}, {"table": "b", "rows": None, "ok": False}],
+              "probe": {"changed": ["raw_a"], "sources_checked": 27}}
+    d = m.run_details(result, ["b: timeout"], start, start + timedelta(seconds=75), ("probe-1300-x", "probe-1300"))
+    assert d["batch_id"] == "probe-1300-x" and d["duration_seconds"] == 75
+    assert d["tables_total"] == 2 and d["tables_failed"] == 1 and d["tables_changed"] == "raw_a"
+    assert d["detail"] == "b: timeout"
+    skipped = m.run_details({"probe": {"sources_checked": 27}}, [], start, start, ("", ""))
+    assert skipped["tables_total"] == 27 and skipped["tables_failed"] == 0 and skipped["detail"] is None
+    names = {f.name for f in m.JOB_RUN_DETAIL_FIELDS}
+    assert set(d) <= names, set(d) - names
+
+
+def test_collect_batch_lists_who_has_not_reported():
+    class FakeBQ:
+        def query(self, sql, job_config=None):
+            if "DISTINCT job_name" in sql:
+                rows = [type("R", (), {"job_name": j})() for j in ("plex-etl-a", "plex-etl-b", "plex-etl-c")]
+            else:
+                rows = [{"job_name": "plex-etl-a", "status": "success"}, {"job_name": "plex-etl-c", "status": "skipped"}]
+            return type("Job", (), {"result": lambda _self: rows})()
+
+    digest = m.collect_batch(FakeBQ(), "nightly-2026-10-21", "nightly", wait_seconds=0)
+    assert [r["job_name"] for r in digest["runs"]] == ["plex-etl-a", "plex-etl-c"]
+    assert digest["missing"] == ["plex-etl-b"]
+
+
+def test_batch_label():
+    assert email_utils.batch_label("probe-1300") == "1 PM probe"
+    assert email_utils.batch_label("probe-2300") == "11 PM probe"
+    assert email_utils.batch_label("full-0400") == "4 AM full run"
+    assert email_utils.batch_label("nightly") == "nightly test run"
+
+
+def test_first_job_email_says_the_rest_report_in_the_digest():
+    _, body, text = render({**BASE_REPORT, "status": "success", "rows_fetched": 5, "rows_written": 5,
+                            "run_mode": "probe", "email_role": "first", "batch_kind": "probe-1300",
+                            "events": [], "errors": [], "extractions": []})
+    assert "first job of the 1 PM probe" in body and "digest" in text
+    _, alone, _ = render({**BASE_REPORT, "status": "success", "run_mode": "probe",
+                          "events": [], "errors": [], "extractions": []})
+    assert "digest" not in alone
+
+
+def test_digest_email():
+    from datetime import datetime, timezone
+    runs = [
+        {"job_name": "plex-etl-sales-orders-test", "status": "success", "run_mode": "scheduled",
+         "started_at": datetime(2026, 10, 22, 1, 10, tzinfo=timezone.utc), "duration_seconds": 300,
+         "rows_written": 12345, "tables_total": 24, "tables_failed": 0, "tables_changed": None, "detail": None},
+        {"job_name": "plex-etl-work-orders-test", "status": "skipped", "run_mode": "scheduled",
+         "started_at": datetime(2026, 10, 22, 1, 30, tzinfo=timezone.utc), "duration_seconds": 20,
+         "rows_written": 0, "tables_total": 9, "tables_failed": 0, "tables_changed": None, "detail": None},
+        {"job_name": "plex-etl-part-lot-test", "status": "failed", "run_mode": "scheduled",
+         "started_at": datetime(2026, 10, 22, 5, 20, tzinfo=timezone.utc), "duration_seconds": 40,
+         "rows_written": 0, "tables_total": 3, "tables_failed": 3, "tables_changed": None,
+         "detail": "ODBC <timeout>"},
+    ]
+    subject, body, text = render({"batch_id": "nightly-2026-10-21", "batch_kind": "nightly", "runs": runs,
+                                  "missing": ["plex-etl-sales-quotes-test"], "gcp_project": "voxdatalake",
+                                  "bq_dataset": "PlexTest", "time_zone": "America/Denver",
+                                  "execution_name": "plex-etl-part-lot-test-xyz"}, sender="send_digest")
+    assert subject == "[Plex ETL] - Digest — 2026-10-21", subject
+    assert "Nightly test run" in body and "TEST" in body
+    assert "Sales Orders" in body and "Part Lot" in body and "Sales Quotes" in body
+    assert "19:10" in body, "start times are local"
+    assert "12,345" in body and "NO RESULT YET" in body and "FAILED" in body
+    assert "ODBC &lt;timeout&gt;" in body, "error detail is escaped"
+    assert "1 job(s) need a look" in body
+    assert "{{" not in body
+    assert "Part Lot: FAILED" in text
+    assert "Health checks" not in body, "no health section when there is nothing to say"
+    save("digest", body)
+
+
+# ── Plex outage hardening (2026-10-22) ────────────────────────────────────────
+def test_connect_deadline_gives_up_on_a_hung_driver():
+    import threading as _t
+    from time import monotonic as _now
+    release = _t.Event()
+    closed = []
+
+    class Conn:
+        def close(self):
+            closed.append(True)
+
+    def hangs():
+        release.wait(5)
+        return Conn()
+
+    started = _now()
+    try:
+        m.connect_with_deadline(hangs, 1)
+        raise AssertionError("expected a timeout")
+    except TimeoutError as exc:
+        assert "within 1s" in str(exc)
+    assert _now() - started < 3, "the deadline is wall-clock, whatever the driver does"
+    release.set()   # the connect finishes late: it is closed, not leaked
+    for _ in range(50):
+        if closed:
+            break
+        sleep_short()
+    assert closed == [True]
+    ok = Conn()
+    assert m.connect_with_deadline(lambda: ok, 5) is ok
+    try:
+        m.connect_with_deadline(lambda: (_ for _ in ()).throw(ValueError("refused")), 5)
+        raise AssertionError("expected the connect's own error")
+    except ValueError:
+        pass
+
+
+def sleep_short():
+    from time import sleep as _s
+    _s(0.05)
+
+
+def test_connect_retries_then_fails_with_the_outage_prefix():
+    import pyodbc
+    calls = []
+
+    def fake_connect(conn_str, timeout=30):
+        calls.append(conn_str)
+        raise pyodbc.Error("08S01", "Network problem, connection unexpectedly closed by peer")
+
+    saved = pyodbc.connect, m.CONNECT_ATTEMPTS, m.CONNECT_BACKOFF_SECONDS, m.sleep
+    pyodbc.connect, m.CONNECT_ATTEMPTS, m.CONNECT_BACKOFF_SECONDS = fake_connect, 3, 20
+    waits = []
+    m.sleep = waits.append
+    try:
+        try:
+            m.get_odbc_connection("u", "", "", access_token="t")
+            raise AssertionError("expected a failure")
+        except ConnectionError as exc:
+            assert str(exc).startswith("3 attempt(s); last:"), exc
+        assert len(calls) == 3 and waits == [20, 40], (len(calls), waits)
+        # A refused login is not retried: it fails the same way every time.
+        calls.clear()
+        pyodbc.connect = lambda conn_str, timeout=30: calls.append(1) or (_ for _ in ()).throw(
+            pyodbc.Error("28000", "invalid credentials"))
+        try:
+            m.get_odbc_connection("u", "", "", access_token="t")
+        except ConnectionError:
+            pass
+        assert len(calls) == 1
+    finally:
+        pyodbc.connect, m.CONNECT_ATTEMPTS, m.CONNECT_BACKOFF_SECONDS, m.sleep = saved
+
+
+def test_canary_is_quiet_and_only_the_outage_alert_mails():
+    plan = m.email_plan
+    for status in ("success", "no_changes", "failed", "partial"):
+        assert plan(status, "canary", "probe", "always") == (False, False)
+    assert plan("failed", "outage-alert", "probe", "always") == (True, False)
+    assert plan("success", "outage-alert", "probe", "always") == (False, False)
+    # Recovery runs are an ordinary batch.
+    assert plan("success", "last", "full", "always") == (False, True)
+
+
+def test_run_details_carry_the_build():
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    assert m.run_details({}, [], now, now, ("", ""))["build"] == m.BUILD_SHA
+
+
+def test_stale_and_drift_checks():
+    from datetime import datetime, timedelta, timezone
+    now = datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
+    rows = [{"job_name": "plex-etl-b", "last_clean": now - timedelta(hours=20), "build": "abc1234"},
+            {"job_name": "plex-etl-a", "last_clean": now - timedelta(hours=2), "build": "abc1234"},
+            {"job_name": "plex-etl-c", "last_clean": None, "build": None}]
+    assert [r["job_name"] for r in m.stale_jobs(rows, now, 12)] == ["plex-etl-b", "plex-etl-c"]
+    assert [r["job_name"] for r in m.build_drift(rows, "abc1234")] == ["plex-etl-c"]
+    assert [r["job_name"] for r in m.build_drift(rows, "def5678")] == ["plex-etl-a", "plex-etl-b", "plex-etl-c"]
+    assert m.build_drift(rows, "unknown") == [], "a local build has nothing to compare"
+
+
+def test_collect_batch_uses_the_dispatchers_member_list():
+    class FakeBQ:
+        def query(self, sql, job_config=None):
+            assert "DISTINCT job_name" not in sql, "BATCH_EXPECTED replaces the history lookup"
+            rows = [{"job_name": "plex-etl-a", "status": "success"}]
+            return type("Job", (), {"result": lambda _self: rows})()
+
+    saved = m.BATCH_EXPECTED
+    m.BATCH_EXPECTED = ["plex-etl-a", "plex-etl-b"]
+    try:
+        digest = m.collect_batch(FakeBQ(), "recovery-x", "recovery", wait_seconds=0)
+    finally:
+        m.BATCH_EXPECTED = saved
+    assert digest["missing"] == ["plex-etl-b"]
+
+
+def test_digest_lists_health_warnings():
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    runs = [{"job_name": "plex-etl-sales-orders", "status": "success", "run_mode": "full",
+             "started_at": now, "duration_seconds": 60, "rows_written": 10}]
+    health = {"stale_after_hours": 12, "build": "abc1234",
+              "stale": [{"job_name": "plex-etl-work-orders", "last_clean": now - timedelta(hours=30)}],
+              "drift": [{"job_name": "plex-etl-part-lot", "build": None}],
+              "dispatch": [{"job_name": "plex-etl-sales-quotes", "outcome": "succeeded-unrecorded",
+                            "reason": "schedule", "finished_at": now}],
+              "errors": []}
+    _, body, text = render({"batch_id": "recovery-abc", "batch_kind": "recovery", "runs": runs, "missing": [],
+                            "health": health, "gcp_project": "voxdatalake", "bq_dataset": "PlexProd",
+                            "time_zone": "America/Denver", "execution_name": "x"}, sender="send_digest")
+    assert "Re-run after a Plex outage" in body
+    assert "All jobs OK, 3 health warning(s)" in body
+    assert "Work Orders: no clean run in over 12 h (last 30 h ago)" in text
+    assert "Part Lot: running image from before build tracking" in text
+    assert "Sales Quotes" in text and "never wrote its outcome" in text
+    save("digest_health", body)
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-10-20",
+  "as_of": "2026-10-22",
   "sources": [
     "CLAUDE.md",
     "CHANGELOG.md",
@@ -280,6 +280,22 @@
       "schedule": "nightly 11:10 PM Mountain; no -retry scheduler"
     },
     {
+      "job": "plex-etl-part-lot",
+      "pipeline": "part_lot",
+      "env": "prod",
+      "config": "gs://voxdatalake-report-configs/reports/part_lot.yaml",
+      "trigger": "dispatcher (scheduler plex-etl-dispatcher -> etl-dispatcher function, rows in PlexOps.etl_schedule)",
+      "schedule": "13:52, 18:52, 23:52 probe plus 04:52 full, America/Denver (rows added 2026-10-21); max_retries 0"
+    },
+    {
+      "job": "plex-etl-part-lot-test",
+      "pipeline": "part_lot",
+      "env": "test",
+      "config": "gs://voxdatalake-report-configs/test/part_lot.yaml",
+      "trigger": "scheduler plex-part-lot-sync-test",
+      "schedule": "nightly 11:20 PM Mountain; no -retry scheduler"
+    },
+    {
       "job": "plex-etl-label-design",
       "pipeline": "label_design",
       "env": "prod",
@@ -317,19 +333,19 @@
       "time": "1:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "13 prod jobs, one every 4 minutes (13:00 to 13:48), rows in PlexOps.etl_schedule; a quiet probe skips the run."
+      "notes": "14 prod jobs, one every 4 minutes (13:00 to 13:52; part_lot joined 2026-10-21), rows in PlexOps.etl_schedule; a quiet probe skips the run."
     },
     {
       "time": "6:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "18:00 to 18:48. First live round (2026-10-19, after stage B was enabled 18:20): 12 ran, 1 skipped."
+      "notes": "18:00 to 18:52. First live round (2026-10-19, after stage B was enabled 18:20): 12 ran, 1 skipped."
     },
     {
       "time": "11:00 PM",
       "timezone": "America/Denver",
       "mode": "probe",
-      "notes": "23:00 to 23:48. First live round: 4 ran, 9 skipped. A slot is dispatched up to 30 minutes late, even across midnight."
+      "notes": "23:00 to 23:52. First live round: 4 ran, 9 skipped. A slot is dispatched up to 30 minutes late, even across midnight."
     },
     {
       "time": "4:00 AM",
@@ -443,6 +459,13 @@
       "mode": "scheduled: full, probe logged, never skips"
     },
     {
+      "scheduler": "plex-part-lot-sync-test",
+      "cron": "20 23 * * *",
+      "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
+      "target_job": "plex-etl-part-lot-test",
+      "mode": "scheduled: full, probe logged, never skips"
+    },
+    {
       "scheduler": "plex-label-design-sync-test",
       "cron": "5 5-17 * * 1-5",
       "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
@@ -457,7 +480,7 @@
       "mode": "push, no probe"
     },
     {
-      "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing and label_design)",
+      "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing, part_lot and label_design)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
       "target_job": "the matching -test job, POST with RUN_MODE=retry override (needs role plexEtlRunWithOverrides)",
@@ -482,8 +505,8 @@
     {
       "name": "plex-api-push-test",
       "kind": "Cloud Function Gen 2, entry point plex_api_push",
-      "trigger": "HTTP; no scheduler documented",
-      "purpose": "Reads plex_api_label_design_report and creates Monday items on board 18432111755 group API_Test; LCR hash dedupe, audit table plex_api_push_log.",
+      "trigger": "ARCHIVED 2026-10-20: never deployed; parked in deploy/plex_api_function/ARCHIVED.md",
+      "purpose": "ARCHIVED. Reads plex_api_label_design_report and creates Monday items on board 18432111755 group API_Test; LCR hash dedupe, audit table plex_api_push_log. A review found it would duplicate items on the live board and push orders that are not Pending Fulfillment.",
       "deployed_by": "gcloud functions deploy (docstring in deploy/plex_api_function/push.py). OPEN_ITEMS L13 says not deployed yet; live state not confirmed."
     },
     {
@@ -557,16 +580,17 @@
       "After a clean run write probe_log applied; a partial or failed run writes failed and the reference does not advance.",
       "record_dispatch_outcome writes the outcome onto the etl_dispatch_log row; the full email names the changed tables."
     ],
-    "change_detection": "COUNT(*) catches added or removed rows. The extraction's probe: [...] list adds MAX(change date or key) columns (71 of 82 extractions have one) and sum:Col entries for SUM, which makes edits visible on views with no change date; SUM of key columns is refused (Plex 32-bit overflow) and Plex refuses SUM on bit columns. Columns were chosen by scripts/generate_probe_columns.py. YAML (_config_sha) and every view's SQL are in the fingerprint. Floats are rounded to 4 places. The YAML key is probe_mode, not probe:, because older images crash on a string probe:.",
+    "change_detection": "COUNT(*) catches added or removed rows. The extraction's probe: [...] list adds MAX(change date or key) columns (88 of the 100 auto extractions across 13 pipelines have one, after the 2026-10-21 audit) and sum:Col entries for SUM, which makes edits visible on views with no change date; SUM of key columns is refused (Plex 32-bit overflow) and Plex refuses SUM on bit columns. Columns were chosen by scripts/generate_probe_columns.py. YAML (_config_sha) and every view's SQL are in the fingerprint. Floats are rounded to 4 places. The YAML key is probe_mode, not probe:, because older images crash on a string probe:. Label Design uses an explicit probe.queries block instead: 4 queries (Label Design release status keys, their releases, the Pending Fulfillment status key, and the orders the view would push), so an order approval alone moves the fingerprint (L14, 2026-10-20).",
     "failure_policy": "No retries: prod max_retries is 0 and the prod -retry schedulers are gone. A failed, partial or lost run gets ONE follow-up probe from the dispatcher 15 minutes later (not if older than 6 hours; never a follow-up of a follow-up; a busy follow-up is not retried; a dispatch-failed start gets none). A failed run does not advance the fingerprint, so the follow-up re-runs in full. The probe fails open: a query error, bad column, empty aggregate or unreadable probe_log runs the full extraction and logs an inconclusive row.",
     "gotchas": [
       "A quiet probe skips view creation, so a SQL-only deploy used to wait for Plex to change (OPEN_ITEMS L10). Since 2026-10-19 YAML and SQL are in the fingerprint; L10 stays open until the next SQL-only deploy proves it (the quiet run must log applied).",
       "Code and image changes are not in the fingerprint; a quiet pipeline picks them up at the next changed probe, the 4 AM full run, or a hand start.",
-      "An edit on a table with no change date and no sum: column is invisible to the probe; the 4 AM full run bounds it at one day.",
+      "An edit on a table with no change date and no sum: column is invisible to the probe; the 4 AM full run bounds it at one day. Known cases after the 2026-10-21 audit: a requisition status flip (Requisition_Status_Key is refused as key-like; needs a main.py allowlist) and a rep reassignment in Sales_v_Order_Salesperson.",
       "A permanently broken probe is invisible: query probe_log WHERE outcome='inconclusive'.",
       "Busy tables (Part_v_Production, Part_v_Container) mean Work Orders and inventory usually run in full at 1 PM and 6 PM; that is correct.",
       "A short email does not mean views were rebuilt, and job exit 0 does not mean the view exists; query it.",
-      "The first run after a fingerprint format change always runs in full."
+      "The first run after a fingerprint format change always runs in full.",
+      "A failed run used to be followed by a skip if Plex stayed quiet (Label Design, 2026-10-20 22:02 UTC). last_run_unclean (image 9d1d62b) makes the next probe run in full; not yet seen working in prod (D14 d)."
     ],
     "prod_vs_test": "Only prod uses the probe to skip work. The dispatcher starts prod jobs with RUN_MODE=probe at 1 PM, 6 PM and 11 PM, and an unchanged fingerprint skips the run; the 4 AM run is RUN_MODE=full and never skips. Test jobs are started by Cloud Scheduler with no override, so RUN_MODE is scheduled: the probe still runs and its fingerprint is logged as the reference, but probe_may_skip returns false and the job extracts everything, every night. That keeps test a full nightly rehearsal of every query. The one exception is Label Design, whose explicit probe skips on scheduled runs in both environments."
   },
@@ -600,6 +624,41 @@
     "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X"
   },
   "changelog_recent": [
+    {
+      "date": "2026-10-22",
+      "title": "Bottling 9-parts no longer count as production (scorecard)",
+      "summary": "Jennilyn: a Bottling job on a part starting with 9 is double credit for its 5 part. Dropped from production_monthly_by_workcenter_group (and so production_vs_goal), packaging_daily and weekly_production_update, BigQuery and Plex SQL alike; Labeling untouched. Bulk cases (9xxxx-BK) are exempt and still count (Jennilyn). October Bottling 126,756; 14,055 left out (Slim Complex FG, a true double credit of its 5 part)."
+    },
+    {
+      "date": "2026-10-22",
+      "title": "Plex outages: breaker, canary, recovery; hard connect deadline",
+      "summary": "After two runs fail to connect, due slots are logged held-outage, one canary probe tries every 10 min (its first failure is the only email), and once one connects each held job gets ONE recovery run. A hard ODBC connect deadline, digest health and drift alerts, and new jobs start on the image plex-etl-sales-orders runs live (local.etl_image)."
+    },
+    {
+      "date": "2026-10-21",
+      "title": "Batch emails: first job, then one digest",
+      "summary": "In each prod dispatcher batch and the nightly test cascade only the first job emails its report and the last sends one digest; a failed or partial job always emails. Roles come from EMAIL_ROLE."
+    },
+    {
+      "date": "2026-10-21",
+      "title": "Probe coverage audit",
+      "summary": "Runtime audit: no wrong skip in prod (65/65 dispatch slots ran, every skip matched the next snapshot, every 4 AM run full). Static audit: sum: and change-date probe columns added on sales_orders, work_orders, inventory_activity, quality_nonconformance and purchasing_pending_requisitions (prod and test). Unfixed gaps logged as D14."
+    },
+    {
+      "date": "2026-10-20",
+      "title": "Label Design probe watches order approval (L14)",
+      "summary": "Probe queries 3 and 4 fingerprint the Pending Fulfillment orders the view would push. Order 373 had waited 5.3 h because an approval alone did not move the fingerprint. Deployed and checked: test probe logged applied with 4 parts."
+    },
+    {
+      "date": "2026-10-20",
+      "title": "Plex clock is Mountain; ODBC lags about 50 min",
+      "summary": "GETDATE() in SQL Developer showed Plex timestamps are naive Mountain time; the hour seen earlier was prod ODBC lag. label_design_push_latency now converts with America/Denver."
+    },
+    {
+      "date": "2026-10-20",
+      "title": "label_design_push_latency view",
+      "summary": "New PlexProd/PlexTest view: time from line entry to approval (sales side) and from approval to the Monday board (our side), per pushed item, from label_design_push_log."
+    },
     {
       "date": "2026-10-20",
       "title": "Probe rollout live in prod; first rounds checked",
@@ -801,6 +860,30 @@
       "next": "Get a screenshot or export from Jennilyn."
     },
     {
+      "id": "D12",
+      "title": "Probe and dispatcher hardening: ETL image 9d1d62b live; dispatcher redeploy unconfirmed; no alerting yet",
+      "owner": "Emilio",
+      "next": "Confirm gcloud functions deploy etl-dispatcher ran; add a log alert on tick entries with severity=ERROR."
+    },
+    {
+      "id": "D14",
+      "title": "Probe audit gaps: requisition status, rep reassignment, Flat_BOM negative MAX, last_run_unclean unproven",
+      "owner": "Claude / Emilio",
+      "next": "Decide on the main.py SUM allowlist (needs an image); watch probe_log."
+    },
+    {
+      "id": "D15",
+      "title": "Part Lot reports: screen spot-checks",
+      "owner": "Emilio",
+      "next": "Check 12149-01VOXNU-1 (33 vs 34 attributes) and 93001 (14 vs 13 inherited) in prod; confirm 'active parts' = Part_Status Active with Jennilyn."
+    },
+    {
+      "id": "D16",
+      "title": "Batch emails (2026-10-21): confirm the first live batches",
+      "owner": "Emilio",
+      "next": "Check that a prod batch sends 2 emails, not 14: SELECT batch_id, COUNT(*) FROM PlexProd.job_run_log WHERE batch_id IS NOT NULL GROUP BY 1."
+    },
+    {
       "id": "S1",
       "title": "Disable the old goals Apps Script",
       "owner": "Emilio",
@@ -916,9 +999,9 @@
     },
     {
       "id": "L3",
-      "title": "Prod push live since 2026-10-19 cutover",
+      "title": "Prod push live since 2026-10-19; 38 backlog items created at 9:22 MT",
       "owner": "Emilio",
-      "next": "Confirm the first 9:35 MT push created 38 items and the Plex links open."
+      "next": "Open a pushed item's Plex link; settle the starting Design Status and a sandbox board for the paused test push."
     },
     {
       "id": "L5",
@@ -970,9 +1053,15 @@
     },
     {
       "id": "L13",
-      "title": "Plex REST API to Monday push not deployed yet",
+      "title": "Plex REST API: extractor live in test, push ARCHIVED 2026-10-20",
       "owner": "Emilio",
-      "next": "Deploy extractor and push, verify the report view and board."
+      "next": "Nothing until the API path should replace ODBC; fix ARCHIVED.md first."
+    },
+    {
+      "id": "L14",
+      "title": "Label Design probe watches order approval (deployed 2026-10-20)",
+      "owner": "Emilio",
+      "next": "Next approval reaches the board in about 2 h; probe_log shows 4 parts, no inconclusive rows."
     }
   ],
   "gotchas": [
@@ -1039,6 +1128,10 @@
     {
       "title": "Deploy the dispatcher function first",
       "detail": "etl-dispatcher is deployed with gcloud functions deploy before deploy.sh or the scheduler gets 404s."
+    },
+    {
+      "title": "Plex's clock is Mountain time; prod ODBC lags about 50 min",
+      "detail": "Plex timestamps are naive America/Denver (GETDATE() checked 2026-10-20), not UTC-7. The prod ODBC copy runs about 50 min behind live Plex, so an approval at noon is first seen by the 1 PM run and reaches the Monday board around 1:35 PM at best, about 2 h worst case."
     }
   ],
   "env_compare": [

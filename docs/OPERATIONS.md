@@ -356,9 +356,65 @@ repeatedly.
 
 ---
 
+## Batch emails: the first job, then one digest (since 2026-10-21)
+
+Jobs that run as a batch mail only at its two ends:
+
+| Batch | First job (own report) | Last job (digest) |
+|---|---|---|
+| Prod 1 PM / 6 PM / 11 PM probe, 4 AM full run (`PlexOps.etl_schedule`, one batch per mode and hour) | earliest `run_time` in the hour | latest `run_time` in the hour |
+| Test, nightly (Cloud Scheduler, 7:10 PM to 11:20 PM) | `plex-etl-sales-orders-test` | `plex-etl-part-lot-test` |
+
+- **The first job** sends its usual report, with a line saying the rest of the
+  batch reports in the digest.
+- **The jobs in between** send nothing when they succeed or find no changes.
+- **Any job that fails or ends partial** sends its own full report at once,
+  wherever it sits in the batch.
+- **The last job** sends its own report only if it failed or ended partial.
+  It then waits up to 6 minutes (`DIGEST_WAIT_SECONDS`) for every job in the
+  batch to log a result, and sends **one digest**: subject
+  `[Plex ETL] - Digest — <date>`, a row per job with result, start time,
+  duration, rows written and the error or changed tables. A job still running
+  then shows as **NO RESULT YET**.
+- **Follow-up probes, test retries (9:45 PM) and Label Design** are outside the
+  batches and mail by their own rules, as before.
+
+Who is first or last comes from `EMAIL_ROLE` (`first`/`middle`/`last`). For
+prod the dispatcher computes it on every start (`batch_for` in
+`deploy/etl_dispatcher/main.py`), so changing a time in `etl_schedule` moves
+the roles with it. For test it is a fixed env var on each test job in
+`terraform/main.tf`: **move a test cron and you must move `first`/`last` too.**
+
+**The audit trail is `job_run_log`,** which now records per run: `batch_id`,
+`batch_kind`, `email_role`, `report_name`, `started_at`, `duration_seconds`,
+rows fetched and written, tables total and failed, the changed tables, the
+error detail and the execution name. The digest is built from it.
+
+```sql
+SELECT job_name, status, run_mode, started_at, duration_seconds, rows_written, tables_changed, detail
+FROM `voxdatalake.PlexProd.job_run_log`
+WHERE batch_id = 'probe-1300-2026-10-22'
+ORDER BY started_at
+```
+
+**Health checks in the digest (since 2026-10-22).** Under the table, an amber
+box lists anything that needs a look, even when every job in the batch was OK:
+- **Stale:** a job with no `success`/`skipped` run in 12 h (30 h in test;
+  `STALE_AFTER_HOURS`).
+- **Build drift:** a job whose last run (within 24 h) logged a different
+  `build` than the digest's own. `job_run_log.build` is the image's git SHA,
+  set by Cloud Build (`GIT_SHA`); `unknown` means a build from before 10-22.
+- **Dispatcher:** `succeeded-unrecorded`, `lost`, `dispatch-failed` and
+  `held-outage` rows in the last 24 h (prod only).
+
+Known gaps: if the last job is skipped as busy or fails to start, no digest
+goes out for that batch (each failure still emailed on its own). A batch's
+member list is learned from `job_run_log` over the last 7 days, so on the first
+day after deploy the digest cannot list a job that has not reported yet.
+
 ## Email Status Levels
 
-Every run sends an email with one of three status badges:
+Every emailed run carries one of these status badges:
 
 | Badge | Color | Meaning |
 |---|---|---|
@@ -499,9 +555,47 @@ ORDER BY dispatched_at DESC;
 - **`dispatch-failed`:** Cloud Run refused the start.
 - **`succeeded-unrecorded`:** Cloud Run says it succeeded, but the job wrote
   no outcome.
+- **`held-outage`:** not started, because Plex was refusing connections (see
+  below). Its job gets one recovery run once Plex is back.
+
+**`reason` values:** `schedule`, `follow-up`, `canary`, `recovery`.
 
 **Retries.** A `failed` / `partial` / `lost` run gets one follow-up probe 15
-minutes later (`reason = 'follow-up'`). There's no other retry.
+minutes later (`reason = 'follow-up'`), unless the job has run again since.
+There's no other retry.
+
+### Plex outages: breaker, canary, recovery (since 2026-10-22)
+
+When Plex stops answering ODBC, retrying every job is useless and mails a
+failure per job. The dispatcher stops instead.
+
+1. **Opens:** the two newest finished runs that say anything about Plex both
+   failed with `ODBC connection failed` (`OUTAGE_THRESHOLD`). A failure of
+   another kind (bad SQL, a view) does not count either way.
+2. **While open:** due slots are logged `held-outage` and not started; no
+   follow-ups. One **canary** probe runs at a time, 10 minutes apart
+   (`CANARY_INTERVAL_MINUTES`), preferring the fastest jobs (`CANARY_JOBS`).
+   The first canary's failure emails once, saying Plex is down; the rest are
+   silent. The tick logs at `WARNING` with `"outage": {...}`.
+3. **Closes:** the first run that reaches Plex (a canary that succeeds).
+4. **Recovery:** each job with a `held-outage` slot in the last 24 h gets ONE
+   run (`reason = 'recovery'`, `followup_of` = the held slot), full if any
+   held slot was full, 4 per tick, as one batch with a digest. A later run of
+   the job covers it: a full run covers anything, a probe covers a probe.
+
+**Is Plex down right now?**
+```sql
+SELECT job_name, reason, outcome, dispatched_at, detail
+FROM `voxdatalake.PlexOps.etl_dispatch_log`
+WHERE reason IN ('canary', 'recovery') OR outcome = 'held-outage'
+ORDER BY dispatched_at DESC LIMIT 30;
+```
+
+**Connect deadline (the job side).** Each Plex connect gets 60 s wall-clock
+(`CONNECT_DEADLINE_SECONDS`), 3 attempts (`CONNECT_ATTEMPTS`), backoff 20 s
+then 40 s (`CONNECT_BACKOFF_SECONDS`). A login refusal (`28xxx`) fails at
+once. The error reads `ODBC connection failed: 3 attempt(s); last: ...`;
+keep that prefix, the breaker matches it.
 
 **Dry run** (from a terminal with gcloud):
 ```bash

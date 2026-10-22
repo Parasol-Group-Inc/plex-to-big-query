@@ -92,7 +92,8 @@ but see the caution below the table.
 | **Sales** | `sales_returns` | Open RMA's | `plex-etl-sales-returns` | 1:40 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-sales-returns-test` | 10:30 PM |
 | **Supply Chain** | `quality_supplier_returns` | Approve Vendor Return Authorizations | `plex-etl-quality-supplier-returns` | 1:44 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-quality-supplier-returns-test` | 10:50 PM |
 | **Production** | `part_routing` | Audit - Part Info and Routing, Audit - Part Info and Routing (Container Types), Vox Nutrition Item List with Shelf Life Details | `plex-etl-part-routing` | 1:48 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-part-routing-test` | 11:10 PM (no retry) |
-| *all except `label_design` and `part_routing`* | *retry* | — | none (removed 2026-10-19; the dispatcher sends one follow-up probe 15 min later) | — | `plex-<pipeline>-sync-test-retry` | 9:45 PM |
+| **Quality** | `part_lot` | Part Lot Attribute Specs, Part Lot Inheritance | `plex-etl-part-lot` | 1:52 PM probe (+ 6 PM, 11 PM probe, 4 AM full), once its `etl_schedule` rows are added | `plex-etl-part-lot-test` | 11:20 PM (no retry) |
+| *all except `label_design`, `part_routing` and `part_lot`* | *retry* | — | none (removed 2026-10-19; the dispatcher sends one follow-up probe 15 min later) | — | `plex-<pipeline>-sync-test-retry` | 9:45 PM |
 
 Prod/test pairs are staggered 10 minutes apart. `scorecard_goals_resolved` is
 built by both `sales_orders` and `work_orders`, which is why the per-pipeline

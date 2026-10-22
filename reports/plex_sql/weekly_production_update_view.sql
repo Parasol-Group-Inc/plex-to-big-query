@@ -47,7 +47,9 @@ by_department AS (
     ON pd.Part_Key = pp.Part_Key
   WHERE wc.Workcenter_Group IN ('Encapsulating', 'Bottling', 'Labeling', 'Printing')
   -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
-    AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%')
+  -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+    AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%'
+           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%')
 ),
 
 -- Fixed department list so every department shows even with no production.

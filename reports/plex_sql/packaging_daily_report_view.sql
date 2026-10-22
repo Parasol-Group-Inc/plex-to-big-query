@@ -50,7 +50,9 @@ detail AS (
     ON pd.Part_Key = pp.Part_Key
   WHERE wc.Workcenter_Group = 'Bottling'
   -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
-    AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9%'
+  -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+    AND (LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9%'
+         OR LTRIM(ISNULL(pp.Part_No, '')) LIKE '9[0-9][0-9][0-9][0-9]-BK%')
 ),
 
 -- DISTINCT string lists (SQL Server has no STRING_AGG(DISTINCT ...)).

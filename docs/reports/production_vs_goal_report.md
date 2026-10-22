@@ -21,7 +21,7 @@ This is the only one of the three goal views on the Work Orders pipeline; the ot
 
 ## Flags and open questions
 
-- **Bottling actuals leave out 9-parts (since 2026-10-22).** Inherited from [`production_monthly_by_workcenter_group_report`](production_monthly_by_workcenter_group_report.md): a Bottling job for a part starting with 9 is double credit for its 5 part, so it isn't counted (Jennilyn). Bottling only. October 2026: 14,210 units left out (Slim Complex FG 14,055, Omega 3 bulk case 155).
+- **Bottling actuals leave out 9-parts (since 2026-10-22).** Inherited from [`production_monthly_by_workcenter_group_report`](production_monthly_by_workcenter_group_report.md): a Bottling job for a part starting with 9 is double credit for its 5 part, so it isn't counted (Jennilyn). Bottling only. Bulk cases (`9xxxx-BK…`) are exempt and still count. October 2026: 14,055 units left out (Slim Complex FG).
 - **⚠ The Plex group name is not the tile name.** Plex uses **`Encapsulating`**, the scorecard tile says "Encapsulation". A goal must use the Plex spelling or it silently won't match — the app's area dropdown reads its names from the production report for exactly this reason. `goal_without_production` flags exactly this.
 - **Confirmed live 2026-09-04:** only `Bottling` and `Pre-Weigh` have logged production so far, so the full list of group names isn't visible from the data yet.
 - **Full outer join** — a group with a target and no output yet shows at 0%, which is the point of the tile early in a month.

@@ -46,6 +46,8 @@
 -- Labeling's output is all 9-parts and stays counted. Matched on the
 -- part the production record itself names (Part_v_Production.Part_Key),
 -- not the job's, so a record with no job is still judged.
+-- BULK CASES STAY COUNTED (Jennilyn, 2026-10-22): 9xxxx-BK parts ("BULK
+-- CASE", e.g. 93336-BKVOXNU-1) have no 5-part job, so they are exempt.
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per department.
@@ -106,7 +108,8 @@ by_department AS (
 
   WHERE wc.Workcenter_Group IN ('Encapsulating', 'Bottling', 'Labeling', 'Printing')
     AND NOT (wc.Workcenter_Group = 'Bottling'
-             AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9'))
+             AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9')
+             AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
 ),
 
 -- Fixed department roster so a department with zero production in the

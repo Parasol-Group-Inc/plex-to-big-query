@@ -49,6 +49,8 @@
 -- Labeling's output is all 9-parts and stays counted. Matched on the
 -- part the production record itself names (Part_v_Production.Part_Key),
 -- not the job's, so a record with no job is still judged.
+-- BULK CASES STAY COUNTED (Jennilyn, 2026-10-22): 9xxxx-BK parts ("BULK
+-- CASE", e.g. 93336-BKVOXNU-1) have no 5-part job, so they are exempt.
 --
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml, same raw
 -- tables the 4 daily reports already use.
@@ -108,7 +110,8 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
 WHERE prod.production_date IS NOT NULL
   AND wc.Workcenter_Group IS NOT NULL
   AND NOT (wc.Workcenter_Group = 'Bottling'
-           AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9'))
+           AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9')
+           AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
 
 GROUP BY production_month, workcenter_group
 ORDER BY production_month DESC, workcenter_group

@@ -14,6 +14,20 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (scorecard) - Bottling 9-parts no longer count as production
+
+### Changed
+- **Bottling production on a part starting with 9 is left out of production
+  totals** (Jennilyn: the job for the 5 part is what counts; the 9 version of
+  the same part is double credit). Bottling only: Labeling's output is all
+  9-parts and still counts. Matched on the production record's own
+  `Part_Key`, good and scrap alike.
+  - Views: `production_monthly_by_workcenter_group_report` (and through it
+    `production_vs_goal_report`), `packaging_daily_report`,
+    `weekly_production_update_report`. SQL only, no new extraction:
+    `raw_Part_v_Part` is already in the dataset (sales_orders pipeline).
+  - Prod on 2026-10-22: Bottling 112,120 → 111,965 (one part,
+    `93336-BKVOXNU-1`, bulk case, 155 units). No other group moved.
 ## 2026-10-22 - Plex outages: breaker, canary, recovery; hard connect deadline
 
 A Plex prod ODBC outage (21 Oct, 11 PM to 4:30 AM, `08S01`) failed every

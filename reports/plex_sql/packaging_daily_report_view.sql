@@ -14,6 +14,7 @@ WITH prod_rows AS (
     pr.Rejected,
     pr.Job_Op_Key,
     pr.Workcenter_Key,
+    pr.Part_Key,
     pr.Record_By,
     pr.Report_Shift,
     CAST(pr.Record_Date AS date) AS production_date
@@ -44,7 +45,12 @@ detail AS (
     ON j.Part_Key = part.Part_Key
   LEFT JOIN Personnel_v_Employee AS emp
     ON pd.Record_By = emp.Plexus_User_No
+  -- The part the production record names, for the 9-part rule.
+  LEFT JOIN Part_v_Part AS pp
+    ON pd.Part_Key = pp.Part_Key
   WHERE wc.Workcenter_Group = 'Bottling'
+  -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
+    AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9%'
 ),
 
 -- DISTINCT string lists (SQL Server has no STRING_AGG(DISTINCT ...)).

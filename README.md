@@ -125,6 +125,7 @@ graph LR
 | Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
 | Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
+| Find any report, raw table or pipeline, with its SQL and Plex SQL | [Plex Data Hub](https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt) (built from `docs/hub/`, see its README) |
 | Look up a Plex field | [docs/PLEX_GLOSSARY.md](docs/PLEX_GLOSSARY.md), [catalog/plex_catalog_index.md](catalog/plex_catalog_index.md) |
 | Understand the scorecard, tile by tile | [Scorecard Field Manual](https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a) |
 | Recover from a lost project, or tear down | [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md), [docs/TEARDOWN.md](docs/TEARDOWN.md) |

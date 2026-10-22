@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (scorecard) - Bottling 9-part rule: verified live, Plex SQL equivalents
+
+### Changed
+- **Plex SQL Developer equivalents** (`reports/plex_sql/`) now apply the
+  Bottling 9-part rule too: `production_monthly_by_workcenter_group_view`,
+  `production_vs_goal_view`, `packaging_daily_report_view`,
+  `weekly_production_update_view`. Matched on `Part_v_Production.Part_Key`,
+  as in BigQuery.
+
+### Verified
+- Live in prod after PR #55's deploy and full run: October Bottling reads
+  **126,601**, which equals all Bottling output on non-9 parts; **14,210** is
+  left out. That is Slim Complex FG `93323-10REDRO-0` (14,055, recorded
+  10-22), a true double credit of its 5 part `53323-10REDRO-0` (14,055,
+  10-19 to 10-20), and Omega 3 bulk case `93336-BKVOXNU-1` (155), which has
+  no 5-part job. Whether bulk cases stay dropped is open with Jennilyn
+  (`docs/OPEN_ITEMS.md` S18).
+
 ## 2026-10-22 (scorecard) - Bottling 9-parts no longer count as production
 
 ### Changed

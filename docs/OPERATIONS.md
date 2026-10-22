@@ -356,9 +356,55 @@ repeatedly.
 
 ---
 
+## Batch emails: the first job, then one digest (since 2026-10-21)
+
+Jobs that run as a batch mail only at its two ends:
+
+| Batch | First job (own report) | Last job (digest) |
+|---|---|---|
+| Prod 1 PM / 6 PM / 11 PM probe, 4 AM full run (`PlexOps.etl_schedule`, one batch per mode and hour) | earliest `run_time` in the hour | latest `run_time` in the hour |
+| Test, nightly (Cloud Scheduler, 7:10 PM to 11:20 PM) | `plex-etl-sales-orders-test` | `plex-etl-part-lot-test` |
+
+- **The first job** sends its usual report, with a line saying the rest of the
+  batch reports in the digest.
+- **The jobs in between** send nothing when they succeed or find no changes.
+- **Any job that fails or ends partial** sends its own full report at once,
+  wherever it sits in the batch.
+- **The last job** sends its own report only if it failed or ended partial.
+  It then waits up to 6 minutes (`DIGEST_WAIT_SECONDS`) for every job in the
+  batch to log a result, and sends **one digest**: subject
+  `[Plex ETL] - Digest — <date>`, a row per job with result, start time,
+  duration, rows written and the error or changed tables. A job still running
+  then shows as **NO RESULT YET**.
+- **Follow-up probes, test retries (9:45 PM) and Label Design** are outside the
+  batches and mail by their own rules, as before.
+
+Who is first or last comes from `EMAIL_ROLE` (`first`/`middle`/`last`). For
+prod the dispatcher computes it on every start (`batch_for` in
+`deploy/etl_dispatcher/main.py`), so changing a time in `etl_schedule` moves
+the roles with it. For test it is a fixed env var on each test job in
+`terraform/main.tf`: **move a test cron and you must move `first`/`last` too.**
+
+**The audit trail is `job_run_log`,** which now records per run: `batch_id`,
+`batch_kind`, `email_role`, `report_name`, `started_at`, `duration_seconds`,
+rows fetched and written, tables total and failed, the changed tables, the
+error detail and the execution name. The digest is built from it.
+
+```sql
+SELECT job_name, status, run_mode, started_at, duration_seconds, rows_written, tables_changed, detail
+FROM `voxdatalake.PlexProd.job_run_log`
+WHERE batch_id = 'probe-1300-2026-10-22'
+ORDER BY started_at
+```
+
+Known gaps: if the last job is skipped as busy or fails to start, no digest
+goes out for that batch (each failure still emailed on its own). A batch's
+member list is learned from `job_run_log` over the last 7 days, so on the first
+day after deploy the digest cannot list a job that has not reported yet.
+
 ## Email Status Levels
 
-Every run sends an email with one of three status badges:
+Every emailed run carries one of these status badges:
 
 | Badge | Color | Meaning |
 |---|---|---|

@@ -24,7 +24,9 @@ on each call it
 The job learns how it was started from two env overrides on the run request:
 RUN_MODE (probe | full) and DISPATCH_ID, plus DISPATCH_LOG_TABLE so it can find
 this dataset (the jobs' own BQ_DATASET is PlexProd or PlexTest; the dispatcher's
-tables live in OPS_DATASET). Sending overrides needs run.jobs.runWithOverrides,
+tables live in OPS_DATASET). Since 2026-10-21 it also sends EMAIL_ROLE,
+BATCH_ID and BATCH_KIND (batch_for), so only the first and last job of each
+hour's batch email, the last one a digest of all of them. Sending overrides needs run.jobs.runWithOverrides,
 which the ETL service account holds via the plexEtlRunWithOverrides role
 (OPEN_ITEMS D2).
 
@@ -139,7 +141,8 @@ def due_slots(schedule, now_utc, logged_slots, busy_jobs, window_minutes=WINDOW_
                 continue
             planned.add(key)
             action = "skipped-busy" if job in busy_jobs else "dispatch"
-            out.append({"job_name": job, "mode": mode, "scheduled_for": slot, "action": action})
+            out.append({"job_name": job, "mode": mode, "scheduled_for": slot, "action": action,
+                        "run_time": row.get("run_time")})
             busy_jobs = busy_jobs | {job} if action == "dispatch" else busy_jobs
     return out
 
@@ -197,13 +200,51 @@ def _ts(value):
     return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
-def run_body(mode, dispatch_id):
-    """The jobs.run request body: env overrides on the job's only container."""
-    return {"overrides": {"containerOverrides": [{"env": [
+def batch_for(schedule, job_name, mode, scheduled_for):
+    """Which batch a scheduled run belongs to, and its place in it (2026-10-21).
+
+    A batch is every enabled row with the same mode whose run_time falls in the
+    same hour: the 1 PM probes, the 4 AM full run. Ordered by run_time, the
+    first job emails its own report, the last one sends the digest of the whole
+    batch, and the rest stay silent unless they fail (main.py email_plan).
+    Returns {"role": first|middle|last|only, "batch_id", "batch_kind"}, or None
+    when the row is not in the schedule (e.g. disabled since)."""
+    local = scheduled_for.astimezone(TZ)
+    group = []
+    for row in schedule:
+        if not row.get("enabled") or row.get("mode") != mode or not row.get("job_name"):
+            continue
+        try:
+            h, m = parse_run_time(row.get("run_time"))
+        except (ValueError, TypeError):
+            continue
+        if h == local.hour:
+            group.append(((h, m), row["job_name"]))
+    names = [name for _, name in sorted(group)]
+    if job_name not in names:
+        return None
+    i = names.index(job_name)
+    role = "only" if len(names) == 1 else "first" if i == 0 else "last" if i == len(names) - 1 else "middle"
+    kind = f"{mode}-{local.hour:02d}00"
+    return {"role": role, "batch_id": f"{kind}-{local.date().isoformat()}", "batch_kind": kind}
+
+
+def run_body(mode, dispatch_id, batch=None):
+    """The jobs.run request body: env overrides on the job's only container.
+    batch (from batch_for, role possibly replaced) adds EMAIL_ROLE, BATCH_ID
+    and BATCH_KIND; without it the job keeps its own email rules."""
+    env = [
         {"name": "RUN_MODE", "value": mode},
         {"name": "DISPATCH_ID", "value": dispatch_id},
         {"name": "DISPATCH_LOG_TABLE", "value": f"{OPS_DATASET}.{LOG_TABLE}"},
-    ]}]}}
+    ]
+    if batch:
+        env += [
+            {"name": "EMAIL_ROLE", "value": batch["role"]},
+            {"name": "BATCH_ID", "value": batch["batch_id"]},
+            {"name": "BATCH_KIND", "value": batch["batch_kind"]},
+        ]
+    return {"overrides": {"containerOverrides": [{"env": env}]}}
 
 
 # ── IO: BigQuery and Cloud Run ────────────────────────────────────────────────
@@ -235,10 +276,10 @@ def _session():
     return AuthorizedSession(creds)
 
 
-def start_job(session, job_name, mode, dispatch_id):
+def start_job(session, job_name, mode, dispatch_id, batch=None):
     url = (f"https://run.googleapis.com/v2/projects/{GCP_PROJECT}/locations/{REGION}"
            f"/jobs/{job_name}:run")
-    resp = session.post(url, json=run_body(mode, dispatch_id), timeout=60)
+    resp = session.post(url, json=run_body(mode, dispatch_id, batch), timeout=60)
     if resp.status_code >= 300:
         raise RuntimeError(f"jobs.run {job_name} -> HTTP {resp.status_code}: {resp.text[:400]}")
     meta = (resp.json() or {}).get("metadata") or {}
@@ -309,20 +350,25 @@ def tick(now_utc=None, dry_run=False):
         if slot["action"] == "invalid":
             summary["errors"].append(f"schedule row for {slot['job_name']}: {slot['detail']}")
             continue
+        batch = batch_for(schedule, slot["job_name"], slot["mode"], slot["scheduled_for"])
         _dispatch(bq, session, slot["job_name"], slot["mode"], "schedule",
-                  slot["scheduled_for"], None, slot["action"], summary, dry_run)
+                  slot["scheduled_for"], None, slot["action"], summary, dry_run, batch)
         if slot["action"] == "dispatch":
             busy.add(slot["job_name"])
 
-    # 3. One follow-up probe per failed run.
+    # 3. One follow-up probe per failed run. It logs under the failed run's
+    # batch for the audit, but mails as itself: the digest has gone by then.
     recent = _query(bq, f"""
-        SELECT dispatch_id, job_name, reason, outcome, finished_at, followup_of
+        SELECT dispatch_id, job_name, mode, reason, scheduled_for, outcome, finished_at, followup_of
         FROM {_fq(LOG_TABLE)}
         WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)""")
     for row in followups_due(recent, now):
         action = "skipped-busy" if row["job_name"] in busy else "dispatch"
+        batch = (batch_for(schedule, row["job_name"], row["mode"], row["scheduled_for"])
+                 if row.get("scheduled_for") else None)
         _dispatch(bq, session, row["job_name"], "probe", "follow-up", None,
-                  row["dispatch_id"], action, summary, dry_run)
+                  row["dispatch_id"], action, summary, dry_run,
+                  {**batch, "role": "followup"} if batch else None)
         if action == "dispatch":
             busy.add(row["job_name"])
 
@@ -331,10 +377,12 @@ def tick(now_utc=None, dry_run=False):
     return summary
 
 
-def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action, summary, dry_run):
+def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action, summary, dry_run,
+              batch=None):
     dispatch_id = uuid.uuid4().hex[:16]
     entry = {"dispatch_id": dispatch_id, "job_name": job, "mode": mode, "reason": reason,
-             "scheduled_for": scheduled_for, "followup_of": followup_of}
+             "scheduled_for": scheduled_for, "followup_of": followup_of,
+             "email_role": (batch or {}).get("role")}
     bucket = "followups" if reason == "follow-up" else ("dispatched" if action == "dispatch" else "skipped")
     record = {**entry, "action": action}
     if dry_run:
@@ -367,7 +415,7 @@ def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action
         return
     import requests
     try:
-        execution = start_job(session, job, mode, dispatch_id)
+        execution = start_job(session, job, mode, dispatch_id, batch)
     except requests.exceptions.Timeout as exc:
         # Cloud Run may well have created the execution before the POST timed
         # out. Leave the row OPEN: the job writes its own outcome if it runs,

@@ -552,6 +552,14 @@ resource "google_cloud_run_v2_job" "etl_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "first"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -878,6 +886,10 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -1218,6 +1230,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1545,6 +1561,10 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1871,6 +1891,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -2207,6 +2231,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -2693,6 +2721,10 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3030,6 +3062,10 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -3450,6 +3486,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3778,6 +3818,10 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -4095,6 +4139,10 @@ resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -4418,6 +4466,10 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -5549,6 +5601,10 @@ resource "google_cloud_run_v2_job" "etl_part_routing_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
@@ -5855,6 +5911,14 @@ resource "google_cloud_run_v2_job" "etl_part_lot_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "last"
         }
       }
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,

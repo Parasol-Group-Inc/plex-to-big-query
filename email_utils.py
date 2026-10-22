@@ -178,8 +178,38 @@ _RUN_MODE_LABELS = {
 }
 
 
+def batch_label(kind: str) -> str:
+    """'probe-1300' -> '1 PM probe', 'full-0400' -> '4 AM full run',
+    'nightly' -> 'nightly test run'. Anything else is shown as it is."""
+    if kind == "nightly":
+        return "nightly test run"
+    m = re.fullmatch(r"(probe|full)-(\d{2})(\d{2})", kind or "")
+    if not m:
+        return kind or "batch"
+    hour, minute = int(m.group(2)), int(m.group(3))
+    clock = f"{hour % 12 or 12}{f':{minute:02d}' if minute else ''} {'AM' if hour < 12 else 'PM'}"
+    return f"{clock} {'probe' if m.group(1) == 'probe' else 'full run'}"
+
+
+def _batch_note(report: Dict[str, object]) -> str:
+    """Where this email sits in its batch (see main.EMAIL_ROLE), or ''."""
+    role = str(report.get("email_role") or "")
+    if role not in ("first", "middle", "last") or report.get("run_mode") == "retry":
+        return ""
+    label = batch_label(str(report.get("batch_kind") or ""))
+    if role == "first":
+        return (f" This is the first job of the {label}: the other jobs report in one digest "
+                f"when the batch ends, and any job that fails still emails on its own.")
+    return f" This job is part of the {label}; the digest at the end of the batch lists every job."
+
+
 def _why_it_ran(report: Dict[str, object]) -> str:
-    """One plain sentence on what triggered this run and what the probe saw."""
+    """One plain sentence on what triggered this run and what the probe saw,
+    plus where it sits in its batch."""
+    return _why_it_ran_alone(report) + _batch_note(report)
+
+
+def _why_it_ran_alone(report: Dict[str, object]) -> str:
     mode = str(report.get("run_mode", "scheduled"))
     probe = report.get("probe") or {}
     label = _RUN_MODE_LABELS.get(mode, mode)
@@ -235,11 +265,13 @@ def _notes(events: List[str]) -> List[str]:
     return [e for e in events if e.startswith(("WARNING", "ERROR"))]
 
 
-def send_report(report: Dict[str, object]) -> bool:
+def _sendgrid_config():
+    """(api_key, to_emails, from_email), or None when email is off or the
+    config is incomplete (each case logged)."""
     enabled = os.environ.get("SENDGRID_ENABLED", "false").lower() == "true"
     if not enabled:
         log.info("SendGrid disabled; skipping email report.")
-        return False
+        return None
 
     # Prefer direct env var; fall back to Secret Manager secret name pointer
     api_key = os.environ.get("SENDGRID_API_KEY")
@@ -256,18 +288,46 @@ def send_report(report: Dict[str, object]) -> bool:
                 log.warning("Could not fetch SendGrid key from Secret Manager: %s", e)
     to_emails_raw = os.environ.get("REPORT_TO_EMAILS", "")
     from_email = os.environ.get("REPORT_FROM_EMAIL")
-    status = str(report.get("status", "unknown")).lower()
-    no_changes = status == "no_changes"
-    template_name = "probe_nochange.html" if no_changes else os.environ.get("REPORT_TEMPLATE", "report.html")
 
     if not api_key or not to_emails_raw or not from_email:
         log.warning("SendGrid config incomplete; skipping email report.")
-        return False
+        return None
 
     to_emails = [email.strip() for email in to_emails_raw.split(",") if email.strip()]
     if not to_emails:
         log.warning("No report recipients configured; skipping email report.")
+        return None
+    return api_key, to_emails, from_email
+
+
+def _send(config, subject: str, html_content: str, text_content: str):
+    """Send one message, with the inline logo, through SendGrid."""
+    api_key, to_emails, from_email = config
+    message = Mail(
+        from_email=from_email,
+        to_emails=to_emails,
+        subject=subject,
+        html_content=html_content,
+        plain_text_content=text_content,
+    )
+
+    logo = _logo_attachment()
+    if logo is not None:
+        message.attachment = logo
+
+    client = SendGridAPIClient(api_key)
+    response = client.send(message)
+    log.info("SendGrid report sent with status %s", response.status_code)
+
+
+def send_report(report: Dict[str, object]) -> bool:
+    config = _sendgrid_config()
+    if config is None:
         return False
+
+    status = str(report.get("status", "unknown")).lower()
+    no_changes = status == "no_changes"
+    template_name = "probe_nochange.html" if no_changes else os.environ.get("REPORT_TEMPLATE", "report.html")
 
     status_class = (
         "badge-success" if status == "success" else
@@ -483,19 +543,161 @@ def send_report(report: Dict[str, object]) -> bool:
         f"Repo:  {context['repo_url']}\n"
     )
 
-    message = Mail(
-        from_email=from_email,
-        to_emails=to_emails,
-        subject=subject,
-        html_content=html_content,
-        plain_text_content=text_content,
+    _send(config, subject, html_content, text_content)
+    return True
+
+
+# ── Batch digest (2026-10-21) ─────────────────────────────────────────────────
+# The last job of a batch (main.EMAIL_ROLE == "last") sends one email listing
+# every job's latest result in the batch, read back from job_run_log. Its
+# subject is the same for every digest of a day, prod or test, so a day's
+# digests thread together; the batch and the environment are in the body.
+
+_DIGEST_STATUS = {
+    "success": ("OK", "#065f46", "#d1fae5"),
+    "skipped": ("No changes", "#475569", "#eef2f6"),
+    "partial": ("PARTIAL", "#92400e", "#fef3c7"),
+    "failed":  ("FAILED", "#991b1b", "#fee2e2"),
+}
+
+
+def _pipeline_name(job_name: str) -> str:
+    """'plex-etl-sales-orders-test' -> 'Sales Orders'."""
+    name = re.sub(r"^plex-etl-", "", job_name or "?")
+    name = re.sub(r"-test$", "", name)
+    return name.replace("-", " ").replace("_", " ").title()
+
+
+def _local_time(value, zone: ZoneInfo) -> str:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value[11:16]
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=ZoneInfo("UTC"))
+        return value.astimezone(zone).strftime("%H:%M")
+    return ""
+
+
+def _digest_rows(runs: List[Dict[str, object]], missing: List[str], zone: ZoneInfo):
+    """(html rows, text lines) for the digest's per-job table."""
+    html_rows, text_lines = [], []
+    for r in runs:
+        status = str(r.get("status", "?"))
+        label, fg, bg = _DIGEST_STATUS.get(status, (status.upper(), "#475569", "#eef2f6"))
+        name = _pipeline_name(str(r.get("job_name", "")))
+        rows = r.get("rows_written")
+        rows_txt = f"{rows:,}" if isinstance(rows, int) and status != "skipped" else "—"
+        dur = r.get("duration_seconds")
+        dur_txt = f"{dur}s" if isinstance(dur, int) else ""
+        when = _local_time(r.get("started_at") or r.get("logged_at"), zone)
+        mode = _RUN_MODE_LABELS.get(str(r.get("run_mode", "")), str(r.get("run_mode", "")))
+        failed = r.get("tables_failed") or 0
+        total = r.get("tables_total")
+        note_parts = []
+        if r.get("detail"):
+            note_parts.append(str(r["detail"]))
+        elif failed:
+            note_parts.append(f"{failed} of {total} table(s) failed")
+        elif r.get("tables_changed"):
+            note_parts.append(f"changed: {r['tables_changed']}")
+        elif status == "skipped" and total:
+            note_parts.append(f"{total} table(s) checked, none changed")
+        note = "; ".join(note_parts)
+        if len(note) > 300:
+            note = note[:297] + "..."
+        html_rows.append(
+            f'<tr><td class="d-name">{html.escape(name)}<span class="d-sub">{html.escape(mode)}</span></td>'
+            f'<td><span class="d-status" style="color:{fg};background:{bg};">{html.escape(label)}</span></td>'
+            f'<td class="d-num">{html.escape(when)}</td><td class="d-num">{html.escape(dur_txt)}</td>'
+            f'<td class="d-num">{html.escape(rows_txt)}</td>'
+            f'<td class="d-note">{html.escape(note)}</td></tr>')
+        text_lines.append(f"- {name}: {label} at {when}, {dur_txt}, rows written {rows_txt}"
+                          + (f" — {note}" if note else ""))
+    for job in missing:
+        name = _pipeline_name(job)
+        html_rows.append(
+            f'<tr><td class="d-name">{html.escape(name)}</td>'
+            f'<td><span class="d-status" style="color:#92400e;background:#fef3c7;">NO RESULT YET</span></td>'
+            f'<td class="d-num"></td><td class="d-num"></td><td class="d-num">—</td>'
+            f'<td class="d-note">Still running, or did not start: check its own email or the logs.</td></tr>')
+        text_lines.append(f"- {name}: NO RESULT YET (still running, or did not start)")
+    return "".join(html_rows), text_lines
+
+
+def send_digest(digest: Dict[str, object]) -> bool:
+    """Email one batch's digest: digest is main.collect_batch()'s result plus
+    gcp_project, bq_dataset, time_zone and execution_name."""
+    config = _sendgrid_config()
+    if config is None:
+        return False
+
+    runs = [r for r in (digest.get("runs") or []) if isinstance(r, dict)]
+    missing = [str(m) for m in (digest.get("missing") or [])]
+    zone = ZoneInfo(str(digest.get("time_zone") or os.environ.get("REPORT_TIME_ZONE", "America/Denver")))
+    batch_id = str(digest.get("batch_id", ""))
+    label = batch_label(str(digest.get("batch_kind", "")))
+    m = re.search(r"(\d{4}-\d{2}-\d{2})$", batch_id)
+    batch_date = m.group(1) if m else datetime.now(zone).strftime("%Y-%m-%d")
+
+    gcp_project = str(digest.get("gcp_project", os.environ.get("GCP_PROJECT", "")))
+    bq_dataset = str(digest.get("bq_dataset", os.environ.get("BQ_DATASET", "")))
+    environment = "TEST" if "test" in bq_dataset.lower() else ("PRODUCTION" if bq_dataset else "")
+    env_class = "badge-env-test" if environment == "TEST" else "badge-env-prod"
+    environment_badge_html = f' <span class="badge {env_class}">{html.escape(environment)}</span>' if environment else ""
+
+    counts = {s: sum(1 for r in runs if r.get("status") == s) for s in _DIGEST_STATUS}
+    unclean = counts["partial"] + counts["failed"]
+    rows_written = sum(r["rows_written"] for r in runs
+                       if isinstance(r.get("rows_written"), int) and r.get("status") != "skipped")
+    if unclean:
+        status_label, status_class = f"{unclean} job(s) need a look", "badge-error" if counts["failed"] else "badge-warning"
+    elif missing:
+        status_label, status_class = f"{len(missing)} job(s) without a result", "badge-warning"
+    else:
+        status_label, status_class = "All jobs OK", "badge-success"
+
+    summary = (f"{len(runs)} of {len(runs) + len(missing)} job(s) in the {label} reported: "
+               f"{counts['success']} loaded, {counts['skipped']} had no changes in Plex, "
+               f"{unclean} failed or ended partial.")
+    if unclean:
+        summary += " Each failed or partial job also sent its own email with the errors."
+    if missing:
+        summary += " Jobs listed as NO RESULT YET had not finished when this digest was sent."
+
+    rows_html, rows_text = _digest_rows(runs, missing, zone)
+    execution_name = str(digest.get("execution_name") or "")
+    company_name = os.environ.get("COMPANY_NAME", "Vox Nutrition")
+    context = {
+        "batch_label": label[:1].upper() + label[1:],
+        "batch_id": batch_id,
+        "batch_date": batch_date,
+        "status_label": status_label,
+        "status_class": status_class,
+        "environment_badge_html": environment_badge_html,
+        "jobs": str(len(runs) + len(missing)),
+        "ok": str(counts["success"]),
+        "no_changes": str(counts["skipped"]),
+        "unclean": str(unclean),
+        "rows_written": f"{rows_written:,}",
+        "summary": summary,
+        "rows_html": rows_html,
+        "gcp_project": gcp_project,
+        "bq_dataset": bq_dataset,
+        "execution_name": execution_name or "local",
+        "company_name": company_name,
+    }
+    html_content = _render_template(_load_template("digest.html"), context)
+    text_content = (
+        f"{context['batch_label']} — {batch_date}\n"
+        + (f"Environment: {environment}\n" if environment else "")
+        + f"{status_label}\n\n{summary}\n\n"
+        + "\n".join(rows_text) + "\n\n"
+        f"Dataset: {gcp_project}.{bq_dataset}\n"
+        f"Batch: {batch_id}\n"
     )
-
-    logo = _logo_attachment()
-    if logo is not None:
-        message.attachment = logo
-
-    client = SendGridAPIClient(api_key)
-    response = client.send(message)
-    log.info("SendGrid report sent with status %s", response.status_code)
+    subject = f"[Plex ETL] - Digest — {batch_date}"
+    _send(config, subject, html_content, text_content)
     return True

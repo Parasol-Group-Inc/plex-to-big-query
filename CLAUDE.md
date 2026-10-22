@@ -239,6 +239,12 @@ prod job's run times: 1 PM / 6 PM / 11 PM `probe`, plus a 4 AM `full` run. The
 starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
 - **Change a time with SQL, not Terraform.**
 - **No retries:** a failed run gets ONE follow-up probe 15 min later.
+- **A Plex outage trips a breaker (since 2026-10-22).** After two runs fail
+  to connect, due slots are logged `held-outage` instead of started, one
+  canary probe tries every 10 min (its first failure is the only email), and
+  once one connects each held job gets ONE `recovery` run. All derived from
+  `etl_dispatch_log`; no state elsewhere. It matches the error prefix
+  `ODBC connection failed`, so don't reword it in `main.py`.
 - **Test jobs still use their own nightly schedulers.**
 
 To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.
@@ -256,11 +262,13 @@ with NOT_FOUND.
 
 **Cloud Run job and scheduler names are immutable — Terraform destroys and
 recreates to rename.** That's safe (neither holds state), but a recreated job
-is a brand-new job, so it comes up on whatever `image_url` in
-`terraform.tfvars` says. Because every job's `lifecycle.ignore_changes` on
-`image` lets the live jobs drift ahead of that value, **check `image_url`
-against a live job before any rename** — it was several deploys stale in
-2026-09-04 and would have silently rolled the pipeline back.
+is a brand-new job. It used to come up on `image_url` in `terraform.tfvars`,
+which nothing kept current (several deploys stale on 2026-09-04 and again on
+2026-10-22). **Since 2026-10-22 a new job starts on `local.etl_image`**, the
+image `plex-etl-sales-orders` runs live (`var.image_reference_job`). The plan
+prints it as the `etl_image` output: check it before a rename. Every job run
+also logs its build SHA in `job_run_log.build`, and the batch digest flags a
+job on a different build.
 
 ## Email subjects
 

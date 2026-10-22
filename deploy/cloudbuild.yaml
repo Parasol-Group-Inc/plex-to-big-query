@@ -70,6 +70,7 @@ steps:
       - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:${SHORT_SHA}"
       - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
       - "--cache-from=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE_NAME}:latest"
+      - "--build-arg=GIT_SHA=${SHORT_SHA}"   # job_run_log.build; see the Dockerfile
       - "."
     waitFor:
       - "fetch-driver"

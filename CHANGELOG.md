@@ -14,6 +14,54 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 - Plex outages: breaker, canary, recovery; hard connect deadline
+
+A Plex prod ODBC outage (21 Oct, 11 PM to 4:30 AM, `08S01`) failed every
+scheduled run, mailed a failure per job plus a follow-up per job, and left
+the 4 AM full run undone until the next day.
+
+### Added
+- **Outage breaker in the dispatcher.** Two consecutive finished runs that
+  failed with `ODBC connection failed` (and no run that reached Plex since)
+  open it. While open, scheduled slots are logged `held-outage` and not
+  started, follow-ups stop, and one **canary** probe runs every 10 minutes
+  (`reason = 'canary'`; sales-quotes, quality-supplier-returns or
+  part-obsolescence, the fastest prod probes). The **first canary's failure
+  is the outage's one email**; later canaries are silent. The first run that
+  reaches Plex closes it.
+- **Recovery after an outage.** Each job with a held slot in the last 24 h
+  gets ONE run (`reason = 'recovery'`), full if any held slot was full, four
+  per tick, as one batch (`recovery-<id>`) with first/last roles and a
+  digest. A recovery run is the job's one try; a later run of the same job
+  (full covers anything, a probe covers a probe) makes it unnecessary, and
+  the same rule now replaces a follow-up that a later run already covered.
+- **Hard connect deadline.** The DataDirect driver ignores pyodbc's
+  `timeout`, so a dead host could hang a job until Cloud Run killed it. Each
+  connect now runs on a thread with a 60 s wall-clock deadline, three
+  attempts with 20 s / 40 s backoff (`CONNECT_DEADLINE_SECONDS`,
+  `CONNECT_ATTEMPTS`, `CONNECT_BACKOFF_SECONDS`). A refused login (`28xxx`)
+  is not retried.
+- **Digest health checks.** The batch digest now lists: jobs with no clean
+  run in 12 h (30 h in test), jobs whose last run was on a different build
+  than the digest's, and dispatcher outcomes in the last 24 h that need a
+  look (`succeeded-unrecorded`, `lost`, `dispatch-failed`, `held-outage`).
+  An all-OK batch with warnings is labelled so.
+- **`job_run_log.build`:** the image's git SHA (`GIT_SHA` build arg, set by
+  Cloud Build). Images built before this log `unknown`.
+
+### Changed
+- **New jobs start on the live image.** Terraform's `local.etl_image` reads
+  the image `plex-etl-sales-orders` runs now (`var.image_reference_job`)
+  instead of the hand-kept `var.image_url`, which was stale again
+  (`etl:6c33c51`). Existing jobs still ignore the field; a plan shows no job
+  change. `var.image_url` remains the fallback when `image_reference_job = ""`.
+
+Ships in three parts: Cloud Build for the image, `gcloud functions deploy
+etl-dispatcher` (command in `terraform/main.tf`) for the breaker, and
+`./scripts/deploy.sh` for the Terraform image local. Any order works: an old
+image fails outages with the same prefix the breaker reads, and an old
+dispatcher ignores the new columns.
+
 ## 2026-10-21 - Batch emails: first job, then one digest
 
 ### Changed

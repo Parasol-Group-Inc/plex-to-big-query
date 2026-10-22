@@ -183,6 +183,8 @@ def batch_label(kind: str) -> str:
     'nightly' -> 'nightly test run'. Anything else is shown as it is."""
     if kind == "nightly":
         return "nightly test run"
+    if kind.startswith("recovery"):
+        return "re-run after a Plex outage"
     m = re.fullmatch(r"(probe|full)-(\d{2})(\d{2})", kind or "")
     if not m:
         return kind or "batch"
@@ -627,6 +629,54 @@ def _digest_rows(runs: List[Dict[str, object]], missing: List[str], zone: ZoneIn
     return "".join(html_rows), text_lines
 
 
+_DISPATCH_NOTES = {
+    "succeeded-unrecorded": "finished, but never wrote its outcome: check its own email or job_run_log",
+    "lost":                 "never finished and never reported: check the Cloud Run execution",
+    "dispatch-failed":      "Cloud Run refused to start it",
+    "held-outage":          "held during a Plex outage, to re-run once Plex answers",
+}
+
+
+def _ago(value, now: datetime) -> str:
+    if not isinstance(value, datetime):
+        return "none in the last week"
+    hours = (now - value).total_seconds() / 3600
+    return f"{hours:.0f} h ago" if hours < 48 else f"{hours / 24:.0f} days ago"
+
+
+def _digest_health(health: Dict[str, object], zone: ZoneInfo):
+    """(html, text lines, warning count) for main.batch_health()'s checks.
+    Empty when every check passed."""
+    now = datetime.now(ZoneInfo("UTC"))
+    items = []   # (html, text)
+    hours = health.get("stale_after_hours")
+    for r in health.get("stale") or []:
+        name = _pipeline_name(str(r.get("job_name", "")))
+        msg = f"{name}: no clean run in over {hours} h (last {_ago(r.get('last_clean'), now)})"
+        items.append((html.escape(msg), msg))
+    build = str(health.get("build") or "")
+    for r in health.get("drift") or []:
+        name = _pipeline_name(str(r.get("job_name", "")))
+        msg = (f"{name}: running image {r.get('build') or 'from before build tracking'}, "
+               f"not {build} like this digest's sender: it missed a deploy")
+        items.append((html.escape(msg), msg))
+    for r in health.get("dispatch") or []:
+        name = _pipeline_name(str(r.get("job_name", "")))
+        outcome = str(r.get("outcome", ""))
+        when = _local_time(r.get("finished_at"), zone)
+        msg = f"{name} ({r.get('reason') or 'run'}, {when}): {_DISPATCH_NOTES.get(outcome, outcome)}"
+        items.append((html.escape(msg), msg))
+    for err in health.get("errors") or []:
+        msg = f"Health check could not run: {err}"[:300]
+        items.append((html.escape(msg), msg))
+    if not items:
+        return "", [], 0
+    body = "".join(f"<li>{h}</li>" for h, _ in items)
+    html_out = ('<h2 class="health-title">Health checks</h2>'
+                f'<ul class="health">{body}</ul>')
+    return html_out, ["Health checks:"] + [f"- {t}" for _, t in items], len(items)
+
+
 def send_digest(digest: Dict[str, object]) -> bool:
     """Email one batch's digest: digest is main.collect_batch()'s result plus
     gcp_project, bq_dataset, time_zone and execution_name."""
@@ -658,6 +708,9 @@ def send_digest(digest: Dict[str, object]) -> bool:
         status_label, status_class = f"{len(missing)} job(s) without a result", "badge-warning"
     else:
         status_label, status_class = "All jobs OK", "badge-success"
+    health_html, health_text, warnings = _digest_health(digest.get("health") or {}, zone)
+    if warnings and status_class == "badge-success":
+        status_label, status_class = f"All jobs OK, {warnings} health warning(s)", "badge-warning"
 
     summary = (f"{len(runs)} of {len(runs) + len(missing)} job(s) in the {label} reported: "
                f"{counts['success']} loaded, {counts['skipped']} had no changes in Plex, "
@@ -684,6 +737,7 @@ def send_digest(digest: Dict[str, object]) -> bool:
         "rows_written": f"{rows_written:,}",
         "summary": summary,
         "rows_html": rows_html,
+        "health_html": health_html,
         "gcp_project": gcp_project,
         "bq_dataset": bq_dataset,
         "execution_name": execution_name or "local",
@@ -695,7 +749,8 @@ def send_digest(digest: Dict[str, object]) -> bool:
         + (f"Environment: {environment}\n" if environment else "")
         + f"{status_label}\n\n{summary}\n\n"
         + "\n".join(rows_text) + "\n\n"
-        f"Dataset: {gcp_project}.{bq_dataset}\n"
+        + ("\n".join(health_text) + "\n\n" if health_text else "")
+        + f"Dataset: {gcp_project}.{bq_dataset}\n"
         f"Batch: {batch_id}\n"
     )
     subject = f"[Plex ETL] - Digest — {batch_date}"

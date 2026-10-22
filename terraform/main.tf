@@ -4897,6 +4897,18 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           name  = "REPORT_CONFIG_GCS_PATH"
           value = "gs://${var.report_configs_bucket}/reports/label_design.yaml"
         }
+        # After a run that extracted, start the Monday push straight away
+        # (2026-10-22), so a new order reaches the board minutes after the
+        # probe sees it. A start that fails turns the run partial, and the
+        # next probe runs again. See POST_RUN_JOB in main.py.
+        env {
+          name  = "POST_RUN_JOB"
+          value = google_cloud_run_v2_job.label_design_push.name
+        }
+        env {
+          name  = "GCP_REGION"
+          value = var.gcp_region
+        }
         # Hourly behind the change probe (reports/label_design.yaml): a mail on
         # every run that found something would be noise. A partial or failed
         # run still mails; a clean one is recorded in `job_run_log` and
@@ -4964,15 +4976,18 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
   }
 }
 
-# HOURLY since 2026-10-01, which is only affordable because of the change
-# probe in reports/label_design.yaml: a run whose probe fingerprint matches
-# the last clean run's skips all 14 extractions in seconds. 5 AM - 5 PM
-# Mountain (Jennilyn, 2026-10-01 — the team starts at 5). The days are NOT
+# EVERY 15 MINUTES since 2026-10-22 (hourly from 2026-10-01), which is only
+# affordable because of the change probe in reports/label_design.yaml: a run
+# whose probe fingerprint matches the last clean run's skips all 15
+# extractions in seconds. Only a new order, line or release changes the
+# fingerprint. A run that extracts starts the Monday push itself
+# (POST_RUN_JOB). 5:00 AM - 5:45 PM Mountain (Jennilyn, 2026-10-01 — the
+# team starts at 5). The days are NOT
 # settled: it still runs weekends, pending an answer (OPEN_ITEMS L9).
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
-  description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
-  schedule    = "0 5-17 * * 1-5" # hourly 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
+  description = "Triggers Plex to BigQuery Label Design queue ETL job (every 15 min, probe-gated)"
+  schedule    = "*/15 5-17 * * 1-5" # every 15 min 5:00 AM - 5:45 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5305,10 +5320,14 @@ resource "google_cloud_run_v2_job" "label_design_push" {
 
 resource "google_cloud_scheduler_job" "label_design_push" {
   name        = "plex-label-design-push-sync"
-  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board"
-  schedule    = "35 5-17 * * 1-5" # 35 min after plex-label-design-sync (:00), Mon-Fri; last push 5:35 PM
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
+  description = "End-of-day sweep: pushes any Label Design rows (PlexProd) still missing from the Plex Import Monday board"
+  # ONE SWEEP A DAY since 2026-10-22 (hourly at :35 before). Each ETL run that
+  # extracts now starts this job itself (POST_RUN_JOB), so the sweep only
+  # catches a push that failed. 6:05 PM is after the last 5:45 PM run and its
+  # push, so two pushes never run at once (they would both create the item).
+  schedule  = "5 18 * * 1-5" # 6:05 PM Mountain, Mon-Fri
+  time_zone = var.scheduler_time_zone
+  region    = var.gcp_region
 
   # RELEASED 2026-10-19 (cutover). Before the first scheduled run, the board
   # had been emptied, and a dry run showed 38 new items and no hand-typed

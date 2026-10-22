@@ -510,7 +510,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 | `DISPATCH_ID` | `""` | — | Set by the ETL dispatcher; the run writes its outcome onto that `etl_dispatch_log` row |
 | `DISPATCH_LOG_TABLE` | `etl_dispatch_log` | — | Where the dispatcher's rows live (job's own dataset) |
 | `REPORT_TIME_ZONE` | `America/Denver` | — | Zone for email times and for the subject's date |
-| `EMAIL_MODE` | `always` | apply | `on_error` sends mail only on a `partial` or `failed` run — set on both Label Design ETL jobs, which run hourly and would otherwise mail 26 times a day. A clean run is still recorded in `job_run_log` and `probe_log` |
+| `EMAIL_MODE` | `always` | apply | `on_error` sends mail only on a `partial` or `failed` run — set on both Label Design ETL jobs, which run every 15 minutes (prod) and hourly (test) and would otherwise mail dozens of times a day. A clean run is still recorded in `job_run_log` and `probe_log` |
 | `PROBE_LOG_TABLE` | `probe_log` | apply | Change-probe outcome table — see "Change probe" |
 | `REPORT_CONFIG_GCS_PATH` | `""` | — (edit the YAML instead) | GCS path to the multi-report YAML. Empty = legacy single-view mode using the vars below |
 | `PLEX_HOST` | `""` | apply | Plex ODBC hostname |
@@ -542,7 +542,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **14 pipelines × prod/test = 28 Cloud Run jobs, plus the two Label Design push jobs = 30** (68 BigQuery views). Prod pipelines run from the ETL dispatcher (`PlexOps.etl_schedule`: 1 / 6 / 11 PM probe + 4 AM full); the test jobs run once a day on an evening cascade (`America/Denver`); Label Design runs hourly, 5 AM - 5 PM Mountain (prod at :00, test at :05, push at :35), gated by a change probe. Twelve test jobs also have a retry trigger at 9:45 PM Mountain (30 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **14 pipelines × prod/test = 28 Cloud Run jobs, plus the two Label Design push jobs = 30** (68 BigQuery views). Prod pipelines run from the ETL dispatcher (`PlexOps.etl_schedule`: 1 / 6 / 11 PM probe + 4 AM full); the test jobs run once a day on an evening cascade (`America/Denver`); Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain (test hourly at :05), gated by a change probe; a prod run that extracts starts the Monday push itself, with a 6:05 PM sweep. Twelve test jobs also have a retry trigger at 9:45 PM Mountain (30 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
 Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl-sales-orders`/`sales_orders.yaml`, since expanded to 27 extractions + 27 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 

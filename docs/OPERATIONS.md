@@ -320,7 +320,7 @@ never in the subject — check the body for those.
 | Setting | Production | Test |
 |---|---|---|
 | Cloud Run jobs (14 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
-| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (hourly) and `plex-label-design-push-sync` (live) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
+| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
 | Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
@@ -442,7 +442,8 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 Every pipeline can start a run with a cheap question to Plex: has anything I
 read changed since my last clean run? If not, it skips the extraction.
 
-- **Label Design** has asked it every hour since 2026-10-01: an *explicit*
+- **Label Design** has asked it every hour since 2026-10-01, every 15 minutes
+  since 2026-10-22: an *explicit*
   probe on the release lines sitting in `Label Design` status.
 - **Every nightly pipeline** got an *automatic* probe on 2026-10-19: one
   `COUNT(*)` plus `MAX(change date / key)` per table. Plex answers those on its
@@ -625,9 +626,11 @@ automatically — no manual adjustment needed). The naming is uniform —
 | … one per test pipeline except Label Design and Part Routing | |
 
 **Label Design has no retry trigger** (both were removed 2026-10-01). It runs
-hourly behind a change probe, and a failed or partial run leaves the stored
-fingerprint where it was, so the next hourly probe sees a difference and runs
-again — the probe is the retry.
+every 15 minutes behind a change probe, and a failed or partial run leaves the
+stored fingerprint where it was, so the next probe sees a difference and runs
+again — the probe is the retry. The same holds for the Monday push it starts
+(`POST_RUN_JOB`, 2026-10-22): a push that cannot be started turns the run
+partial, so the next probe re-runs and starts it again.
 
 **How it decides whether to actually do anything:** the retry trigger
 re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution

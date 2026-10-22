@@ -2,8 +2,9 @@
 """Label Design push — `label_design_report` (BigQuery) -> Monday board.
 
 Replaces the Google Sheet + Apps Script hop (deploy/archive/label_design_sync/). Runs
-as its own Cloud Run job, scheduled after the Label Design ETL has refreshed
-the view:
+as its own Cloud Run job. The Label Design ETL starts it after every run that
+refreshed the view (POST_RUN_JOB, since 2026-10-22); its own scheduler is a
+6:05 PM sweep:
 
     python -m label_design_service.push            # in the container
     DRY_RUN=1 python -m label_design_service.push  # show what would be created

@@ -25,8 +25,9 @@ This pipeline **copies Plex ERP data into BigQuery** so the data team can query 
 jobs have no scheduler of their own: the dispatcher runs them from
 `PlexOps.etl_schedule` (1 / 6 / 11 PM probe + 4 AM full). The test nightly
 cascade runs **7:10 PM → 10:50 PM Mountain** (`America/Denver`), 20 minutes
-apart; Label Design runs **hourly, 5 AM - 5 PM Mountain**
-(test at :05, push at :35; the test push is paused). Full schedule and run history:
+apart; Label Design probes **every 15 minutes, 5:00 AM - 5:45 PM Mountain**
+and a run that finds new orders starts the Monday push itself (6:05 PM
+sweep; test hourly at :05, test push paused). Full schedule and run history:
 [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be run by hand.
 
 ---
@@ -345,7 +346,7 @@ graph LR
 | `sales_quotes` | `plex-etl-sales-quotes` | 10:10 PM | 2 | 1 | `sales_quotes_open_report` |
 | `sales_returns` | `plex-etl-sales-returns` | 10:30 PM | 2 | 1 | `sales_returns_open_report` |
 | `quality_supplier_returns` | `plex-etl-quality-supplier-returns` | 10:50 PM | 3 | 1 | `quality_supplier_returns_pending_report` |
-| `label_design` | `plex-etl-label-design` | prod hourly 5 AM - 5 PM / test hourly :05 | 14 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
+| `label_design` | `plex-etl-label-design` | prod every 15 min 5 AM - 5:45 PM / test hourly :05 | 15 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
 
 Counts are `grep -c -E '^\s*-\s*plex_view:'` and the `bq_view` entries per
 YAML; `scorecard_goals_resolved` is listed in both `sales_orders` and
@@ -613,7 +614,7 @@ To discover view names: open **Plex SQL Dev** → expand the database tree → r
 | GCP Service | What it is (in general) | What it does in this pipeline |
 |---|---|---|
 | **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery (30 jobs, one shared image) |
-| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers the ETL dispatcher every 5 minutes (which starts prod jobs from `PlexOps.etl_schedule`), each test job (the nightly cascade plus a 9:45 PM `-test-retry` on 12 of them), and Label Design hourly 5 AM - 5 PM — see Active Reports |
+| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers the ETL dispatcher every 5 minutes (which starts prod jobs from `PlexOps.etl_schedule`), each test job (the nightly cascade plus a 9:45 PM `-test-retry` on 12 of them), and Label Design every 15 min 5 AM - 5:45 PM — see Active Reports |
 | **BigQuery** | Serverless data warehouse — query terabytes with SQL, pay per query | Stores the raw Plex tables + the views the data team queries (`PlexProd`, `PlexTest`, `ScorecardSandbox`) |
 | **Cloud Storage (GCS)** | Object storage — like S3, stores files | `voxdatalake-report-configs`: YAML configs and view SQL (written by Terraform); `voxdatalake-terraform-state`: Terraform state |
 | **Secret Manager** | Encrypted secret store | Stores the Plex IAM token and SendGrid API key |

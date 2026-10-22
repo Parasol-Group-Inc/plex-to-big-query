@@ -11,6 +11,28 @@
 
 ---
 
+## UPDATE — 2026-10-22 (later): probe every 15 minutes, push straight after
+
+Asked by Emilio: when the probe finds new orders, push them to BigQuery and
+Monday then, not at the next :35.
+
+- **`plex-label-design-sync`** now fires every 15 minutes, 5:00 AM - 5:45 PM
+  Mountain, weekdays (was hourly). A quiet probe still takes seconds and sends
+  nothing.
+- **A prod run that extracts starts `plex-etl-label-design-push` itself**
+  (`POST_RUN_JOB` in `main.py`, set only on the prod Label Design job). If the
+  start fails, the run turns partial (mails), its fingerprint is not applied,
+  and the next probe re-runs and tries again.
+- **`plex-label-design-push-sync` is now a 6:05 PM sweep** (was hourly at
+  :35). Kept as a safety net, timed after the last run so two pushes never
+  overlap (both would create the same item).
+- **Expected latency:** about 50 min ODBC lag + up to 15 min to the next probe
+  + about 4 min run and push, so about 1 h from approval to board (was
+  about 2 h). `label_design_push_latency` will show it.
+- **Test is unchanged:** hourly at :05, push paused.
+
+---
+
 ## UPDATE — 2026-10-22: moving items to Design & QA, missing status labels
 
 Ashley moves items from "Plex Import" (18432111755) to "Design & QA"
@@ -31,7 +53,7 @@ destination has no label for.
 
 ---
 
-## UPDATE — 2026-10-20 (latest): push latency view; probe gap fixed
+## UPDATE — 2026-10-20: push latency view; probe gap fixed
 
 - **Probe now watches order approval** (OPEN_ITEMS L14). It fingerprints the
   same filter the view applies, so an approval alone triggers the next hourly

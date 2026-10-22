@@ -45,12 +45,13 @@ page.
     later.
   - Times are changed with SQL (docs/OPERATIONS.md § ETL schedule).
 - **Test (14 pipelines):** once a day in the evening cascade, 7:10-11:10 PM, as
-  before, with the 9:45 PM retry; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
-  test at :05, push at :35).
+  before, with the 9:45 PM retry; **Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain, Mon-Fri**
+  (test hourly at :05). A prod run that extracts starts the Monday push itself;
+  the push scheduler is a 6:05 PM sweep (since 2026-10-22).
 - **Every run sends one email:** prod up to 13 × 4 = **52 a day** (threaded per
   pipeline), test **13 a day**, plus whatever the 9:45 PM retries send (see the caution
   under the table). Label Design is the exception: it runs `EMAIL_MODE=on_error`,
-  so its hourly runs mail only when partial or failed; a clean run is recorded
+  so its 15-minute runs mail only when partial or failed; a clean run is recorded
   in `job_run_log` and `probe_log` instead.
 - **Every email goes to the same 3 people, prod and test alike** —
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
@@ -78,7 +79,7 @@ but see the caution below the table.
 
 | Category | Pipeline | Reports produced (email body lists each by this name) | Prod job | Prod time (`PlexOps.etl_schedule`) | Test job | Test time |
 |---|---|---|---|---|---|---|
-| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | hourly 5 AM - 5 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
+| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | every 15 min 5 AM - 5:45 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
 | **Sales** | `sales_orders` | 27 reports — see `bq_view` in `reports/sales_orders.yaml` | `plex-etl-sales-orders` | 1:00 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-sales-orders-test` | 7:10 PM |
 | **Production** | `work_orders` | 19 reports — see `bq_view` in `reports/work_orders.yaml` | `plex-etl-work-orders` | 1:04 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-work-orders-test` | 7:30 PM |
 | **Supply Chain** | `purchasing_open_orders` | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 1:08 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
@@ -122,7 +123,7 @@ view counts add up to 69 while there are 68 distinct views.
 >
 > **Until that is answered, no pipeline has a working automatic retry** — a
 > failed nightly run waits for a human. Label Design is the exception by
-> design: no retry trigger, because its hourly probe re-runs a failed cycle
+> design: no retry trigger, because its 15-minute probe re-runs a failed cycle
 > within the hour.
 
 **Changing a time:** a **prod** time is a row in `PlexOps.etl_schedule` —

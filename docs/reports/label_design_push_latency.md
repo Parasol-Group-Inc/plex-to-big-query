@@ -1,6 +1,6 @@
 # Label Design Push Latency
 
-> **Status:** 🛠 Built 2026-10-20, not deployed yet · **Category:** Sales · **Runs:** with the Label Design queue (hourly, 5 AM - 5 PM Mountain, Monday to Friday)
+> **Status:** 🛠 Built 2026-10-20, not deployed yet · **Category:** Sales · **Runs:** with the Label Design queue (every 15 minutes, 5 AM - 5:45 PM Mountain, Monday to Friday)
 
 ## What this tells you
 
@@ -39,9 +39,9 @@ One item the push service tried to create on the board (normally
   side" look shorter than it was.
 - **Plex's clock is Mountain time** (checked 2026-10-20 in SQL Developer).
 - **Our copy of Plex runs about 50 minutes behind it.** The prod ODBC source
-  lags Plex, so a change made at noon is first visible to the hourly check
-  around 1 PM. "Our side" includes that delay, so about 1.5 h is normal
-  there.
+  lags Plex, so a change made at noon is first visible around 12:50. "Our
+  side" includes that delay. Since 2026-10-22 (15-minute checks, push straight
+  after), about 1 h is normal there; before, about 1.5 h.
 - **The first 38 items** (pushed 2026-10-19 at 9:22 AM) were the cutover
   backlog, from orders entered before go-live. Filter on
   `before_go_live_floor = false` to measure normal operation.

@@ -1,6 +1,6 @@
 # Label Design Queue
 
-> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** hourly, 5 AM - 5 PM Mountain, Monday to Friday (only does real work when something changed)
+> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** every 15 minutes, 5 AM - 5:45 PM Mountain, Monday to Friday (only does real work when something changed)
 
 ## What this tells you
 
@@ -23,24 +23,26 @@ This is **not** a scorecard tile. It is an operational queue, which is why it
 runs through the working day rather than riding the overnight `sales_orders`
 pipeline.
 
-**It runs every hour, 5 AM - 5 PM Mountain, Monday to Friday**, so an order
-approved at 10:20 is normally on the board within about 2 hours instead of
-waiting for the afternoon run. The copy of Plex we read runs about 50 minutes
-behind Plex itself, so a 10:20 approval is first seen by the noon run and lands
-on the board around 12:35. The 5 AM start is the team's own: they are working the queue
-before most of the office. The last board update of the day is 5:35 PM.
+**It checks every 15 minutes, 5 AM - 5:45 PM Mountain, Monday to Friday**,
+and a check that finds new orders sends them to Monday straight away (since
+22 Oct; before that it checked hourly and pushed at :35). The copy of Plex we
+read runs about 50 minutes behind Plex itself, so an order approved at 10:20
+is first seen around 11:15 and is normally on the board by about 11:20, about
+an hour after approval instead of about two. The 5 AM start is the team's own:
+they are working the queue before most of the office. The last check of the
+day is 5:45 PM, and a 6:05 PM sweep pushes anything a failed push left behind.
 
 **Nothing runs at weekends** (since 2026-10-02). Orders entered on Saturday or
 Sunday reach the board on Monday at 5 AM, ahead of the team arriving — so the
 queue is current when anyone looks at it, even though it sat still for two
 days. If the team ever starts working weekends, this needs changing back.
-Most of those hourly runs do almost nothing: the job first asks Plex which
+Most of those runs do almost nothing: the job first asks Plex which
 order lines are sitting on the Label Design status, and which of their orders
 are approved (Pending Fulfillment, dated on or after 18 Oct). If both lists
 are exactly what they were last time, it stops there — no extraction, no board update, no
-email. The same is true of the push: it checks in BigQuery whether anything is
-new before it opens Monday at all. A quiet hour costs seconds; an hour with a
-new order does the full job.
+email, and no push. The push itself also checks in BigQuery whether anything
+is new before it opens Monday at all. A quiet check costs seconds; one that
+finds a new order does the full job.
 
 ## How it's built (high level)
 

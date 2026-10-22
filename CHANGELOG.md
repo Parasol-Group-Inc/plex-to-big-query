@@ -28,6 +28,29 @@ don't need an entry.
   (schema, permissions) fails twice and is reported as before, 30 s later.
   Code change: ships via Cloud Build.
 
+## 2026-10-22 (label-design) - Label Design probes every 15 minutes and pushes straight after
+
+### Changed
+- **`plex-label-design-sync` fires every 15 minutes**, 5:00 AM - 5:45 PM
+  Mountain, Mon-Fri (was hourly 5 AM - 5 PM). The change probe keeps a quiet
+  check to seconds; only a new order, line, release or approval extracts.
+- **A prod Label Design run that extracts starts the Monday push itself.**
+  New `POST_RUN_JOB` env var (`main.py`, `start_post_run_job()`): after a
+  success or partial run, the job calls Cloud Run's `:run` on
+  `plex-etl-label-design-push` (no overrides, so `roles/run.invoker` is
+  enough). A start that fails turns the run partial, so the probe
+  fingerprint is not applied and the next probe re-runs and retries. Set
+  only on the prod Label Design job; every other job leaves it unset.
+- **`plex-label-design-push-sync` is a 6:05 PM sweep** (was hourly at :35),
+  after the last run, so two pushes never overlap.
+- Expected approval-to-board time drops from about 2 h to about 1 h (most of
+  it is the ~50 min prod ODBC lag). Docs: `docs/reports/label_design_report.md`,
+  `label_design_push_latency.md`, `EMAIL_SCHEDULE.md`, `OPERATIONS.md`,
+  `CHEATSHEET.md`, `TECHNICAL_REFERENCE.md`, `label-design/STATUS.md`, README.
+- Ships in two parts: Terraform (schedules, env vars) via `./scripts/deploy.sh`,
+  and the `main.py` code via Cloud Build. **Cloud Build first:** with the old
+  code the job ignores `POST_RUN_JOB`, and the board would update only at 6:05 PM.
+
 ## 2026-10-22 (scorecard) - Bottling bulk cases (9xxxx-BK) stay counted; Plex SQL equivalents
 
 ### Changed

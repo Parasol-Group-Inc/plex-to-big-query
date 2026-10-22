@@ -154,6 +154,16 @@ with five lines gives five items, even when two lines carry the same part). A li
 on the board is never pushed again. Every push is also recorded in the
 `label_design_push_log` table.
 
+**Moving an item to Design & QA no longer loses its details** (since 22 Oct).
+When Ashley moves an item from "Plex Import" to "Design & QA", Monday reuses
+the column matching chosen the first time anyone moved items between those
+boards, and that matching drops some fields. Bottle Material arrived blank on
+every move, even though both boards have the same labels. A separate job checks
+every 15 minutes (5 AM - 6:45 PM, weekdays). Within about 15 minutes of an
+item arriving on Design & QA, it puts back any field the push sent that came
+across blank. It does this **once per item**. It never changes a field that
+already has a value, and if the team clears a field later it stays cleared.
+
 ## Flags and open questions
 
 - **Part-level columns**, pulled from Plex's generic Part Attribute system.

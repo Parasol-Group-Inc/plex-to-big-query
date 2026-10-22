@@ -11,6 +11,46 @@
 
 ---
 
+## UPDATE — 2026-10-22 (latest): repair job for board moves
+
+Ashley reported that Bottle Material does not carry over when she moves an
+item from "Plex Import" (18432111755) to "Design & QA" (18395121955).
+
+- **Cause.** The push sends the right value; the push log shows it, and the
+  item had it on Plex Import. Monday's move blanks it (status index 5, the
+  blank label) although both boards have the same labels. Monday asks how to
+  match columns on the first move between two boards and reuses that answer
+  after, so Bottle Material was most likely left unmatched then. This is
+  inferred: the API does not show the saved matching. Re-matching it in the
+  move dialog, if Monday offers that, would fix it at the source.
+- **One-off fill (done).** Bottle Material was filled on the 7 moved items
+  that had it blank.
+- **Permanent fix: `label_design_service/repair.py`**, prod job
+  `plex-etl-label-design-repair`, scheduler `plex-label-design-repair-sync`
+  (every 15 min, 5:00 AM - 6:45 PM MT, weekdays). For every item the push
+  created in the last 30 days, it asks Monday where the item is now (a move
+  keeps the item id). The first time it finds the item on Design & QA, it
+  fills every pushed column that is blank there, never overwrites one, and
+  logs `outcome = 'repaired'` in `label_design_push_log`. That item is never
+  checked again, so a field the team clears later stays cleared. It never
+  creates items, so it cannot race the push. `label_design_push_latency`
+  ignores `repaired` rows.
+- **Found on the way:**
+  - Design & QA has **two status columns titled "Sales Rep"**. One holds the
+    rep; `color_mm7zxq8m` is always empty. The repair counts the field as
+    filled if either has a value. The team could delete the empty one.
+  - Monday's `items(ids)` still returns deleted and archived items, so the
+    job checks `state`. Of 53 pushed items on 2026-10-22, 15 were on
+    Design & QA and 38 deleted or archived; Plex Import held 0 active items.
+  - The dry run found nothing missing on the 15: the one-off fill had
+    covered them.
+- **Priority:** Ashley added the missing Priority labels herself (20:42 UTC),
+  so the "Still open, for Ashley" Priority point below is done. No move has
+  happened since, so it is untested; the repair would fill it anyway.
+- **Open:** OPEN_ITEMS L15, confirm the first real repair.
+
+---
+
 ## UPDATE — 2026-10-22 (later): probe every 15 minutes, push straight after
 
 Asked by Emilio: when the probe finds new orders, push them to BigQuery and

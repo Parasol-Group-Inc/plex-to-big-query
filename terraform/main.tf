@@ -5345,6 +5345,82 @@ resource "google_cloud_scheduler_job" "label_design_push" {
   }
 }
 
+# ── Label Design repair — PRODUCTION (added 2026-10-22) ──────────────────────
+# Ashley moves items from "Plex Import" to "Design & QA" (18395121955). Monday
+# matches columns only on the first move between two boards and reuses that
+# answer, so a column it left unmatched arrives blank on every move (Bottle
+# Material). `python -m label_design_service.repair` finds each pushed item
+# (label_design_push_log) once it is on Design & QA and fills every pushed
+# column that is blank there, ONCE per item (an `outcome = 'repaired'` row).
+#
+# Its own job and schedule, not part of the push: it never creates items, so
+# it cannot race the push into a duplicate, and it runs whether or not there
+# were new orders. A run with nothing new to check is one BigQuery query and
+# one Monday lookup.
+resource "google_cloud_run_v2_job" "label_design_repair" {
+  name     = "plex-etl-label-design-repair"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        args  = ["python", "-m", "label_design_service.repair"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "MONDAY_BOARD_ID"
+          value = "18432111755"
+        }
+        env {
+          name  = "REPAIR_BOARD_ID"
+          value = "18395121955"
+        }
+        env {
+          name  = "SECRET_MONDAY_API_KEY"
+          value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+      }
+      # The next run 15 min later is the retry.
+      max_retries = 0
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "label_design_repair" {
+  name        = "plex-label-design-repair-sync"
+  description = "Refills columns a Plex Import -> Design & QA move left blank (once per item)"
+  schedule    = "*/15 5-18 * * 1-5" # every 15 min, 5:00 AM - 6:45 PM Mountain, Mon-Fri
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_repair.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
 # ===========================================================================
 # PLEX REST API -> BIGQUERY LANDING — Cloud Function (Gen 2)
 # Added 2026-10-12 as Cloud Run job, pivoted to Cloud Function 2026-10-13.

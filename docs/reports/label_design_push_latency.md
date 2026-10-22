@@ -27,7 +27,9 @@ entered, and when the order was last edited.
 ## What a row is
 
 One item the push service tried to create on the board (normally
-`outcome = created`).
+`outcome = created`). The repair job's `repaired` rows in the same log
+(22 Oct onwards: a moved item's blank fields being refilled) are left out,
+because they are not pushes.
 
 ## Things to know before trusting it
 

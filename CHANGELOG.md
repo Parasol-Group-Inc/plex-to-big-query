@@ -14,6 +14,40 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (label-design) - Repair job refills columns a board move drops
+
+### Added
+- **`plex-etl-label-design-repair`** (prod Cloud Run job,
+  `label_design_service/repair.py`) and **`plex-label-design-repair-sync`**
+  (every 15 min, 5:00 AM - 6:45 PM Mountain, Mon-Fri). Moving an item from
+  "Plex Import" to "Design & QA" blanked Bottle Material every time. Monday
+  reuses the column matching saved on the first move between two boards. For
+  each item the push created in the last 30 days (`REPAIR_DAYS`), the job
+  asks Monday where it is now. The first time it finds it on Design & QA
+  (`REPAIR_BOARD_ID`), it fills every pushed column that is blank there from
+  the push log's values, never overwrites, and logs `outcome = 'repaired'`
+  in `label_design_push_log`. Once per item, so a field the team clears later
+  stays cleared. It never creates items and sends no email. Deleted and
+  archived items (still returned by `items(ids)`) are skipped by `state`. A
+  title that repeats on the board (Design & QA has two "Sales Rep" status
+  columns) counts as filled if any copy has a value.
+- `deploy/cloudbuild.yaml` `_ALL_JOBS` lists the new job.
+
+### Changed
+- **`label_design_push_latency` ignores `repaired` rows**: they refill an
+  item already counted, and are not pushes.
+- Job and scheduler counts are now 31 (README, OPERATIONS, CHEATSHEET,
+  EMAIL_SCHEDULE). Docs: `docs/reports/label_design_report.md`,
+  `docs/reports/label_design_push_latency.md`, `label-design/README.md`,
+  `label-design/STATUS.md`, OPEN_ITEMS L15.
+
+### Fixed
+- **One-off:** Bottle Material filled by hand (API) on the 7 moved items that
+  had it blank.
+
+Ships via Cloud Build first (the image must contain `repair.py`), then
+`./scripts/deploy.sh` creates the job and scheduler.
+
 ## 2026-10-22 (dev) - BigQuery loads retry once
 
 ### Fixed

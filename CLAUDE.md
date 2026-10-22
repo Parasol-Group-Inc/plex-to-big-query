@@ -274,6 +274,13 @@ Prod and test deliberately share a subject (the `_test` suffix is stripped) so
 the two environments thread together; PRODUCTION/TEST shows as a body badge.
 **This is a code change, so it ships via Cloud Build, not `terraform apply`.**
 
+**Batches mail only at their ends (since 2026-10-21).** In each prod dispatcher
+batch (same mode and hour in `etl_schedule`) and in the nightly test cascade,
+only the first job emails its report and the last sends one digest,
+`[Plex ETL] - Digest — {date}`; a failed or partial job always emails. The
+roles are `EMAIL_ROLE`: set by the dispatcher for prod, fixed per test job in
+Terraform. Details: `docs/OPERATIONS.md` § "Batch emails".
+
 ## Known friction
 
 - **GitHub push access**: resolved once (2026-08-24, repo access fixed on

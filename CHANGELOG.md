@@ -14,6 +14,34 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-21 - Batch emails: first job, then one digest
+
+### Changed
+- **Batches now mail only at their ends.** The prod dispatcher's four daily
+  batches (1 PM, 6 PM, 11 PM probe; 4 AM full) and the nightly test cascade
+  used to send one email per job: up to 56 a day in prod. Now the first job of
+  a batch sends its own report, the jobs in between stay silent, and the last
+  job sends one digest of every job's result (`templates/digest.html`, subject
+  `[Plex ETL] - Digest — <date>`). **A failed or partial job still emails its
+  own report**, wherever it sits. Follow-up probes, test retries and Label
+  Design keep their own rules.
+- **Roles:** the dispatcher sends `EMAIL_ROLE`, `BATCH_ID` and `BATCH_KIND`
+  on every start (`batch_for`: same mode and hour = one batch, ordered by
+  `run_time`). The 14 test jobs carry a fixed `EMAIL_ROLE` in Terraform
+  (`first` on sales-orders-test, `last` on part-lot-test).
+
+### Added
+- **`job_run_log` audit columns:** `report_name`, `batch_id`, `batch_kind`,
+  `email_role`, `started_at`, `duration_seconds`, `rows_fetched`,
+  `rows_written`, `tables_total`, `tables_failed`, `tables_changed`, `detail`,
+  `execution_name`. Added as NULLABLE by the job itself on its first run; the
+  digest reads them. Docs: `docs/OPERATIONS.md` § "Batch emails".
+
+Ships in three parts, in any order (an older image ignores the new env, and a
+job with no role mails as before): Cloud Build for the image, the
+`gcloud functions deploy etl-dispatcher` command in `terraform/main.tf`, and
+`./scripts/deploy.sh` for the test jobs' env.
+
 ## 2026-10-21 - Part Lot inheritance: lot format reads as its name
 
 ### Fixed

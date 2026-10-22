@@ -5,7 +5,9 @@ import hashlib
 import json
 import logging
 from datetime import date, datetime, time, timezone
-from typing import Optional
+from time import monotonic, sleep
+from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 import pyodbc
 import pandas as pd
@@ -13,7 +15,7 @@ import yaml
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import bigquery, secretmanager, storage
 
-from email_utils import send_report
+from email_utils import send_digest, send_report
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -78,6 +80,33 @@ REPORT_TIME_ZONE  = os.environ.get("REPORT_TIME_ZONE", "America/Denver")
 # something. With "on_error" the run email is sent only for a partial or
 # failed run; a clean run is recorded in `job_run_log` / `probe_log` instead.
 EMAIL_MODE        = os.environ.get("EMAIL_MODE", "always").lower()
+
+# Batch emails (2026-10-21). Jobs that run as a batch — the prod dispatcher's
+# 1 PM / 6 PM / 11 PM probes and 4 AM full run, and the test cascade each
+# night — mail only at the two ends: the FIRST job sends its own report (the
+# batch has started), the LAST one sends one digest of every job in the batch,
+# and the ones in between stay silent unless they fail or end partial. Every
+# run is still recorded in `job_run_log`, which is what the digest reads.
+#   EMAIL_ROLE  first | middle | last — the dispatcher sets it per run for prod
+#               (from etl_schedule); Terraform sets it per test job. "only" is
+#               a batch of one, "followup" the dispatcher's follow-up probe;
+#               both mail their own report. Unset keeps EMAIL_MODE's behaviour.
+#   BATCH_ID / BATCH_KIND  which batch this run belongs to, e.g.
+#               "probe-1300-2026-10-21" / "probe-1300". The dispatcher sends
+#               both; a test job with a role and no BATCH_ID falls in the night's
+#               "nightly-<date>" batch.
+EMAIL_ROLE        = os.environ.get("EMAIL_ROLE", "").lower()
+BATCH_ID          = os.environ.get("BATCH_ID", "")
+BATCH_KIND        = os.environ.get("BATCH_KIND", "")
+BATCH_ROLES       = ("first", "middle", "last")
+# How long the last job waits for the rest of its batch to log a result before
+# sending the digest anyway (jobs still running are listed as "no result yet").
+# Prod jobs start 4 minutes apart and the slowest takes about 7.
+DIGEST_WAIT_SECONDS = int(os.environ.get("DIGEST_WAIT_SECONDS", "360"))
+DIGEST_POLL_SECONDS = int(os.environ.get("DIGEST_POLL_SECONDS", "20"))
+# A batch's expected members are the jobs that logged under its BATCH_KIND in
+# this many days, so a new pipeline joins the digest after its first run.
+DIGEST_LOOKBACK_DAYS = int(os.environ.get("DIGEST_LOOKBACK_DAYS", "7"))
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -650,11 +679,31 @@ def ensure_metadata_table(bq: bigquery.Client):
         bq.create_table(table)
 
 
+# What each run did, for the audit trail and the batch digest (2026-10-21).
+# Added to job_run_log as NULLABLE columns, so older rows simply hold NULLs.
+JOB_RUN_DETAIL_FIELDS = [
+    bigquery.SchemaField("report_name",      "STRING"),
+    bigquery.SchemaField("batch_id",         "STRING"),
+    bigquery.SchemaField("batch_kind",       "STRING"),
+    bigquery.SchemaField("email_role",       "STRING"),
+    bigquery.SchemaField("started_at",       "TIMESTAMP"),
+    bigquery.SchemaField("duration_seconds", "INTEGER"),
+    bigquery.SchemaField("rows_fetched",     "INTEGER"),
+    bigquery.SchemaField("rows_written",     "INTEGER"),
+    bigquery.SchemaField("tables_total",     "INTEGER"),
+    bigquery.SchemaField("tables_failed",    "INTEGER"),
+    bigquery.SchemaField("tables_changed",   "STRING"),
+    bigquery.SchemaField("detail",           "STRING"),
+    bigquery.SchemaField("execution_name",   "STRING"),
+]
+
+
 def ensure_job_run_log_table(bq: bigquery.Client):
     """
     Create the job run log table if it doesn't exist yet. One row per
     completed run (scheduled or retry) — lets a retry trigger check whether
     today's scheduled run already succeeded/partial before doing real work.
+    Adds the per-run detail columns to a table created before they existed.
     """
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
     schema = [
@@ -663,11 +712,18 @@ def ensure_job_run_log_table(bq: bigquery.Client):
         bigquery.SchemaField("status",    "STRING",    mode="REQUIRED"),
         bigquery.SchemaField("run_mode",  "STRING",    mode="REQUIRED"),
         bigquery.SchemaField("logged_at", "TIMESTAMP", mode="REQUIRED"),
-    ]
+    ] + JOB_RUN_DETAIL_FIELDS
     try:
-        bq.get_table(table_ref)
+        table = bq.get_table(table_ref)
     except gcp_exceptions.NotFound:
         bq.create_table(bigquery.Table(table_ref, schema=schema))
+        return
+    existing = {field.name for field in table.schema}
+    missing = [f for f in JOB_RUN_DETAIL_FIELDS if f.name not in existing]
+    if missing:
+        table.schema = list(table.schema) + missing
+        bq.update_table(table, ["schema"])
+        log.info(f"Added {', '.join(f.name for f in missing)} to {JOB_RUN_LOG_TABLE}.")
 
 
 def get_todays_run_status(bq: bigquery.Client, job_name: str) -> Optional[str]:
@@ -718,20 +774,127 @@ def last_run_unclean(bq: bigquery.Client, job_name: str) -> bool:
     return bool(rows) and rows[0].status in ("failed", "partial")
 
 
-def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str):
-    """Record this run's outcome so a future retry trigger can check it."""
+def log_job_run(bq: bigquery.Client, job_name: str, status: str, run_mode: str,
+                details: Optional[dict] = None):
+    """Record this run's outcome so a future retry trigger can check it.
+
+    `details` fills the JOB_RUN_DETAIL_FIELDS columns. If they are refused —
+    a run that crashed before ensure_job_run_log_table() added them, or a
+    column added seconds ago that streaming does not accept yet — the row is
+    written again without them: the status row is what the retry and the probe
+    read, and it must not be lost to the audit columns."""
     now = datetime.now(timezone.utc)
-    row = [{
+    base = {
         "job_name":  job_name,
         "run_date":  now.date().isoformat(),
         "status":    status,
         "run_mode":  run_mode,
         "logged_at": now.isoformat(),
-    }]
+    }
     table_ref = f"{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}"
-    errors = bq.insert_rows_json(table_ref, row)
+    wanted = {k: v for k, v in (details or {}).items() if v is not None and v != ""}
+    if wanted:
+        try:
+            errors = bq.insert_rows_json(table_ref, [{**base, **wanted}])
+        except Exception as exc:
+            errors = [str(exc)]
+        if not errors:
+            return
+        log.warning(f"Job run detail refused ({errors}); logging the status alone.")
+    errors = bq.insert_rows_json(table_ref, [base])
     if errors:
         log.warning(f"Failed to log job run status: {errors}")
+
+
+def run_batch() -> tuple:
+    """(batch_id, batch_kind) this run belongs to, or ("", "") outside a batch.
+
+    The dispatcher names prod batches. A test job has only its static
+    EMAIL_ROLE, so its batch is the night's cascade: every test job runs
+    between 7 PM and midnight Mountain, so the local date names the night. A
+    test retry that does real work lands in the same night, and the digest
+    then shows its result instead of the failure it repaired."""
+    if BATCH_ID:
+        return BATCH_ID, BATCH_KIND or BATCH_ID
+    if EMAIL_ROLE in BATCH_ROLES:
+        night = datetime.now(ZoneInfo(REPORT_TIME_ZONE)).date().isoformat()
+        return f"nightly-{night}", "nightly"
+    return "", ""
+
+
+def email_plan(status: str, role: str, run_mode: str, email_mode: str) -> tuple:
+    """(send this run's own email, send the batch digest) for one finished run.
+
+    status is success | partial | failed | no_changes (a probe that skipped).
+    A run that ends partial or failed always mails its own report, whatever
+    its role. Outside a batch — no role, or a retry run, which only does work
+    after a failure — EMAIL_MODE decides as before: "on_error" mails only
+    unclean runs."""
+    unclean = status in ("partial", "failed")
+    if role in BATCH_ROLES and run_mode != "retry":
+        return unclean or role == "first", role == "last"
+    if role in ("only", "followup"):
+        return True, False
+    return unclean or email_mode != "on_error", False
+
+
+def run_details(result: dict, errors: List[str], start_time: datetime,
+                end_time: datetime, batch: tuple) -> dict:
+    """The JOB_RUN_DETAIL_FIELDS values for this run's job_run_log row."""
+    extractions = [e for e in (result.get("extractions") or []) if isinstance(e, dict)]
+    probe = result.get("probe") or {}
+    changed = probe.get("changed") or []
+    return {
+        "report_name":      result.get("report_name"),
+        "batch_id":         batch[0],
+        "batch_kind":       batch[1],
+        "email_role":       EMAIL_ROLE,
+        "started_at":       start_time.isoformat(),
+        "duration_seconds": int((end_time - start_time).total_seconds()),
+        "rows_fetched":     int(result.get("rows_fetched") or 0),
+        "rows_written":     int(result.get("rows_written") or 0),
+        "tables_total":     len(extractions) if extractions else probe.get("sources_checked"),
+        "tables_failed":    sum(1 for e in extractions if not e.get("ok", True)),
+        "tables_changed":   ", ".join(str(c) for c in changed)[:1000] or None,
+        "detail":           "; ".join(errors)[:1000] if errors else None,
+        "execution_name":   result.get("execution_name") or os.environ.get("CLOUD_RUN_EXECUTION", ""),
+    }
+
+
+def collect_batch(bq: bigquery.Client, batch_id: str, batch_kind: str,
+                  wait_seconds: int = DIGEST_WAIT_SECONDS) -> dict:
+    """Every job's latest result in this batch, once the batch has finished.
+
+    Waits up to wait_seconds for each expected member (a job that logged under
+    this batch_kind in the last DIGEST_LOOKBACK_DAYS days) to log a row for
+    this batch_id; whoever is still missing then is listed as such. A retry
+    that found nothing to do does not count as a result."""
+    table = f"`{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`"
+    cfg = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("batch_id", "STRING", batch_id),
+        bigquery.ScalarQueryParameter("batch_kind", "STRING", batch_kind),
+        bigquery.ScalarQueryParameter("days", "INT64", DIGEST_LOOKBACK_DAYS),
+    ])
+    expected_sql = f"""
+        SELECT DISTINCT job_name FROM {table}
+        WHERE batch_kind = @batch_kind
+          AND logged_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)"""
+    runs_sql = f"""
+        SELECT * FROM {table}
+        WHERE batch_id = @batch_id
+          AND NOT (run_mode = 'retry' AND status = 'skipped')
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY job_name ORDER BY logged_at DESC) = 1
+        ORDER BY started_at, logged_at"""
+    deadline = monotonic() + wait_seconds
+    while True:
+        expected = {r.job_name for r in bq.query(expected_sql, job_config=cfg).result()}
+        runs = [dict(r) for r in bq.query(runs_sql, job_config=cfg).result()]
+        missing = sorted(expected - {r["job_name"] for r in runs})
+        if not missing or monotonic() >= deadline:
+            break
+        log.info(f"Digest for {batch_id}: waiting on {len(missing)} job(s): {', '.join(missing)}")
+        sleep(DIGEST_POLL_SECONDS)
+    return {"batch_id": batch_id, "batch_kind": batch_kind, "runs": runs, "missing": missing}
 
 
 def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
@@ -1542,24 +1705,29 @@ def run_and_report():
     }
 
     job_identity = run_identity()
+    batch = run_batch()
 
     try:
         result = main()
         if result.get("skipped"):
             probe_skip = result.get("skip_reason") == "probe"
             log.info(f"Run skipped ({'probe unchanged' if probe_skip else 'retry no-op'}) for {job_identity}.")
+            end_time = datetime.now(timezone.utc)
             if OUTPUT_MODE == "bigquery":
                 try:
-                    log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE)
+                    log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE,
+                                details=run_details(result, [], start_time, end_time, batch))
                 except Exception:
                     log.exception("Failed to log skipped run status.")
             record_dispatch_outcome("skipped")
             # A probe that found nothing still says so — with its own short
             # template and the SAME subject as a full run, so each pipeline's
-            # day stays one Gmail thread. A retry no-op stays silent, as before.
+            # day stays one Gmail thread — when email_plan() wants it: outside
+            # a batch, or as the batch's first run. A retry no-op stays silent.
             # EMAIL_MODE=on_error (label_design, hourly) keeps clean runs silent.
-            if probe_skip and OUTPUT_MODE == "bigquery" and EMAIL_MODE != "on_error":
-                end_time = datetime.now(timezone.utc)
+            own_email, digest = (email_plan("no_changes", EMAIL_ROLE, RUN_MODE, EMAIL_MODE)
+                                 if probe_skip else (False, False))
+            if own_email and OUTPUT_MODE == "bigquery":
                 try:
                     send_report({
                         **_report_identity(result),
@@ -1572,11 +1740,15 @@ def run_and_report():
                         "events":           result.get("events", []),
                         "errors":           [],
                         "run_mode":         RUN_MODE,
+                        "email_role":       EMAIL_ROLE,
+                        "batch_kind":       batch[1],
                         "probe":            result.get("probe", {}),
                         "extractions":      [],
                     })
                 except Exception:
                     log.exception("Failed to send probe no-change email.")
+            if digest and OUTPUT_MODE == "bigquery":
+                send_batch_digest(batch)
             return result
         partial_errors = result.get("partial_errors", [])
         if partial_errors:
@@ -1596,7 +1768,8 @@ def run_and_report():
 
     if OUTPUT_MODE == "bigquery":
         try:
-            log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE)
+            log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE,
+                        details=run_details(result, errors, start_time, datetime.now(timezone.utc), batch))
         except Exception:
             log.exception("Failed to log job run status.")
 
@@ -1634,22 +1807,44 @@ def run_and_report():
         "events":           result.get("events", []),
         "errors":           errors,
         "run_mode":         RUN_MODE,
+        "email_role":       EMAIL_ROLE,
+        "batch_kind":       batch[1],
         "probe":            result.get("probe", {}),
         "extractions":      result.get("extractions", []),
     }
 
+    # A failed attempt that Cloud Run retries has already mailed its failure;
+    # the retry mails only if it succeeds.
     task_attempt = int(os.environ.get("CLOUD_RUN_TASK_ATTEMPT", "0"))
-    email_wanted = EMAIL_MODE != "on_error" or status != "success"
-    if OUTPUT_MODE == "bigquery" and email_wanted and (status == "success" or task_attempt == 0):
+    own_email, digest = email_plan(status, EMAIL_ROLE, RUN_MODE, EMAIL_MODE)
+    if OUTPUT_MODE == "bigquery" and own_email and (status == "success" or task_attempt == 0):
         try:
             send_report(report)
         except Exception:
             log.exception("Failed to send report email.")
+    if OUTPUT_MODE == "bigquery" and digest:
+        send_batch_digest(batch)
 
     if error is not None:
         raise error
 
     return report
+
+
+def send_batch_digest(batch: tuple):
+    """The last job's digest of its whole batch. Never raises: the run's own
+    result is already logged, and a lost digest must not fail the run."""
+    try:
+        digest = collect_batch(bigquery.Client(project=GCP_PROJECT), *batch)
+        send_digest({
+            **digest,
+            "gcp_project":    GCP_PROJECT,
+            "bq_dataset":     BQ_DATASET,
+            "time_zone":      REPORT_TIME_ZONE,
+            "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        })
+    except Exception:
+        log.exception(f"Failed to send the digest for batch {batch[0]}.")
 
 
 if __name__ == "__main__":

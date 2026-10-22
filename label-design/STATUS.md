@@ -11,7 +11,89 @@
 
 ---
 
-## UPDATE — 2026-10-20 (latest): push latency view; probe gap fixed
+## UPDATE — 2026-10-22 (latest): repair job for board moves
+
+Ashley reported that Bottle Material does not carry over when she moves an
+item from "Plex Import" (18432111755) to "Design & QA" (18395121955).
+
+- **Cause.** The push sends the right value; the push log shows it, and the
+  item had it on Plex Import. Monday's move blanks it (status index 5, the
+  blank label) although both boards have the same labels. Monday asks how to
+  match columns on the first move between two boards and reuses that answer
+  after, so Bottle Material was most likely left unmatched then. This is
+  inferred: the API does not show the saved matching. Re-matching it in the
+  move dialog, if Monday offers that, would fix it at the source.
+- **One-off fill (done).** Bottle Material was filled on the 7 moved items
+  that had it blank.
+- **Permanent fix: `label_design_service/repair.py`**, prod job
+  `plex-etl-label-design-repair`, scheduler `plex-label-design-repair-sync`
+  (every 15 min, 5:00 AM - 6:45 PM MT, weekdays). For every item the push
+  created in the last 30 days, it asks Monday where the item is now (a move
+  keeps the item id). The first time it finds the item on Design & QA, it
+  fills every pushed column that is blank there, never overwrites one, and
+  logs `outcome = 'repaired'` in `label_design_push_log`. That item is never
+  checked again, so a field the team clears later stays cleared. It never
+  creates items, so it cannot race the push. `label_design_push_latency`
+  ignores `repaired` rows.
+- **Found on the way:**
+  - Design & QA has **two status columns titled "Sales Rep"**. One holds the
+    rep; `color_mm7zxq8m` is always empty. The repair counts the field as
+    filled if either has a value. The team could delete the empty one.
+  - Monday's `items(ids)` still returns deleted and archived items, so the
+    job checks `state`. Of 53 pushed items on 2026-10-22, 15 were on
+    Design & QA and 38 deleted or archived; Plex Import held 0 active items.
+  - The dry run found nothing missing on the 15: the one-off fill had
+    covered them.
+- **Priority:** Ashley added the missing Priority labels herself (20:42 UTC),
+  so the "Still open, for Ashley" Priority point below is done. No move has
+  happened since, so it is untested; the repair would fill it anyway.
+- **Open:** OPEN_ITEMS L15, confirm the first real repair.
+
+---
+
+## UPDATE — 2026-10-22 (later): probe every 15 minutes, push straight after
+
+Asked by Emilio: when the probe finds new orders, push them to BigQuery and
+Monday then, not at the next :35.
+
+- **`plex-label-design-sync`** now fires every 15 minutes, 5:00 AM - 5:45 PM
+  Mountain, weekdays (was hourly). A quiet probe still takes seconds and sends
+  nothing.
+- **A prod run that extracts starts `plex-etl-label-design-push` itself**
+  (`POST_RUN_JOB` in `main.py`, set only on the prod Label Design job). If the
+  start fails, the run turns partial (mails), its fingerprint is not applied,
+  and the next probe re-runs and tries again.
+- **`plex-label-design-push-sync` is now a 6:05 PM sweep** (was hourly at
+  :35). Kept as a safety net, timed after the last run so two pushes never
+  overlap (both would create the same item).
+- **Expected latency:** about 50 min ODBC lag + up to 15 min to the next probe
+  + about 4 min run and push, so about 1 h from approval to board (was
+  about 2 h). `label_design_push_latency` will show it.
+- **Test is unchanged:** hourly at :05, push paused.
+
+---
+
+## UPDATE — 2026-10-22: moving items to Design & QA, missing status labels
+
+Ashley moves items from "Plex Import" (18432111755) to "Design & QA"
+(18395121955). Monday asks for column matching only on the first move between
+two boards, then reuses that mapping silently, and drops any status value the
+destination has no label for.
+
+- **Columns:** all 70 "Plex Import" columns already exist on Design & QA with
+  the same title and type (`scripts/replicate_board_columns.py --dry-run`
+  plus a type check). None needed creating.
+- **Labels added via the API (`update_status_column`, existing label ids,
+  colours and order kept):** Bottle Material + `Amber`, `White`; Inside
+  Sales Rep + `Claudio Soto`, `Andres Martinez`.
+- **Still open, for Ashley:** Priority (`color_mkzvyt93`) on Design & QA lacks
+  `High`, `Medium`, `Low`, `Blanket`. The API key gets 403 on that column
+  (restricted editing). Its `RUSH` label is also deactivated, so a plain RUSH
+  priority may not carry over.
+
+---
+
+## UPDATE — 2026-10-20: push latency view; probe gap fixed
 
 - **Probe now watches order approval** (OPEN_ITEMS L14). It fingerprints the
   same filter the view applies, so an approval alone triggers the next hourly

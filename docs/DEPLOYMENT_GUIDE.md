@@ -55,7 +55,7 @@ If you're coming from frontend, here's a mental model for each service this pipe
 |---|---|---|
 | **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
 | **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
-| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — in prod, one `plex-etl-dispatcher` scheduler (every 5 min) starts 13 pipelines at the times in `PlexOps.etl_schedule`, and Label Design keeps its own hourly scheduler; test jobs run in an evening cascade with a 9:45 PM retry; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — in prod, one `plex-etl-dispatcher` scheduler (every 5 min) starts 13 pipelines at the times in `PlexOps.etl_schedule`, and Label Design keeps its own 15-minute scheduler; test jobs run in an evening cascade with a 9:45 PM retry; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
 | **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
 | **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
 | **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |

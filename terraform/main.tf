@@ -4897,6 +4897,18 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           name  = "REPORT_CONFIG_GCS_PATH"
           value = "gs://${var.report_configs_bucket}/reports/label_design.yaml"
         }
+        # After a run that extracted, start the Monday push straight away
+        # (2026-10-22), so a new order reaches the board minutes after the
+        # probe sees it. A start that fails turns the run partial, and the
+        # next probe runs again. See POST_RUN_JOB in main.py.
+        env {
+          name  = "POST_RUN_JOB"
+          value = google_cloud_run_v2_job.label_design_push.name
+        }
+        env {
+          name  = "GCP_REGION"
+          value = var.gcp_region
+        }
         # Hourly behind the change probe (reports/label_design.yaml): a mail on
         # every run that found something would be noise. A partial or failed
         # run still mails; a clean one is recorded in `job_run_log` and
@@ -4964,15 +4976,18 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
   }
 }
 
-# HOURLY since 2026-10-01, which is only affordable because of the change
-# probe in reports/label_design.yaml: a run whose probe fingerprint matches
-# the last clean run's skips all 14 extractions in seconds. 5 AM - 5 PM
-# Mountain (Jennilyn, 2026-10-01 — the team starts at 5). The days are NOT
+# EVERY 15 MINUTES since 2026-10-22 (hourly from 2026-10-01), which is only
+# affordable because of the change probe in reports/label_design.yaml: a run
+# whose probe fingerprint matches the last clean run's skips all 15
+# extractions in seconds. Only a new order, line or release changes the
+# fingerprint. A run that extracts starts the Monday push itself
+# (POST_RUN_JOB). 5:00 AM - 5:45 PM Mountain (Jennilyn, 2026-10-01 — the
+# team starts at 5). The days are NOT
 # settled: it still runs weekends, pending an answer (OPEN_ITEMS L9).
 resource "google_cloud_scheduler_job" "etl_label_design" {
   name        = "plex-label-design-sync"
-  description = "Triggers Plex to BigQuery Label Design queue ETL job (hourly, probe-gated)"
-  schedule    = "0 5-17 * * 1-5" # hourly 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
+  description = "Triggers Plex to BigQuery Label Design queue ETL job (every 15 min, probe-gated)"
+  schedule    = "*/15 5-17 * * 1-5" # every 15 min 5:00 AM - 5:45 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
 
@@ -5305,10 +5320,14 @@ resource "google_cloud_run_v2_job" "label_design_push" {
 
 resource "google_cloud_scheduler_job" "label_design_push" {
   name        = "plex-label-design-push-sync"
-  description = "Pushes new Label Design rows (PlexProd) to the Plex Import Monday board"
-  schedule    = "35 5-17 * * 1-5" # 35 min after plex-label-design-sync (:00), Mon-Fri; last push 5:35 PM
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
+  description = "End-of-day sweep: pushes any Label Design rows (PlexProd) still missing from the Plex Import Monday board"
+  # ONE SWEEP A DAY since 2026-10-22 (hourly at :35 before). Each ETL run that
+  # extracts now starts this job itself (POST_RUN_JOB), so the sweep only
+  # catches a push that failed. 6:05 PM is after the last 5:45 PM run and its
+  # push, so two pushes never run at once (they would both create the item).
+  schedule  = "5 18 * * 1-5" # 6:05 PM Mountain, Mon-Fri
+  time_zone = var.scheduler_time_zone
+  region    = var.gcp_region
 
   # RELEASED 2026-10-19 (cutover). Before the first scheduled run, the board
   # had been emptied, and a dry run showed 38 new items and no hand-typed
@@ -5318,6 +5337,82 @@ resource "google_cloud_scheduler_job" "label_design_push" {
   http_target {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_push.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Label Design repair — PRODUCTION (added 2026-10-22) ──────────────────────
+# Ashley moves items from "Plex Import" to "Design & QA" (18395121955). Monday
+# matches columns only on the first move between two boards and reuses that
+# answer, so a column it left unmatched arrives blank on every move (Bottle
+# Material). `python -m label_design_service.repair` finds each pushed item
+# (label_design_push_log) once it is on Design & QA and fills every pushed
+# column that is blank there, ONCE per item (an `outcome = 'repaired'` row).
+#
+# Its own job and schedule, not part of the push: it never creates items, so
+# it cannot race the push into a duplicate, and it runs whether or not there
+# were new orders. A run with nothing new to check is one BigQuery query and
+# one Monday lookup.
+resource "google_cloud_run_v2_job" "label_design_repair" {
+  name     = "plex-etl-label-design-repair"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        args  = ["python", "-m", "label_design_service.repair"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "MONDAY_BOARD_ID"
+          value = "18432111755"
+        }
+        env {
+          name  = "REPAIR_BOARD_ID"
+          value = "18395121955"
+        }
+        env {
+          name  = "SECRET_MONDAY_API_KEY"
+          value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+      }
+      # The next run 15 min later is the retry.
+      max_retries = 0
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "label_design_repair" {
+  name        = "plex-label-design-repair-sync"
+  description = "Refills columns a Plex Import -> Design & QA move left blank (once per item)"
+  schedule    = "*/15 5-18 * * 1-5" # every 15 min, 5:00 AM - 6:45 PM Mountain, Mon-Fri
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_repair.name}:run"
     body        = base64encode("{}")
 
     oauth_token {

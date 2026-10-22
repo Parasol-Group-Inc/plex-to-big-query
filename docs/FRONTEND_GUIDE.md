@@ -497,7 +497,7 @@ Cloud Run injects `CLOUD_RUN_TASK_ATTEMPT` (0-indexed) into every container exec
 | GCP Service | What it does in this pipeline |
 |---|---|
 | **Cloud Run Jobs** | Runs the Python container on schedule or manual trigger — 30 jobs total (14 pipelines × prod/test, plus the two Label Design push jobs), all sharing one image |
-| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — the ETL dispatcher (every 5 minutes) starts prod jobs such as `plex-etl-sales-orders` from `PlexOps.etl_schedule`; test jobs have their own nightly schedulers (`plex-etl-sales-orders-test` at 7:10 PM Mountain as the running example), 12 of them with a retry trigger at 9:45 PM Mountain; Label Design hourly 5 AM - 5 PM (30 scheduler jobs total) |
+| **Cloud Scheduler** | Fires HTTP POST to Cloud Run — the ETL dispatcher (every 5 minutes) starts prod jobs such as `plex-etl-sales-orders` from `PlexOps.etl_schedule`; test jobs have their own nightly schedulers (`plex-etl-sales-orders-test` at 7:10 PM Mountain as the running example), 12 of them with a retry trigger at 9:45 PM Mountain; Label Design every 15 min 5 AM - 5:45 PM (30 scheduler jobs total) |
 | **BigQuery** | Stores dozens of raw Plex tables across `PlexProd`/`PlexTest` + one or more named JOIN views per report family (`sales_orders_report` + `sales_orders_open_report` for this one) |
 | **Cloud Storage** | Holds YAML report configs and SQL view definitions — read at runtime, uploaded by Terraform |
 | **Secret Manager** | Stores the Plex IAM token and SendGrid API key |

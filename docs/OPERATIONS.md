@@ -29,8 +29,8 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-14 pipelines, 30 Cloud Run jobs (prod + test, plus the two Label Design push
-job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
+14 pipelines, 31 Cloud Run jobs (prod + test, plus the two Label Design push
+jobs and the prod Label Design repair job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
@@ -320,7 +320,7 @@ never in the subject — check the body for those.
 | Setting | Production | Test |
 |---|---|---|
 | Cloud Run jobs (14 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
-| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (hourly) and `plex-label-design-push-sync` (live) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
+| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) and `plex-label-design-repair-sync` (every 15 min) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
 | Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
@@ -442,7 +442,8 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
 Every pipeline can start a run with a cheap question to Plex: has anything I
 read changed since my last clean run? If not, it skips the extraction.
 
-- **Label Design** has asked it every hour since 2026-10-01: an *explicit*
+- **Label Design** has asked it every hour since 2026-10-01, every 15 minutes
+  since 2026-10-22: an *explicit*
   probe on the release lines sitting in `Label Design` status.
 - **Every nightly pipeline** got an *automatic* probe on 2026-10-19: one
   `COUNT(*)` plus `MAX(change date / key)` per table. Plex answers those on its
@@ -479,6 +480,25 @@ is 0 it returns before reading the Monday API key or paging the board, so a
 quiet hour costs no Monday API calls at all. It can over-count (a hand-typed
 board item has no audit row) but never under-count, so the board scan stays the
 final authority.
+
+**The repair job refills what a board move dropped (2026-10-22).** Ashley moves
+items from "Plex Import" to "Design & QA". Monday matches columns only on the
+first move between two boards and reuses that answer, so a column it left
+unmatched (Bottle Material) arrives blank on every move.
+`plex-etl-label-design-repair` (`label_design_service/repair.py`, scheduler
+`plex-label-design-repair-sync`, every 15 min 5:00 AM - 6:45 PM weekdays) looks
+up each pushed item from the last 30 days that has no `repaired` row yet. Once
+an item is on Design & QA, it fills every pushed column that is blank there and
+logs `outcome = 'repaired'` in `label_design_push_log`. It never touches a
+filled column and never checks an item twice, so a value the team clears
+afterwards stays cleared. It never creates items, so it cannot race the push.
+To see what it did:
+
+```sql
+SELECT pushed_at, monday_item_id, customer_part_no, detail
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE outcome = 'repaired' ORDER BY pushed_at DESC LIMIT 20;
+```
 
 ### Checking it is actually working
 
@@ -625,9 +645,11 @@ automatically — no manual adjustment needed). The naming is uniform —
 | … one per test pipeline except Label Design and Part Routing | |
 
 **Label Design has no retry trigger** (both were removed 2026-10-01). It runs
-hourly behind a change probe, and a failed or partial run leaves the stored
-fingerprint where it was, so the next hourly probe sees a difference and runs
-again — the probe is the retry.
+every 15 minutes behind a change probe, and a failed or partial run leaves the
+stored fingerprint where it was, so the next probe sees a difference and runs
+again — the probe is the retry. The same holds for the Monday push it starts
+(`POST_RUN_JOB`, 2026-10-22): a push that cannot be started turns the run
+partial, so the next probe re-runs and starts it again.
 
 **How it decides whether to actually do anything:** the retry trigger
 re-invokes the *same* Cloud Run Job with `RUN_MODE=retry` (a per-execution

@@ -10,7 +10,8 @@ description: "VOX | Label Design queue for the Monday holding board — prod (Pl
 #
 # NOT a scorecard tile. It is an operational queue the sales and design teams
 # work from, which is why it gets its own pipeline rather than riding
-# sales_orders: it runs at 10:00 and 14:00 Mountain, not once overnight.
+# sales_orders: it probes every 15 minutes, 5:00 AM - 5:45 PM Mountain on
+# weekdays (since 2026-10-22), and a run that extracts starts the Monday push.
 #
 # Four of the eight tables this needs are already extracted by sales_orders
 # (Sales_v_PO, _PO_Line, _Release, _PO_Status, Common_v_Customer,

@@ -301,7 +301,7 @@
       "env": "prod",
       "config": "gs://voxdatalake-report-configs/reports/label_design.yaml",
       "trigger": "scheduler plex-label-design-sync (own scheduler, not the dispatcher)",
-      "schedule": "hourly at :00, 5 AM-5 PM Mountain, Mon-Fri (0 5-17 * * 1-5), behind an explicit change probe; max_retries 1; EMAIL_MODE=on_error"
+      "schedule": "every 15 min, 5:00 AM-5:45 PM Mountain, Mon-Fri (*/15 5-17 * * 1-5), behind an explicit change probe; a run that extracts starts plex-etl-label-design-push (POST_RUN_JOB); max_retries 1; EMAIL_MODE=on_error"
     },
     {
       "job": "plex-etl-label-design-test",
@@ -316,8 +316,8 @@
       "pipeline": "label_design_push",
       "env": "prod",
       "config": "none; runs python -m label_design_service.push, board 18432111755 group 'New from Plex', BQ_DATASET PlexProd",
-      "trigger": "scheduler plex-label-design-push-sync (live since the 2026-10-19 cutover)",
-      "schedule": "35 5-17 * * 1-5 Mountain; max_retries 0"
+      "trigger": "started by plex-etl-label-design after every run that extracts (POST_RUN_JOB, since 2026-10-22); scheduler plex-label-design-push-sync is a 6:05 PM sweep",
+      "schedule": "on demand + 5 18 * * 1-5 Mountain sweep; max_retries 0"
     },
     {
       "job": "plex-etl-label-design-push-test",
@@ -326,6 +326,14 @@
       "config": "none; same push module, BQ_DATASET PlexTest",
       "trigger": "scheduler plex-label-design-push-sync-test (PAUSED since the 2026-10-19 cutover)",
       "schedule": "35 5-17 * * 1-5 Mountain when un-paused; max_retries 0"
+    },
+    {
+      "job": "plex-etl-label-design-repair",
+      "pipeline": "label_design_repair",
+      "env": "prod",
+      "config": "none; runs python -m label_design_service.repair, pushed items on 18432111755 -> blanks on Design & QA 18395121955, BQ_DATASET PlexProd",
+      "trigger": "scheduler plex-label-design-repair-sync (since 2026-10-22)",
+      "schedule": "*/15 5-18 * * 1-5 Mountain; once per item, logs outcome repaired in label_design_push_log; no email; max_retries 0"
     }
   ],
   "prod_schedule": [
@@ -480,6 +488,13 @@
       "mode": "push, no probe"
     },
     {
+      "scheduler": "plex-label-design-repair-sync",
+      "cron": "*/15 5-18 * * 1-5",
+      "timezone": "var.scheduler_time_zone (Mountain)",
+      "target_job": "plex-etl-label-design-repair",
+      "mode": "repair: refill blanks a Monday board move dropped, never creates items"
+    },
+    {
       "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing, part_lot and label_design)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
@@ -617,13 +632,28 @@
     ]
   },
   "mermaid": {
-    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>hourly :00, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push :35\"]\n    Monday[\"Monday board Plex Import\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  Prod --> Push --> Monday\n  Apps -->|\"goals and safety incidents\"| Prod",
+    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>every 15 min, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push<br/>started by each changed run + 6:05 PM sweep\"]\n    Monday[\"Monday board Plex Import\"]\n    QA[\"Monday board Design & QA<br/>items moved by hand\"]\n    Repair[\"plex-etl-label-design-repair<br/>every 15 min, refills blanks once\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  LDJob -->|\"POST_RUN_JOB\"| Push\n  Prod --> Push --> Monday\n  Monday -->|\"moved by the team\"| QA\n  Repair -->|\"fills pushed values\"| QA\n  Prod -->|\"push log\"| Repair\n  Apps -->|\"goals and safety incidents\"| Prod",
     "probe_flow": "flowchart TD\n  Start[\"Job starts<br/>RUN_MODE probe, full, scheduled or retry\"]\n  Load[\"Load YAML from GCS<br/>open Plex ODBC connection\"]\n  Kind{\"probe_kind<br/>auto, explicit or none\"}\n  Full[\"Full extraction<br/>WRITE_TRUNCATE every raw table\"]\n  Ref[\"Read last applied fingerprint<br/>from probe_log\"]\n  Run[\"run_probe<br/>COUNT and MAX or SUM per table<br/>plus YAML and SQL hash\"]\n  Inc[\"Inconclusive<br/>log inconclusive row, fail open\"]\n  Same{\"May skip and<br/>fingerprint unchanged\"}\n  Skip[\"Log skipped<br/>short Probe ran email<br/>outcome skipped\"]\n  Views[\"Create or replace bq_views<br/>retry a failed view once\"]\n  Ok{\"Clean run\"}\n  Applied[\"probe_log applied<br/>fingerprint is new reference\"]\n  Failed[\"probe_log failed<br/>reference unchanged\"]\n  Disp[\"record_dispatch_outcome<br/>full email\"]\n  Follow[\"Dispatcher follow-up probe<br/>15 min later, once\"]\n  Start --> Load --> Kind\n  Kind -->|\"none\"| Full\n  Kind -->|\"auto or explicit\"| Ref\n  Ref -->|\"unreadable\"| Inc\n  Ref --> Run\n  Run -->|\"error\"| Inc\n  Run --> Same\n  Inc --> Full\n  Same -->|\"yes\"| Skip\n  Same -->|\"no, or full run\"| Full\n  Full --> Views --> Ok\n  Ok -->|\"yes\"| Applied --> Disp\n  Ok -->|\"no\"| Failed --> Disp\n  Disp -->|\"failed, partial or lost\"| Follow",
     "dispatch_sequence": "sequenceDiagram\n  participant CS as Cloud Scheduler\n  participant D as etl-dispatcher\n  participant BQ as PlexOps in BigQuery\n  participant CR as Cloud Run job\n  participant PX as Plex ODBC\n  CS->>D: HTTP tick every 5 minutes\n  D->>BQ: read etl_schedule and open etl_dispatch_log rows\n  D->>CR: reconcile open runs from execution status\n  D->>BQ: record failed, succeeded-unrecorded or lost\n  D->>BQ: insert dispatch row for each due slot first\n  D->>CR: run job with RUN_MODE, DISPATCH_ID, DISPATCH_LOG_TABLE\n  CR->>PX: probe aggregates\n  alt fingerprint unchanged and mode is probe\n    CR->>BQ: probe_log skipped, outcome skipped\n  else changed or full mode\n    CR->>PX: full extraction\n    CR->>BQ: write raw tables and views, probe_log applied\n    CR->>BQ: outcome success, partial or failed\n  end\n  D->>BQ: next tick finds failed, partial or lost run\n  D->>CR: one follow-up probe 15 minutes after it finished",
     "deploy_flow": "flowchart LR\n  Dev[\"dev branch worktree<br/>ptbq-dev and project folders\"]\n  Hook[\"pre-commit and pre-push hooks\"]\n  PR[\"Pull request into main\"]\n  Main[\"primary folder<br/>clean main equals origin main\"]\n  Deploy[\"scripts/deploy.sh\"]\n  Guard[\"tf_guard.py<br/>runs inside every plan\"]\n  Review[\"plan_review.py<br/>type the change count\"]\n  TF[\"terraform apply<br/>of the reviewed plan\"]\n  GCS[\"GCS configs and SQL<br/>jobs and schedulers\"]\n  Tag[\"git tag deploy timestamp\"]\n  CB[\"gcloud builds submit<br/>deploy/cloudbuild.yaml\"]\n  Img[\"image to Artifact Registry<br/>deploy-all then smoke test on test job\"]\n  GF[\"gcloud functions deploy<br/>dispatcher and plex api\"]\n  Dev --> Hook --> PR --> Main\n  Main --> Deploy --> Guard --> Review --> TF --> GCS\n  TF --> Tag\n  Main -->|\"code changes\"| CB --> Img\n  Main -->|\"function changes\"| GF",
     "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X"
   },
   "changelog_recent": [
+    {
+      "date": "2026-10-22",
+      "title": "Repair job refills columns a board move drops (label-design)",
+      "summary": "Moving an item from Plex Import to Design & QA blanked Bottle Material. New prod job plex-etl-label-design-repair (every 15 min, weekdays) fills each moved item's blank pushed columns once, never overwrites, and logs outcome repaired in label_design_push_log. label_design_push_latency ignores those rows."
+    },
+    {
+      "date": "2026-10-22",
+      "title": "Label Design probes every 15 min and pushes straight after (label-design)",
+      "summary": "plex-label-design-sync fires every 15 min, 5:00 AM-5:45 PM weekdays (was hourly). A prod run that extracts starts plex-etl-label-design-push itself (POST_RUN_JOB); a failed start turns the run partial so the next probe retries. The push scheduler is now a 6:05 PM sweep. Approval-to-board drops from about 2 h to about 1 h, mostly the ODBC lag."
+    },
+    {
+      "date": "2026-10-22",
+      "title": "BigQuery loads retry once (dev)",
+      "summary": "A Google-side load error (matched no files) made a 1 PM Label Design run partial on raw_Sales_v_PO_Line. write_to_bigquery now retries a failed load once, 30 s later."
+    },
     {
       "date": "2026-10-22",
       "title": "Bottling 9-parts no longer count as production (scorecard)",

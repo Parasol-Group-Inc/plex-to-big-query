@@ -123,6 +123,13 @@ STALE_AFTER_HOURS = int(os.environ.get("STALE_AFTER_HOURS",
 # name a job still running an old image.
 BUILD_SHA = os.environ.get("GIT_SHA", "") or "unknown"
 
+# A Cloud Run job to start after a run that extracted (2026-10-22). Label
+# Design sets it to its Monday push, so new orders reach the board minutes
+# after the probe sees them instead of at the next scheduled push. Unset
+# everywhere else.
+POST_RUN_JOB = os.environ.get("POST_RUN_JOB", "")
+GCP_REGION   = os.environ.get("GCP_REGION", "us-central1")
+
 # Plex ODBC connect (2026-10-22). The driver ignores pyodbc's own timeout: on
 # the night of 2026-10-21 every connect hung about 3 minutes before Plex closed
 # it. Each attempt gets a hard wall-clock deadline, and a refused or hung
@@ -1943,6 +1950,18 @@ def run_and_report():
                 "accepting connections. A canary job tries again every few minutes, quietly; "
                 "when one connects, each held job re-runs and a digest reports the recovery."]
 
+    # Start the follow-on job only after a run that extracted. A start that
+    # fails turns the run partial, so its probe fingerprint is not applied and
+    # the next probe runs again and starts it then.
+    if status in ("success", "partial") and POST_RUN_JOB and OUTPUT_MODE == "bigquery":
+        try:
+            start_post_run_job()
+            result.setdefault("events", []).append(f"Started {POST_RUN_JOB}")
+        except Exception as exc:
+            log.exception(f"Failed to start {POST_RUN_JOB}.")
+            status = "partial"
+            errors = list(errors) + [f"Could not start {POST_RUN_JOB}: {exc}"]
+
     if OUTPUT_MODE == "bigquery":
         try:
             log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status=status, run_mode=RUN_MODE,
@@ -2006,6 +2025,20 @@ def run_and_report():
         raise error
 
     return report
+
+
+def start_post_run_job():
+    """Start POST_RUN_JOB (Cloud Run Admin API v2 :run, no overrides, so
+    roles/run.invoker is enough). Returns once the execution is created."""
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    url = (f"https://run.googleapis.com/v2/projects/{GCP_PROJECT}/locations/{GCP_REGION}"
+           f"/jobs/{POST_RUN_JOB}:run")
+    response = AuthorizedSession(credentials).post(url, json={}, timeout=60)
+    response.raise_for_status()
+    log.info(f"Started {POST_RUN_JOB}: {response.json().get('metadata', {}).get('name', '')}")
 
 
 def send_batch_digest(batch: tuple):

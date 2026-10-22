@@ -14,6 +14,40 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (label-design) - Repair job refills columns a board move drops
+
+### Added
+- **`plex-etl-label-design-repair`** (prod Cloud Run job,
+  `label_design_service/repair.py`) and **`plex-label-design-repair-sync`**
+  (every 15 min, 5:00 AM - 6:45 PM Mountain, Mon-Fri). Moving an item from
+  "Plex Import" to "Design & QA" blanked Bottle Material every time. Monday
+  reuses the column matching saved on the first move between two boards. For
+  each item the push created in the last 30 days (`REPAIR_DAYS`), the job
+  asks Monday where it is now. The first time it finds it on Design & QA
+  (`REPAIR_BOARD_ID`), it fills every pushed column that is blank there from
+  the push log's values, never overwrites, and logs `outcome = 'repaired'`
+  in `label_design_push_log`. Once per item, so a field the team clears later
+  stays cleared. It never creates items and sends no email. Deleted and
+  archived items (still returned by `items(ids)`) are skipped by `state`. A
+  title that repeats on the board (Design & QA has two "Sales Rep" status
+  columns) counts as filled if any copy has a value.
+- `deploy/cloudbuild.yaml` `_ALL_JOBS` lists the new job.
+
+### Changed
+- **`label_design_push_latency` ignores `repaired` rows**: they refill an
+  item already counted, and are not pushes.
+- Job and scheduler counts are now 31 (README, OPERATIONS, CHEATSHEET,
+  EMAIL_SCHEDULE). Docs: `docs/reports/label_design_report.md`,
+  `docs/reports/label_design_push_latency.md`, `label-design/README.md`,
+  `label-design/STATUS.md`, OPEN_ITEMS L15.
+
+### Fixed
+- **One-off:** Bottle Material filled by hand (API) on the 7 moved items that
+  had it blank.
+
+Ships via Cloud Build first (the image must contain `repair.py`), then
+`./scripts/deploy.sh` creates the job and scheduler.
+
 ## 2026-10-22 (dev) - BigQuery loads retry once
 
 ### Fixed
@@ -27,6 +61,29 @@ don't need an entry.
   same unfiltered pull). `WRITE_TRUNCATE` makes the retry safe. A real error
   (schema, permissions) fails twice and is reported as before, 30 s later.
   Code change: ships via Cloud Build.
+
+## 2026-10-22 (label-design) - Label Design probes every 15 minutes and pushes straight after
+
+### Changed
+- **`plex-label-design-sync` fires every 15 minutes**, 5:00 AM - 5:45 PM
+  Mountain, Mon-Fri (was hourly 5 AM - 5 PM). The change probe keeps a quiet
+  check to seconds; only a new order, line, release or approval extracts.
+- **A prod Label Design run that extracts starts the Monday push itself.**
+  New `POST_RUN_JOB` env var (`main.py`, `start_post_run_job()`): after a
+  success or partial run, the job calls Cloud Run's `:run` on
+  `plex-etl-label-design-push` (no overrides, so `roles/run.invoker` is
+  enough). A start that fails turns the run partial, so the probe
+  fingerprint is not applied and the next probe re-runs and retries. Set
+  only on the prod Label Design job; every other job leaves it unset.
+- **`plex-label-design-push-sync` is a 6:05 PM sweep** (was hourly at :35),
+  after the last run, so two pushes never overlap.
+- Expected approval-to-board time drops from about 2 h to about 1 h (most of
+  it is the ~50 min prod ODBC lag). Docs: `docs/reports/label_design_report.md`,
+  `label_design_push_latency.md`, `EMAIL_SCHEDULE.md`, `OPERATIONS.md`,
+  `CHEATSHEET.md`, `TECHNICAL_REFERENCE.md`, `label-design/STATUS.md`, README.
+- Ships in two parts: Terraform (schedules, env vars) via `./scripts/deploy.sh`,
+  and the `main.py` code via Cloud Build. **Cloud Build first:** with the old
+  code the job ignores `POST_RUN_JOB`, and the board would update only at 6:05 PM.
 
 ## 2026-10-22 (scorecard) - Bottling bulk cases (9xxxx-BK) stay counted; Plex SQL equivalents
 

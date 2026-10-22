@@ -11,6 +11,26 @@
 
 ---
 
+## UPDATE — 2026-10-22: moving items to Design & QA, missing status labels
+
+Ashley moves items from "Plex Import" (18432111755) to "Design & QA"
+(18395121955). Monday asks for column matching only on the first move between
+two boards, then reuses that mapping silently, and drops any status value the
+destination has no label for.
+
+- **Columns:** all 70 "Plex Import" columns already exist on Design & QA with
+  the same title and type (`scripts/replicate_board_columns.py --dry-run`
+  plus a type check). None needed creating.
+- **Labels added via the API (`update_status_column`, existing label ids,
+  colours and order kept):** Bottle Material + `Amber`, `White`; Inside
+  Sales Rep + `Claudio Soto`, `Andres Martinez`.
+- **Still open, for Ashley:** Priority (`color_mkzvyt93`) on Design & QA lacks
+  `High`, `Medium`, `Low`, `Blanket`. The API key gets 403 on that column
+  (restricted editing). Its `RUSH` label is also deactivated, so a plain RUSH
+  priority may not carry over.
+
+---
+
 ## UPDATE — 2026-10-20 (latest): push latency view; probe gap fixed
 
 - **Probe now watches order approval** (OPEN_ITEMS L14). It fingerprints the

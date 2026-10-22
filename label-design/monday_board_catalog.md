@@ -166,7 +166,7 @@ display order.
 `[0]` Re-Send QA Form · `[1]` Create QA Form
 
 ### Bottle Material (`color_mkzvbses`)
-`[0]` PET · `[1]` HDPE · `[2]` Glass · `[3]` N/A · `[4]` Opt Out · `[6]` Opt In · `[7]` -
+`[0]` PET · `[1]` HDPE · `[2]` Glass · `[3]` N/A · `[4]` Opt Out · `[6]` Opt In · `[7]` - · `[8]` Amber · `[9]` White *(added 2026-10-22)*
 
 ### Regulatory Status (`color_mkzkf80t`)
 `[0]` Aquamin Trademark · `[1]` Sabinsa Trademark · `[2]` Organic ·

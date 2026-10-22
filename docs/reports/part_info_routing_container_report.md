@@ -1,6 +1,6 @@
 # Audit - Part Info and Routing (Container Types)
 
-> **Status:** 🔬 Built 2026-10-19, checked on PlexTest data (32,482 rows), not yet deployed · **Category:** Production · **Runs:** with Audit - Part Info and Routing (same pipeline, `part_routing`), nightly at 11:00 PM Mountain until the probe schedule (phase 2)
+> **Status:** ✅ Live in prod (PlexProd) since 2026-10-19; 55,733 rows on 2026-10-20, from 48,398 approved containers (the PlexTest check on 10-19 saw 32,482 rows from 24,937) · **Category:** Production · **Runs:** with Audit - Part Info and Routing (same pipeline, `part_routing`), prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

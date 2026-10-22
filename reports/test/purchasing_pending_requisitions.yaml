@@ -15,7 +15,7 @@ extractions:
     bq_table: raw_Purchasing_v_Requisition
     filter: ""
     date_col: ""
-    probe: [Requisition_Key]
+    probe: [Requisition_Key, Requested_Date, sum:Quantity, sum:Unit_Price]
 
   - plex_view: Purchasing_v_Requisition_Status
     bq_table: raw_Purchasing_v_Requisition_Status

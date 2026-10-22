@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<!--
+  Batch digest (2026-10-21). Sent once by the LAST job of a batch (the prod
+  dispatcher's probes and full run, or the nightly test cascade) in place of
+  one email per job: every job's latest result in the batch, read back from
+  job_run_log. Failed or partial jobs still send their own report.html.
+  Same Vox palette and table layout as report.html.
+-->
+<style>
+  body { margin:0; padding:0; background:#f4f7f9; font-family:Arial,Helvetica,sans-serif; color:#333333; }
+  .wrapper { width:100%; padding:24px 0; }
+  .card { max-width:700px; margin:0 auto; background:#ffffff; border-top:5px solid #1f8ccb; border-radius:4px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+
+  .header { padding:24px 28px 18px; border-bottom:2px solid #aecfe6; }
+  .logo { width:160px; max-width:160px; height:auto; display:block; border:0; }
+  .header-sub { margin:14px 0 0; font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:#9ca3af; }
+
+  .body { padding:24px 28px; }
+  .report-title { font-family:Georgia,"Times New Roman",serif; font-size:20px; font-weight:700; color:#215a7c; margin:0 0 4px; }
+  .dataset-path { font-size:12px; color:#6b7280; margin:0 0 18px; font-family:"Courier New",monospace; }
+
+  .badge { display:inline-block; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; letter-spacing:0.4px; margin-bottom:18px; }
+  .badge-success { background:#d1fae5; color:#065f46; }
+  .badge-warning { background:#fef3c7; color:#92400e; }
+  .badge-error   { background:#fee2e2; color:#991b1b; }
+  .badge-env-prod { background:#e2eff8; color:#215a7c; }
+  .badge-env-test { background:#fef3c7; color:#92400e; }
+
+  .stats { width:100%; border:1px solid #aecfe6; border-collapse:collapse; border-radius:4px; margin-bottom:22px; }
+  .stats td { padding:12px 8px; text-align:center; border-right:1px solid #e8eef3; }
+  .stats td:last-child { border-right:none; }
+  .stat-val { font-size:16px; font-weight:700; color:#215a7c; display:block; margin-bottom:3px; }
+  .stat-lbl { font-size:10px; color:#9ca3af; text-transform:uppercase; letter-spacing:0.8px; }
+
+  .grid { width:100%; border-collapse:collapse; margin-top:8px; }
+  .grid td { padding:9px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; vertical-align:top; }
+  .grid td:first-child { width:190px; color:#6b7280; }
+  .section-label { font-family:Georgia,"Times New Roman",serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#215a7c; padding:16px 10px 4px; border-bottom:1px solid #aecfe6 !important; }
+  .mono { font-family:"Courier New",monospace; font-size:12px; }
+  .link-row td { border-bottom:none; padding-top:6px; padding-bottom:6px; }
+  .link { color:#1f8ccb; text-decoration:none; font-size:12px; font-weight:bold; }
+  .events-list { margin:0; padding-left:16px; font-size:12px; color:#374151; }
+  .events-list li { padding:2px 0; }
+  .error-hint { display:block; margin-top:3px; color:#215a7c; font-size:11px; font-style:italic; font-family:Arial,sans-serif; }
+  .none-text { color:#9ca3af; font-size:12px; font-style:italic; }
+  .badge-neutral { background:#eef2f6; color:#475569; }
+  .badge-mode { background:#ffffff; color:#215a7c; border:1px solid #aecfe6; font-weight:normal; }
+  .why { background:#f2f8fc; border-left:4px solid #1f8ccb; padding:12px 14px; font-size:13px; line-height:1.5; color:#215a7c; margin:0 0 20px; }
+  .x-table { width:100%; border-collapse:collapse; }
+  .x-table td { padding:3px 6px; font-size:11px; border-bottom:1px solid #f4f6f8; color:#4b5563; }
+  .x-name { font-family:"Courier New",monospace; }
+  .x-rows { text-align:right; white-space:nowrap; }
+
+  .footer { padding:18px 28px; background:#fafafa; border-top:1px solid #eeeeee; color:#888888; font-size:11px; line-height:1.7; }
+  .footer a { color:#1f8ccb; text-decoration:none; }
+  .footer-right { text-align:right; color:#9ca3af; }
+  .d-table { width:100%; border-collapse:collapse; margin-top:4px; }
+  .d-table th { font-size:10px; color:#9ca3af; text-transform:uppercase; letter-spacing:0.8px; text-align:left; padding:6px 6px; border-bottom:1px solid #aecfe6; }
+  .d-table td { padding:8px 6px; border-bottom:1px solid #f1f5f9; font-size:12px; vertical-align:top; color:#374151; }
+  .d-name { font-weight:bold; color:#215a7c; }
+  .d-sub { display:block; font-weight:normal; color:#9ca3af; font-size:10px; }
+  .d-status { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; white-space:nowrap; }
+  .d-num { text-align:right; white-space:nowrap; }
+  .d-note { font-size:11px; color:#6b7280; }
+  .health-title { font-size:13px; color:#92400e; margin:22px 0 6px; }
+  .health { margin:0; padding:10px 14px 10px 30px; background:#fffbeb; border-left:4px solid #f59e0b; font-size:12px; line-height:1.6; color:#78350f; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card">
+
+    <div class="header">
+      <img src="cid:voxlogo" alt="Vox Nutrition" class="logo" width="160">
+      <p class="header-sub">Plex &#x2192; BigQuery &nbsp;&middot;&nbsp; Batch Digest</p>
+    </div>
+
+    <div class="body">
+      <h1 class="report-title">{{batch_label}} &mdash; {{batch_date}}</h1>
+      <p class="dataset-path">{{gcp_project}} &rsaquo; {{bq_dataset}}</p>
+
+      <span class="badge {{status_class}}">{{status_label}}</span>{{environment_badge_html}}
+
+      <table class="stats" role="presentation">
+        <tr>
+          <td><span class="stat-val">{{jobs}}</span><span class="stat-lbl">Jobs</span></td>
+          <td><span class="stat-val">{{ok}}</span><span class="stat-lbl">Loaded</span></td>
+          <td><span class="stat-val">{{no_changes}}</span><span class="stat-lbl">No changes</span></td>
+          <td><span class="stat-val">{{unclean}}</span><span class="stat-lbl">Failed / partial</span></td>
+          <td><span class="stat-val">{{rows_written}}</span><span class="stat-lbl">Rows written</span></td>
+        </tr>
+      </table>
+
+      <p class="why">{{summary}}</p>
+
+      <table class="d-table" role="presentation">
+        <tr><th>Pipeline</th><th>Result</th><th class="d-num">Start</th><th class="d-num">Took</th><th class="d-num">Rows</th><th>Notes</th></tr>
+        {{rows_html}}
+      </table>
+
+      {{health_html}}
+    </div>
+
+    <div class="footer">
+      <table role="presentation" width="100%"><tr>
+        <td>
+          <b style="color:#6b7280;">Batch</b> {{batch_id}}<br>
+          <b style="color:#6b7280;">Sent by</b> {{execution_name}}
+        </td>
+        <td class="footer-right">
+          {{company_name}}<br>
+          Automated Data Sync &mdash; one email per batch<br>
+          Please do not reply
+        </td>
+      </tr></table>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

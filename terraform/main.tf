@@ -44,6 +44,36 @@ output "deployed_from" {
   value       = data.external.deploy_guard.result
 }
 
+# ── ETL image ────────────────────────────────────────────────────────────────
+# A job Terraform CREATES (new pipeline, or a rename, which is a destroy and
+# recreate) starts on local.etl_image. Existing jobs ignore it: Cloud Build
+# moves their image. It used to be var.image_url, which nothing kept current
+# (several deploys stale on 2026-09-04 and again on 2026-10-22), so a rename
+# would have rolled that job back. It now reads the image a live reference
+# job runs, which Cloud Build's deploy-all keeps on the newest build;
+# var.image_url is only the fallback for a project with no jobs yet
+# (image_reference_job = "").
+data "google_cloud_run_v2_job" "image_reference" {
+  count    = var.image_reference_job == "" ? 0 : 1
+  name     = var.image_reference_job
+  location = var.gcp_region
+}
+
+locals {
+  etl_image = (var.image_reference_job == "" ? var.image_url
+  : data.google_cloud_run_v2_job.image_reference[0].template[0].template[0].containers[0].image)
+}
+
+output "etl_image" {
+  description = "The image any job created by this apply starts on."
+  value       = local.etl_image
+
+  precondition {
+    condition     = can(regex("/plex-pipeline/etl[:@]", local.etl_image)) && !endswith(local.etl_image, ":latest")
+    error_message = "The ETL image must be a pinned build from the plex-pipeline/etl repository, not :latest."
+  }
+}
+
 data "google_project" "current" {
   project_id = var.gcp_project
 }
@@ -58,6 +88,9 @@ resource "google_project_service" "required" {
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "storage.googleapis.com",
+    # The ETL dispatcher (deploy/etl_dispatcher/) and the Plex API extractor
+    # are Gen 2 Cloud Functions.
+    "cloudfunctions.googleapis.com",
   ])
 
   project            = var.gcp_project
@@ -102,8 +135,10 @@ resource "google_project_iam_member" "etl_roles" {
 resource "google_project_iam_custom_role" "run_with_overrides" {
   role_id     = "plexEtlRunWithOverrides"
   title       = "Plex ETL - run jobs with overrides"
-  description = "Lets the retry schedulers invoke a Cloud Run job with an overrides body; roles/run.invoker alone cannot."
-  permissions = ["run.jobs.runWithOverrides"]
+  description = "Lets the retry schedulers and the ETL dispatcher invoke a Cloud Run job with an overrides body (roles/run.invoker alone cannot), and lets the dispatcher read an execution's status."
+  # run.executions.get (added 2026-10-19): the dispatcher reads a run's Cloud
+  # Run execution to tell a crash from a run still in progress. Read-only.
+  permissions = ["run.jobs.runWithOverrides", "run.executions.get"]
 }
 
 resource "google_project_iam_member" "etl_run_with_overrides" {
@@ -261,7 +296,7 @@ resource "google_cloud_run_v2_job" "etl" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -367,7 +402,9 @@ resource "google_cloud_run_v2_job" "etl" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -375,7 +412,8 @@ resource "google_cloud_run_v2_job" "etl" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -389,51 +427,9 @@ resource "google_cloud_run_v2_job" "etl" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl" {
-  name        = var.scheduler_job
-  description = "Triggers Plex to BigQuery ETL job"
-  schedule    = var.scheduler_cron
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # Retries the same job if today's scheduled run failed. Fires every day at
 # the same time regardless — main.py checks job_run_log and no-ops if
 # today's scheduled run already succeeded/partial.
-resource "google_cloud_scheduler_job" "etl_retry" {
-  name        = "${var.scheduler_job}-retry"
-  description = "Retries the sales orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Test environment ── same image, test Plex host, PlexTest dataset ──────────
 
 resource "google_bigquery_dataset" "plex_test" {
@@ -484,7 +480,7 @@ resource "google_cloud_run_v2_job" "etl_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -587,6 +583,14 @@ resource "google_cloud_run_v2_job" "etl_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "first"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -596,7 +600,8 @@ resource "google_cloud_run_v2_job" "etl_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -685,7 +690,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -783,7 +788,9 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -791,7 +798,8 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -805,48 +813,6 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_work_orders" {
-  name        = "plex-work-orders-sync"
-  description = "Triggers Plex to BigQuery work orders ETL job"
-  schedule    = "20 19 * * *" # 7:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_work_orders_retry" {
-  name        = "plex-work-orders-sync-retry"
-  description = "Retries the work orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Work Orders report — test (PlexTest, 5 AM UTC) ───────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_work_orders_test" {
@@ -857,7 +823,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -954,6 +920,10 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -963,7 +933,8 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1064,7 +1035,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1162,7 +1133,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1170,7 +1143,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1184,48 +1158,6 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_purchasing_open_orders" {
-  name        = "plex-purchasing-open-orders-sync"
-  description = "Triggers Plex to BigQuery purchasing open orders ETL job"
-  schedule    = "40 19 * * *" # 7:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_retry" {
-  name        = "plex-purchasing-open-orders-sync-retry"
-  description = "Retries the purchasing open orders ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Purchasing Open Orders — test (PlexTest, 7 AM UTC) ───────────────────────
 
 resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
@@ -1236,7 +1168,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1333,6 +1265,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1342,7 +1278,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1431,7 +1368,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1529,7 +1466,9 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1537,7 +1476,8 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1551,48 +1491,6 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_part_obsolescence" {
-  name        = "plex-part-obsolescence-sync"
-  description = "Triggers Plex to BigQuery part obsolescence ETL job"
-  schedule    = "0 20 * * *" # 8:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_obsolescence_retry" {
-  name        = "plex-part-obsolescence-sync-retry"
-  description = "Retries the part obsolescence ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Part Obsolescence — test (PlexTest, 9 AM UTC) ─────────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
@@ -1603,7 +1501,7 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1700,6 +1598,10 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -1709,7 +1611,8 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1798,7 +1701,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -1896,7 +1799,9 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -1904,7 +1809,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -1918,48 +1824,6 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_inventory_activity" {
-  name        = "plex-inventory-activity-sync"
-  description = "Triggers Plex to BigQuery inventory activity ETL job"
-  schedule    = "20 20 * * *" # 8:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_activity_retry" {
-  name        = "plex-inventory-activity-sync-retry"
-  description = "Retries the inventory activity ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Inventory Activity — test (PlexTest, 11 AM UTC) ───────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
@@ -1970,7 +1834,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2067,6 +1931,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -2076,7 +1944,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2176,7 +2045,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2274,7 +2143,9 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -2282,7 +2153,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2296,42 +2168,6 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_inventory_snapshot" {
-  name        = "plex-inventory-snapshot-sync"
-  description = "Triggers Plex to BigQuery inventory snapshot ETL job"
-  schedule    = "40 20 * * *" # 8:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_snapshot_retry" {
-  name        = "plex-inventory-snapshot-sync-retry"
-  description = "Retries the inventory snapshot ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
 resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
   name     = "plex-etl-inventory-snapshot-test"
   location = var.gcp_region
@@ -2340,7 +2176,7 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2437,6 +2273,10 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -2446,7 +2286,8 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2693,7 +2534,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2791,7 +2632,9 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -2799,7 +2642,8 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -2813,42 +2657,6 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_quality_nonconformance" {
-  name        = "plex-quality-nonconformance-sync"
-  description = "Triggers Plex to BigQuery quality non-conformance ETL job"
-  schedule    = "0 21 * * *" # 9:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_nonconformance.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_nonconformance_retry" {
-  name        = "plex-quality-nonconformance-sync-retry"
-  description = "Retries the quality non-conformance ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_nonconformance.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
 # ── Quality Non-Conformance — test (PlexTest, 3 PM UTC) ───────────────────────
 
 resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
@@ -2859,7 +2667,7 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -2956,6 +2764,10 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -2965,7 +2777,8 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3065,7 +2878,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3163,7 +2976,9 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -3171,7 +2986,8 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3185,42 +3001,6 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory" {
-  name        = "plex-part-on-hand-inventory-sync"
-  description = "Triggers Plex to BigQuery part on-hand inventory ETL job"
-  schedule    = "20 21 * * *" # 9:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory.name}:run"
-    body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_retry" {
-  name        = "plex-part-on-hand-inventory-sync-retry"
-  description = "Retries the part on-hand inventory ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
 # ── Part On-Hand Inventory — test (PlexTest, 5 PM UTC) ────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
@@ -3231,7 +3011,7 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3328,6 +3108,10 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3337,7 +3121,8 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3518,7 +3303,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3616,7 +3401,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -3624,7 +3411,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3638,48 +3426,6 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions" {
-  name        = "plex-purchasing-pending-requisitions-sync"
-  description = "Triggers Plex to BigQuery purchasing pending requisitions ETL job"
-  schedule    = "40 21 * * *" # 9:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_retry" {
-  name        = "plex-purchasing-pending-requisitions-sync-retry"
-  description = "Retries the purchasing pending requisitions ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Purchasing Pending Requisitions — test (PlexTest, 9:50 PM Mountain) ──────
 
 resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
@@ -3690,7 +3436,7 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3787,6 +3533,10 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       max_retries = 1
       timeout     = "600s"
@@ -3796,7 +3546,8 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions_test" {
   # Image is deliberately NOT managed by Terraform — deploy/cloudbuild.yaml
   # (or a manual `gcloud run jobs update --image=...`) owns the deployed
   # image tag for every plex-etl-* job. Terraform still declares an initial
-  # pinned SHA in var.image_url for first-time creation, but ignores drift
+  # image (local.etl_image: the reference job's live one) for first-time
+  # creation, but ignores drift
   # on this field afterward — the standard split for "IaC owns resource
   # shape, CI/CD owns application version" (see HashiCorp's ignore_changes
   # docs). This is what stops a routine `terraform apply` from silently
@@ -3894,7 +3645,7 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -3992,7 +3743,9 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4006,48 +3759,6 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_sales_quotes" {
-  name        = "plex-sales-quotes-sync"
-  description = "Triggers Plex to BigQuery Open Quotes ETL job"
-  schedule    = "0 22 * * *" # 10:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_quotes_retry" {
-  name        = "plex-sales-quotes-sync-retry"
-  description = "Retries the Open Quotes ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Open Quotes — test (PlexTest, 10:10 PM Mountain) ─────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
@@ -4058,7 +3769,7 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4154,6 +3865,10 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -4252,7 +3967,7 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4350,7 +4065,9 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4364,48 +4081,6 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_sales_returns" {
-  name        = "plex-sales-returns-sync"
-  description = "Triggers Plex to BigQuery Open RMA's ETL job"
-  schedule    = "20 22 * * *" # 10:20 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_returns_retry" {
-  name        = "plex-sales-returns-sync-retry"
-  description = "Retries the Open RMA's ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Open RMA's — test (PlexTest, 10:30 PM Mountain) ──────────────────────────
 
 resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
@@ -4416,7 +4091,7 @@ resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4512,6 +4187,10 @@ resource "google_cloud_run_v2_job" "etl_sales_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -4615,7 +4294,7 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4713,7 +4392,9 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
+      # the dispatcher sends one follow-up probe 15 min after a failure instead.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -4727,48 +4408,6 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_quality_supplier_returns" {
-  name        = "plex-quality-supplier-returns-sync"
-  description = "Triggers Plex to BigQuery Approve Vendor Return Authorizations ETL job"
-  schedule    = "40 22 * * *" # 10:40 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_retry" {
-  name        = "plex-quality-supplier-returns-sync-retry"
-  description = "Retries the Approve Vendor Return Authorizations ETL job if today's scheduled run failed"
-  schedule    = var.retry_scheduler_cron
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Approve Vendor Return Authorizations — test (PlexTest, 10:50 PM Mountain) ─
 
 resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
@@ -4779,7 +4418,7 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -4875,6 +4514,10 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns_test" {
         env {
           name  = "COMPANY_NAME"
           value = var.company_name
+        }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
         }
       }
       max_retries = 1
@@ -5184,6 +4827,13 @@ resource "google_storage_bucket_object" "label_design_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "label_design_push_latency_view_sql" {
+  name         = "sql/label_design_push_latency_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/label_design_push_latency_view.sql"
+  content_type = "text/plain"
+}
+
 # ── Label Design queue — prod (PlexProd, 9:30 AM & 1:30 PM Mountain, daily) ─
 
 resource "google_cloud_run_v2_job" "etl_label_design" {
@@ -5194,7 +4844,7 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5354,7 +5004,7 @@ resource "google_cloud_run_v2_job" "etl_label_design_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5534,7 +5184,7 @@ resource "google_cloud_run_v2_job" "label_design_push_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         args  = ["python", "-m", "label_design_service.push"]
         env {
           name  = "GCP_PROJECT"
@@ -5616,7 +5266,7 @@ resource "google_cloud_run_v2_job" "label_design_push" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         args  = ["python", "-m", "label_design_service.push"]
         env {
           name  = "GCP_PROJECT"
@@ -5752,6 +5402,14 @@ resource "google_storage_bucket_object" "part_info_routing_view_sql" {
   content_type = "text/plain"
 }
 
+# Third view (2026-10-19): Vox Nutrition Item List with Shelf Life Details.
+resource "google_storage_bucket_object" "part_shelf_life_view_sql" {
+  name         = "sql/part_shelf_life_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_shelf_life_view.sql"
+  content_type = "text/plain"
+}
+
 # Second view on the same pipeline (2026-10-19): the wContainerType procedure.
 resource "google_storage_bucket_object" "part_info_routing_container_view_sql" {
   name         = "sql/part_info_routing_container_view.sql"
@@ -5770,7 +5428,7 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -5884,24 +5542,6 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_part_routing" {
-  name        = "plex-part-routing-sync"
-  description = "Triggers Plex to BigQuery Part Info and Routing ETL job"
-  schedule    = "0 23 * * *" # 11:00 PM Mountain — see scheduler_time_zone
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_routing.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Part Info and Routing — test (PlexTest, 11:10 PM Mountain) ──────────────
 
 resource "google_cloud_run_v2_job" "etl_part_routing_test" {
@@ -5912,7 +5552,7 @@ resource "google_cloud_run_v2_job" "etl_part_routing_test" {
     template {
       service_account = google_service_account.etl.email
       containers {
-        image = var.image_url
+        image = local.etl_image
         env {
           name  = "GCP_PROJECT"
           value = var.gcp_project
@@ -6009,6 +5649,10 @@ resource "google_cloud_run_v2_job" "etl_part_routing_test" {
           name  = "COMPANY_NAME"
           value = var.company_name
         }
+        env {
+          name  = "EMAIL_ROLE"
+          value = "middle"
+        }
       }
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
@@ -6040,6 +5684,434 @@ resource "google_cloud_scheduler_job" "etl_part_routing_test" {
 
     oauth_token {
       service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Part Lot — added 2026-10-21 (Jennilyn). Two views from 22 raw tables:
+# part_lot_attribute_specs_report (the Part Lot Attributes screen for every
+# active part) and part_lot_inheritance_report (the Lot Management box).
+# Four tables are 250k-325k rows and are pulled in keyset pages (page_key),
+# hence the 1800s timeout instead of part_routing's 900s.
+#
+# PROD has no Cloud Scheduler job: it runs from PlexOps.etl_schedule through
+# the dispatcher (rows added by SQL after the first deploy, see
+# docs/reports/part_lot_inheritance_report.md). Test keeps its own nightly
+# scheduler, 11:20 PM, after part_routing's 11:10 PM.
+# ═══════════════════════════════════════════════════════════════════════════
+
+resource "google_storage_bucket_object" "part_lot_config_prod" {
+  name         = "reports/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_config_test" {
+  name         = "test/part_lot.yaml"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/test/part_lot.yaml"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_attribute_specs_view_sql" {
+  name         = "sql/part_lot_attribute_specs_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_attribute_specs_view.sql"
+  content_type = "text/plain"
+}
+
+resource "google_storage_bucket_object" "part_lot_inheritance_view_sql" {
+  name         = "sql/part_lot_inheritance_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_lot_inheritance_view.sql"
+  content_type = "text/plain"
+}
+
+# ── Part Lot — prod (PlexProd; run times are rows in PlexOps.etl_schedule) ──
+
+resource "google_cloud_run_v2_job" "etl_part_lot" {
+  name     = "plex-etl-part-lot"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/reports/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+# ── Part Lot — test (PlexTest, 11:20 PM Mountain) ──────────────────────────
+
+resource "google_cloud_run_v2_job" "etl_part_lot_test" {
+  name     = "plex-etl-part-lot-test"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_test
+        }
+        env {
+          name  = "BQ_TABLE"
+          value = var.bq_table
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host_test
+        }
+        env {
+          name  = "PLEX_PORT"
+          value = "19995"
+        }
+        env {
+          name  = "PLEX_SERVER_DATASOURCE"
+          value = "ReportDataSource"
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name  = "PLEX_DSN"
+          value = var.plex_dsn
+        }
+        env {
+          name  = "SECRET_ODBC_USER"
+          value = var.secret_odbc_user
+        }
+        env {
+          name  = "SECRET_ODBC_PASSWORD"
+          value = var.secret_odbc_password
+        }
+        env {
+          name  = "SECRET_COMPANY_CODE"
+          value = var.secret_company_code
+        }
+        env {
+          name  = "REPORT_CONFIG_GCS_PATH"
+          value = "gs://${var.report_configs_bucket}/test/part_lot.yaml"
+        }
+        env {
+          name  = "PLEX_VIEW"
+          value = var.plex_view
+        }
+        env {
+          name  = "PLEX_FILTER"
+          value = var.plex_filter
+        }
+        env {
+          name  = "PLEX_DATE_COL"
+          value = var.plex_date_col
+        }
+        env {
+          name  = "METADATA_TABLE"
+          value = var.metadata_table
+        }
+        env {
+          name  = "BACKFILL_MINUTES"
+          value = tostring(var.backfill_minutes)
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "REPORT_SUBJECT"
+          value = var.report_subject
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+        env {
+          name  = "COMPANY_NAME"
+          value = var.company_name
+        }
+        # Batch emails (main.py EMAIL_ROLE): the nightly test cascade mails only
+        # at its ends: "first" on the first job by cron time, "last" (the digest)
+        # on the last; every other test job is "middle". Moving a test cron
+        # means moving these two.
+        env {
+          name  = "EMAIL_ROLE"
+          value = "last"
+        }
+      }
+      # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
+      # 2026-10-19): an immediate re-run usually repeats the same error.
+      max_retries = 0
+      timeout     = "1800s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "etl_part_lot_test" {
+  name        = "plex-part-lot-sync-test"
+  description = "Triggers Plex to BigQuery Part Lot ETL job (test)"
+  schedule    = "20 23 * * *" # 11:20 PM Mountain — see scheduler_time_zone
+  time_zone   = var.scheduler_time_zone
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_lot_test.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ETL DISPATCHER — probe rollout phase 2 (docs/PROBE_BUILD_PLAN.md), 2026-10-19
+#
+# The prod schedule moves from per-job Cloud Scheduler crons into a TABLE,
+# PlexOps.etl_schedule, so times change with a SQL UPDATE instead of a deploy.
+# Cloud Scheduler cannot read BigQuery, so one scheduler calls the dispatcher
+# (a Gen 2 Cloud Function) every 5 minutes; it starts the jobs whose slot has
+# come, with RUN_MODE=probe|full, and sends ONE follow-up probe 15 minutes after
+# a failed or partial run. Every start is a row in PlexOps.etl_dispatch_log.
+#
+# STAGED. Stage A: the dataset, tables and dispatcher, prod rows seeded
+# disabled (deploy/etl_dispatcher/seed_schedule.sql). Stage B (live, see the
+# note below): prod rows enabled, prod nightly + -retry schedulers removed,
+# prod max_retries = 0.
+#
+# The function is deployed with gcloud, like the Plex API extractor (no
+# archive provider, no image). From the repo root:
+#   gcloud functions deploy etl-dispatcher \
+#     --gen2 --runtime=python312 --region=us-central1 \
+#     --source=deploy/etl_dispatcher --entry-point=dispatch \
+#     --trigger-http --no-allow-unauthenticated \
+#     --service-account=<etl SA email> \
+#     --timeout=300 --memory=512Mi --max-instances=1 \
+#     --set-env-vars=GCP_PROJECT=voxdatalake,OPS_DATASET=PlexOps \
+#     --project=voxdatalake
+# --max-instances=1: two overlapping ticks must not race; the slot key in the
+# dispatch log makes a repeat harmless, but one instance makes it impossible.
+# The ETL service account already holds roles/run.invoker project-wide, which
+# covers invoking a Gen 2 function, so no extra binding is needed.
+# ORDER: deploy the function BEFORE running deploy.sh, or this scheduler gets a
+# 404 every 5 minutes until it exists. Keep --max-instances=1 and --timeout=300
+# on every redeploy: they are only in this command.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# STAGE B (2026-10-19): the 13 prod nightly schedulers and the 12 prod -retry
+# schedulers are REMOVED — prod runs only when the dispatcher starts it from
+# PlexOps.etl_schedule (enabled the same day), and a failed run gets one
+# follow-up probe 15 min later instead of a 9:45 PM retry. Prod jobs have
+# max_retries = 0. Test jobs keep their nightly scheduler and -retry.
+
+resource "google_bigquery_dataset" "ops" {
+  dataset_id                 = "PlexOps"
+  location                   = var.bq_location
+  description                = "ETL operations: the prod run schedule and the dispatcher's log. Not report data."
+  delete_contents_on_destroy = false
+}
+
+# One row per job per time. Edit with SQL; the dispatcher reads it every 5 min.
+resource "google_bigquery_table" "etl_schedule" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "etl_schedule"
+  deletion_protection = true
+  description         = "Prod ETL run times (America/Denver). mode: probe | full. See docs/OPERATIONS.md § ETL schedule."
+
+  schema = jsonencode([
+    { name = "job_name", type = "STRING", mode = "REQUIRED", description = "Cloud Run job, e.g. plex-etl-sales-orders" },
+    { name = "run_time", type = "STRING", mode = "REQUIRED", description = "HH:MM, America/Denver wall clock" },
+    { name = "mode", type = "STRING", mode = "REQUIRED", description = "probe (skip if unchanged) or full (always extract)" },
+    { name = "enabled", type = "BOOL", mode = "REQUIRED" },
+    { name = "note", type = "STRING", mode = "NULLABLE" },
+    { name = "updated_by", type = "STRING", mode = "NULLABLE" },
+    { name = "updated_at", type = "TIMESTAMP", mode = "NULLABLE" },
+  ])
+}
+
+# One row per start, written by the dispatcher; the job fills outcome/finished_at.
+resource "google_bigquery_table" "etl_dispatch_log" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "etl_dispatch_log"
+  deletion_protection = true
+  description         = "Every job start by the ETL dispatcher, and how it ended."
+
+  schema = jsonencode([
+    { name = "dispatch_id", type = "STRING", mode = "REQUIRED" },
+    { name = "job_name", type = "STRING", mode = "REQUIRED" },
+    { name = "mode", type = "STRING", mode = "REQUIRED" },
+    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up" },
+    { name = "scheduled_for", type = "TIMESTAMP", mode = "NULLABLE", description = "the schedule slot (UTC); NULL for a follow-up" },
+    { name = "followup_of", type = "STRING", mode = "NULLABLE", description = "dispatch_id of the failed run this follows up" },
+    { name = "dispatched_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "execution_name", type = "STRING", mode = "NULLABLE" },
+    { name = "outcome", type = "STRING", mode = "NULLABLE", description = "success | partial | failed | skipped | skipped-busy | lost | dispatch-failed | succeeded-unrecorded; NULL while running" },
+    { name = "finished_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "detail", type = "STRING", mode = "NULLABLE" },
+  ])
+}
+
+resource "google_cloud_scheduler_job" "etl_dispatcher" {
+  name        = "plex-etl-dispatcher"
+  description = "Every 5 minutes: start the ETL jobs due in PlexOps.etl_schedule (docs/PROBE_BUILD_PLAN.md)"
+  schedule    = "*/5 * * * *"
+  time_zone   = "America/Denver"
+  region      = var.gcp_region
+
+  # A tick is idempotent (slot key in the dispatch log), so a retry is safe.
+  retry_config {
+    retry_count = 1
+  }
+  # Longer than the function's 300 s timeout, so a slow tick is not cut off
+  # and retried while it is still working (the default is 180 s).
+  attempt_deadline = "320s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
+
+    oidc_token {
+      service_account_email = google_service_account.etl.email
+      audience              = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
     }
   }
 }

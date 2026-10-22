@@ -1,6 +1,6 @@
 # Vox | Open Purchase Orders
 
-> **Status:** ✅ Built and deployed 2026-08-10/11, confirmed live · **Category:** Supply Chain · **Runs:** `plex-etl-purchasing-open-orders`, 7:40 PM / 7:50 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-10/11, confirmed live · **Category:** Supply Chain · **Runs:** `plex-etl-purchasing-open-orders`, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

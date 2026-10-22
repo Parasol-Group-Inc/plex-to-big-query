@@ -1,6 +1,6 @@
 report_name: part_routing_test
 category: Production
-description: "Vox | Audit - Part Info and Routing (+ Container Types) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
+description: "Vox | Audit - Part Info and Routing (+ Container Types, Shelf Life) — TEST environment (vox.test.odbc.plex.com → PlexTest dataset)"
 
 probe_mode: auto
 
@@ -104,6 +104,20 @@ extractions:
     date_col: ""
     probe: [Container_Type_Key]
 
+  - plex_view: Part_v_Part_Shelf_Life
+    bq_table: raw_Part_v_Part_Shelf_Life
+    filter: ""
+    date_col: ""
+    probe: [Part_Shelf_Life_Key, sum:Shelf_Life, sum:Supplier_Shelf_Life]
+    page_key: Part_Shelf_Life_Key
+    page_size: 25000
+
+  - plex_view: Part_v_Shelf_Life_Type
+    bq_table: raw_Part_v_Shelf_Life_Type
+    filter: ""
+    date_col: ""
+    probe: [Shelf_Life_Type_Key]
+
 bq_view:
   - name: part_info_routing_report
     display_name: "Audit - Part Info and Routing"
@@ -111,3 +125,6 @@ bq_view:
   - name: part_info_routing_container_report
     display_name: "Audit - Part Info and Routing (Container Types)"
     sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_container_view.sql
+  - name: part_shelf_life_report
+    display_name: "Vox Nutrition Item List with Shelf Life Details"
+    sql_file: gs://voxdatalake-report-configs/sql/part_shelf_life_view.sql

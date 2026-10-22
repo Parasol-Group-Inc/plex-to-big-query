@@ -17,7 +17,9 @@
                                    is also in gs://voxdatalake-build-assets;
                                    zipfiles/ exists nowhere else (added
                                    2026-09-30, docs/DISASTER_RECOVERY.md).
-      secrets.env                  the six Secret Manager VALUES, read with
+      ../ptbq-label-design/.env    the sibling worktrees' own gitignored files
+      ../ptbq-sandbox/.env.clickup (added 2026-10-20)
+      secrets.env                  the eight Secret Manager VALUES, read with
                                    `gcloud secrets versions access` (added
                                    2026-09-30). Restore with
                                    scripts/restore_secrets.sh. Anyone who can
@@ -28,6 +30,8 @@
                                    in this same bucket under a different prefix.
                                    A local file means a migration left one
                                    behind, and it is worth keeping a copy.
+      remote__default.tfstate      a copy of that remote state, made inside the
+                                   bucket (added 2026-10-20).
 
     A full repo archive goes up alongside them. That is belt and braces — the
     repo is on GitHub — but it costs pennies and it means one command restores
@@ -86,7 +90,11 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # ── The files that exist nowhere else ──────────────────────────────────────
 $LocalOnly = @(
     'terraform/terraform.tfvars',
-    '.env'
+    '.env',
+    # The sibling project worktrees (CLAUDE.md) keep their own gitignored
+    # files; picked up from whichever folder runs this (added 2026-10-20).
+    '../ptbq-label-design/.env',
+    '../ptbq-sandbox/.env.clickup'
 ) + (Get-ChildItem -Path (Join-Path $RepoRoot 'assets') -Filter '*.csv' -ErrorAction SilentlyContinue |
      ForEach-Object { "assets/$($_.Name)" }
 ) + (Get-ChildItem -Path (Join-Path $RepoRoot 'terraform') -Filter '*.tfstate*' -ErrorAction SilentlyContinue |
@@ -137,10 +145,11 @@ Write-Host ''
 # Read straight from Secret Manager into a temp file, uploaded, then deleted,
 # so no value is ever shown or pasted. The names match terraform/main.tf.
 $SecretNames = @('plex-access-token', 'plex-odbc-user', 'plex-odbc-password',
-                 'plex-company-code', 'sendgrid-api-key', 'monday-api-key')
+                 'plex-company-code', 'sendgrid-api-key', 'monday-api-key',
+                 'plex-api-consumer-key', 'plex-api-consumer-secret')   # REST API pair, added 2026-10-20
 $SecretsPath = Join-Path ([System.IO.Path]::GetTempPath()) "secrets-$Stamp.env"
 Write-Host 'Secret values (Secret Manager -> secrets.env, never printed):' -ForegroundColor Yellow
-if ($PSCmdlet.ShouldProcess($SecretsPath, 'read six secret values')) {
+if ($PSCmdlet.ShouldProcess($SecretsPath, "read $($SecretNames.Count) secret values")) {
     $lines = @("# plex-to-big-query secret values, $Stamp UTC. Restore: scripts/restore_secrets.sh")
     foreach ($name in $SecretNames) {
         $prev = $ErrorActionPreference
@@ -224,7 +233,7 @@ function Send-ToBucket {
 
 Write-Host 'Uploading:' -ForegroundColor Yellow
 foreach ($rel in ($Present | Where-Object { $_ -notlike '*/' -and $_ -ne 'secrets.env' })) {   # folders and secrets go up separately
-    $flat = $rel -replace '[\\/]', '__'      # keep a flat, unambiguous object name
+    $flat = ($rel -replace '^\.\./', '') -replace '[\\/]', '__'      # keep a flat, unambiguous object name
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Dest/$flat"
     Send-ToBucket -Source (Join-Path $RepoRoot $rel) -Target "$Latest/$flat"
 }
@@ -245,6 +254,12 @@ foreach ($f in $Folders) {
         Send-ToBucket -Source $f.Zip -Target "$Dest/$($f.Name).zip"   # -WhatIf: prints the would-upload line
     }
 }
+# The remote Terraform state, copied bucket-to-bucket into the stamped folder.
+# The bucket is versioned, but a copy next to the tfvars it was planned with
+# restores as a pair, and survives someone deleting old versions.
+Send-ToBucket -Source "$Bucket/plex-to-big-query/default.tfstate" -Target "$Dest/remote__default.tfstate"
+Send-ToBucket -Source "$Bucket/plex-to-big-query/default.tfstate" -Target "$Latest/remote__default.tfstate"
+$Present += 'remote default.tfstate (copied in the bucket)'
 if (Test-Path $ArchivePath) {
     Send-ToBucket -Source $ArchivePath -Target "$Dest/$ArchiveName"
     Send-ToBucket -Source $ArchivePath -Target "$Latest/repo-latest.zip"

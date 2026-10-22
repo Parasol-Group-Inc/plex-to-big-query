@@ -23,9 +23,11 @@ This is **not** a scorecard tile. It is an operational queue, which is why it
 runs through the working day rather than riding the overnight `sales_orders`
 pipeline.
 
-**It runs every hour, 5 AM - 5 PM Mountain, Monday to Friday**, so an order that
-reaches Label Design at 10:20 is on the board by 10:35 instead of waiting for
-the afternoon run. The 5 AM start is the team's own: they are working the queue
+**It runs every hour, 5 AM - 5 PM Mountain, Monday to Friday**, so an order
+approved at 10:20 is normally on the board within about 2 hours instead of
+waiting for the afternoon run. The copy of Plex we read runs about 50 minutes
+behind Plex itself, so a 10:20 approval is first seen by the noon run and lands
+on the board around 12:35. The 5 AM start is the team's own: they are working the queue
 before most of the office. The last board update of the day is 5:35 PM.
 
 **Nothing runs at weekends** (since 2026-10-02). Orders entered on Saturday or
@@ -33,8 +35,9 @@ Sunday reach the board on Monday at 5 AM, ahead of the team arriving — so the
 queue is current when anyone looks at it, even though it sat still for two
 days. If the team ever starts working weekends, this needs changing back.
 Most of those hourly runs do almost nothing: the job first asks Plex which
-order lines are sitting on the Label Design status, and if that list is exactly
-what it was last time, it stops there — no extraction, no board update, no
+order lines are sitting on the Label Design status, and which of their orders
+are approved (Pending Fulfillment, dated on or after 18 Oct). If both lists
+are exactly what they were last time, it stops there — no extraction, no board update, no
 email. The same is true of the push: it checks in BigQuery whether anything is
 new before it opens Monday at all. A quiet hour costs seconds; an hour with a
 new order does the full job.
@@ -43,14 +46,19 @@ new order does the full job.
 
 Takes every sales-order release whose status is **Label Design**, keeps only
 those on an order that is **Pending Fulfillment** (approved), and limits it to
-orders placed in the **last 14 days** and **on or after 18 October 2026**.
+orders placed **on or after 18 October 2026**.
 
-The second date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
+That date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
 orders migrated in for cutover, dated back to early October, and the team works
 those by hand, so they must not appear on Monday. The 38 items pushed on the
 morning of the 19th stay on the board, because the cutoff only stops new ones.
-From 1 November the 14-day window is stricter anyway, so the cutoff stops
-mattering.
+
+There used to be a 14-day window on the order date as well. It was removed on
+2026-10-20 because it dropped orders that sales approved more than two weeks
+after they were entered, and nothing flagged them. An order now reaches Monday
+whenever it becomes approved, however long that takes. It still appears only
+once: the push skips anything already on the board or in its log, including
+items the team has deleted.
 
 Each row is joined to the customer, the
 customer part number and description, the job note, and the sales reps on the

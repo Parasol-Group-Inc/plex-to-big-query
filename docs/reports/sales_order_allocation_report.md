@@ -1,6 +1,6 @@
 # Vox | Allocation Report
 
-> **Status:** ✅ Deployed to test 2026-08-21, decided open-status proxy — currently returns 0 rows on real data, needs a data-scientist/Vox answer · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Deployed to test 2026-08-21, decided open-status proxy — currently returns 0 rows on real data, needs a data-scientist/Vox answer · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

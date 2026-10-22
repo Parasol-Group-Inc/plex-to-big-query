@@ -1,6 +1,6 @@
 report_name: part_routing
 category: Production
-description: "Vox | Audit - Part Info and Routing (+ Container Types) — prod (PlexProd dataset)"
+description: "Vox | Audit - Part Info and Routing (+ Container Types, Shelf Life) — prod (PlexProd dataset)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Plex stored procedure "Audit - Part_Info_and_Routing" (author Shannon Hadley,
@@ -149,9 +149,9 @@ extractions:
   # (procedure Audit - Part_Info_and_Routing_wContainerType). Every other table
   # that view reads is already pulled above.
   #
-  # Approved containers per part operation, with pack quantities. 24,937 rows
-  # on 2026-10-19 — just under one page, so paged by its unique key now rather
-  # than the night it outgrows a single call. No change date: the probe SUMs the
+  # Approved containers per part operation, with pack quantities. 48,398 rows
+  # on 2026-10-20 (the 24,937 noted on 10-19 was wrong), so two pages, paged by
+  # its unique key. No change date: the probe SUMs the
   # quantities. It cannot SUM [Primary] (Plex refuses SUM on a bit column, and
   # Primary is a reserved word there), so a primary-flag flip alone waits for
   # the 4 AM full run.
@@ -170,6 +170,27 @@ extractions:
     date_col: ""
     probe: [Container_Type_Key]
 
+  # ── Added 2026-10-19 for the third view, part_shelf_life_report ("Vox
+  # Nutrition Item List with Shelf Life Details"). Part_v_Part is already above.
+  #
+  # Shelf life per part and type (Best By / Use By / Sell By). 35,342 rows on
+  # 2026-10-19 — over one page, so paged by its unique key. No change date: the
+  # probe SUMs the shelf-life values, so an edited shelf life is seen.
+  - plex_view: Part_v_Part_Shelf_Life
+    bq_table: raw_Part_v_Part_Shelf_Life
+    filter: ""
+    date_col: ""
+    probe: [Part_Shelf_Life_Key, sum:Shelf_Life, sum:Supplier_Shelf_Life]
+    page_key: Part_Shelf_Life_Key
+    page_size: 25000
+
+  # Shelf life type lookup (4 rows).
+  - plex_view: Part_v_Shelf_Life_Type
+    bq_table: raw_Part_v_Shelf_Life_Type
+    filter: ""
+    date_col: ""
+    probe: [Shelf_Life_Type_Key]
+
 bq_view:
   - name: part_info_routing_report
     display_name: "Audit - Part Info and Routing"
@@ -177,3 +198,6 @@ bq_view:
   - name: part_info_routing_container_report
     display_name: "Audit - Part Info and Routing (Container Types)"
     sql_file: gs://voxdatalake-report-configs/sql/part_info_routing_container_view.sql
+  - name: part_shelf_life_report
+    display_name: "Vox Nutrition Item List with Shelf Life Details"
+    sql_file: gs://voxdatalake-report-configs/sql/part_shelf_life_view.sql

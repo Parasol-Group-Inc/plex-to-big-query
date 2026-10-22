@@ -1,6 +1,6 @@
 # Encap Daily Report
 
-> **Status:** ✅ Fixed and verified in both Test and Prod 2026-08-26 — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.encap_daily_report` exists and is queryable again (0 rows, benign — see Flags below) · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Fixed and verified in both Test and Prod 2026-08-26 — manually ran `plex-etl-work-orders` (prod), confirmed `PlexProd.encap_daily_report` exists and is queryable again (0 rows, benign — see Flags below) · **Category:** Production · **Runs:** rides the Work Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

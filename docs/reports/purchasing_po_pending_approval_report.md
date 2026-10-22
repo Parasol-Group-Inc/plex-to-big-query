@@ -1,6 +1,6 @@
 # Purchase Orders to Approve: Results
 
-> **Status:** ✅ Built and confirmed — filtered on Plex's own literal status label, no business-rule guessing involved · **Category:** Supply Chain · **Runs:** rides the Purchasing Open Orders pipeline, 7:40 PM / 7:50 PM Mountain (prod/test)
+> **Status:** ✅ Built and confirmed — filtered on Plex's own literal status label, no business-rule guessing involved · **Category:** Supply Chain · **Runs:** rides the Purchasing Open Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

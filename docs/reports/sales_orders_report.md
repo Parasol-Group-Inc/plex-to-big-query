@@ -1,6 +1,6 @@
 # Sales Orders
 
-> **Status:** ✅ Built and deployed to production 2026-08-22 (has been running against real Vox Nutrition data since 2026-07-13) · **Category:** Sales · **Runs:** `plex-etl-sales-orders`, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed to production 2026-08-22 (has been running against real Vox Nutrition data since 2026-07-13) · **Category:** Sales · **Runs:** `plex-etl-sales-orders`, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

@@ -1,6 +1,6 @@
 # Quality Nonconformance
 
-> **Status:** ✅ Built 2026-08-11 · **repointed 2026-09-22 to the table Vox actually writes to, and returning 22 real records for the first time** · **Category:** Quality · **Runs:** `plex-etl-quality-nonconformance(-test)`, 9:00 PM / 9:10 PM Mountain (prod/test)
+> **Status:** ✅ Built 2026-08-11 · **repointed 2026-09-22 to the table Vox actually writes to, and returning 22 real records for the first time** · **Category:** Quality · **Runs:** `plex-etl-quality-nonconformance(-test)`, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

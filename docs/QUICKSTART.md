@@ -24,8 +24,8 @@ There are two phases:
 > project**.
 >
 > **Reality check for Phase 2:** the first deploy doesn't create just one job —
-> `terraform/main.tf` defines all **27** Cloud Run jobs (13 pipelines ×
-> prod/test, plus the Label Design push job) and 51 schedulers with no conditional gating, so one deploy stands
+> `terraform/main.tf` defines all **30** Cloud Run jobs (14 pipelines ×
+> prod/test, plus the two Label Design push jobs) and 30 schedulers with no conditional gating, so one deploy stands
 > up the entire stack at once. The job this guide walks through testing,
 > `plex-etl-sales-orders`, runs the **Sales Orders** pipeline
 > (`reports/sales_orders.yaml` — 27 Plex views) via `report_config_gcs_path`
@@ -271,8 +271,8 @@ your `PATH` and Git Bash to run `deploy.sh`.
 - Every `reports/` YAML and SQL file, uploaded to the report-configs bucket
 - An Artifact Registry repository (where your Docker image lives)
 - **Six** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `monday-api-key`
-- All 27 Cloud Run job definitions (13 pipelines × prod/test, plus the Label Design push job)
-- All 51 Cloud Scheduler jobs — one daily trigger per Cloud Run job + a 9:45 PM Mountain retry trigger on each except Label Design and its push
+- All 30 Cloud Run job definitions (14 pipelines × prod/test, plus the two Label Design push jobs)
+- All 30 Cloud Scheduler jobs — the ETL dispatcher trigger, one nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers (prod pipelines have no scheduler of their own; they run from `PlexOps.etl_schedule`)
 
 **Check it worked:** In GCP Console → **Secret Manager**, you should see 6 secrets listed.
 
@@ -311,13 +311,13 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA
 docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```
 
-Set `image_url` in `terraform.tfvars` to that `:$SHA` tag and deploy again — this is what actually creates `plex-etl-sales-orders` (and the other 26 jobs) on a real image:
+Set `image_url` in `terraform.tfvars` to that `:$SHA` tag and deploy again — this is what actually creates `plex-etl-sales-orders` (and the other 29 jobs) on a real image:
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-**This is the only time in this walkthrough that a Terraform apply moves an image onto a job.** Every job has `lifecycle { ignore_changes = [image] }` specifically so a *later* apply (for something unrelated) can never silently swap the image out. On any later rebuild, pushing a new image does nothing by itself — run `./scripts/deploy_preflight.sh`, then `deploy/cloudbuild.yaml` (`gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .`), whose `deploy-all` step moves all 26 jobs from one build.
+**This is the only time in this walkthrough that a Terraform apply moves an image onto a job.** Every job has `lifecycle { ignore_changes = [image] }` specifically so a *later* apply (for something unrelated) can never silently swap the image out. On any later rebuild, pushing a new image does nothing by itself — run `./scripts/deploy_preflight.sh`, then `deploy/cloudbuild.yaml` (`gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .`), whose `deploy-all` step moves all 30 jobs from one build.
 
 ### Step 12 · Run the job manually to test
 
@@ -353,7 +353,7 @@ bq query --use_legacy_sql=false --project_id=voxdatalake \
 
 ## You're done
 
-`plex-etl-sales-orders` (Sales Orders) now runs daily at 7:00 PM Mountain; `plex-etl-sales-orders-test` at 7:10 PM Mountain (with the live `terraform.tfvars`; the `variables.tf` defaults are 02:00/03:00 UTC). The other 24 jobs Step 9 created run on their own schedules — full list in [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). You don't need to do anything else.
+`plex-etl-sales-orders` (Sales Orders) now runs daily at 7:00 PM Mountain; `plex-etl-sales-orders-test` at 7:10 PM Mountain (with the live `terraform.tfvars`; the `variables.tf` defaults are 02:00/03:00 UTC). The other 28 jobs Step 9 created run on their own schedules — full list in [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). You don't need to do anything else.
 
 **To check on a specific day's run:** GCP Console → **Cloud Run** → **Jobs** → `plex-etl-sales-orders` (or any other job) → **Executions** tab shows each run with its status.
 
@@ -377,12 +377,18 @@ gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=pl
 echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token \
   --data-file=- --project=voxdatalake
 
-# Pause the daily schedule (keeps everything deployed, just stops auto-runs).
-# Its -retry scheduler (plex-sales-orders-sync-retry) fires separately — pause it too.
-gcloud scheduler jobs pause plex-sales-orders-sync --location=us-central1 --project=voxdatalake
+# Pause the prod schedule (keeps everything deployed, just stops auto-runs).
+# Prod has no scheduler of its own: the ETL dispatcher reads PlexOps.etl_schedule.
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "UPDATE \`voxdatalake.PlexOps.etl_schedule\` SET enabled = FALSE, updated_by = 'your-name', updated_at = CURRENT_TIMESTAMP() WHERE job_name = 'plex-etl-sales-orders'"
 
-# Resume the schedule
-gcloud scheduler jobs resume plex-sales-orders-sync --location=us-central1 --project=voxdatalake
+# Resume the prod schedule
+bq query --project_id=voxdatalake --nouse_legacy_sql \
+  "UPDATE \`voxdatalake.PlexOps.etl_schedule\` SET enabled = TRUE, updated_by = 'your-name', updated_at = CURRENT_TIMESTAMP() WHERE job_name = 'plex-etl-sales-orders'"
+
+# Test job: pause/resume its own scheduler (its -test-retry scheduler fires separately — pause it too)
+gcloud scheduler jobs pause plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake
 ```
 
 For the full command reference, see [docs/API_REFERENCE.md](API_REFERENCE.md).

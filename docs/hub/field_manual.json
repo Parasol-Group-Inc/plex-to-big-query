@@ -1,0 +1,798 @@
+{
+ "source": "https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a",
+ "snapshot": "2026-10-20 (figures read from PlexTest 11 Sep 2026)",
+ "asks": [
+  {
+   "ask": "&ldquo;Where does this number come from?&rdquo;",
+   "ans": "Name the chain: <b>Plex table &rarr; view &rarr; tile</b>. Every teardown below prints it. If a tile has no Plex table, it is a manual input and the form is the source."
+  },
+  {
+   "ask": "&ldquo;Why do we need that at all?&rdquo;",
+   "ans": "Because a tile on the scorecard reads it. If nothing reads it, we should not be building it &mdash; that is the honest answer, and it is worth saying."
+  },
+  {
+   "ask": "&ldquo;Why is it zero?&rdquo;",
+   "ans": "Three different causes that look identical: the <b>view was never created</b>, the <b>Plex tenant has no such data</b>, or a <b>filter can never match</b>. Only the last is a bug, and it is the one that looks most like good news."
+  },
+  {
+   "ask": "&ldquo;Is this the same as the old number?&rdquo;",
+   "ans": "Usually not, and usually on purpose. Say which definition changed. WIP fell 2.4&times; when the status filter was corrected &mdash; the new number is right."
+  },
+  {
+   "ask": "&ldquo;Can I change it myself?&rdquo;",
+   "ans": "Goals, safety incidents and turnaround standards: <b>yes</b>, through the manual-data form. Anything sourced from Plex: it changes in Plex, and the pipeline follows."
+  },
+  {
+   "ask": "&ldquo;When does it update?&rdquo;",
+   "ans": "Overnight, on a schedule per pipeline. The Label Design queue is the exception &mdash; twice daily, at 10:00 and 14:00."
+  }
+ ],
+ "teardowns": [
+  {
+   "area": "Revenue",
+   "tile": "MTD / YTD Revenue",
+   "q": "How much did we actually ship and invoice this month?",
+   "plex_tables": [
+    "Sales_v_Shipper",
+    "Sales_v_Shipper_Line",
+    "Part_v_Part"
+   ],
+   "views": [
+    "sales_revenue_summary_report"
+   ],
+   "why": "Revenue is counted when goods <b>ship</b>, not when an order is taken. That is why it comes from the Shipping module rather than the sales order. It reconciled exactly against 17 real carton records when shipments existed.",
+   "watch": "Reads <b>0</b> today because the test tenant holds no shipments at all. Every revenue view reads 0 together — that pattern is the signature of missing shipping data, not a broken view."
+  },
+  {
+   "area": "Revenue",
+   "tile": "% into month / run rate",
+   "q": "At this pace, where does the month land?",
+   "plex_tables": [
+    "Sales_v_Shipper_Line"
+   ],
+   "views": [
+    "sales_revenue_run_rate_report"
+   ],
+   "why": "Straight-line projection: revenue so far ÷ days elapsed × days in month. Pure date maths on top of MTD Revenue — no new data.",
+   "watch": "Calendar days, not business days. A month that starts with a long weekend projects low."
+  },
+  {
+   "area": "Revenue",
+   "tile": "Revenue vs goal",
+   "q": "Are we on track against the revenue target?",
+   "plex_tables": [
+    "scorecard_goals_app",
+    "scorecard_goals",
+    "Sales_v_Shipper_Line"
+   ],
+   "views": [
+    "v2_revenue_vs_goal_report"
+   ],
+   "why": "The goal side comes from the manual-data form (nobody can extract a negotiated target from an ERP). The <code>v2_</code> prefix means it reads the resolver, which prefers a goal typed into the form and falls back to the spreadsheet — so the scorecard can move one tile at a time instead of all at once.",
+   "watch": "<b>The revenue goals loaded are the company-wide SALES target.</b> No revenue-specific goal exists anywhere in BigQuery. Revenue and Sales are deliberately different numbers, so this is a business assumption, stated on every row and retractable in one click."
+  },
+  {
+   "area": "Sales",
+   "tile": "Sales MTD / by rep / YTD",
+   "q": "How much did we sell — orders taken, not goods shipped?",
+   "plex_tables": [
+    "Sales_v_PO",
+    "Sales_v_PO_Line",
+    "Sales_v_Order_Salesperson",
+    "Plexus_Control_v_Plexus_User"
+   ],
+   "views": [
+    "sales_mtd_summary_report"
+   ],
+   "why": "A sale counts in the month its order <b>first reached Pending Fulfillment</b>, dated by that status change rather than by order entry. That is what makes it a different number from Revenue, on purpose — one measures selling, the other measures shipping.",
+   "watch": "Priced off the sales-order <b>line</b> price. It read $0 for weeks because it used the customer price list, and most parts have no list price."
+  },
+  {
+   "area": "Sales",
+   "tile": "Sales vs goal by rep",
+   "q": "Is each rep on track?",
+   "plex_tables": [
+    "scorecard_goals_app",
+    "scorecard_goals",
+    "Sales_v_PO_Line"
+   ],
+   "views": [
+    "v2_sales_vs_goal_report"
+   ],
+   "why": "Rep goals and the company-wide target are maintained <b>separately and are allowed to disagree</b> — turnover means the eight reps sum to $4,690,000 against a $5,040,000 team goal. Team performance sums actuals, never goals.",
+   "watch": "<code>scope</code> is an exact string match on the rep name. A typo yields a NULL goal that reads as 0% forever with no error — which is why the form reads rep names from this very report instead of letting anyone type them."
+  },
+  {
+   "area": "Sales",
+   "tile": "Orders pending approval by Accounting",
+   "q": "Which orders are sitting with accounting?",
+   "plex_tables": [
+    "Sales_v_PO",
+    "Sales_v_PO_Status"
+   ],
+   "views": [
+    "sales_orders_pending_accounting_approval_report"
+   ],
+   "why": "<b>Deposit Review</b> is the accounting stage — confirmed 11 Sep. The full chain: Quote and Pending Sales Approval are internal <i>sales</i> stages; Deposit Review is accounting; once a payment is applied the order moves to Pending Fulfillment.",
+   "watch": "It was silently dead for weeks. It filtered <b>Pending Payment Review</b>, a status the September consolidation deleted, so it returned 0 rows — which reads exactly like “nothing is pending”. Now matched on the status <b>name</b>, never the numeric key."
+  },
+  {
+   "area": "Operational health",
+   "tile": "WIP",
+   "q": "What have we sold that has not shipped yet?",
+   "plex_tables": [
+    "Sales_v_PO",
+    "Sales_v_Release",
+    "Sales_v_PO_Status"
+   ],
+   "views": [
+    "sales_order_value_by_status_report"
+   ],
+   "why": "Exactly two statuses count: <b>Pending Fulfillment and Hold</b>. Held goods are still owed to a customer. It nets off any quantity already shipped, so a partly-shipped order contributes only its remaining balance.",
+   "watch": "The old filter (“not a quote, not cancelled”) also swept in Pending Sales Approval, Deposit Review and Closed, putting WIP at $43,723 against a true $17,950 — <b>inflated 2.4×</b>. Any screenshot from before 9 Sep overstates it."
+  },
+  {
+   "area": "Operational health",
+   "tile": "Total in Shipping / Ready to Ship",
+   "q": "What is packed and waiting to go out the door?",
+   "plex_tables": [
+    "Sales_v_Shipper",
+    "Sales_v_Shipper_Line",
+    "Part_v_Customer_Part_Price"
+   ],
+   "views": [
+    "shipping_pending_revenue_report"
+   ],
+   "why": "Counts only the <b>ready</b> quantity, never the whole order. Price falls back in order: shipment price → sales order line → customer list, and <code>price_source</code> records which was used, so an estimate is never mistaken for a real figure.",
+   "watch": "<code>Shipper_Line.Price</code> is 0 before a shipment is finalised on this tenant. Without the fallback this tile would read $0 while real goods sat on the dock."
+  },
+  {
+   "area": "Operational health",
+   "tile": "Out of Stock (33 parts)",
+   "q": "Which ingredients are we short of?",
+   "plex_tables": [
+    "Part_v_Container",
+    "Part_v_Part",
+    "Sales_v_Release",
+    "Part_v_Flat_BOM"
+   ],
+   "views": [
+    "inventory_out_of_stock_report"
+   ],
+   "why": "Three conditions: the part number starts with <b>33</b>, it <b>has</b> a minimum inventory quantity, and availability is negative. The 33 scan is name-based on purpose — a part-type dropdown was rejected because switching would break the rule. Demand includes what parent finished goods will consume via the bill of materials; without that <b>no 33 part appears at all</b>, because they have neither containers nor direct sales orders.",
+   "watch": "<b>Proven 11 Sep with four real shortages</b>, then back to 0 an hour later when those orders moved to Quote status. Both readings are correct — a quote is not demand. The field is <code>Minimum_Inventory_Quantity</code>; a part with 0 is treated as “no threshold set” and excluded."
+  },
+  {
+   "area": "Inventory",
+   "tile": "Quantity Available",
+   "q": "How much of this part can we actually promise?",
+   "plex_tables": [
+    "Part_v_Container",
+    "Sales_v_Release",
+    "Sales_v_PO_Status",
+    "Part_v_Flat_BOM"
+   ],
+   "views": [
+    "inventory_available_to_sell_report"
+   ],
+   "why": "On hand minus demand, for every part at once — the BigQuery equivalent of Plex's own Sales Order Line Inventory Check screen. Which statuses count as demand is <b>Plex's answer, not ours</b>: it reads the <code>Include_In_MRP</code> flag. That design paid for itself within a day — when Jennilyn changed the flag in Plex, order demand fell from 508,807 units to 5,000 with no code change.",
+   "watch": "Job requirements are still missing — demand covers sales orders and BOM explosion, not what open jobs will consume."
+  },
+  {
+   "area": "Inventory",
+   "tile": "On-hand inventory",
+   "q": "What is physically in the building?",
+   "plex_tables": [
+    "Part_v_Container",
+    "Part_v_Container_Status"
+   ],
+   "views": [
+    "part_on_hand_inventory_report"
+   ],
+   "why": "On-hand lives under the <b>Part</b> module, not Warehouse. <code>Warehouse_v_Part_Quantity</code> is the intuitive guess and does not exist on this tenant. Container statuses counted: OK, Hold, Inspection Required, Hold for Design Order.",
+   "watch": "Rework, lab analysis, defective and expired are deliberately excluded — a reworked container returns to normal inventory anyway, so counting it twice would inflate supply."
+  },
+  {
+   "area": "Inventory",
+   "tile": "Inventory Balance / valuation",
+   "q": "What is all our stock worth in dollars?",
+   "plex_tables": [
+    "Part_v_Snapshot"
+   ],
+   "views": [
+    "inventory_valuation_total_report"
+   ],
+   "why": "Confirmed 11 Sep: “Inventory Balance” on the revenue sheet means the dollar value of everything in inventory, raw materials through finished goods.",
+   "watch": "<b>Returns 0 because Plex has costed nothing on this tenant.</b> The source is not missing, it is unpopulated — an important distinction. Jennilyn is asking Justin where this should come from. Splitting into WIP / FG / Raw is separately impossible: no label lookup for the cost categories exists."
+  },
+  {
+   "area": "Inventory",
+   "tile": "Cycle count accuracy",
+   "q": "How much counting did the warehouse do, and how right were they?",
+   "plex_tables": [
+    "Part_v_Cycle_Inventory",
+    "Part_v_Cycle_Frequency"
+   ],
+   "views": [
+    "part_cycle_count_report"
+   ],
+   "why": "Three numbers: locations counted, items counted, accuracy. <b>Accuracy is a per-location hit rate</b> — each assigned location either held what it should or it did not, and those yes/nos are averaged. Cycle counting lives under <b>Part</b>, not Warehouse — the same trap as on-hand inventory.",
+   "watch": "The first build weighted accuracy by quantity, which is better arithmetic and <b>not what Vox means</b>. Corrected. Counting is lumpy by design, so an empty month is normal — check <code>locations_counted</code> before showing a percentage or an idle month reads as 0% accurate."
+  },
+  {
+   "area": "Production",
+   "tile": "Production by work centre group",
+   "q": "How much did each area actually make?",
+   "plex_tables": [
+    "Part_v_Production",
+    "Part_v_Workcenter"
+   ],
+   "views": [
+    "production_monthly_by_workcenter_group_report"
+   ],
+   "why": "One view covers every area — Blending, Bottling, Encapsulating, Labeling, Pre-Weigh, Preparation, Printing, Rework — rather than one view per line.",
+   "watch": "<b>Plex says <code>Encapsulating</code>; the scorecard tile says “Encapsulation”.</b> A goal typed with the tile's spelling never matches and shows 0% forever, with no error. This single mismatch is why every dropdown in the manual-data form reads its options from the reports."
+  },
+  {
+   "area": "Production",
+   "tile": "Open Caps / Open Bottles",
+   "q": "How much work is still on the floor?",
+   "plex_tables": [
+    "Part_v_Job",
+    "Part_v_Workcenter"
+   ],
+   "views": [
+    "mfg_job_open_caps_report"
+   ],
+   "why": "“Open” is the inverse of Completed / Cancelled / Hold. The original tile had <b>no status filter at all</b> and counted finished jobs as open work.",
+   "watch": ""
+  },
+  {
+   "area": "Quality",
+   "tile": "FPY by area",
+   "q": "What proportion came out right first time?",
+   "plex_tables": [
+    "Part_v_Production"
+   ],
+   "views": [
+    "quality_fpy_by_area_month_report"
+   ],
+   "why": "Computed straight from production quantities — good ÷ total. Needs no quality records at all, which is why it works while the rest of Quality is empty.",
+   "watch": "<b>DPMO divides by “opportunities per unit”, which is set to 1 as a placeholder nobody has defined.</b> With 1, DPMO and defect rate are the same number wearing different labels. Sigma is deliberately not computed — a hand-rolled approximation risked being subtly wrong in cGMP-adjacent reporting."
+  },
+  {
+   "area": "Quality",
+   "tile": "Destruction $ / Rework $",
+   "q": "What did scrapped and reworked material cost us?",
+   "plex_tables": [
+    "Quality_v_Problem",
+    "Quality_v_Final_Disposition"
+   ],
+   "views": [
+    "quality_disposition_cost_report"
+   ],
+   "why": "<b>Plex has no “Destroy” value — it calls destruction <code>Scrap</code>.</b> That is why searching for a destruction field found nothing for weeks. Destroyed material is a nonconformance record whose <i>final</i> disposition is Scrap. The dollar figure is Plex's own Cost field, so it needs no external cost table.",
+   "watch": "<b>Rework means two different things and the built one is not the one asked for.</b> It is a disposition here <i>and</i> a container inventory status; Jennilyn named the container one. Different populations that will not agree. The container version needs a per-container cost."
+  },
+  {
+   "area": "Quality",
+   "tile": "Turnaround time (TAT)",
+   "q": "How long do quality problems take to close?",
+   "plex_tables": [
+    "Quality_v_Problem"
+   ],
+   "views": [
+    "quality_turnaround_time_report"
+   ],
+   "why": "Closed date minus problem date, per nonconformance, tagged with the month it closed so one view answers both “last month” and “rolling”.",
+   "watch": "<b>Two open issues.</b> The clock starts at Problem Date; if the existing Performance/Bonus standards were set against Entered Date, our number runs larger and looks like performance dropped on cutover day. And the standards themselves live in a table on the Monthly TAT sheet — they need to move into the form, with restricted edit access."
+  },
+  {
+   "area": "Quality",
+   "tile": "Deviations",
+   "q": "What was approved to run outside spec?",
+   "plex_tables": [
+    "Quality_v_Deviation",
+    "Quality_v_Deviation_Part",
+    "Quality_v_Deviation_Job"
+   ],
+   "views": [
+    "quality_deviation_report"
+   ],
+   "why": "Richer than the sheet it replaces — correlates each deviation to job, part and work centre.",
+   "watch": "<b>Deviation VALUE</b> (pieces affected × part value) is not built: it needs a part cost, and Plex has costed nothing on this tenant. The first real deviation record arrived 11 Sep."
+  },
+  {
+   "area": "Pipeline",
+   "tile": "Total pipeline",
+   "q": "What might we win?",
+   "plex_tables": [
+    "Sales_v_PO",
+    "Sales_v_PO_Status",
+    "Sales_v_PO_Line"
+   ],
+   "views": [
+    "pipeline_plex_value_report"
+   ],
+   "why": "Quotes plus orders awaiting sales approval. This is the <b>Plex half only</b> — the full tile adds Monday.com, and that blend is by design, not a gap.",
+   "watch": "Opportunities and Forecast stages have no Plex source and never will — Plex tracks quotes and orders, never a deal before it becomes a quote. Those stay in Monday."
+  },
+  {
+   "area": "Safety",
+   "tile": "Safe Days",
+   "q": "How long since the last incident?",
+   "plex_tables": [
+    "— nothing in Plex"
+   ],
+   "views": [
+    "safety_incidents (manual)"
+   ],
+   "why": "Plex has no safety object of any kind. The manual-data form writes a dated incident log and the tile counts forward from the newest one.",
+   "watch": "<b>An empty log reads as a perfect record</b>, which is only true if the log is being kept. The form matters more than the tile."
+  },
+  {
+   "area": "Operational report",
+   "tile": "Label Design queue → Monday",
+   "q": "Which orders need artwork, and who do I ask about them?",
+   "plex_tables": [
+    "Sales_v_PO",
+    "Sales_v_Release_Status",
+    "Sales_v_PO_Line_Note",
+    "Part_v_Customer_Part"
+   ],
+   "views": [
+    "label_design_report"
+   ],
+   "why": "<b>Not a scorecard tile</b> — an operational queue that replaces a twice-daily manual loop (download from NetSuite, paste into a sheet, dedupe by hand, upload to Monday). Rebuilt from Jennilyn's own stored procedure with three additions: the rep name, an order-status filter of Pending Fulfillment, and a 14-day window. Dedupe is order number + customer part number, because dates change and an order can be cancelled and reopened.",
+   "watch": "Rows land in a <b>holding</b> board, never the live one, so notes and reason codes get reviewed first. Which rep is the “BDM” has never been stated, so both primary and secondary ship."
+  }
+ ],
+ "traps": [
+  {
+   "title": "Encapsulating vs “Encapsulation”",
+   "body": "Plex's work centre group is <code>Encapsulating</code>. The scorecard tile says “Encapsulation”. A goal typed the tile's way silently matches nothing and reads 0% forever.",
+   "note": "Every dropdown reads its options from the reports, so nobody types a scope by hand."
+  },
+  {
+   "title": "Minimum Inventory Quantity",
+   "body": "Everyone says “minimum stock level”. No Plex field is called that. The field is <code>Minimum_Inventory_Quantity</code>.",
+   "note": "Confirmed 11 Sep. A value of 0 means “not assigned”, not “zero needed”."
+  },
+  {
+   "title": "Scrap, not Destroy",
+   "body": "Plex has no destruction disposition. Destroyed material is scrapped.",
+   "note": "Weeks were spent looking for a field that was never going to exist."
+  },
+  {
+   "title": "Part, not Warehouse",
+   "body": "On-hand inventory and cycle counting both live under the <b>Part</b> module. The Warehouse-named tables do not exist on this tenant.",
+   "note": "The general rule: when a warehouse-shaped concept comes back missing, look under Part before concluding Plex cannot do it."
+  },
+  {
+   "title": "Revenue ≠ Sales",
+   "body": "Revenue counts goods <b>shipped</b>. Sales counts orders that reached <b>Pending Fulfillment</b>. They are deliberately different numbers and will not tie.",
+   "note": "This is why using one goal for both is an assumption worth confirming."
+  },
+  {
+   "title": "Status names, not status keys",
+   "body": "Vox cut the sales-order status list from 10 to 7 and three numeric keys vanished. A report filtering a dead key returns 0 rows and looks like good news.",
+   "note": "All new report SQL matches on the status name."
+  },
+  {
+   "title": "Test is not Production",
+   "body": "<code>PlexTest</code> resets periodically and the team enters practice data in it. <code>PlexProd</code> is empty until go-live.",
+   "note": "A figure read from test is true for that hour, not for the business."
+  }
+ ],
+ "risks": [
+  {
+   "what": "Revenue goals are the sales target",
+   "why": "No revenue-specific goal exists anywhere in BigQuery. The 12 loaded monthly figures are the company-wide sales target, which is measured against orders rather than shipments.",
+   "where": "Confirm or retract — one click in the form."
+  },
+  {
+   "what": "Part costs do not exist yet",
+   "why": "Plex costs parts through <code>Part_v_Snapshot</code>, which holds no rows. Blocks Deviation $, container-based Rework $, and Inventory Balance.",
+   "where": "<code>Product_Cost</code> is <b>not</b> the fallback: 199 rows joining to 5 of 6,221 parts and none of the 33s."
+  },
+  {
+   "what": "DPMO uses a placeholder of 1",
+   "why": "Nobody has defined opportunities per unit. Feeds the second heaviest-used source on the scorecard.",
+   "where": "A one-number change whenever Quality decides."
+  },
+  {
+   "what": "TAT clock start unconfirmed",
+   "why": "We use Problem Date. If the standards were set against Entered Date, our figure runs consistently larger.",
+   "where": "Would look like a performance drop on the day we cut over."
+  },
+  {
+   "what": "Rework: two populations",
+   "why": "Built on the disposition; Jennilyn asked for the container status. They will not agree.",
+   "where": "Neither was silently chosen — both are documented."
+  },
+  {
+   "what": "Job requirements missing from demand",
+   "why": "Quantity Available counts sales orders and BOM explosion, not what open jobs will consume.",
+   "where": "The job tables now hold real rows, so this is the next addition."
+  },
+  {
+   "what": "Inventory valuation cannot be split",
+   "why": "No label lookup exists for the cost sub-types, so WIP / Finished Goods / Raw cannot be separated.",
+   "where": "Fine if the tile needs one grand total."
+  }
+ ],
+ "plex_glossary": [
+  {
+   "term": "Approved_By",
+   "d": "Field label for a claim's approver."
+  },
+  {
+   "term": "Approved_Date",
+   "d": "The date a claim was approved."
+  },
+  {
+   "term": "Building_Key",
+   "d": "Unique key (DB field value, identifier) assigned to a Building record."
+  },
+  {
+   "term": "Cancelled_Status",
+   "d": "Job Op Status for Cancelled"
+  },
+  {
+   "term": "Change_Date",
+   "d": "In context to the sppap form."
+  },
+  {
+   "term": "Checksheet_No",
+   "d": "THe serial number for an SPC checksheet"
+  },
+  {
+   "term": "Common_Name",
+   "d": "The Common Name the Person goes by. I.e. Samual likes to go by Sam."
+  },
+  {
+   "term": "Completed_By",
+   "d": "Full name of user who completed a work request."
+  },
+  {
+   "term": "Completed_Status",
+   "d": "Job Op Status for Completed"
+  },
+  {
+   "term": "Corrective_Action",
+   "d": "Steps taken to correct or resolve an issue."
+  },
+  {
+   "term": "Cost_Sub_Type_Key",
+   "d": "The actual key of the cost sub type record. (primarily only used internally)"
+  },
+  {
+   "term": "Customer_No",
+   "d": "Number used to identify customer."
+  },
+  {
+   "term": "Customer_Part_Key",
+   "d": "Customer Part record key"
+  },
+  {
+   "term": "Customer_Part_No",
+   "d": "For new Material Cert report in /Sales/SSI/Shipping_Material_Cert_Include.asp"
+  },
+  {
+   "term": "Deviation_No",
+   "d": "as it pertains to the deviation module"
+  },
+  {
+   "term": "Deviation_Status",
+   "d": "Deviation Status - used in the Deviation Tracking System"
+  },
+  {
+   "term": "Deviation_Type",
+   "d": "as it pertains to the deviation module"
+  },
+  {
+   "term": "Disposition_Type",
+   "d": "Label, type of disposition"
+  },
+  {
+   "term": "Due_Date",
+   "d": "The time a certain action is due."
+  },
+  {
+   "term": "Entered_Date",
+   "d": "used on Customer Support Manager (12472). Date on which a record was added to the system."
+  },
+  {
+   "term": "Expiration_Date",
+   "d": "Customer order expiration date."
+  },
+  {
+   "term": "First_Name",
+   "d": "A person's first name"
+  },
+  {
+   "term": "Full_Description",
+   "d": "A statement that represents something in words with much detail."
+  },
+  {
+   "term": "Hold_Status",
+   "d": "Job Op Status for Hold"
+  },
+  {
+   "term": "Inspection_Date",
+   "d": "Date a checksheet was taken"
+  },
+  {
+   "term": "Inventory_Activity",
+   "d": "UX - Grid: Displays a list of inventory activity."
+  },
+  {
+   "term": "Item_Key",
+   "d": "grid header label for a deployment item key"
+  },
+  {
+   "term": "Job_Distribution",
+   "d": "Quantity of job dedicated to another job or customer release."
+  },
+  {
+   "term": "Job_No",
+   "d": "Job identifier"
+  },
+  {
+   "term": "Job_Note",
+   "d": "The note for a job"
+  },
+  {
+   "term": "Job_Op",
+   "d": "short for Job Operation"
+  },
+  {
+   "term": "Job_Status",
+   "d": "Job Status Setup Table"
+  },
+  {
+   "term": "Job_Type",
+   "d": "Job Types Setup Table"
+  },
+  {
+   "term": "Last_Name",
+   "d": "A person's last name"
+  },
+  {
+   "term": "Line_Item",
+   "d": "Used in the BMW Packing Slip document in UX"
+  },
+  {
+   "term": "Line_Item_Key",
+   "d": "Unique key (DB field value, identifier) assigned to a Line Item record."
+  },
+  {
+   "term": "Log_Hours",
+   "d": "Hours logged at a workcented"
+  },
+  {
+   "term": "Lot_No",
+   "d": "Form data label title"
+  },
+  {
+   "term": "Manufactured_Date",
+   "d": "New column name on finalize grid"
+  },
+  {
+   "term": "Note_Type",
+   "d": "Type of Note"
+  },
+  {
+   "term": "Op_No",
+   "d": "Operation Number"
+  },
+  {
+   "term": "Order_No",
+   "d": "Sales.dbo.PO Order Number"
+  },
+  {
+   "term": "Out_Of_Spec",
+   "d": "Percent of measurements out of specification limits"
+  },
+  {
+   "term": "Part_Group",
+   "d": "Group to which the Part belongs"
+  },
+  {
+   "term": "Part_Key",
+   "d": "Unique key (DB field value, identifier) assigned to a Part record."
+  },
+  {
+   "term": "Part_No",
+   "d": "Part number [EXCLUDED FROM PLEX TRANSLATION]"
+  },
+  {
+   "term": "Part_Product_Group",
+   "d": "This field is used to provide additional detail to the part's description."
+  },
+  {
+   "term": "Part_Type",
+   "d": "Type to which the Part belongs"
+  },
+  {
+   "term": "Pieces_Affected",
+   "d": "Pieces Affected by an action"
+  },
+  {
+   "term": "Plexus_User_No",
+   "d": "A User of Plexus [EXCLUDED FROM PLEX TRANSLATION]"
+  },
+  {
+   "term": "Problem_Category",
+   "d": "Defines type of category a problem should be associated with."
+  },
+  {
+   "term": "Problem_Date",
+   "d": "date problem occurred."
+  },
+  {
+   "term": "Problem_No",
+   "d": "Numeric value used to uniquely identify a problem record."
+  },
+  {
+   "term": "Problem_Status",
+   "d": "Defines the state of a problem. Open, Closed, Cancelled, etc."
+  },
+  {
+   "term": "Problem_Type",
+   "d": "Defines the type of problem that has occurred."
+  },
+  {
+   "term": "Product_Type",
+   "d": "Part Product Type, categorization of parts in the part list."
+  },
+  {
+   "term": "Production_Date",
+   "d": "Date of when the material is used"
+  },
+  {
+   "term": "Quantity_Rejected",
+   "d": "Pertains to supplier scorecard system."
+  },
+  {
+   "term": "Quantity_Shipped",
+   "d": "Number of parts shipped during a period of time."
+  },
+  {
+   "term": "Quantity_Unit",
+   "d": "Dynamic Print \"Job Sheet\" have option to show \"Quantity\" or \"Quantity & Unit\" This is required for showing the options in dropdown."
+  },
+  {
+   "term": "Quote_Date",
+   "d": "Date of Quote"
+  },
+  {
+   "term": "Quote_Due_Date",
+   "d": "The date which a quotation is due back to the customer"
+  },
+  {
+   "term": "Quote_No",
+   "d": "Quotation Number"
+  },
+  {
+   "term": "Quote_Status",
+   "d": "The current status of quote"
+  },
+  {
+   "term": "Release_Allocation",
+   "d": "Containers that are dedicated to a specific release."
+  },
+  {
+   "term": "Release_Key",
+   "d": "Unique key assigned to a customer release record."
+  },
+  {
+   "term": "Release_No",
+   "d": "The unique number associated to each delivery date on a blanket order's release schedule."
+  },
+  {
+   "term": "Release_Status",
+   "d": "The status of a Customer Release"
+  },
+  {
+   "term": "Release_Status_Key",
+   "d": "Release Status record key"
+  },
+  {
+   "term": "Report_Shift",
+   "d": "Column header. The shift that will be used for reporting purposes. 'Record Shift', on the hand, would be the shift linked with the actual production record. This shift can be overriden for reporting purposes."
+  },
+  {
+   "term": "Requested_Date",
+   "d": "Date the service record was requested"
+  },
+  {
+   "term": "Requisition_No",
+   "d": "Serial number to for a purchase requisition"
+  },
+  {
+   "term": "Requisition_Status",
+   "d": "Field label showing the status of a requisition"
+  },
+  {
+   "term": "Response_Due_Date",
+   "d": "Used in the PRR log."
+  },
+  {
+   "term": "Return_No",
+   "d": "Return Number"
+  },
+  {
+   "term": "Return_Status",
+   "d": "Statuses for returns"
+  },
+  {
+   "term": "Return_Type",
+   "d": "Types of returns"
+  },
+  {
+   "term": "Root_Cause",
+   "d": "The root cause of an injury."
+  },
+  {
+   "term": "Setup_Time",
+   "d": "SMED Tracking"
+  },
+  {
+   "term": "Ship_Date",
+   "d": "The date of a shipment"
+  },
+  {
+   "term": "Shipper_No",
+   "d": "Number used to identify shipment."
+  },
+  {
+   "term": "Sort_Order",
+   "d": "Order by which the data is returned"
+  },
+  {
+   "term": "Start_Date",
+   "d": "Date to start when filtering data"
+  },
+  {
+   "term": "Started_By",
+   "d": "User that started the operation"
+  },
+  {
+   "term": "Supplier_No",
+   "d": "Supplier number"
+  },
+  {
+   "term": "Tare_Weight",
+   "d": "Weight of the empty packaging or comtainer."
+  },
+  {
+   "term": "Unaccounted_For",
+   "d": "Warning Message. How many Hours are Unaccounted For?"
+  },
+  {
+   "term": "Update_Date",
+   "d": "The date a record was updated"
+  },
+  {
+   "term": "Updated_Date",
+   "d": "the newest date"
+  },
+  {
+   "term": "Workcenter_Group",
+   "d": "Workcenters can be organized into groups. This is the label for a single group. For example, the press belongs in the workcenter group called \"stamping\"."
+  },
+  {
+   "term": "Workcenter_Key",
+   "d": "Unique database key assigned to a workcenter."
+  },
+  {
+   "term": "Workcenter_Log",
+   "d": "A log of activity on a workcenter"
+  },
+  {
+   "term": "Workcenter_Type",
+   "d": "Type to which the workcenter belongs"
+  }
+ ]
+}

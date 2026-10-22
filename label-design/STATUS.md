@@ -11,13 +11,54 @@
 
 ---
 
+## UPDATE — 2026-10-20 (latest): push latency view; probe gap fixed
+
+- **Probe now watches order approval** (OPEN_ITEMS L14). It fingerprints the
+  same filter the view applies, so an approval alone triggers the next hourly
+  run. Expect about 2 h from approval to board (≈50 min ODBC lag + up to 1 h
+  to the next run + the :35 push).
+
+- **New view `label_design_push_latency`** (built, not deployed): each pushed
+  item's Plex entry time, last order edit (≈ approval) and board time. Doc:
+  `docs/reports/label_design_push_latency.md`.
+- **Post-floor orders so far:** 355, 363 and 340 reached the board about
+  1.5 h after approval; 373 waited 5.3 h because the probe ignores order
+  status (OPEN_ITEMS L14, fix proposed).
+- **Plex's clock is Mountain time; prod ODBC lags Plex by about 50 min**
+  (`GETDATE()` checked 2026-10-20). The view first assumed UTC-7; fixed. Most of the wait is on the sales side
+  (20 to 30 h from entry to approval).
+- **Correction:** the 2026-10-19 09:22 MT prod push created the 38 cutover
+  items (OPEN_ITEMS L3 had said 0).
+- The 15:02/15:04 MT failures on 2026-10-20 were Plex ODBC connection resets,
+  transient.
+
+## UPDATE — 2026-10-20: 14-day window removed; Plex API push archived
+
+1. **The view's 14-day window on the order date is gone.** It dropped orders
+   that reached Pending Fulfillment more than 14 days after their order date:
+   prod has Quote and Pending Sales Approval orders 25+ days old. The
+   2026-10-18 cutoff is now the permanent floor. Dedupe (board LCRs plus
+   `label_design_push_log`) keeps an order from being pushed twice. On
+   2026-10-20 the 14 orders dated 10-19 with Label Design releases were all
+   still in Deposit Review, Pending Sales Approval or Quote, which is why the
+   board got nothing new. They arrive as they are approved. **Ships with
+   `./scripts/deploy.sh` (SQL only).**
+2. **The Plex REST API → Monday push is ARCHIVED** (`deploy/plex_api_function/push.py`
+   and `views.sql`). It is in `main` (PR #42) but never deployed, and must not be
+   deployed as is. A 2026-10-20 review found the problems, listed in
+   `deploy/plex_api_function/ARCHIVED.md`. The ODBC push stays the only path to
+   Monday. The API extractor (`plex_api_*` tables in BigQuery) is unchanged.
+
+---
+
 ## UPDATE — 2026-10-19 (later): go-live cutoff at 18 October
 
 `label_design_view.sql` now also requires `order_date >= 2026-10-18`, so the
 cutover-migrated orders (dated 5-15 Oct) never reach BigQuery or Monday. The
 team works those by hand. The 38 pushed that morning stay on the board. The
-live prod view's 38 rows drop to 0 with the cutoff; new orders pass. Delete the
-line after 2026-11-01, when the 14-day window covers it. CHANGELOG 2026-10-19.
+live prod view's 38 rows drop to 0 with the cutoff; new orders pass. CHANGELOG
+2026-10-19. (Superseded 2026-10-20: the 14-day window is removed and this
+cutoff is now permanent, see above.)
 
 ---
 
@@ -32,7 +73,34 @@ Afterwards, check that 38 items exist and that the Plex links open
 
 ---
 
-## UPDATE — 2026-10-12 (latest): live Plex REST API landed in BigQuery
+## UPDATE — 2026-10-13: API push to Monday + BOM + report view
+
+Built the full pipeline from Plex REST API → BigQuery → Monday:
+
+1. **Extractor (`main.py`)** now fetches `boms` (per unique partId from
+   order lines, `/engineering/v1/boms?PartId=<uuid>`). All resources have
+   typed fields so `_latest` views expose proper columns. Default resources:
+   `orders,order_lines,releases,boms`.
+
+2. **Report view (`views.sql`)** — `plex_api_label_design_report`: joins
+   releases (status='Label Design') → lines → orders → customers → parts →
+   BOM label parts (73\*) → BOM bottle parts (53\*). Bottle material parsed
+   from FG part name. Same dedupe key pattern as the ODBC push.
+
+3. **Push function (`push.py`)** — companion Cloud Function. Reads the
+   report view, creates items on Monday board 18432111755, group "API_Test".
+   LCR hash dedupe, `plex_api_push_log` audit table, partial-create fallback.
+   Columns: Customer Name, Date, Sales Order, Customer PO, Email, Phone,
+   Bottle Material, Label Part #, Description, Item, LCR.
+
+**Not deployed yet.** Next: deploy updated extractor, run it, verify the
+view returns rows, deploy the push function, run it, check Monday.
+
+---
+
+---
+
+## UPDATE — 2026-10-12: live Plex REST API landed in BigQuery
 
 The ODBC database runs up to 4 h behind Plex (bad for this queue), so a second
 source was built beside it: `plex_api_service/extract.py`, Cloud Run job

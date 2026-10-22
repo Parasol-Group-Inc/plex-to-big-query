@@ -51,6 +51,7 @@ or `sql/` paths:** that is how prod diverged and a fix got rolled back
   | `ptbq-scorecard` | `dev-scorecard` | Vox Scorecard |
   | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
   | `ptbq-label-design` | `dev-label-design` | Label Design |
+  | `ptbq-part-lot` | `dev-part-lot` | Part Lot Attributes + inheritance |
   | `ptbq-dev` | `dev` | shared tooling |
 
   Work in the folder of the project you were asked about. Never
@@ -230,6 +231,26 @@ before touching it:
   fixes found there (rep resolution, Deposit Review, scrap flag). Production
   still runs `reports/sql/`. When a fix lands there, delete its override.
 
+## Prod ETL times live in a table, not Cloud Scheduler (since 2026-10-19)
+
+Since probe phase 2 stage B (`docs/PROBE_BUILD_PLAN.md`), `PlexOps.etl_schedule` holds every
+prod job's run times: 1 PM / 6 PM / 11 PM `probe`, plus a 4 AM `full` run. The
+`etl-dispatcher` Cloud Function (called every 5 min by `plex-etl-dispatcher`)
+starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
+- **Change a time with SQL, not Terraform.**
+- **No retries:** a failed run gets ONE follow-up probe 15 min later.
+- **A Plex outage trips a breaker (since 2026-10-22).** After two runs fail
+  to connect, due slots are logged `held-outage` instead of started, one
+  canary probe tries every 10 min (its first failure is the only email), and
+  once one connects each held job gets ONE `recovery` run. All derived from
+  `etl_dispatch_log`; no state elsewhere. It matches the error prefix
+  `ODBC connection failed`, so don't reword it in `main.py`.
+- **Test jobs still use their own nightly schedulers.**
+
+To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.
+The function is deployed with `gcloud functions deploy` (command in
+`terraform/main.tf`), not Cloud Build.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers
@@ -241,11 +262,13 @@ with NOT_FOUND.
 
 **Cloud Run job and scheduler names are immutable — Terraform destroys and
 recreates to rename.** That's safe (neither holds state), but a recreated job
-is a brand-new job, so it comes up on whatever `image_url` in
-`terraform.tfvars` says. Because every job's `lifecycle.ignore_changes` on
-`image` lets the live jobs drift ahead of that value, **check `image_url`
-against a live job before any rename** — it was several deploys stale in
-2026-09-04 and would have silently rolled the pipeline back.
+is a brand-new job. It used to come up on `image_url` in `terraform.tfvars`,
+which nothing kept current (several deploys stale on 2026-09-04 and again on
+2026-10-22). **Since 2026-10-22 a new job starts on `local.etl_image`**, the
+image `plex-etl-sales-orders` runs live (`var.image_reference_job`). The plan
+prints it as the `etl_image` output: check it before a rename. Every job run
+also logs its build SHA in `job_run_log.build`, and the batch digest flags a
+job on a different build.
 
 ## Email subjects
 
@@ -258,6 +281,13 @@ the body under "REPORTS PRODUCED".
 Prod and test deliberately share a subject (the `_test` suffix is stripped) so
 the two environments thread together; PRODUCTION/TEST shows as a body badge.
 **This is a code change, so it ships via Cloud Build, not `terraform apply`.**
+
+**Batches mail only at their ends (since 2026-10-21).** In each prod dispatcher
+batch (same mode and hour in `etl_schedule`) and in the nightly test cascade,
+only the first job emails its report and the last sends one digest,
+`[Plex ETL] - Digest — {date}`; a failed or partial job always emails. The
+roles are `EMAIL_ROLE`: set by the dispatcher for prod, fixed per test job in
+Terraform. Details: `docs/OPERATIONS.md` § "Batch emails".
 
 ## Known friction
 

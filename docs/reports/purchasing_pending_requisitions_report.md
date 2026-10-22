@@ -1,6 +1,6 @@
 # Purchasing Pending Requisitions
 
-> **Status:** ✅ Built and deployed 2026-08-22, business rule confirmed but not yet checked against a real requisition · **Category:** Supply Chain · **Runs:** own daily job, 9:40 PM / 9:50 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-22, business rule confirmed but not yet checked against a real requisition · **Category:** Supply Chain · **Runs:** own daily job, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

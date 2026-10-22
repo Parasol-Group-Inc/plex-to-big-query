@@ -8,7 +8,7 @@ Cloud Storage, deployed from this repo by Terraform.
 
 **GCP project:** `voxdatalake` · **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
 
-**13 pipelines, 26 Cloud Run jobs (prod + test), about 68 BigQuery views.**
+**14 pipelines, 30 Cloud Run jobs (prod + test, plus the two Label Design push jobs), about 68 BigQuery views.**
 The pipelines are Sales Orders, Sales Quotes, Sales Returns, Work Orders,
 Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence,
 Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality
@@ -141,7 +141,7 @@ graph LR
 | `reports/*.yaml`, `reports/test/*.yaml` | Per-pipeline extractions and views; prod and test are **separate, hand-kept** files | shared |
 | `reports/sql/*.sql` | One file per BigQuery view (used by prod and test) | shared |
 | `terraform/` | All GCP infrastructure, including the deploy guard | shared |
-| `deploy/cloudbuild.yaml` | Image build and deploy to all 26 jobs | shared |
+| `deploy/cloudbuild.yaml` | Image build and deploy to all 30 jobs | shared |
 | `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
 | `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
 | `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |

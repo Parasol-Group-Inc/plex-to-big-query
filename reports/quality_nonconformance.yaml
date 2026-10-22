@@ -51,7 +51,7 @@ extractions:
     bq_table: raw_Quality_v_Problem
     filter: ""
     date_col: ""
-    probe: [Problem_Key]
+    probe: [Problem_Key, Closed_Date, Entered_Date]
 
   # ── Added 2026-09-22 — THE TABLE VOX ACTUALLY WRITES TO.
   #

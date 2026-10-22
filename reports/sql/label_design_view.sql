@@ -19,7 +19,10 @@
 --     only on the RELEASE status being Label Design, which also returned lines
 --     whose order had not been approved yet.
 --  3. A rolling date window on the order date, so the queue is current work
---     rather than everything ever in Label Design.
+--     rather than everything ever in Label Design. REMOVED 2026-10-20: it
+--     dropped orders approved more than 14 days after their order date. The
+--     2026-10-18 go-live floor and the push's dedupe do that job now (see the
+--     WHERE clause).
 --
 -- Deduplication against what is already on the sheet happens in the Apps
 -- Script, not here, on ORDER NUMBER + CUSTOMER PART NUMBER — her rule, chosen
@@ -506,17 +509,21 @@ release_lines AS (
   -- silently empty the queue (2026-09-29, matching the Plex version).
   WHERE UPPER(TRIM(rs.Release_Status)) = 'LABEL DESIGN'
     AND UPPER(TRIM(ps.PO_Status)) = 'PENDING FULFILLMENT'
-    -- Addition 3: a rolling window. 14 days per "keep this like within the last
-    -- two weeks or something"; widen here rather than in the Apps Script, since
-    -- the sheet's own dedupe stops a widened window re-adding old rows.
-    AND po.order_date_resolved >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
-    -- Addition 4 (2026-10-19, Emilio): nothing ordered before the cutover
-    -- weekend reaches BigQuery or Monday. Prod Plex holds orders migrated in
-    -- with order dates back to early October. The team works those by hand, so
-    -- the push must not create items for them. The 38 already pushed on
-    -- 2026-10-19 stay on the board; this only stops new ones. Once the 14-day
-    -- window passes 2026-11-01, it is the stricter filter and this line is a
-    -- no-op that can be deleted.
+    -- Addition 3 (the 14-day rolling window on the order date) was REMOVED
+    -- 2026-10-20. The order date is fixed at entry, but an order only reaches
+    -- Pending Fulfillment once sales approves it or the deposit clears, and in
+    -- PlexProd Quote / Pending Sales Approval orders routinely sit 25+ days.
+    -- An order approved after day 14 never entered the view, so it was never
+    -- pushed and nothing flagged it. The queue stays current without the
+    -- window: a release leaves this view once its status moves off Label
+    -- Design, and the push never re-creates an LCR it has on the board or in
+    -- label_design_push_log, even if the team deleted the item.
+    --
+    -- Addition 4 (2026-10-19, Emilio), now the permanent floor: nothing ordered
+    -- before the cutover weekend reaches BigQuery or Monday. Prod Plex holds
+    -- orders migrated in with order dates back to early October. The team
+    -- works those by hand, so the push must not create items for them. The 38
+    -- already pushed on 2026-10-19 stay on the board.
     AND po.order_date_resolved >= DATE '2026-10-18'
 )
 

@@ -38,6 +38,15 @@
 -- own scheduling convention, since Plex production dates have no
 -- explicit timezone conversion applied elsewhere in this codebase either.
 --
+-- BOTTLING 9-PARTS ARE NOT PRODUCTION (Jennilyn, 2026-10-22): when Bottling
+-- completes a job for a part starting with 9 (the finished-good version),
+-- the same output was already counted on the job for its 5 part (the
+-- bottled-bulk version). Counting both is double credit, so Bottling
+-- records for 9-parts are dropped, good and scrap alike. Bottling only:
+-- Labeling's output is all 9-parts and stays counted. Matched on the
+-- part the production record itself names (Part_v_Production.Part_Key),
+-- not the job's, so a record with no job is still judged.
+--
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per department.
 
@@ -60,6 +69,7 @@ prod AS (
     p.Quantity,
     p.Rejected,
     p.Job_Op_Key,
+    p.Part_Key,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS INT64), 0), 1000))),
       NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS DATE), DATE '1970-01-01'),
@@ -91,7 +101,12 @@ by_department AS (
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
     ON SAFE_CAST(jo.Workcenter_Key AS INT64) = wc.Workcenter_Key
 
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
+    ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
+
   WHERE wc.Workcenter_Group IN ('Encapsulating', 'Bottling', 'Labeling', 'Printing')
+    AND NOT (wc.Workcenter_Group = 'Bottling'
+             AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9'))
 ),
 
 -- Fixed department roster so a department with zero production in the

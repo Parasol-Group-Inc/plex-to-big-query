@@ -4,7 +4,8 @@ import decimal
 import hashlib
 import json
 import logging
-from datetime import date, datetime, time, timezone
+import threading
+from datetime import date, datetime, time, timedelta, timezone
 from time import monotonic, sleep
 from typing import List, Optional
 from zoneinfo import ZoneInfo
@@ -107,6 +108,29 @@ DIGEST_POLL_SECONDS = int(os.environ.get("DIGEST_POLL_SECONDS", "20"))
 # A batch's expected members are the jobs that logged under its BATCH_KIND in
 # this many days, so a new pipeline joins the digest after its first run.
 DIGEST_LOOKBACK_DAYS = int(os.environ.get("DIGEST_LOOKBACK_DAYS", "7"))
+# A batch the dispatcher assembles on the spot — the re-runs after a Plex outage
+# (see deploy/etl_dispatcher/) — has no history to read its members from, so the
+# dispatcher names them: space-separated job names.
+BATCH_EXPECTED = os.environ.get("BATCH_EXPECTED", "").split()
+
+# Health checks in every digest (2026-10-22). A job whose last clean run
+# (success or no changes) is older than this is listed as stale. Prod runs at
+# least every 9 hours; a test job once a night.
+STALE_AFTER_HOURS = int(os.environ.get("STALE_AFTER_HOURS",
+                                       "30" if BQ_DATASET.lower().endswith("test") else "12"))
+# The commit this image was built from: the Dockerfile's GIT_SHA build arg,
+# which Cloud Build sets. Logged on every job_run_log row, so the digest can
+# name a job still running an old image.
+BUILD_SHA = os.environ.get("GIT_SHA", "") or "unknown"
+
+# Plex ODBC connect (2026-10-22). The driver ignores pyodbc's own timeout: on
+# the night of 2026-10-21 every connect hung about 3 minutes before Plex closed
+# it. Each attempt gets a hard wall-clock deadline, and a refused or hung
+# connect is tried CONNECT_ATTEMPTS times, CONNECT_BACKOFF_SECONDS apart
+# (doubling), before the run fails.
+CONNECT_DEADLINE_SECONDS = int(os.environ.get("CONNECT_DEADLINE_SECONDS", "60"))
+CONNECT_ATTEMPTS         = int(os.environ.get("CONNECT_ATTEMPTS", "3"))
+CONNECT_BACKOFF_SECONDS  = int(os.environ.get("CONNECT_BACKOFF_SECONDS", "20"))
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -695,6 +719,7 @@ JOB_RUN_DETAIL_FIELDS = [
     bigquery.SchemaField("tables_changed",   "STRING"),
     bigquery.SchemaField("detail",           "STRING"),
     bigquery.SchemaField("execution_name",   "STRING"),
+    bigquery.SchemaField("build",            "STRING"),   # BUILD_SHA, 2026-10-22
 ]
 
 
@@ -831,6 +856,15 @@ def email_plan(status: str, role: str, run_mode: str, email_mode: str) -> tuple:
     after a failure — EMAIL_MODE decides as before: "on_error" mails only
     unclean runs."""
     unclean = status in ("partial", "failed")
+    # The dispatcher's outage canary (2026-10-22): every few minutes during a
+    # Plex outage, one light job tries to connect. It fails quietly — the
+    # failures that opened the outage have mailed already — except the first
+    # canary of an outage ("outage-alert"), whose failure email says that
+    # scheduled runs are now held. Recovery re-runs then mail as a batch.
+    if role == "canary":
+        return False, False
+    if role == "outage-alert":
+        return unclean, False
     if role in BATCH_ROLES and run_mode != "retry":
         return unclean or role == "first", role == "last"
     if role in ("only", "followup"):
@@ -858,6 +892,7 @@ def run_details(result: dict, errors: List[str], start_time: datetime,
         "tables_changed":   ", ".join(str(c) for c in changed)[:1000] or None,
         "detail":           "; ".join(errors)[:1000] if errors else None,
         "execution_name":   result.get("execution_name") or os.environ.get("CLOUD_RUN_EXECUTION", ""),
+        "build":            BUILD_SHA,
     }
 
 
@@ -887,7 +922,7 @@ def collect_batch(bq: bigquery.Client, batch_id: str, batch_kind: str,
         ORDER BY started_at, logged_at"""
     deadline = monotonic() + wait_seconds
     while True:
-        expected = {r.job_name for r in bq.query(expected_sql, job_config=cfg).result()}
+        expected = set(BATCH_EXPECTED) or {r.job_name for r in bq.query(expected_sql, job_config=cfg).result()}
         runs = [dict(r) for r in bq.query(runs_sql, job_config=cfg).result()]
         missing = sorted(expected - {r["job_name"] for r in runs})
         if not missing or monotonic() >= deadline:
@@ -895,6 +930,67 @@ def collect_batch(bq: bigquery.Client, batch_id: str, batch_kind: str,
         log.info(f"Digest for {batch_id}: waiting on {len(missing)} job(s): {', '.join(missing)}")
         sleep(DIGEST_POLL_SECONDS)
     return {"batch_id": batch_id, "batch_kind": batch_kind, "runs": runs, "missing": missing}
+
+
+def stale_jobs(latest: List[dict], now: datetime, hours: int) -> List[dict]:
+    """Jobs whose last clean run is more than `hours` old.
+
+    latest: one dict per job seen lately — job_name, last_clean (TIMESTAMP or
+    None when it has had no clean run in the lookback)."""
+    cutoff = now - timedelta(hours=hours)
+    return sorted((r for r in latest if r.get("last_clean") is None or r["last_clean"] < cutoff),
+                  key=lambda r: r["job_name"])
+
+
+def build_drift(latest: List[dict], current: str) -> List[dict]:
+    """Jobs whose latest run came from a different image than `current`.
+
+    latest: job_name, build (None for an image older than build tracking). A
+    sender that does not know its own build ("unknown") compares nothing."""
+    if current == "unknown":
+        return []
+    return sorted((r for r in latest if (r.get("build") or "unknown") != current),
+                  key=lambda r: r["job_name"])
+
+
+def batch_health(bq: bigquery.Client) -> dict:
+    """What every digest checks besides its own batch (2026-10-22): stale jobs,
+    jobs on another image, and dispatcher runs that ended without a word.
+    Each check is independent and fails soft: a digest with a check missing
+    beats no digest."""
+    table = f"`{GCP_PROJECT}.{BQ_DATASET}.{JOB_RUN_LOG_TABLE}`"
+    health = {"stale": [], "drift": [], "dispatch": [], "stale_after_hours": STALE_AFTER_HOURS,
+              "build": BUILD_SHA, "errors": []}
+    try:
+        rows = [dict(r) for r in bq.query(f"""
+            SELECT job_name,
+                   MAX(IF(status IN ('success', 'skipped'), logged_at, NULL)) AS last_clean,
+                   ARRAY_AGG(build ORDER BY logged_at DESC LIMIT 1)[SAFE_OFFSET(0)] AS build,
+                   MAX(logged_at) AS last_run
+            FROM {table}
+            WHERE logged_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {DIGEST_LOOKBACK_DAYS} DAY)
+              AND run_mode != 'retry'
+            GROUP BY job_name""").result()]
+        now = datetime.now(timezone.utc)
+        health["stale"] = stale_jobs(rows, now, STALE_AFTER_HOURS)
+        # Only jobs that ran today can tell which image they are on.
+        recent = [r for r in rows if r["last_run"] > now - timedelta(hours=24)]
+        health["drift"] = build_drift(recent, BUILD_SHA)
+    except Exception as exc:
+        log.exception("Digest health: job_run_log check failed.")
+        health["errors"].append(f"job_run_log check failed: {exc}")
+    if DISPATCH_ID and "." in DISPATCH_LOG_TABLE:
+        try:
+            health["dispatch"] = [dict(r) for r in bq.query(f"""
+                SELECT job_name, outcome, reason, finished_at, detail
+                FROM `{GCP_PROJECT}.{DISPATCH_LOG_TABLE}`
+                WHERE outcome IN ('succeeded-unrecorded', 'lost', 'dispatch-failed', 'held-outage')
+                  AND finished_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+                ORDER BY finished_at""").result()]
+        except Exception as exc:
+            log.exception("Digest health: dispatch log check failed.")
+            health["errors"].append(f"dispatch log check failed: {exc}")
+    return health
 
 
 def create_or_replace_bq_view(bq: bigquery.Client, dataset: str, name: str, sql: str):
@@ -944,9 +1040,71 @@ def get_odbc_connection(user: str, password: str, company_code: str, access_toke
             f"CustomProperties=CompanyCode={company_code};"
         )
         log.info(f"Connecting via DSN={PLEX_DSN} (username/password auth)")
-    conn = pyodbc.connect(conn_str, timeout=30)
-    log.info("ODBC connection established.")
-    return conn
+    last_exc = None
+    for attempt in range(1, CONNECT_ATTEMPTS + 1):
+        try:
+            conn = connect_with_deadline(lambda: pyodbc.connect(conn_str, timeout=30),
+                                         CONNECT_DEADLINE_SECONDS)
+            log.info(f"ODBC connection established (attempt {attempt}).")
+            return conn
+        except Exception as exc:
+            last_exc = exc
+            if not connect_retryable(exc) or attempt == CONNECT_ATTEMPTS:
+                break
+            wait = CONNECT_BACKOFF_SECONDS * 2 ** (attempt - 1)
+            log.warning(f"ODBC connect attempt {attempt} of {CONNECT_ATTEMPTS} failed ({exc}); "
+                        f"trying again in {wait}s.")
+            sleep(wait)
+    # Callers prefix "ODBC connection failed: ", which is what the dispatcher's
+    # outage breaker looks for.
+    raise ConnectionError(f"{attempt} attempt(s); last: {last_exc}") from last_exc
+
+
+def connect_retryable(exc: Exception) -> bool:
+    """Whether another connect attempt can help. A refused login (SQLSTATE
+    28xxx) fails the same way every time; anything else — a timeout, a dropped
+    socket (08S01), a refused connection — may be gone a minute later."""
+    state = exc.args[0] if isinstance(exc, pyodbc.Error) and exc.args else ""
+    return not str(state).startswith("28")
+
+
+def connect_with_deadline(connect, deadline_seconds: int):
+    """Run connect() (which returns a connection), but give up after
+    deadline_seconds. pyodbc releases the GIL while the driver connects, so
+    the attempt runs on a daemon thread and this thread just waits on it. A
+    connect that completes after the deadline is closed rather than leaked."""
+    box: dict = {}
+    lock = threading.Lock()
+    done = threading.Event()
+
+    def attempt():
+        try:
+            conn = connect()
+        except Exception as exc:
+            with lock:
+                box["error"] = exc
+            done.set()
+            return
+        with lock:
+            late = box.get("abandoned", False)
+            if not late:
+                box["conn"] = conn
+        done.set()
+        if late:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=attempt, name="odbc-connect", daemon=True).start()
+    done.wait(deadline_seconds)
+    with lock:
+        if "conn" in box:
+            return box["conn"]
+        if "error" in box:
+            raise box["error"]
+        box["abandoned"] = True
+    raise TimeoutError(f"no answer from Plex within {deadline_seconds}s")
 
 
 # Maps a pyodbc cursor.description type_code (a Python type object -- e.g.
@@ -1171,7 +1329,8 @@ def write_to_csv(df: pd.DataFrame, output_dir: str, table_name: str) -> int:
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     sync_time   = datetime.now(timezone.utc)
-    log.info("=== Plex → BigQuery ETL job starting ===")
+    log.info(f"=== Plex → BigQuery ETL job starting (build {BUILD_SHA}, mode {RUN_MODE}"
+             f"{', role ' + EMAIL_ROLE if EMAIL_ROLE else ''}) ===")
     events         = []
     partial_errors = []   # extraction-level failures (not fatal, but flagged in email)
     rows_fetched   = 0
@@ -1765,6 +1924,12 @@ def run_and_report():
         # main() raised, so `result` is still the defaults above. Use whatever
         # identity main() recorded before it failed (see _RUN_CONTEXT).
         result = {**result, **_RUN_CONTEXT}
+        if EMAIL_ROLE == "outage-alert":
+            # The one email of a Plex outage (see email_plan).
+            result["events"] = list(result.get("events") or []) + [
+                "PLEX OUTAGE: the dispatcher has held every scheduled run since Plex stopped "
+                "accepting connections. A canary job tries again every few minutes, quietly; "
+                "when one connects, each held job re-runs and a digest reports the recovery."]
 
     if OUTPUT_MODE == "bigquery":
         try:
@@ -1835,9 +2000,11 @@ def send_batch_digest(batch: tuple):
     """The last job's digest of its whole batch. Never raises: the run's own
     result is already logged, and a lost digest must not fail the run."""
     try:
-        digest = collect_batch(bigquery.Client(project=GCP_PROJECT), *batch)
+        bq = bigquery.Client(project=GCP_PROJECT)
+        digest = collect_batch(bq, *batch)
         send_digest({
             **digest,
+            "health":         batch_health(bq),
             "gcp_project":    GCP_PROJECT,
             "bq_dataset":     BQ_DATASET,
             "time_zone":      REPORT_TIME_ZONE,

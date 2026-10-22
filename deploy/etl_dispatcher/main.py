@@ -20,6 +20,10 @@ on each call it
      time instead of looping (Emilio, 2026-10-19: "if it failed, probe it after
      15 mins" — and no immediate retry, since right away the error is likely
      the same).
+  4. HOLDS everything while Plex refuses connections (2026-10-22, see
+     OUTAGE_SIGNATURE below): scheduled slots are logged `held-outage`, a quiet
+     `canary` run tests the connection every CANARY_INTERVAL_MINUTES, and once
+     one connects every held job gets one `recovery` run, mailed as one batch.
 
 The job learns how it was started from two env overrides on the run request:
 RUN_MODE (probe | full) and DISPATCH_ID, plus DISPATCH_LOG_TABLE so it can find
@@ -82,6 +86,38 @@ OUTCOME_GRACE_MINUTES = int(os.environ.get("OUTCOME_GRACE_MINUTES", "5"))
 
 VALID_MODES = ("probe", "full")
 FOLLOWUP_OUTCOMES = ("failed", "partial", "lost")
+
+# Plex outage breaker (2026-10-22). On 2026-10-21, from 11 PM to 4:30 AM, Plex
+# prod refused every ODBC connection: every scheduled run failed, each failure
+# earned a follow-up that failed too, and each mailed. Now, once
+# OUTAGE_THRESHOLD runs in a row (any jobs, by finish time) fail to connect,
+# the breaker is open:
+#   - scheduled slots are logged `held-outage` instead of started;
+#   - follow-ups wait;
+#   - every CANARY_INTERVAL_MINUTES one light job (CANARY_JOBS, first that is
+#     free) is started as a `canary`. The first canary of an outage mails its
+#     failure ("outage-alert"), the rest are silent.
+# Any run that connects — a canary that succeeds, partial or skipped — closes
+# it. Then each job with a held slot gets ONE `recovery` run (full if any held
+# slot was full), RECOVERY_PER_TICK per tick, mailing as one batch whose last
+# job sends the digest. Stateless: everything is read back from the log.
+OUTAGE_SIGNATURE = "ODBC connection failed"   # main.py's prefix on a failed connect
+OUTAGE_THRESHOLD = int(os.environ.get("OUTAGE_THRESHOLD", "2"))
+CANARY_INTERVAL_MINUTES = int(os.environ.get("CANARY_INTERVAL_MINUTES", "10"))
+# The quickest probes in PlexProd.job_run_log (about 20-30 s), in order of
+# preference. An empty or stale list falls back to any scheduled job.
+CANARY_JOBS = os.environ.get(
+    "CANARY_JOBS",
+    "plex-etl-sales-quotes plex-etl-quality-supplier-returns plex-etl-part-obsolescence").split()
+RECOVERY_HORIZON_HOURS = int(os.environ.get("RECOVERY_HORIZON_HOURS", "24"))
+RECOVERY_PER_TICK = int(os.environ.get("RECOVERY_PER_TICK", "4"))
+HEALTHY_OUTCOMES = ("success", "partial", "skipped", "succeeded-unrecorded")
+# Outcomes of a dispatch row that never started a run.
+NOT_STARTED = ("held-outage", "skipped-busy", "dispatch-failed")
+# Runs that never earn a follow-up: a follow-up, and the breaker's own runs
+# (a failed canary is the next canary's job; a failed recovery waits for the
+# next scheduled time like any follow-up would).
+NO_FOLLOWUP_REASONS = ("follow-up", "canary", "recovery")
 
 
 # ── Pure planning ─────────────────────────────────────────────────────────────
@@ -158,14 +194,128 @@ def followups_due(log_rows, now_utc, delay_minutes=FOLLOWUP_DELAY_MINUTES,
     already = {r.get("followup_of") for r in log_rows if r.get("followup_of")}
     out = []
     for r in log_rows:
-        if r.get("reason") == "follow-up" or r.get("outcome") not in FOLLOWUP_OUTCOMES:
+        if r.get("reason") in NO_FOLLOWUP_REASONS or r.get("outcome") not in FOLLOWUP_OUTCOMES:
             continue
         if r["dispatch_id"] in already or not r.get("finished_at"):
+            continue
+        # The job has run again since (a scheduled slot, a recovery run): that
+        # run is the follow-up.
+        if _covered(r, log_rows):
             continue
         age = now_utc - r["finished_at"]
         if dt.timedelta(minutes=delay_minutes) <= age <= dt.timedelta(hours=horizon_hours):
             out.append(r)
     return out
+
+
+def _covered(row, log_rows):
+    """Whether a run of the same job started after `row` and does its work: any
+    started run covers a probe; only a full run covers a full one. A canary
+    that could not connect covers nothing."""
+    for r in log_rows:
+        if (r.get("job_name") == row.get("job_name") and r.get("dispatch_id") != row.get("dispatch_id")
+                and r.get("dispatched_at") and row.get("dispatched_at")
+                and r["dispatched_at"] > row["dispatched_at"]
+                and r.get("outcome") not in NOT_STARTED
+                and not (r.get("reason") == "canary" and r.get("outcome") in ("failed", "lost"))
+                and (r.get("mode") == "full" or row.get("mode") != "full")):
+            return True
+    return False
+
+
+def connect_evidence(row):
+    """'up' if this run reached Plex, 'down' if it could not connect, else
+    None (a failure of some other kind says nothing about Plex)."""
+    outcome = row.get("outcome")
+    if outcome in HEALTHY_OUTCOMES:
+        return "up"
+    if outcome == "failed" and str(row.get("detail") or "").startswith(OUTAGE_SIGNATURE):
+        return "down"
+    return None
+
+
+def outage_state(log_rows, threshold=OUTAGE_THRESHOLD):
+    """None while Plex answers. Else {since, failures}: the newest `failures`
+    finished runs that tell anything about Plex all failed to connect, and the
+    first of them finished at `since`."""
+    evidence = sorted((r for r in log_rows if r.get("finished_at") and connect_evidence(r)),
+                      key=lambda r: r["finished_at"], reverse=True)
+    streak = []
+    for r in evidence:
+        if connect_evidence(r) == "up":
+            break
+        streak.append(r)
+    if len(streak) < threshold:
+        return None
+    return {"since": streak[-1]["finished_at"], "failures": len(streak)}
+
+
+def canary_due(log_rows, now_utc, outage, schedule, busy_jobs,
+               interval_minutes=CANARY_INTERVAL_MINUTES, preferred=CANARY_JOBS):
+    """The canary to start now during an outage, or None: {job_name, role}.
+
+    One at a time, interval_minutes after the last one started (or after the
+    outage opened). The first canary of an outage has role 'outage-alert' —
+    its failure is the outage's one email — and the rest 'canary'."""
+    canaries = [r for r in log_rows if r.get("reason") == "canary"
+                and r.get("dispatched_at") and r["dispatched_at"] >= outage["since"]]
+    if any(r.get("outcome") is None for r in canaries):
+        return None
+    last = max([r["dispatched_at"] for r in canaries] + [outage["since"]])
+    if now_utc - last < dt.timedelta(minutes=interval_minutes):
+        return None
+    enabled = sorted({r["job_name"] for r in schedule if r.get("enabled") and r.get("job_name")})
+    for job in [j for j in preferred if j in enabled] + enabled:
+        if job not in busy_jobs:
+            return {"job_name": job, "role": "canary" if canaries else "outage-alert"}
+    return None
+
+
+def recovery_plan(log_rows, now_utc, busy_jobs, horizon_hours=RECOVERY_HORIZON_HOURS,
+                  per_tick=RECOVERY_PER_TICK):
+    """The recovery runs to start now, once an outage is over.
+
+    Each job with a `held-outage` slot in the last horizon_hours that no later
+    run has covered owes ONE run: full if any held slot was full. The
+    outage's recovery is one batch named after its newest held slot, so it
+    keeps its name across the ticks it takes (per_tick runs each); roles
+    first/middle/last count the recovery runs already started for it.
+    Returns {batch_id, batch_kind, expected, runs: [{job_name, mode,
+    followup_of, role}]}, or None when nothing is owed."""
+    horizon = dt.timedelta(hours=horizon_hours)
+    held = [r for r in log_rows if r.get("outcome") == "held-outage"
+            and r.get("dispatched_at") and now_utc - r["dispatched_at"] <= horizon]
+    if not held:
+        return None
+    newest = max(held, key=lambda r: r["dispatched_at"])
+    started = sorted({r["job_name"] for r in log_rows if r.get("reason") == "recovery"
+                      and r.get("dispatched_at") and r["dispatched_at"] > newest["dispatched_at"]})
+    owed = {}
+    for r in sorted(held, key=lambda r: r["dispatched_at"]):
+        # A job's recovery run is its one try, whatever its outcome: a failed
+        # one waits for the next scheduled time, never a loop.
+        if r["job_name"] in started or _covered(r, log_rows):
+            continue
+        entry = owed.setdefault(r["job_name"], {"job_name": r["job_name"], "mode": "probe"})
+        if r.get("mode") == "full":
+            entry["mode"] = "full"
+        entry["followup_of"] = r["dispatch_id"]   # the newest owed slot
+    if not owed:
+        return None
+    names = sorted(owed)
+    total = len(started) + len(names)
+    runs = []
+    for job in names:
+        if job in busy_jobs:
+            continue
+        if len(runs) >= per_tick:
+            break
+        pos = len(started) + names.index(job)
+        role = ("only" if total == 1 else "first" if pos == 0
+                else "last" if pos == total - 1 else "middle")
+        runs.append({**owed[job], "role": role})
+    return {"batch_id": f"recovery-{newest['dispatch_id']}", "batch_kind": "recovery",
+            "expected": sorted(set(started) | set(names)), "runs": runs}
 
 
 def reconcile(row, execution, now_utc, lost_after=LOST_AFTER_MINUTES,
@@ -244,6 +394,9 @@ def run_body(mode, dispatch_id, batch=None):
             {"name": "BATCH_ID", "value": batch["batch_id"]},
             {"name": "BATCH_KIND", "value": batch["batch_kind"]},
         ]
+        if batch.get("expected"):
+            # A recovery batch has no history to read its members from.
+            env.append({"name": "BATCH_EXPECTED", "value": " ".join(batch["expected"])})
     return {"overrides": {"containerOverrides": [{"env": env}]}}
 
 
@@ -304,7 +457,8 @@ def tick(now_utc=None, dry_run=False):
     now = now_utc or dt.datetime.now(dt.timezone.utc)
     bq, session = _bq(), _session()
     summary = {"now_utc": now.isoformat(), "dry_run": dry_run, "reconciled": [],
-               "dispatched": [], "skipped": [], "followups": [], "errors": []}
+               "dispatched": [], "skipped": [], "followups": [], "canary": [], "recovery": [],
+               "outage": None, "errors": []}
 
     # 1. Settle runs still open.
     open_rows = _query(bq, f"""
@@ -341,7 +495,17 @@ def tick(now_utc=None, dry_run=False):
                 summary["errors"].append(f"settle {row['dispatch_id']}: {exc}")
                 busy.add(row["job_name"])
 
-    # 2. Scheduled slots.
+    # The last day of the log, as settled by step 1: the outage breaker, the
+    # canary, recovery and follow-ups all read it.
+    recent = _query(bq, f"""
+        SELECT dispatch_id, job_name, mode, reason, scheduled_for, dispatched_at, outcome,
+               finished_at, followup_of, detail
+        FROM {_fq(LOG_TABLE)}
+        WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)""")
+    outage = outage_state(recent)
+    summary["outage"] = outage
+
+    # 2. Scheduled slots — held, not started, while Plex is refusing connections.
     schedule = _query(bq, f"SELECT job_name, run_time, mode, enabled FROM {_fq(SCHEDULE_TABLE)}")
     logged = {(r["job_name"], r["scheduled_for"]) for r in _query(bq, f"""
         SELECT job_name, scheduled_for FROM {_fq(LOG_TABLE)}
@@ -350,19 +514,41 @@ def tick(now_utc=None, dry_run=False):
         if slot["action"] == "invalid":
             summary["errors"].append(f"schedule row for {slot['job_name']}: {slot['detail']}")
             continue
+        action = "held-outage" if outage and slot["action"] == "dispatch" else slot["action"]
         batch = batch_for(schedule, slot["job_name"], slot["mode"], slot["scheduled_for"])
         _dispatch(bq, session, slot["job_name"], slot["mode"], "schedule",
-                  slot["scheduled_for"], None, slot["action"], summary, dry_run, batch)
-        if slot["action"] == "dispatch":
+                  slot["scheduled_for"], None, action, summary, dry_run, batch)
+        if action == "dispatch":
             busy.add(slot["job_name"])
 
-    # 3. One follow-up probe per failed run. It logs under the failed run's
+    if outage:
+        # 3a. During an outage: no follow-ups, one canary at a time.
+        canary = canary_due(recent, now, outage, schedule, busy)
+        if canary:
+            day = now.astimezone(TZ).date().isoformat()
+            _dispatch(bq, session, canary["job_name"], "probe", "canary", None, None, "dispatch",
+                      summary, dry_run, {"role": canary["role"], "batch_id": f"canary-{day}",
+                                         "batch_kind": "canary"})
+        print(json.dumps({"message": "etl-dispatcher tick", "severity": "WARNING" if not summary["errors"]
+                          else "ERROR", **summary}, default=str), flush=True)
+        return summary
+
+    # 3b. After an outage: one recovery run per job with a held slot.
+    started_now = set()
+    plan = recovery_plan(recent, now, busy)
+    for run in (plan or {}).get("runs", []):
+        _dispatch(bq, session, run["job_name"], run["mode"], "recovery", None, run["followup_of"],
+                  "dispatch", summary, dry_run,
+                  {"role": run["role"], "batch_id": plan["batch_id"], "batch_kind": plan["batch_kind"],
+                   "expected": plan["expected"]})
+        busy.add(run["job_name"])
+        started_now.add(run["job_name"])
+
+    # 4. One follow-up probe per failed run. It logs under the failed run's
     # batch for the audit, but mails as itself: the digest has gone by then.
-    recent = _query(bq, f"""
-        SELECT dispatch_id, job_name, mode, reason, scheduled_for, outcome, finished_at, followup_of
-        FROM {_fq(LOG_TABLE)}
-        WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)""")
     for row in followups_due(recent, now):
+        if row["job_name"] in started_now:
+            continue   # a recovery run just started covers it
         action = "skipped-busy" if row["job_name"] in busy else "dispatch"
         batch = (batch_for(schedule, row["job_name"], row["mode"], row["scheduled_for"])
                  if row.get("scheduled_for") else None)
@@ -377,13 +563,20 @@ def tick(now_utc=None, dry_run=False):
     return summary
 
 
+SKIP_DETAILS = {
+    "skipped-busy": "previous dispatch of this job still running",
+    "held-outage":  "Plex is refusing ODBC connections: held, to re-run once a canary connects",
+}
+
+
 def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action, summary, dry_run,
               batch=None):
     dispatch_id = uuid.uuid4().hex[:16]
     entry = {"dispatch_id": dispatch_id, "job_name": job, "mode": mode, "reason": reason,
              "scheduled_for": scheduled_for, "followup_of": followup_of,
              "email_role": (batch or {}).get("role")}
-    bucket = "followups" if reason == "follow-up" else ("dispatched" if action == "dispatch" else "skipped")
+    bucket = {"follow-up": "followups", "canary": "canary", "recovery": "recovery"}.get(
+        reason, "dispatched" if action == "dispatch" else "skipped")
     record = {**entry, "action": action}
     if dry_run:
         summary[bucket].append(record)
@@ -401,7 +594,7 @@ def _dispatch(bq, session, job, mode, reason, scheduled_for, followup_of, action
             _param("reason", reason), _param("slot", scheduled_for, "TIMESTAMP"),
             _param("followup_of", followup_of),
             _param("outcome", None if action == "dispatch" else action),
-            _param("detail", None if action == "dispatch" else "previous dispatch of this job still running")])
+            _param("detail", SKIP_DETAILS.get(action))])
     except Exception as exc:
         # No row, so no run: the slot is still unlogged and the next tick, five
         # minutes later, tries it again. One failed insert must not end the pass

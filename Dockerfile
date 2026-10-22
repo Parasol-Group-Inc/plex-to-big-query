@@ -56,5 +56,12 @@ COPY catalog/ catalog/
 COPY entrypoint.sh /entrypoint.sh
 RUN mkdir -p /output && chmod +x /entrypoint.sh
 
+# The commit this image was built from. Cloud Build passes --build-arg
+# GIT_SHA=$SHORT_SHA; every run logs it (job_run_log.build), and the batch
+# digest names any job still on another image. Declared last so a new SHA
+# never invalidates the cached layers above.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "main.py"]

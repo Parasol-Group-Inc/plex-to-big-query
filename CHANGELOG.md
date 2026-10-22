@@ -14,6 +14,20 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-22 (dev) - BigQuery loads retry once
+
+### Fixed
+- **A failed BigQuery load now retries once, 30 s later** (`write_to_bigquery`
+  in `main.py`). The 1 PM prod Label Design run went PARTIAL on
+  `raw_Sales_v_PO_Line`: `400 ... Failed to expand table ... matched no
+  files`, a Google-side error where the staged upload goes missing. Sales
+  Orders' 1 PM probe loaded the same table in the same minute (13:00:49 vs
+  13:02:43), and Label Design runs on the hour 5 AM-5 PM, so this can recur
+  at 1 PM on weekdays. No data was lost: Sales Orders' load landed (715 rows,
+  same unfiltered pull). `WRITE_TRUNCATE` makes the retry safe. A real error
+  (schema, permissions) fails twice and is reported as before, 30 s later.
+  Code change: ships via Cloud Build.
+
 ## 2026-10-22 (scorecard) - Bottling bulk cases (9xxxx-BK) stay counted; Plex SQL equivalents
 
 ### Changed

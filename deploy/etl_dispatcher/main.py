@@ -78,7 +78,7 @@ FOLLOWUP_DELAY_MINUTES = int(os.environ.get("FOLLOWUP_DELAY_MINUTES", "15"))
 # for a day); the next scheduled time covers it.
 FOLLOWUP_HORIZON_HOURS = int(os.environ.get("FOLLOWUP_HORIZON_HOURS", "6"))
 # A dispatched run with no outcome and no finished execution after this long is
-# treated as lost (failed). Longer than any job's timeout (max 900 s).
+# treated as lost (failed). Longer than any job's timeout (max 1800 s).
 LOST_AFTER_MINUTES = int(os.environ.get("LOST_AFTER_MINUTES", "120"))
 # After an execution completes, how long the job's own outcome row may lag
 # before the execution's status is used instead.

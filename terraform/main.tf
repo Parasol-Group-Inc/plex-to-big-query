@@ -405,7 +405,9 @@ resource "google_cloud_run_v2_job" "etl" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
+      # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
+      timeout     = "1200s"
     }
   }
 
@@ -593,7 +595,9 @@ resource "google_cloud_run_v2_job" "etl_test" {
         }
       }
       max_retries = 1
-      timeout     = "600s"
+      # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
+      # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
+      timeout     = "1200s"
     }
   }
 
@@ -791,7 +795,9 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
+      # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
+      timeout     = "1200s"
     }
   }
 
@@ -926,7 +932,9 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
         }
       }
       max_retries = 1
-      timeout     = "600s"
+      # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
+      # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
+      timeout     = "1200s"
     }
   }
 

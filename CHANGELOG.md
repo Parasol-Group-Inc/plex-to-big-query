@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-23 (dev) - Sales Orders and Work Orders get a 20-minute timeout
+
+### Changed
+- **`plex-etl-sales-orders` and `plex-etl-work-orders` (prod and test) time
+  out at 1200s instead of 600s.** On 2026-10-22 both 6 PM Sales Orders runs
+  were killed at the 600s limit before logging a result: the first because
+  Plex took 4.5 min to return `Part_v_Part` (normally seconds), the follow-up
+  because BigQuery queued its load jobs for up to 281 s each (normally about
+  1 s). Sales Orders normally takes about 2 min; Work Orders peaked at 377 s,
+  the closest of any job to its limit. Every other job's worst run is under a
+  quarter of 600s, so they stay as they are. The dispatcher's lost-run window
+  (120 min) is far above the new limit. Terraform only: `./scripts/deploy.sh`.
+
 ## 2026-10-22 (label-design) - Repair job refills columns a board move drops
 
 ### Added

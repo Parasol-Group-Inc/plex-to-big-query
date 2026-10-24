@@ -1075,6 +1075,17 @@ def connect_retryable(exc: Exception) -> bool:
     return not str(state).startswith("28")
 
 
+def connection_lost(exc: Exception) -> bool:
+    """Whether Plex dropped an established session (SQLSTATE 08S01: "session
+    kill", "internal network error, session aborted"). Plex does this to a
+    connection that sits idle, and a run is idle on Plex for as long as a
+    BigQuery write takes. On 2026-10-24 BigQuery load jobs queued for 3-6
+    minutes, one write took 8, and every table after it failed in the same
+    millisecond. A new session works, so one reconnect is worth trying."""
+    state = exc.args[0] if isinstance(exc, pyodbc.Error) and exc.args else ""
+    return str(state) == "08S01"
+
+
 def connect_with_deadline(connect, deadline_seconds: int):
     """Run connect() (which returns a connection), but give up after
     deadline_seconds. pyodbc releases the GIL while the driver connects, so
@@ -1604,9 +1615,10 @@ def main():
                 date_col = extraction.get("date_col", "")
 
                 log.info(f"--- Extracting {view} → {table} ---")
-                try:
+
+                def pull(c, extraction=extraction, view=view, filt=filt, date_col=date_col):
                     if extraction.get("page_key"):
-                        df = query_plex_paged(conn, plex_view=view, plex_filter=filt,
+                        df = query_plex_paged(c, plex_view=view, plex_filter=filt,
                                               page_key=extraction["page_key"],
                                               page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
                         if df.attrs.get("page_note"):
@@ -1614,11 +1626,29 @@ def main():
                             # more before giving up on this table.
                             log.warning(f"{df.attrs['page_note']} — pulling {view} once more.")
                             events.append(f"Paged pull of {view} did not add up; pulled once more")
-                            df = query_plex_paged(conn, plex_view=view, plex_filter=filt,
+                            df = query_plex_paged(c, plex_view=view, plex_filter=filt,
                                                   page_key=extraction["page_key"],
                                                   page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
-                    else:
-                        df = query_plex(conn, plex_view=view, plex_filter=filt, plex_date_col=date_col)
+                        return df
+                    return query_plex(c, plex_view=view, plex_filter=filt, plex_date_col=date_col)
+
+                try:
+                    try:
+                        df = pull(conn)
+                    except Exception as first:
+                        if not connection_lost(first):
+                            raise
+                        # Plex dropped the session (idle during a slow BigQuery
+                        # write, usually). Reconnect once and pull this table
+                        # again; later tables then use the new session.
+                        log.warning(f"Plex dropped the session before {view} ({first}) — reconnecting once.")
+                        events.append(f"Plex dropped the session before {view}; reconnected and retried")
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        conn = get_odbc_connection(user, password, company_code, access_token)
+                        df = pull(conn)
                 except Exception as exc:
                     log.exception(f"Query failed for {view}: {exc}")
                     events.append(f"ERROR: {view} query failed: {exc}")

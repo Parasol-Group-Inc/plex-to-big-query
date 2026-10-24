@@ -76,6 +76,14 @@ or `sql/` paths:** that is how prod diverged and a fix got rolled back
   every prompt, and `ListAgents` shows peers. Stage by explicit path, never
   `git add -A`.
 
+## Claude Code runs as a read-only service account
+
+Claude's gcloud/bq calls use `claude-readonly@voxdatalake.iam.gserviceaccount.com`
+(config `claude`), not your login. It can read BigQuery, Cloud Run and logs;
+it can't write, deploy, run jobs or read secrets or GCS. A PERMISSION_DENIED
+from Claude is expected: run that command yourself. Details:
+`docs/CLAUDE_CODE_IAM.md`.
+
 ## Quick health check after any repo move / long gap
 
 ```bash

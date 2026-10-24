@@ -25,6 +25,7 @@ import csv
 import importlib.util
 import json
 import re
+import sys
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -168,6 +169,29 @@ def load_scorecard(reports, other_inputs):
     }
 
 
+def add_qbo_tab(live):
+    """Put the QuickBooks tab into the page that gets published.
+
+    The tab is not part of the template: its figures come from BigQuery in parasoldatalake (Kaya and ODF
+    books), so it is injected only into the live page, never the committed index.html. Publishing a page
+    without it deletes the tab from the artifact, which happened on 2026-10-22, so a live page that cannot
+    get the tab is an error rather than a quiet omission. `--no-qbo` is the explicit way out.
+    """
+    if "--no-qbo" in sys.argv:
+        print("WARNING: --no-qbo: the live page has no QuickBooks tab. Publishing it deletes the tab from the artifact.")
+        return live
+    import qbo_tab
+    try:
+        from google.cloud import bigquery
+        data = qbo_tab.gather(bigquery.Client(project=qbo_tab.BQ_PROJECT))
+    except Exception as exc:
+        sys.exit(f"Cannot build the QuickBooks tab: {exc}\n"
+                 "It reads parasoldatalake with your own gcloud login (configuration `default`, "
+                 "`gcloud auth application-default login`), not claude-readonly. "
+                 "Fix that, or rerun with --no-qbo and do NOT publish index_live.html.")
+    return qbo_tab.inject(live, qbo_tab.render_tab(data))
+
+
 def main():
     pipelines, reports, tables = {}, {}, {}
 
@@ -273,7 +297,7 @@ def main():
     html = page(data)
     OUT.write_text(html, encoding="utf-8", newline="\n")
     if snapshot:
-        live = page({**data, "snapshot": snapshot})
+        live = add_qbo_tab(page({**data, "snapshot": snapshot}))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

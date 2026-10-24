@@ -110,6 +110,14 @@ to a hard error if Plex disables unlicensed ODBC access).
                driver\product.dat, driver\ddprocinfo -ErrorAction SilentlyContinue
    ```
 
+> **Apple Silicon Macs (arm64):** the Plex driver is x86-64, so build and run
+> the image as amd64 or the driver fails with `Can't open lib ... ivoa27.so :
+> file not found`: `export DOCKER_DEFAULT_PLATFORM=linux/amd64` first (slower,
+> emulated). The same error also appears if `driver/lib64/` lacks the ICU
+> libraries (`libicudata.so.42`, `libicuuc.so.42`). `ldd` inside the image names
+> the missing one. Verified on 2026-10-23: 619 rows from `Part_v_Part`.
+> If `docker compose` isn't found, use `docker-compose`.
+
 ---
 
 ## Step 2 — Create your `.env` file

@@ -21,6 +21,12 @@ don't need an entry.
 - New `connection_lost()` and `tests/test_connection_lost.py`. Runs inside the ETL image: `docker run --rm -v "$PWD":/src -w /src --entrypoint python <image> tests/test_connection_lost.py`.
 - **Not fixed:** the BigQuery load queue itself, which is on Google's side, and a slow queue still lengthens a run. This change stops it losing extractions. Ships via Cloud Build (`deploy/cloudbuild.yaml`), not `terraform apply`.
 
+## 2026-10-23 (dev) - The Data Hub builds its own QuickBooks tab
+
+### Changed
+- **`scripts/hub/build_hub.py` now injects the QuickBooks tab into `index_live.html`.** The tab (fleet health, Kaya and ODF scorecards, project reference, and the QBO Pipeline Atlas as a new "Pipeline atlas" view) used to be added by a separate script in `quickbooks-to-biquery`, and publishing this repo's page without that second step deleted it from the artifact on 2026-10-22. The script moved here as `scripts/hub/qbo_tab.py`; the atlas is `docs/hub/qbo_atlas.html`. A live page that can't get the tab is now an error (`--no-qbo` skips it with a warning).
+- Tooling and docs only; nothing deployed. See `docs/hub/README.md`.
+
 ## 2026-10-23 (dev) - Sales Orders and Work Orders get a 20-minute timeout
 
 ### Changed

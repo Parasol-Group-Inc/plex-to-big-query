@@ -123,6 +123,7 @@ graph LR
 | Learn the stack as a frontend developer | [docs/FRONTEND_GUIDE.md](docs/FRONTEND_GUIDE.md) |
 | Look up gcloud / docker / terraform detail | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| Know what Claude Code can and can't touch in GCP (`claude-readonly`) | [docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md) |
 | See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
 | Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
 | Find any report, raw table or pipeline, with its SQL and Plex SQL | [Plex Data Hub](https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt) (built from `docs/hub/`, see its README) |
@@ -161,6 +162,12 @@ cd C:/F/Parasol/plex-to-big-query
 ./scripts/dev_setup.sh --worktrees   # driver, .env from Secret Manager, hooks, one folder per project
 docker compose build && docker compose up   # local, read-only health check
 ```
+
+**On a Mac, read [docs/ONBOARDING.md](docs/ONBOARDING.md) § "On a Mac" first:**
+Apple Silicon needs `export DOCKER_DEFAULT_PLATFORM=linux/amd64` (the Plex
+driver is x86-64), `docker-compose` may replace `docker compose`, and gcloud's
+active configuration must be `default`, not the Claude Code read-only one
+([docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md)).
 
 `dev_setup.sh` needs read access to the secrets and the driver bucket; the
 list to ask an Owner for is in [docs/ONBOARDING.md](docs/ONBOARDING.md). Add

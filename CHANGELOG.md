@@ -14,6 +14,13 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-24 (dev) - A dropped Plex session is retried once, per table
+
+### Fixed
+- **`main.py`: an extraction that fails with SQLSTATE 08S01 reconnects to Plex and pulls that table again, once.** Plex kills a session that sits idle, and a run is idle on Plex for as long as each BigQuery write takes. From 2026-10-24 00:00 UTC BigQuery load jobs waited 3-6 minutes in `default-pipeline` (the shared load pool; no reservations exist) before starting. On the 6 PM Work Orders run one 997-row write took 7 min 54 s, Plex killed the session (`2251 session kill`), and the other 14 tables failed in the same millisecond (`2208 session aborted`), which read as "network errors". The run now logs `Plex dropped the session before <view>; reconnected and retried` and carries on. Any other error is handled as before.
+- New `connection_lost()` and `tests/test_connection_lost.py`. Runs inside the ETL image: `docker run --rm -v "$PWD":/src -w /src --entrypoint python <image> tests/test_connection_lost.py`.
+- **Not fixed:** the BigQuery load queue itself, which is on Google's side, and a slow queue still lengthens a run. This change stops it losing extractions. Ships via Cloud Build (`deploy/cloudbuild.yaml`), not `terraform apply`.
+
 ## 2026-10-23 (dev) - Sales Orders and Work Orders get a 20-minute timeout
 
 ### Changed

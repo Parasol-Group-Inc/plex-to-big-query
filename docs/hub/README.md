@@ -36,11 +36,12 @@ GitHub.
 
 Run it after any change to `reports/*.yaml`, `reports/sql/`, `reports/plex_sql/`
 or `docs/reports/`, commit the new `index.html`, and republish the artifact from
-`index_live.html`.
+`index_live.html` (it includes the QuickBooks tab; see the last section).
 Edit the page in `scripts/hub/template.html`, never `index.html`.
 
 | Input | What it gives the page |
 |---|---|
+| `scripts/hub/qbo_tab.py`, `docs/hub/qbo_atlas.html` | the QuickBooks tab, added to `index_live.html` only (BigQuery, `parasoldatalake`) |
 | `reports/*.yaml`, `reports/test/*.yaml` | pipelines, extractions, `bq_view` lists, prod/test count check |
 | `reports/sql/*.sql` | BigQuery SQL; `raw_*` and `{dataset}.<view>` references build the lineage |
 | `reports/plex_sql/*.sql` | Plex SQL Developer equivalents and their header (`confidence`, `plex_views`, `notes`) |
@@ -94,3 +95,36 @@ they behave differently:
 The comparison table, the run-path diagram and the test schedulers' "How it
 runs" column come from `platform.json` (`env_compare`, `probe.prod_vs_test`,
 `mermaid.env_paths`).
+
+## The QuickBooks tab (built in, since 2026-10-23)
+
+The hub also has a **QuickBooks** tab: fleet health, the Kaya Naturals and On
+Demand Fulfillment scorecards (a build sheet per card), the project reference
+and the six-diagram QBO Pipeline Atlas. It lives in this repo:
+
+| File | What |
+|---|---|
+| `scripts/hub/qbo_tab.py` | renders the tab and injects it into the page; figures are queried from BigQuery in `parasoldatalake` |
+| `docs/hub/qbo_atlas.html` | the atlas (a complete page, embedded in the tab as an iframe); source of truth is now this copy |
+
+`build_hub.py` adds the tab to `index_live.html` itself, so there is no second
+step. The committed `index.html` never has it (it holds client financials,
+like the data snapshot). Publish `index_live.html` and the tab stays.
+
+This replaced a separate script in `quickbooks-to-biquery`, after a publish on
+2026-10-22 silently deleted the tab. Two guards remain:
+
+- If the tab can't be built (no access to `parasoldatalake`), `build_hub.py`
+  exits with an error instead of writing a live page without it. `--no-qbo`
+  skips the tab with a loud warning; never publish that page.
+- Before replacing the live artifact, read it. If it has `qbo-tab-start` and
+  your page doesn't, stop.
+
+Building it needs **your own** gcloud login (`default` configuration and
+`gcloud auth application-default login`), not `claude-readonly`, which has no
+access to `parasoldatalake`; and **Python 3.12 or newer** with `pyyaml` and
+`google-cloud-bigquery` (on a Mac the system `/usr/bin/python3` is 3.9 and
+fails with `SyntaxError: f-string: unmatched '['`; use `/opt/homebrew/bin/python3`
+in a venv). Check a page before publishing: `grep -c qbo-tab-start index_live.html`
+must print `1`. Edit the tab in `qbo_tab.py`; its health findings and reference
+tables are dated snapshots (`HEALTH_ASOF`) refreshed by hand.

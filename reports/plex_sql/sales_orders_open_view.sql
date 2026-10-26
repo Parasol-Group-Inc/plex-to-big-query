@@ -60,6 +60,7 @@ base_price AS (
   WHERE x.rn = 1
 )
 SELECT
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   CAST(po.PO_Date AS date)                              AS date_created,
   da.date_approved,

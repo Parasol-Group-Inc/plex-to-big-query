@@ -176,6 +176,7 @@ SELECT
   DATE_TRUNC(fpf.sales_date, MONTH)                     AS sales_month,
   EXTRACT(YEAR FROM fpf.sales_date)                     AS sales_year,
 
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   sts.PO_Status                                         AS current_status,
   typ.PO_Type                                           AS order_type,

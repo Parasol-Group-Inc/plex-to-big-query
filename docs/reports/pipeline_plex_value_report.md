@@ -21,6 +21,8 @@ Reads `Sales_v_PO` filtered to orders whose status is flagged as a quote (`Sales
 - **Pipeline:** `reports/sales_orders.yaml` → `pipeline_plex_value_report`
 - **SQL:** `reports/sql/pipeline_plex_value_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **Fixed 2026-09-24 — `sales_rep` was always blank.** It read `Sales_v_Order_Salesperson`, which Vox barely uses; it now resolves the order's Inside Salesperson, then the customer's Assigned To, then that table — as in [`sales_mtd_by_status_change_report`](sales_mtd_by_status_change_report.md).

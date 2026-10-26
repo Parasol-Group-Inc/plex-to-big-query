@@ -50,6 +50,7 @@ orders AS (
   FROM Sales_v_PO AS po
 )
 SELECT
+  o.Order_No                                            AS order_no,
   o.PO_No                                               AS document_so,
   o.order_date                                          AS date_created,
   DATEDIFF(day, o.order_date, CAST(GETDATE() AS date))  AS days_old,

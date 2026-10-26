@@ -117,6 +117,7 @@ SELECT
     ELSE 'Pending Sales Approval'
   END                                                   AS pipeline_stage,
 
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   SAFE_CAST(po.PO_Status_Key AS INT64)                  AS status_key,
   sts.PO_Status                                         AS so_status,

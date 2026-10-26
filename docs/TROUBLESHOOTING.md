@@ -157,6 +157,17 @@ report-session access is enabled for the account on the affected
 environment. Rule out the four causes above first if this recurs somewhere
 new, since a fresh occurrence could have a different root cause.
 
+**2026-10-26: 2404 can also be transient.** Prod refused sessions in two windows
+(about 9:20-9:33 AM MDT, and before that a connection-reset outage from Sun 1:00 PM
+to Mon ~6:10 AM MDT) and then accepted them again with no change on our side. In the
+9:20 window the same account connected from a laptop (9:50 AM) and from Cloud Run
+(9:51 AM), and the test host accepted sessions throughout, including 5:07 AM while
+prod was failing. So before concluding the account lost ODBC access: check whether
+other jobs fail in the same window (`PlexProd.job_run_log`, `PlexOps.etl_dispatch_log`),
+and try the Docker health check against the prod host
+(`docker compose run --rm -e PLEX_HOST=vox.odbc.plex.com etl`). Do not retry by hand
+in a loop; the dispatcher's outage breaker already re-runs held jobs once a canary connects.
+
 ### `HY000 [3059] Token is expired / invalid`
 
 The IAM access token stored in Secret Manager is no longer valid.

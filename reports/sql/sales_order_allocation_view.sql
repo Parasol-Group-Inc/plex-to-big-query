@@ -63,6 +63,7 @@
 
 SELECT
 
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   sts.PO_Status                                          AS so_status,
 

@@ -19,6 +19,8 @@ Starts from the exact same sales order data as the main [Sales Orders report](sa
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_open_report`
 - **SQL:** `reports/sql/sales_orders_open_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **Quotes are not open orders (2026-10-19, Jennilyn).** Orders in a quote-stage status (Plex's "Quote", flagged `Is_Quote`) are excluded, alongside Closed and Cancelled. On go-live day that removed 136 of 600 prod lines (78 orders).

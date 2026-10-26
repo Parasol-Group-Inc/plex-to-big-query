@@ -27,6 +27,7 @@ unit_list AS (
   GROUP BY d.PO_Key
 )
 SELECT
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   CAST(po.PO_Date AS date)                              AS date_created,
   po.PO_Status_Key                                      AS status_key,

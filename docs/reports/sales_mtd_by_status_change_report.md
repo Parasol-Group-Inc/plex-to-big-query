@@ -25,6 +25,8 @@ Status key 2073 is confirmed live on this tenant, not guessed — the full Vox w
 - **Pipeline:** `reports/sales_orders.yaml` → `sales_mtd_by_status_change_report`
 - **SQL:** `reports/sql/sales_mtd_by_status_change_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **⚠ Fixed 2026-09-24 — part group was always blank ("(no group)").** The view joined `Part_v_Part.Part_Group_Key` to `Part_v_Part_Product_Group`, a different lookup that is **empty in test and prod** — so every row read NULL, even though virtually every part has a `Part_Group_Key`. The real lookup is **`Part_v_Part_Group`** (13 groups: Capsule, Softgel, Tablet, Gummy, Powder, Liquid, Label, Packaging, Component, Raw Ingredient, Semi-Finished Goods, Inspection, Supplies); all 10 key values in use on `Part_v_Part` (test and prod) resolve against it. It is newly extracted into `raw_Part_v_Part_Group` by the Sales Orders pipeline, a change **deployed 2026-09-25**: PlexTest loaded the 13 groups that night and every current sale line now reads `Capsule`; PlexProd picks up the new table and the fixed view on the first scheduled Sales Orders run after the deploy (7:00 PM Mountain, 2026-09-25). Found by the scorecard sandbox.

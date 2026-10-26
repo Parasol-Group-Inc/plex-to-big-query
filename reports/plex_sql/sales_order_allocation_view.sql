@@ -6,6 +6,7 @@
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 
 SELECT
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   sts.PO_Status                                         AS so_status,
   po.Customer_No,

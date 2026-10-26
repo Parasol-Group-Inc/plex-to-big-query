@@ -14,7 +14,7 @@ This is not a Google Sheet replacement — it's an original Plex-native report b
 
 Starts from the sales order header and line items, then attaches everything a person would want to see next to an order: the customer's name, the primary and secondary sales rep, which part and how much was ordered, a price per unit (and a computed line total), the order's overall dollar total, and the product's type/group classification. It also figures out "Date Approved" by looking back through the order's status history for the first time it reached the "Pending Fulfillment" stage.
 
-Each row carries both the order's **PO number** (`document_so`) and its **Order number** (`order_no`, added 2026-10-26), the two separate numbers Plex keeps on a sales order.
+Each row carries both the order's **Order number** (`order_no`, added 2026-10-26, shown first) and its **PO number** (`document_so`), the two separate numbers Plex keeps on a sales order.
 
 Because it returns one row per order line (not one row per order), an order with several parts on it will show up as several rows — that's expected, not a duplicate.
 

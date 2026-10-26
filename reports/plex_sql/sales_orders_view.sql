@@ -61,6 +61,7 @@ base_price AS (
 )
 SELECT
   po.PO_No                                              AS document_so,
+  po.Order_No                                           AS order_no,
   CAST(po.PO_Date AS date)                              AS date_created,
   da.date_approved,
   typ.PO_Type                                           AS order_type,

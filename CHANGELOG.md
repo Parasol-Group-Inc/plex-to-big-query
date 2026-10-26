@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Sales Orders report gains Order_No
+
+### Added
+- **`sales_orders_report` now has an `order_no` column** (`Sales_v_PO.Order_No`), next to `document_so` (which is `PO_No`). The raw table already held it, so no extraction change; the view picks it up on the next full run. `reports/sql/` and `reports/plex_sql/` both updated. Siblings (`sales_orders_open_report` etc.) are unchanged.
+
 ## 2026-10-24 (dev) - A dropped Plex session is retried once, per table
 
 ### Fixed

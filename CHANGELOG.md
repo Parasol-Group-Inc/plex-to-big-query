@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Sales Orders report: order_no moved before document_so
+
+### Changed
+- **`sales_orders_report`: `order_no` is now the first column, ahead of `document_so`.** Column order only; names and values are unchanged. `reports/sql/` and `reports/plex_sql/` both updated.
+
 ## 2026-10-26 (dev) - Sales Orders report gains Order_No
 
 ### Added

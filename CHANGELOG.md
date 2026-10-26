@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Approaching MSL: Terraform now uploads the view SQL
+
+### Fixed
+- `approaching_msl_view.sql` had no `google_storage_bucket_object` in `terraform/main.tf`, so deploy never put it in GCS and the first run of `plex-etl-sales-orders` logged `Could not load view SQL for approaching_msl_report` (404). Added the resource. Removed a duplicate `reports/plex_sql/approaching_msl_report.sql` (the hub reads `approaching_msl_view.sql`).
+
 ## 2026-10-26 (dev) - Approaching MSL: NetSuite fallback, MSL tabs in the Manual Data app
 
 ### Fixed

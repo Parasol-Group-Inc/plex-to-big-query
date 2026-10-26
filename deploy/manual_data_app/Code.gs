@@ -215,13 +215,15 @@ var DATASETS = {
 
   msl_rules: {
     label: 'MSL rules',
-    blurb: 'The thresholds behind the Approaching MSL report. Each has a default, so nothing here has to be set; a row only overrides it. Retract a row to go back to the default.',
+    blurb: 'The four thresholds behind the Approaching MSL report, with the value in effect filled in. Change what you need and save: only the ones you changed are recorded, and every change stays in the log below as history.',
     tab: 'msl_rules',
     table: 'msl_rules',
     key: ['rule'],
-    currentView: 'mslRules',
+    // Rendered as one input per rule, prefilled (see settingsRows_ / saveRules);
+    // the fields below are the storage columns, one row per rule.
+    settings: true,
     fields: [
-      { name: 'rule', label: 'Rule', type: 'select', required: true, optionsFrom: 'mslRules' },
+      { name: 'rule', label: 'Rule', type: 'text', required: true },
       { name: 'value', label: 'Value', type: 'text', required: true,
         help: 'A number of days or a percent, or ns / plex for reorder_source.' },
       { name: 'note', label: 'Why', type: 'longtext', required: false, max: 500 }
@@ -285,13 +287,17 @@ var METRIC_UNITS = { revenue: 'USD', sales: 'USD', production: 'units' };
 // (the cfg CTE) — keep the two in step, this copy only labels the form.
 var MSL_RULES = {
   usage_min_days: { def: '30', kind: 'number',
-    label: 'usage_min_days — days of Plex history before Plex usage replaces NetSuite' },
+    label: 'Days of Plex history needed',
+    help: 'Until Plex has this many days of production, the report uses NetSuite usage where it has it.' },
   reorder_source: { def: 'ns', kind: 'source',
-    label: 'reorder_source — whose reorder point wins (ns or plex)' },
+    label: 'Reorder point from',
+    help: 'ns or plex: whose reorder point wins when both exist. A NetSuite 0 counts as none set.' },
   disagree_pct:   { def: '25', kind: 'number',
-    label: 'disagree_pct — flag when Plex and NetSuite usage differ by more than this %' },
+    label: 'Flag when usage differs by (%)',
+    help: 'Flags a part when Plex and NetSuite usage differ by more than this percent.' },
   stale_days:     { def: '45', kind: 'number',
-    label: 'stale_days — flag NetSuite figures older than this many days' }
+    label: 'NetSuite figures stale after (days)',
+    help: 'Flags NetSuite figures from an export older than this.' }
 };
 var MAPPING_STATUSES = ['confirmed', 'guessed', 'needs part number', 'not in Plex'];
 var BULK_MAX_ROWS = 2000;
@@ -420,9 +426,6 @@ function buildOptionSets_() {
   sets.incidentTypes = ['Injury', 'Near miss', 'Property damage', 'Spill / release', 'Other']
     .map(function (v) { return { value: v, label: v }; });
   // stockTypes removed 2026-09-22 with the turnaround_standards dataset.
-  sets.mslRules = Object.keys(MSL_RULES).map(function (k) {
-    return { value: k, label: MSL_RULES[k].label + ' (default ' + MSL_RULES[k].def + ')' };
-  });
   sets.mappingStatus = MAPPING_STATUSES.map(function (v) { return { value: v, label: v }; });
 
   function load(name, sql) {
@@ -499,6 +502,7 @@ function getFormData() {
       liveCheck: ds.liveCheck || null,
       currentView: ds.currentView || null,
       bulk: !!ds.bulk,
+      settingsRows: ds.settings ? settingsRows_() : null,
       uiTabs: ds.uiTabs || null,
       pinnedBy: ds.pinnedBy || null,
       fields: ds.fields.filter(function (f) { return f.type !== 'derived'; })
@@ -600,7 +604,6 @@ function getCurrentValue(which, args) {
     if (which === 'currentGoal')  return currentGoal_(args);
     if (which === 'lastIncident') return lastIncident_();
     if (which === 'mslFlags')     return mslFlags_();
-    if (which === 'mslRules')     return mslRulesInEffect_();
     return { state: 'none' };
   } catch (e) {
     return { state: 'error', message: String(e) };
@@ -699,17 +702,74 @@ function mslFlags_() {
   return { state: 'found', lines: lines };
 }
 
-/** The MSL rules as they stand: an override if one is saved, else the default. */
-function mslRulesInEffect_() {
-  var saved = {};
-  query_('SELECT rule, value FROM (SELECT rule, value, is_deleted, ' +
-         'ROW_NUMBER() OVER (PARTITION BY rule ORDER BY updated_at DESC) k FROM ' +
-         fqn_('msl_rules') + ') WHERE k = 1 AND NOT IFNULL(is_deleted, FALSE)')
-    .forEach(function (r) { saved[r[0]] = r[1]; });
-  return { state: 'found', lines: ['Rules in effect:'].concat(
-    Object.keys(MSL_RULES).map(function (k) {
-      return k + ' = ' + (saved[k] != null ? saved[k] + ' (set here)' : MSL_RULES[k].def + ' (default)');
-    })) };
+/**
+ * The MSL rules as they stand, one entry per rule for the settings form: the value
+ * in effect (newest row on the tab unless it is a tombstone, else the default).
+ * Read from the SHEET, the record of truth, so a rule saved a minute ago shows even
+ * if the push is lagging.
+ */
+function settingsRows_() {
+  var cur = {};
+  var tab = sheet_().getSheetByName(DATASETS.msl_rules.tab);
+  if (tab && tab.getLastRow() > 1) {
+    var raw = tab.getRange(1, 1, tab.getLastRow(), tab.getLastColumn()).getValues();
+    var h = raw.shift();
+    var iR = h.indexOf('rule'), iV = h.indexOf('value'), iA = h.indexOf('updated_at'), iD = h.indexOf('is_deleted');
+    var at = {};
+    raw.forEach(function (row) {
+      var k = String(row[iR] || '');
+      var t = Date.parse(row[iA]) || (row[iA] instanceof Date ? row[iA].getTime() : 0);
+      if (!k || (at[k] != null && at[k] > t)) return;
+      at[k] = t;
+      cur[k] = String(row[iD]).toLowerCase() === 'true' ? null : String(row[iV]);
+    });
+  }
+  return Object.keys(MSL_RULES).map(function (k) {
+    var r = MSL_RULES[k];
+    var v = cur[k] != null ? cur[k] : r.def;
+    return { name: k, label: r.label, help: r.help, def: r.def, value: v, overridden: v !== r.def };
+  });
+}
+
+/** Normalises one MSL rule value or throws a message the form can show. */
+function checkMslRule_(name, raw) {
+  var rule = MSL_RULES[name];
+  if (!rule) throw new Error('Unknown rule: ' + name);
+  var v = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (rule.kind === 'source') {
+    if (v !== 'ns' && v !== 'plex') throw new Error(rule.label + ' must be ns or plex.');
+  } else if (v === '' || !isFinite(Number(v)) || Number(v) < 0) {
+    throw new Error(rule.label + ' must be a number of zero or more, got: ' + raw);
+  }
+  return v;
+}
+
+/**
+ * Save the MSL rules form. Writes a row only for a rule whose value differs from
+ * the one in effect, so the log shows real changes, not four rows per save.
+ */
+function saveRules(form) {
+  var ds = DATASETS.msl_rules;
+  var now = {};
+  settingsRows_().forEach(function (r) { now[r.name] = r.value; });
+  var changed = [];
+  Object.keys(MSL_RULES).forEach(function (k) {
+    var v = checkMslRule_(k, form[k]);
+    if (v !== now[k]) changed.push({ rule: k, value: v, from: now[k] });
+  });
+  if (!changed.length) return { ok: true, pushed: true, count: 0, message: 'Nothing changed, so nothing was saved.' };
+
+  var by = activeUser_(), at = nowIso_();
+  changed.forEach(function (c) {
+    appendToSheet_(ds, { rule: c.rule, value: c.value, note: 'was ' + c.from,
+                         updated_by: by, updated_at: at, is_deleted: false });
+  });
+  var push = tryPush_('msl_rules');
+  return {
+    ok: true, pushed: push.ok, count: changed.length,
+    message: 'Saved: ' + changed.map(function (c) { return c.rule + ' ' + c.from + ' → ' + c.value; }).join(', '),
+    pushMessage: push.message
+  };
 }
 
 /**
@@ -1120,15 +1180,7 @@ function applyDatasetRules_(datasetKey, values, ctx) {
   }
 
   if (datasetKey === 'msl_rules' && values.value !== '') {
-    var rule = MSL_RULES[values.rule];
-    if (!rule) throw new Error('Unknown rule: ' + values.rule);
-    var v = String(values.value).trim().toLowerCase();
-    if (rule.kind === 'source') {
-      if (v !== 'ns' && v !== 'plex') throw new Error('reorder_source must be ns or plex.');
-    } else if (!isFinite(Number(v)) || Number(v) < 0) {
-      throw new Error(values.rule + ' must be a number of zero or more, got: ' + values.value);
-    }
-    values.value = v;
+    values.value = checkMslRule_(values.rule, values.value);
   }
 
   if (datasetKey === 'msl_inputs') {

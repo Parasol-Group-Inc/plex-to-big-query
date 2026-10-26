@@ -264,7 +264,31 @@ function optionsFor(f){
   return DATA.options[f.optionsFrom] || [];
 }
 
+// A "settings" dataset (the MSL rules) is one input per rule, prefilled with the
+// value in effect, instead of a pick-a-rule form. Save sends them all; the server
+// records only the ones that changed.
+function renderSettings(){
+  var form = document.getElementById('form');
+  form.innerHTML = '';
+  DATA.datasets[active].settingsRows.forEach(function(r){
+    var wrap = el('div', { class:'field' });
+    wrap.appendChild(el('label', { for:'r_' + r.name, text:r.label }));
+    var input = el('input', { type: r.name === 'reorder_source' ? 'text' : 'number',
+                              name:r.name, id:'r_' + r.name, value:r.value });
+    if (r.name !== 'reorder_source'){ input.setAttribute('min', '0'); input.setAttribute('step', 'any'); }
+    wrap.appendChild(input);
+    wrap.appendChild(el('div', { class:'help',
+      text: r.help + ' Default ' + r.def + (r.overridden ? '; changed here.' : '; not changed.') }));
+    form.appendChild(wrap);
+  });
+  var stale = document.getElementById('currentview');
+  if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  var stale2 = document.getElementById('bulkbox');
+  if (stale2 && stale2.parentNode) stale2.parentNode.removeChild(stale2);
+}
+
 function renderForm(){
+  if (DATA.datasets[active].settingsRows) { renderSettings(); return; }
   var form = document.getElementById('form');
   form.innerHTML = '';
 
@@ -586,6 +610,14 @@ function collect(){
   return out;
 }
 
+function collectSettings(){
+  var out = {};
+  DATA.datasets[active].settingsRows.forEach(function(r){
+    out[r.name] = document.querySelector('[name="' + r.name + '"]').value;
+  });
+  return out;
+}
+
 function say(cls, text){
   document.getElementById('msg').innerHTML =
     '<div class="' + ('msg ' + (cls || '')).trim() + '">' + text + '</div>';
@@ -595,18 +627,20 @@ document.getElementById('save').onclick = function(){
   var btn = this;
   btn.disabled = true;
   say('', 'Saving…');
-  google.script.run
+  var settings = !!DATA.datasets[active].settingsRows;
+  var run = google.script.run
     .withSuccessHandler(function(r){
       btn.disabled = false;
       say(r.pushed ? 'ok' : 'warn', r.message + (r.pushMessage ? '<br>' + r.pushMessage : ''));
-      renderForm();
-      reloadRecent();
+      if (!settings) renderForm();
+      reloadRecent();   // a settings form re-renders from the fresh values in here
     })
     .withFailureHandler(function(e){
       btn.disabled = false;
       say('bad', String(e).replace(/^Error:\s*/, ''));
-    })
-    .saveRow(active, collect());
+    });
+  if (settings) run.saveRules(collectSettings());
+  else run.saveRow(active, collect());
 };
 
 document.getElementById('reset').onclick = function(){
@@ -619,6 +653,8 @@ document.getElementById('reset').onclick = function(){
 function reloadRecent(){
   google.script.run.withSuccessHandler(function(d){
     DATA.recent = d.recent;
+    Object.keys(d.datasets).forEach(function(k){ DATA.datasets[k].settingsRows = d.datasets[k].settingsRows; });
+    if (DATA.datasets[active].settingsRows) renderForm();
     renderRecent();
   }).getFormData();
 }

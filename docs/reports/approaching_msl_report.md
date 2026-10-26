@@ -17,7 +17,7 @@ Which parts are at or approaching their reorder point (minimum inventory), how m
 
 ## NetSuite fallback and the rules behind it
 
-Plex has days of production history where NetSuite has years, so until Plex catches up the report borrows NetSuite's average daily usage and reorder point. They are typed in, by CSV upload, on the **MSL inputs** tab of the Manual Data app, and the thresholds are on its **MSL rules** tab. Each rule has a default and only needs a row to change it:
+Plex has days of production history where NetSuite has years, so until Plex catches up the report borrows NetSuite's average daily usage and reorder point. They are typed in, by CSV upload, on the **MSL inputs** tab of the Manual Data app, and the thresholds are on its **MSL rules** tab. The tab shows the four rules as inputs with the value in effect filled in; change one and save, and only changed rules are recorded (the defaults below apply until then):
 
 | Rule | Default | What it does |
 |---|---|---|

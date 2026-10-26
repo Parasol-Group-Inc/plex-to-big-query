@@ -17,7 +17,7 @@ don't need an entry.
 ## 2026-10-26 (dev) - Approaching MSL: NetSuite fallback, MSL tabs in the Manual Data app
 
 ### Added
-- **Manual Data app: `MSL inputs` and `MSL rules` tabs** (`deploy/manual_data_app/`): NetSuite average daily usage and reorder point per Plex part (`msl_item_inputs`), and four thresholds with defaults (`msl_rules`: `usage_min_days` 30, `reorder_source` ns, `disagree_pct` 25, `stale_days` 45). First dataset with a **CSV upload** (`saveBulk`, all-or-nothing, part numbers checked against Plex). Each tab shows a panel of what is flagged. **Not live until `Code.gs` and `Index.html` are pasted into Apps Script and a New version is deployed.**
+- **Manual Data app: `MSL inputs` and `MSL rules` tabs** (`deploy/manual_data_app/`): NetSuite average daily usage and reorder point per Plex part (`msl_item_inputs`), and four thresholds (`msl_rules`, shown as four prefilled inputs with one Save; only changed rules are recorded; defaults: `usage_min_days` 30, `reorder_source` ns, `disagree_pct` 25, `stale_days` 45). First dataset with a **CSV upload** (`saveBulk`, all-or-nothing, part numbers checked against Plex). Each tab shows a panel of what is flagged. **Not live until `Code.gs` and `Index.html` are pasted into Apps Script and a New version is deployed.**
 - `approaching_msl_report` columns: `usage_source`, `plex_avg_daily_usage`, `ns_avg_daily_usage`, `plex_reorder_point`, `ns_reorder_point`, `ns_as_of`, `data_flag`.
 
 ### Changed

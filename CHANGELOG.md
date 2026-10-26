@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Approaching MSL: NetSuite fallback, MSL tabs in the Manual Data app
+
+### Added
+- **Manual Data app: `MSL inputs` and `MSL rules` tabs** (`deploy/manual_data_app/`): NetSuite average daily usage and reorder point per Plex part (`msl_item_inputs`), and four thresholds (`msl_rules`, shown as four prefilled inputs with one Save; only changed rules are recorded; defaults: `usage_min_days` 30, `reorder_source` ns, `disagree_pct` 25, `stale_days` 45). First dataset with a **CSV upload** (`saveBulk`, all-or-nothing, part numbers checked against Plex). Each tab shows a panel of what is flagged. **Not live until `Code.gs` and `Index.html` are pasted into Apps Script and a New version is deployed.**
+- `approaching_msl_report` columns: `usage_source`, `plex_avg_daily_usage`, `ns_avg_daily_usage`, `plex_reorder_point`, `ns_reorder_point`, `ns_as_of`, `data_flag`.
+
+### Changed
+- `approaching_msl_report`: `avg_daily_usage` is Plex's figure once it rests on `usage_min_days`, otherwise NetSuite's; `reorder_point` follows `reorder_source`. **The view reads the two app tables and fails to create if either is missing**: create them empty first (DDL in `docs/reports/approaching_msl_report.md`). Validated on PlexProd with stand-in rows.
+
+## 2026-10-26 (dev) - Approaching MSL report (Jennilyn)
+
+### Added
+- **`approaching_msl_report`** on `sales_orders.yaml` (prod and test), listed after `inventory_available_to_sell_report`: reorder point, on hand, available (negative when demand exceeds stock), derived average daily usage (production x BOM), days on hand / to reorder, on order, open jobs. View SQL only, no new extraction. Average usage rests on ~8 days of Plex production history (since 2026-10-18). Doc: `docs/reports/approaching_msl_report.md`.
+
+## 2026-10-26 (dev) - Bottling open jobs with sales orders (Jennilyn's view, now in the repo)
+
+### Added
+- **`bottling_job_open_with_orders_report`** on `work_orders.yaml` (prod and test): open Bottling jobs with their sales order, direct via `Sales_v_Release_Job` or suggested via BOM. Jennilyn built it by hand in PlexProd because `Part_v_Job_Distribution` returns 0 rows. View SQL only, no new extraction. Reads `sales_orders_report`. Doc: `docs/reports/bottling_job_open_with_orders_report.md`. First pipeline run overwrites her hand-made view with the same SQL.
+
 ## 2026-10-26 (dev) - order_no on every sales order view (Jennilyn)
 
 ### Added

@@ -108,6 +108,8 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Vox Scorecard \| FPY by Area & Month | Quality | ✅ Deployed and verified 2026-09-01 — real data (100% FPY, Bottling & Pre-Weigh) | [quality_fpy_by_area_month_report.md](quality_fpy_by_area_month_report.md) |
 | Vox Scorecard \| Open Caps (Encapsulation) | Production | ✅ Deployed and verified 2026-09-01 — real data (2 jobs, 4.64M pending) | [mfg_job_open_caps_report.md](mfg_job_open_caps_report.md) |
 | Vox Scorecard \| Open Bottles (Bottling) | Production | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely no open job) | [bottling_job_open_report.md](bottling_job_open_report.md) |
+| Bottling \| Open Jobs with Sales Orders | Production | 🛠 In repo 2026-10-26, deploy pending | [bottling_job_open_with_orders_report.md](bottling_job_open_with_orders_report.md) |
+| Inventory \| Approaching MSL | Supply Chain | 🛠 Built 2026-10-26, deploy pending | [approaching_msl_report.md](approaching_msl_report.md) |
 | Vox Scorecard \| Inventory Value Total | Inventory | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely empty upstream) | [inventory_valuation_total_report.md](inventory_valuation_total_report.md) |
 | Vox Scorecard \| Avg Daily Usage | Supply Chain | 🔬 Deployed 2026-09-01, 0 rows, formula unverified against real data | [inventory_avg_daily_usage_report.md](inventory_avg_daily_usage_report.md) |
 | Vox Scorecard \| Top Quantity Ranking | Supply Chain | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely empty upstream) | [inventory_top_quantity_report.md](inventory_top_quantity_report.md) |

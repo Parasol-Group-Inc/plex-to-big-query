@@ -80,6 +80,7 @@ orders AS (
 
 SELECT
 
+  o.Order_No                                            AS order_no,
   o.PO_No                                               AS document_so,
   o.order_date                                          AS date_created,
   DATE_DIFF(CURRENT_DATE(), o.order_date, DAY)          AS days_old,

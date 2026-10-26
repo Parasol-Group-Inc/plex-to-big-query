@@ -14,6 +14,12 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - order_no on every sales order view (Jennilyn)
+
+### Added
+- **`order_no` (`Sales_v_PO.Order_No`) is now the first column, ahead of `document_so`, in 12 more views:** `sales_orders_open`, `sales_orders_pending_approval` (and, as a `SELECT *` alias, `sales_orders_pending_approval_by_rep`), `sales_orders_pending_accounting_approval`, `sales_orders_aging`, `sales_orders_over_10k`, `sales_orders_over_10k_bottles`, `sales_orders_rush_open`, `sales_order_allocation`, `sales_order_value_by_status`, `sales_mtd_by_status_change`, `pipeline_plex_value` and `sales_revenue_by_rep`. Together with `sales_orders_report` that is every view that carried `document_so`. View SQL only: no extraction change, no new raw table. `reports/sql/` and `reports/plex_sql/` both updated, every query dry-run validated against PlexProd, and each report's doc has a line on it.
+- **Not changed:** `sales_mtd_summary` (it only counts `document_so`, one row per rep) and the shipping, goals and inventory views, which have no order-level rows. `sales_quotes_open` and `sales_returns_open` were not touched.
+
 ## 2026-10-26 (dev) - Sales Orders report: order_no moved before document_so
 
 ### Changed

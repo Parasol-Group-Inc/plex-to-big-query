@@ -44,6 +44,7 @@ rep1 AS (
 )
 SELECT
   CASE WHEN ISNULL(sts.Is_Quote, 0) = 1 THEN 'Quote' ELSE 'Pending Sales Approval' END AS pipeline_stage,
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   po.PO_Status_Key                                      AS status_key,
   sts.PO_Status                                         AS so_status,

@@ -45,6 +45,7 @@ release_shipped AS (
   WHERE ss.Shipped = 1
 )
 SELECT
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   po.PO_Status_Key                                      AS status_key,
   sts.PO_Status                                         AS so_status,

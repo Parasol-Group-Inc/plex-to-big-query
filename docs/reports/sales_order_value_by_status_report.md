@@ -17,6 +17,8 @@ Rebuilt the same day it was first written. The original version flagged a line a
 - **Pipeline:** `reports/sales_orders.yaml` → `sales_order_value_by_status_report`
 - **SQL:** `reports/sql/sales_order_value_by_status_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **✅ The ambiguity is settled (2026-09-09), and the old number was badly wrong.** Jennilyn had described WIP two incompatible ways on Sep 1; neither was quite it. Her ruling: *"really, it should just be pending fulfillment. I guess hold as well would be WIP because it was sold but it hasn't shipped yet. So it just be those two statuses"*, and *"we don't want to count pending sales approval because that's not considered an order yet."* So WIP is **Pending Fulfillment + Hold**, unshipped balance only.

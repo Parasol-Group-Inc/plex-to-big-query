@@ -17,6 +17,8 @@ Uses the same Sales Order header, line, release, status, and customer data alrea
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_over_10k_bottles_report`
 - **SQL:** `reports/sql/sales_orders_over_10k_bottles_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **"10k bottles" is currently "10k units of anything on the order," not confirmed to be bottles specifically.** Plex's release records carry a unit-of-measure field alongside quantity, but no real order data existed on the test tenant to confirm which unit value(s) actually mean "bottles" versus cases, cartons, or other order units. Until that's confirmed, this report totals quantity across all units on an order regardless of what unit they're in — it may overcount if an order mixes bottle and non-bottle units together.

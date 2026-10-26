@@ -19,6 +19,8 @@ From there it reuses the same order → line → release → part join already u
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_rush_open_report`
 - **SQL:** `reports/sql/sales_orders_rush_open_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.

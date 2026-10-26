@@ -87,6 +87,7 @@ SELECT
   COALESCE(u.Plexus_User_No, -1)                        AS sales_rep_key,
   COALESCE(CONCAT(u.First_Name, ' ', u.Last_Name), 'Unassigned') AS sales_rep_name,
 
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   po.Customer_No,
   cust.Name                                             AS customer_name,

@@ -17,6 +17,8 @@ Starts from the same sales order and line data already extracted for the Sales O
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_order_allocation_report`
 - **SQL:** `reports/sql/sales_order_allocation_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
 - **Currently returns 0 rows on real data — needs a data-scientist/Vox answer.** The link table between a sales order release and the job it's allocated to (`Sales_v_Release_Job`) is completely empty on this tenant, even though both sides it's supposed to connect have real rows (8 releases, 16 jobs). Until someone confirms whether Vox actually populates job-to-release links in Plex, this report has no way to show anything, regardless of how many open orders or jobs exist.

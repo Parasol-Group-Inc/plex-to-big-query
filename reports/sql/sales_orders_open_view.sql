@@ -99,6 +99,7 @@ base_price AS (
 
 SELECT
 
+  po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS INT64), 0), 1000))),

@@ -128,6 +128,7 @@ SELECT
 
   -- ── Document info ──────────────────────────────────────────────────────────
   po.PO_No                                              AS document_so,
+  po.Order_No                                           AS order_no,
   -- See DATE CONVERSION PATTERN comment on the date_approved CTE above.
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(po.PO_Date AS STRING) AS INT64), 0), 1000))),

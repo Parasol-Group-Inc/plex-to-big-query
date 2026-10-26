@@ -1,4 +1,4 @@
--- bottling_job_open_with_orders_report — open Bottling jobs with the sales order(s) behind them
+-- bottling_job_open_with_orders_report â€” open Bottling jobs with the sales order(s) behind them
 --
 -- Origin: hand-made in BigQuery by Jennilyn on 2026-10-26 as a workaround, brought under
 -- version control the same day. Plex's Job_Distribution view returns 0 rows (prod and test),

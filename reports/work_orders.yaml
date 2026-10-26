@@ -277,7 +277,7 @@ bq_view:
   - name: bottling_job_open_report
     display_name: "Vox Scorecard | Open Bottles (Bottling)"
     sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_view.sql
-  # Added 2026-10-26 — Jennilyn's hand-made workaround (Job_Distribution is empty in Plex),
+  # Added 2026-10-26 â€” Jennilyn's hand-made workaround (Job_Distribution is empty in Plex),
   # now in the repo. Reads sales_orders_report, so the sales_orders pipeline must have run.
   - name: bottling_job_open_with_orders_report
     display_name: "Bottling | Open Jobs with Sales Orders"

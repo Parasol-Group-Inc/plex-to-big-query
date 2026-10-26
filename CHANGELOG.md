@@ -17,6 +17,7 @@ don't need an entry.
 ## 2026-10-26 (dev) - Approaching MSL: NetSuite fallback, MSL tabs in the Manual Data app
 
 ### Fixed
+- Added `reports/plex_sql/approaching_msl_view.sql`, the Plex SQL Developer equivalent (Plex-side figures only; NetSuite inputs and demand are BigQuery-only).
 - `reports/work_orders.yaml` and `reports/sql/bottling_job_open_with_orders_view.sql` each held one Windows-1252 dash (a byte that is not valid UTF-8) in a comment; both are UTF-8 now. Nothing in the views changes, but `build_hub.py` could not read them. Hub rebuilt with both new reports.
 
 ### Added

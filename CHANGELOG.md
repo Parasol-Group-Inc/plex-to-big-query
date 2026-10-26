@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Approaching MSL report (Jennilyn)
+
+### Added
+- **`approaching_msl_report`** on `sales_orders.yaml` (prod and test), listed after `inventory_available_to_sell_report`: reorder point, on hand, available (negative when demand exceeds stock), derived average daily usage (production x BOM), days on hand / to reorder, on order, open jobs. View SQL only, no new extraction. Average usage rests on ~8 days of Plex production history (since 2026-10-18). Doc: `docs/reports/approaching_msl_report.md`.
+
 ## 2026-10-26 (dev) - Bottling open jobs with sales orders (Jennilyn's view, now in the repo)
 
 ### Added

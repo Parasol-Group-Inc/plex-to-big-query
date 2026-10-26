@@ -363,6 +363,10 @@ bq_view:
   - name: inventory_available_to_sell_report
     display_name: "Inventory | Available to Sell (On-Hand less Demand)"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_available_to_sell_view.sql
+  # Added 2026-10-26 — Jennilyn's "Approaching MSL" sheet. Reads inventory_available_to_sell_report.
+  - name: approaching_msl_report
+    display_name: "Inventory | Approaching MSL"
+    sql_file: gs://voxdatalake-report-configs/sql/approaching_msl_view.sql
   - name: inventory_out_of_stock_report
     display_name: "Vox Scorecard | Out of Stock (33-parts)"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_out_of_stock_view.sql

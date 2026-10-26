@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Bottling open jobs with sales orders (Jennilyn's view, now in the repo)
+
+### Added
+- **`bottling_job_open_with_orders_report`** on `work_orders.yaml` (prod and test): open Bottling jobs with their sales order, direct via `Sales_v_Release_Job` or suggested via BOM. Jennilyn built it by hand in PlexProd because `Part_v_Job_Distribution` returns 0 rows. View SQL only, no new extraction. Reads `sales_orders_report`. Doc: `docs/reports/bottling_job_open_with_orders_report.md`. First pipeline run overwrites her hand-made view with the same SQL.
+
 ## 2026-10-26 (dev) - order_no on every sales order view (Jennilyn)
 
 ### Added

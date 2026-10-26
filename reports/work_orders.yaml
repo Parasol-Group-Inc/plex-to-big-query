@@ -277,6 +277,11 @@ bq_view:
   - name: bottling_job_open_report
     display_name: "Vox Scorecard | Open Bottles (Bottling)"
     sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_view.sql
+  # Added 2026-10-26 — Jennilyn's hand-made workaround (Job_Distribution is empty in Plex),
+  # now in the repo. Reads sales_orders_report, so the sales_orders pipeline must have run.
+  - name: bottling_job_open_with_orders_report
+    display_name: "Bottling | Open Jobs with Sales Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_with_orders_view.sql
   # Added 2026-09-04 â€” "production by work center group by month", asked for
   # directly in the Sep 1 requirements meeting. Complements (does not
   # replace) the 4 per-day, per-workcenter Daily Reports: this is the grain

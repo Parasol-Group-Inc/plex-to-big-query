@@ -6,7 +6,8 @@
  * extracted from Plex: goals and safety incidents. Anything else that turns
  * up later is a registry entry, not a new app.
  *
- * TWO datasets are left, from four. Both removals were decisions, not
+ * Goals and safety incidents, plus the MSL inputs and rules (added 2026-10-26), are
+ * the datasets here; two others were removed. Both removals were decisions, not
  * attrition, and both are worth knowing before adding anything back:
  *   - part costs (2026-09-16) — never a real requirement, just a fallback in
  *     case Plex's own costing stayed empty. The real costing path is Plex,
@@ -177,6 +178,56 @@ var DATASETS = {
     ]
   },
 
+  // ── MSL inputs and rules (added 2026-10-26) ──────────────────────────────
+  // Feed approaching_msl_report. Plex has under two weeks of production history,
+  // so it cannot yet say what a part's average daily usage is; NetSuite can.
+  // `msl_inputs` holds NetSuite's usage and reorder point per Plex part (loaded
+  // from a NetSuite export, usually by CSV upload) and `msl_rules` holds the
+  // thresholds that decide when Plex takes over and what gets flagged. The view
+  // owns the logic; these tabs only hold what a person has to supply. Both show
+  // a panel of what is flagged, because the figures here are a stopgap Jennilyn
+  // needs to know the shape of.
+  msl_inputs: {
+    label: 'MSL inputs',
+    blurb: 'NetSuite average daily usage and reorder point per part, for the Approaching MSL report. Used until Plex has enough production history of its own (see MSL rules). Upload a CSV for a whole export, or fix one part by hand. NetSuite numbers legacy items (13041) where Plex says 33041-00VOXNU-0: the Plex part number is what makes the join, so a row without one is kept but ignored until someone fills it in.',
+    tab: 'msl_inputs',
+    table: 'msl_item_inputs',
+    key: ['ns_item_id'],
+    bulk: true,
+    currentView: 'mslFlags',
+    fields: [
+      { name: 'ns_item_id', label: 'NetSuite item', type: 'text', required: true,
+        help: 'The legacy NetSuite id, e.g. 13041.' },
+      { name: 'part_no', label: 'Plex part number', type: 'text', required: false,
+        help: 'Exact Plex Part_No, e.g. 33041-00VOXNU-0. Checked against Plex on save. Leave blank if not known yet.' },
+      { name: 'description', label: 'Description', type: 'text', required: false },
+      { name: 'ns_avg_daily_usage', label: 'NetSuite avg daily usage', type: 'number', required: false, min: 0 },
+      { name: 'ns_reorder_point', label: 'NetSuite reorder point', type: 'number', required: false, min: 0,
+        help: 'NetSuite zero means "none set" and is ignored by the report.' },
+      { name: 'as_of_date', label: 'Figures as of', type: 'date', required: true, noFuture: true,
+        help: 'The date of the NetSuite export. The report flags figures older than the stale_days rule.' },
+      { name: 'mapping_status', label: 'Mapping', type: 'select', required: false,
+        optionsFrom: 'mappingStatus',
+        help: 'Blank is filled in: confirmed when a part number is given, needs part number when not.' },
+      { name: 'note', label: 'Note', type: 'longtext', required: false, max: 500 }
+    ]
+  },
+
+  msl_rules: {
+    label: 'MSL rules',
+    blurb: 'The thresholds behind the Approaching MSL report. Each has a default, so nothing here has to be set; a row only overrides it. Retract a row to go back to the default.',
+    tab: 'msl_rules',
+    table: 'msl_rules',
+    key: ['rule'],
+    currentView: 'mslRules',
+    fields: [
+      { name: 'rule', label: 'Rule', type: 'select', required: true, optionsFrom: 'mslRules' },
+      { name: 'value', label: 'Value', type: 'text', required: true,
+        help: 'A number of days or a percent, or ns / plex for reorder_source.' },
+      { name: 'note', label: 'Why', type: 'longtext', required: false, max: 500 }
+    ]
+  },
+
   // turnaround_standards (removed 2026-09-22): the Performance and Bonus day
   // counts per stock type. Jennilyn, on the 2026-09-21 call, asked directly:
   // "should we keep the tab for turnaround standards?" — "I don't think we
@@ -229,6 +280,21 @@ var COMMON_FIELDS = [
 ];
 
 var METRIC_UNITS = { revenue: 'USD', sales: 'USD', production: 'units' };
+
+// The MSL rules and their defaults. The DEFAULTS LIVE IN approaching_msl_view.sql
+// (the cfg CTE) — keep the two in step, this copy only labels the form.
+var MSL_RULES = {
+  usage_min_days: { def: '30', kind: 'number',
+    label: 'usage_min_days — days of Plex history before Plex usage replaces NetSuite' },
+  reorder_source: { def: 'ns', kind: 'source',
+    label: 'reorder_source — whose reorder point wins (ns or plex)' },
+  disagree_pct:   { def: '25', kind: 'number',
+    label: 'disagree_pct — flag when Plex and NetSuite usage differ by more than this %' },
+  stale_days:     { def: '45', kind: 'number',
+    label: 'stale_days — flag NetSuite figures older than this many days' }
+};
+var MAPPING_STATUSES = ['confirmed', 'guessed', 'needs part number', 'not in Plex'];
+var BULK_MAX_ROWS = 2000;
 
 // Shown in the dropdowns; stored as a blank scope, which is what the reports
 // emit for a company-wide figure.
@@ -354,6 +420,10 @@ function buildOptionSets_() {
   sets.incidentTypes = ['Injury', 'Near miss', 'Property damage', 'Spill / release', 'Other']
     .map(function (v) { return { value: v, label: v }; });
   // stockTypes removed 2026-09-22 with the turnaround_standards dataset.
+  sets.mslRules = Object.keys(MSL_RULES).map(function (k) {
+    return { value: k, label: MSL_RULES[k].label + ' (default ' + MSL_RULES[k].def + ')' };
+  });
+  sets.mappingStatus = MAPPING_STATUSES.map(function (v) { return { value: v, label: v }; });
 
   function load(name, sql) {
     try {
@@ -428,6 +498,7 @@ function getFormData() {
       blurb: ds.blurb,
       liveCheck: ds.liveCheck || null,
       currentView: ds.currentView || null,
+      bulk: !!ds.bulk,
       uiTabs: ds.uiTabs || null,
       pinnedBy: ds.pinnedBy || null,
       fields: ds.fields.filter(function (f) { return f.type !== 'derived'; })
@@ -528,6 +599,8 @@ function getCurrentValue(which, args) {
   try {
     if (which === 'currentGoal')  return currentGoal_(args);
     if (which === 'lastIncident') return lastIncident_();
+    if (which === 'mslFlags')     return mslFlags_();
+    if (which === 'mslRules')     return mslRulesInEffect_();
     return { state: 'none' };
   } catch (e) {
     return { state: 'error', message: String(e) };
@@ -589,6 +662,54 @@ function lastIncident_() {
     daysLost: rows[0][4],
     description: rows[0][5] || ''
   };
+}
+
+/**
+ * What the MSL inputs tab is dealing with, shown above its form: how many NetSuite
+ * items are mapped, and what the report flags because of them. `lines` are plain
+ * text; the page escapes and joins them.
+ */
+function mslFlags_() {
+  var lines = [];
+  var inputs = query_(
+    'SELECT IFNULL(mapping_status, "unset"), COUNT(*) FROM (' +
+    ' SELECT *, ROW_NUMBER() OVER (PARTITION BY ns_item_id ORDER BY updated_at DESC) k ' +
+    ' FROM ' + fqn_('msl_item_inputs') + ') ' +
+    'WHERE k = 1 AND NOT IFNULL(is_deleted, FALSE) GROUP BY 1 ORDER BY 2 DESC');
+  var total = 0, parts = [];
+  inputs.forEach(function (r) { total += Number(r[1]); parts.push(r[1] + ' ' + r[0]); });
+  if (!total) {
+    return { state: 'found', lines: [
+      'No NetSuite figures loaded yet, so the report uses Plex usage alone, which rests on days, not months, of history.'] };
+  }
+  lines.push('NetSuite items loaded: ' + total + ' (' + parts.join(', ') + ').');
+  lines.push('Only items with a Plex part number reach the report. "guessed" means the part number came from a naming rule (13041 → 33041-00VOXNU-0): confirm it.');
+
+  try {
+    var f = query_(
+      'SELECT COUNTIF(usage_source = "NetSuite"), COUNTIF(data_flag LIKE "%differ%"), ' +
+      '       COUNTIF(data_flag LIKE "Negative%"), COUNTIF(data_flag LIKE "%older than%") ' +
+      'FROM ' + fqn_('approaching_msl_report'))[0];
+    lines.push('In the report now: ' + f[0] + ' parts use NetSuite usage, ' + f[1] +
+               ' where Plex and NetSuite disagree, ' + f[3] + ' with stale NetSuite figures.');
+    lines.push(f[2] + ' parts show negative availability: open orders need more of the part than is in stock. That is intended, not an error.');
+  } catch (e) {
+    lines.push('The report has not been rebuilt with these inputs yet, so its flags are not shown.');
+  }
+  return { state: 'found', lines: lines };
+}
+
+/** The MSL rules as they stand: an override if one is saved, else the default. */
+function mslRulesInEffect_() {
+  var saved = {};
+  query_('SELECT rule, value FROM (SELECT rule, value, is_deleted, ' +
+         'ROW_NUMBER() OVER (PARTITION BY rule ORDER BY updated_at DESC) k FROM ' +
+         fqn_('msl_rules') + ') WHERE k = 1 AND NOT IFNULL(is_deleted, FALSE)')
+    .forEach(function (r) { saved[r[0]] = r[1]; });
+  return { state: 'found', lines: ['Rules in effect:'].concat(
+    Object.keys(MSL_RULES).map(function (k) {
+      return k + ' = ' + (saved[k] != null ? saved[k] + ' (set here)' : MSL_RULES[k].def + ' (default)');
+    })) };
 }
 
 /**
@@ -835,6 +956,78 @@ function saveRow(datasetKey, form) {
 }
 
 /**
+ * Save a whole CSV at once (datasets with `bulk: true`). ALL OR NOTHING: every
+ * row is validated first and, if any fail, nothing is written and the first
+ * problems are returned, so a half-loaded export cannot happen. Columns match
+ * field names by header; unknown headers are ignored and reported. One push at the end.
+ */
+function saveBulk(datasetKey, csvText) {
+  var ds = DATASETS[datasetKey];
+  if (!ds || !ds.bulk) throw new Error('This tab does not take uploads.');
+
+  var table = Utilities.parseCsv(String(csvText || '').replace(/^﻿/, ''));
+  if (table.length < 2) throw new Error('The file has no data rows.');
+  var headers = table[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var fields = ds.fields.filter(function (f) { return f.type !== 'derived'; });
+  var missing = fields.filter(function (f) { return f.required && headers.indexOf(f.name) === -1; })
+                      .map(function (f) { return f.name; });
+  if (missing.length) throw new Error('Missing column(s): ' + missing.join(', ') + '.');
+  var ignored = headers.filter(function (h) {
+    return h && !fields.some(function (f) { return f.name === h; });
+  });
+  var body = table.slice(1).filter(function (r) { return r.join('').trim() !== ''; });
+  if (body.length > BULK_MAX_ROWS) {
+    throw new Error('At most ' + BULK_MAX_ROWS + ' rows per upload, got ' + body.length + '.');
+  }
+
+  var ctx = {};
+  if (datasetKey === 'msl_inputs' && headers.indexOf('part_no') !== -1) {
+    var pi = headers.indexOf('part_no');
+    ctx.unknownParts = {};
+    unknownParts_(body.map(function (r) { return String(r[pi] || '').trim(); }))
+      .forEach(function (p) { ctx.unknownParts[p] = true; });
+  }
+
+  var errors = [], rows = [], seen = {}, at = nowIso_(), who = activeUser_();
+  body.forEach(function (r, i) {
+    var line = i + 2;
+    try {
+      var values = {};
+      fields.forEach(function (f) {
+        var c = headers.indexOf(f.name);
+        values[f.name] = validateField_(f, c === -1 ? '' : r[c]);
+      });
+      applyDatasetRules_(datasetKey, values, ctx);
+      var k = keyOf_(ds, values);
+      if (seen[k]) throw new Error('Repeats line ' + seen[k] + ' (' + k + ').');
+      seen[k] = line;
+      values.updated_by = who;
+      values.updated_at = at;
+      values.is_deleted = false;
+      rows.push(values);
+    } catch (e) {
+      errors.push('Line ' + line + ': ' + String(e.message || e).replace(/^Error:\s*/, ''));
+    }
+  });
+  if (errors.length) {
+    return { ok: false, errors: errors.slice(0, 15), errorCount: errors.length, rows: body.length };
+  }
+
+  var ss = sheet_();
+  var tab = ss.getSheetByName(ds.tab) || createTab_(ss, ds);
+  var sheetHeaders = tab.getRange(1, 1, 1, tab.getLastColumn()).getValues()[0];
+  var out = rows.map(function (v) {
+    return sheetHeaders.map(function (h) { return v[h] === undefined || v[h] === null ? '' : v[h]; });
+  });
+  tab.getRange(tab.getLastRow() + 1, 1, out.length, sheetHeaders.length).setValues(out);
+
+  var push = tryPush_(datasetKey);
+  return { ok: true, pushed: push.ok, count: rows.length, ignored: ignored,
+           message: 'Saved ' + rows.length + ' rows to ' + ds.label + '.',
+           pushMessage: push.message };
+}
+
+/**
  * The months one save should write. Always at least the month entered.
  * Capped by the field's own max so a typo cannot write years of rows.
  */
@@ -906,7 +1099,7 @@ function retractRow(datasetKey, keyValues) {
 }
 
 /** Rules that belong to one dataset rather than to a field. */
-function applyDatasetRules_(datasetKey, values) {
+function applyDatasetRules_(datasetKey, values, ctx) {
   if (datasetKey === 'goals') {
     var metric = String(values.metric || '').toLowerCase();
     if (!METRIC_UNITS[metric]) throw new Error('Unknown goal type: ' + values.metric);
@@ -925,6 +1118,47 @@ function applyDatasetRules_(datasetKey, values) {
   if (datasetKey === 'incidents') {
     values.recordable = String(values.recordable) === 'true';
   }
+
+  if (datasetKey === 'msl_rules' && values.value !== '') {
+    var rule = MSL_RULES[values.rule];
+    if (!rule) throw new Error('Unknown rule: ' + values.rule);
+    var v = String(values.value).trim().toLowerCase();
+    if (rule.kind === 'source') {
+      if (v !== 'ns' && v !== 'plex') throw new Error('reorder_source must be ns or plex.');
+    } else if (!isFinite(Number(v)) || Number(v) < 0) {
+      throw new Error(values.rule + ' must be a number of zero or more, got: ' + values.value);
+    }
+    values.value = v;
+  }
+
+  if (datasetKey === 'msl_inputs') {
+    values.part_no = String(values.part_no || '').trim();
+    // Exact string join to Plex: a part number that does not match reads as "no
+    // NetSuite figure" forever, not as an error. A bulk upload checks the whole
+    // file in one query and passes the answer in ctx.
+    if (values.part_no) {
+      var unknown = ctx && ctx.unknownParts ? ctx.unknownParts[values.part_no]
+                                            : unknownParts_([values.part_no]).length > 0;
+      if (unknown) throw new Error('Part ' + values.part_no + ' is not in Plex (exact match needed).');
+    }
+    if (!values.mapping_status && values.as_of_date) {
+      values.mapping_status = values.part_no ? 'confirmed' : 'needs part number';
+    }
+    if (values.mapping_status === 'confirmed' && !values.part_no) values.mapping_status = 'needs part number';
+  }
+}
+
+/** The part numbers in `list` that Plex does not know, by exact match. */
+function unknownParts_(list) {
+  var uniq = {};
+  list.forEach(function (p) { if (p) uniq[p] = true; });
+  var names = Object.keys(uniq);
+  if (!names.length) return [];
+  var lits = names.map(function (p) { return '"' + p.replace(/[\\"]/g, '') + '"'; });
+  var found = {};
+  query_('SELECT DISTINCT Part_No FROM ' + fqn_('raw_Part_v_Part') +
+         ' WHERE Part_No IN (' + lits.join(',') + ')').forEach(function (r) { found[r[0]] = true; });
+  return names.filter(function (p) { return !found[p]; });
 }
 
 function appendToSheet_(ds, values) {

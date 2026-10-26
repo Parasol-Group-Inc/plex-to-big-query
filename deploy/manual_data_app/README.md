@@ -10,6 +10,8 @@ only and was never deployed.
 |---|---|---|---|
 | **Goals** | three tabs — Sales, Production, Revenue | `scorecard_goals_app` | Targets are negotiated, not recorded |
 | **Safety incidents** | one tab | `safety_incidents` | Not in Plex at all; "days without an incident" counts from these |
+| **MSL inputs** (2026-10-26) | one tab, CSV upload | `msl_item_inputs` | NetSuite usage and reorder point per part, until Plex has the history. Rows need the exact Plex part number; each upload is all-or-nothing |
+| **MSL rules** (2026-10-26) | one tab | `msl_rules` | Thresholds for Approaching MSL (defaults live in `approaching_msl_view.sql`, a row only overrides). Both tabs show a panel of what the report flags |
 
 The three goal tabs are a **presentation split only** (asked for by Jennilyn,
 2026-09-21) — they all write the one `goals` dataset, one sheet tab and one

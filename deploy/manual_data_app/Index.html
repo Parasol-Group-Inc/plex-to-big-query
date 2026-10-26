@@ -339,6 +339,80 @@ function renderForm(){
 
   if (DATA.datasets[active].currentView) wireCurrentView();
   if (DATA.datasets[active].liveCheck) wireLiveCheck();
+  renderBulk();
+}
+
+function esc(s){
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * "Upload a CSV" for datasets flagged bulk in the registry (the MSL inputs).
+ * The file is read in the browser and sent as text; the server validates every
+ * row and writes all of them or none. Lives outside #form like the current-value
+ * panel, so renderForm() removes the previous copy by hand.
+ */
+function renderBulk(){
+  var stale = document.getElementById('bulkbox');
+  if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  var ds = DATA.datasets[active];
+  if (!ds.bulk) return;
+
+  var cols = ds.fields.map(function(f){ return f.name; });
+  var box = el('details', { id:'bulkbox', class:'check' });
+  box.style.marginTop = '16px';
+  box.appendChild(el('summary', { text:'Upload a CSV instead', style:'cursor:pointer;font-weight:600;color:var(--ink)' }));
+  box.appendChild(el('p', { html:'Columns: <b>' + cols.join(', ') + '</b>. Header names must match; only the required ones (marked * above) have to be filled. All rows are checked first and saved together, or not at all.' }));
+
+  var file = el('input', { type:'file', accept:'.csv,text/csv', id:'bulkfile' });
+  var tpl = el('button', { type:'button', class:'link', text:'Download a blank template' });
+  tpl.onclick = function(){
+    var a = el('a', { href:'data:text/csv;charset=utf-8,' + encodeURIComponent(cols.join(',') + '\n'),
+                      download: active + '_template.csv' });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+  var go = el('button', { type:'button', class:'primary', text:'Upload' });
+  go.style.marginTop = '10px';
+  var out = el('div', { id:'bulkmsg' });
+
+  go.onclick = function(){
+    var f = file.files && file.files[0];
+    if (!f){ out.innerHTML = '<div class="msg warn">Choose a CSV file first.</div>'; return; }
+    go.disabled = true;
+    out.innerHTML = '<div class="msg">Reading and checking ' + esc(f.name) + '…</div>';
+    var reader = new FileReader();
+    reader.onerror = function(){ go.disabled = false; out.innerHTML = '<div class="msg bad">Could not read that file.</div>'; };
+    reader.onload = function(){
+      google.script.run
+        .withSuccessHandler(function(r){
+          go.disabled = false;
+          if (!r.ok){
+            out.innerHTML = '<div class="msg bad"><b>Nothing was saved.</b> ' + r.errorCount + ' of ' + r.rows +
+              ' rows have a problem' + (r.errorCount > r.errors.length ? ' (first ' + r.errors.length + ')' : '') + ':<br>' +
+              r.errors.map(esc).join('<br>') + '</div>';
+            return;
+          }
+          // Reported in #msg, outside the box: re-rendering the panel below would
+          // wipe a message written inside it.
+          out.innerHTML = '';
+          file.value = '';
+          say(r.pushed ? 'ok' : 'warn', esc(r.message) +
+            (r.pushMessage ? '<br>' + esc(r.pushMessage) : '') +
+            (r.ignored && r.ignored.length ? '<br>Ignored columns: ' + esc(r.ignored.join(', ')) : ''));
+          reloadRecent();
+          renderForm();
+        })
+        .withFailureHandler(function(e){
+          go.disabled = false;
+          out.innerHTML = '<div class="msg bad">' + esc(String(e).replace(/^Error:\s*/, '')) + '</div>';
+        })
+        .saveBulk(active, reader.result);
+    };
+    reader.readAsText(f);
+  };
+
+  [file, el('br'), tpl, el('br'), go, out].forEach(function(n){ box.appendChild(n); });
+  document.getElementById('panel').appendChild(box);
 }
 
 function refreshDependent(f){
@@ -442,6 +516,9 @@ function wireCurrentView(){
         if (mine !== seq) return;
         if (!r || r.state === 'none' || r.state === 'incomplete'){ box.hidden = true; return; }
         if (r.state === 'error'){ box.hidden = true; return; }
+
+        // A panel that is just lines of text (the MSL tabs).
+        if (r.lines){ show(r.lines.map(esc).join('<br>')); return; }
 
         if (which === 'currentGoal'){
           if (r.state === 'empty'){

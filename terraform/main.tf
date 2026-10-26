@@ -4649,6 +4649,13 @@ resource "google_storage_bucket_object" "inventory_available_to_sell_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "approaching_msl_view_sql" {
+  name         = "sql/approaching_msl_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/approaching_msl_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "inventory_out_of_stock_view_sql" {
   name         = "sql/inventory_out_of_stock_view.sql"
   bucket       = google_storage_bucket.report_configs.name

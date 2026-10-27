@@ -14,6 +14,12 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Backups: Terraform state versioned, BigQuery-only tables snapshotted
+
+### Added
+- Object versioning is ON for `gs://voxdatalake-terraform-state` (set once with `gcloud storage buckets update --versioning`; the bucket is not Terraform-managed, so a plan shows nothing). Before, a bad overwrite of the state file was recoverable only inside the 7-day soft-delete window.
+- Dataset `voxdatalake.Backups` holds 31 table snapshots dated 20261027, each expiring after 90 days: the Label Design push log, safety incidents, both goals tables, MSL inputs and rules, turnaround standards, `job_run_log`, `PlexOps.etl_schedule` and `etl_dispatch_log`, all 18 `VoxScorecardsLive` tables and the three `PlexTest.plex_api_*` tables. They are one-time copies; nothing refreshes them yet. Restore steps: `docs/OPERATIONS.md` section "Backups".
+
 ## 2026-10-26 (dev) - Approaching MSL: one row per part number
 
 ### Fixed

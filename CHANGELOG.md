@@ -14,6 +14,21 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Label Design honours the Plex outage breaker
+
+### Fixed
+- `plex-etl-label-design` (prod) is started by its own 15-minute Cloud Scheduler, not the dispatcher, so the outage breaker never held it: it failed to connect 18 times between 2026-10-22 and 2026-10-27 while the dispatcher was holding every other job, and each failure mailed. `main.py` gains `OUTAGE_BREAKER_TABLE`: when set and the run was not dispatched, it reads `PlexOps.etl_dispatch_log` with the dispatcher's own rule (2+ newest connect-evidence runs failed `ODBC connection failed`) and, while the breaker is open, ends as a silent `skipped` with `detail = "Held — Plex outage breaker open since ..."` instead of calling Plex. A failed read connects anyway. Set on the prod job only in Terraform; the test job and every dispatched run are unchanged. Code change: needs an image build (Cloud Build) as well as `./scripts/deploy.sh`.
+
+## 2026-10-27 (dev) - Bottling open jobs with orders: upload its view SQL
+
+### Fixed
+- `terraform/main.tf` had no `google_storage_bucket_object` for `sql/bottling_job_open_with_orders_view.sql`, so the file never reached GCS while `work_orders.yaml` (prod and test, live since 2026-10-26 21:54 UTC) pointed at it. Every `plex-etl-work-orders` run since then ended PARTIAL with a 404 on that SQL, and the probe logged it `inconclusive`. Added the upload; a check of every `sql_file:` in `reports/*.yaml` and `reports/test/*.yaml` against Terraform found no other gap.
+
+## 2026-10-27 (dev) - Weekly snapshots of the BigQuery-only tables
+
+### Added
+- Scheduled query `backup_snapshots_weekly` (Terraform `google_bigquery_data_transfer_config`, runs as the ETL service account, Mondays 06:00 UTC). It snapshots the 31 tables listed in `terraform/backup_snapshots.sql` into `voxdatalake.Backups` as `<Dataset>__<table>_<YYYYMMDD>`, expiring after 90 days; a snapshot that already exists for the day is skipped. Add a table to the list in that file to cover it. The SQL was run once by hand and works. `docs/OPERATIONS.md` "Backups" updated.
+
 ## 2026-10-27 (dev) - Backups: Terraform state versioned, BigQuery-only tables snapshotted
 
 ### Added

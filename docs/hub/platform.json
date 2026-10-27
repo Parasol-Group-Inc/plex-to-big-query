@@ -1063,9 +1063,9 @@
     },
     {
       "id": "L16",
-      "title": "Push moved to Plex Import Test with label colour alignment and problem emails; repair job and test push retired. Built, not deployed.",
+      "title": "Push moved to Plex Import Test with label colour alignment and problem emails; repair job and test push retired. Deployed 2026-10-27; old Plex Import archived.",
       "owner": "Emilio / Ashley",
-      "next": "Deploy (Cloud Build, then ./scripts/deploy.sh), archive old Plex Import, team decides on the 45 values listed on 2026-10-27; delete Design & QA's empty second Sales Rep column."
+      "next": "Confirm the first real push and move keep every value; team reviews the 43 changed values on the review page; delete Design & QA's empty second Sales Rep column."
     }
   ],
   "gotchas": [
@@ -1281,7 +1281,7 @@
       }
     ],
     "retired": [
-      "Plex Import (18432111755): the push board until 2026-10-27. Its colours never matched Design & QA's. Archive after the deploy that moves the push.",
+      "Plex Import (18432111755): the push board until 2026-10-27, archived that day. Its colours never matched Design & QA's.",
       "plex-etl-label-design-repair (2026-10-22 to 10-27): refilled blank fields after a move; it could not see wrong labels.",
       "plex-etl-label-design-push-test: paused since the 19 Oct cutover; test a push with DRY_RUN=1 instead.",
       "The Google Sheet + Apps Script flow (deploy/archive/label_design_sync/) and the Plex REST API push (deploy/plex_api_function/ARCHIVED.md)."

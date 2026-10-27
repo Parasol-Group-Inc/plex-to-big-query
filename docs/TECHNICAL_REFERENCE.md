@@ -5,7 +5,7 @@ Last reviewed: 2026-09-25
 > **Read this first if you're new:** the project started as one Cloud Run
 > job pulling one Plex view (`Part_v_Part`) into one BigQuery table — the
 > "legacy single-view mode" described below. It has since grown into **27
-> Cloud Run jobs** (14 pipelines × prod/test plus the two Label Design push jobs, 68 BigQuery views) running a **multi-report YAML config mode**, each
+> Cloud Run jobs** (14 pipelines × prod/test plus the Label Design push job, 68 BigQuery views) running a **multi-report YAML config mode**, each
 > producing one or more named BigQuery views from a shared set of raw
 > extractions. Both modes are real, live code paths in `main.py` — legacy
 > mode still works and is what you get by default if `REPORT_CONFIG_GCS_PATH`
@@ -542,7 +542,7 @@ gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/p
 
 ## Active report pipelines
 
-The project runs **14 pipelines × prod/test = 28 Cloud Run jobs, plus the two Label Design push jobs = 30** (68 BigQuery views). Prod pipelines run from the ETL dispatcher (`PlexOps.etl_schedule`: 1 / 6 / 11 PM probe + 4 AM full); the test jobs run once a day on an evening cascade (`America/Denver`); Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain (test hourly at :05), gated by a change probe; a prod run that extracts starts the Monday push itself, with a 6:05 PM sweep. Twelve test jobs also have a retry trigger at 9:45 PM Mountain (30 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
+The project runs **14 pipelines × prod/test = 28 Cloud Run jobs, plus the Label Design push job = 29** (68 BigQuery views). Prod pipelines run from the ETL dispatcher (`PlexOps.etl_schedule`: 1 / 6 / 11 PM probe + 4 AM full); the test jobs run once a day on an evening cascade (`America/Denver`); Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain (test hourly at :05), gated by a change probe; a prod run that extracts starts the Monday push itself, with a 6:05 PM sweep. Twelve test jobs also have a retry trigger at 9:45 PM Mountain (29 schedulers in all). Full enumerated schedule, real run history, and the category/display_name naming convention: **[docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md)**.
 
 Every pipeline's actual extractions/views are defined in its `reports/*.yaml` — that YAML, not this doc, is the source of truth for what a given job pulls. The single-`Part_v_Part`-view example that used to live in this section was the *original* pipeline (now `plex-etl-sales-orders`/`sales_orders.yaml`, since expanded to 27 extractions + 27 views) — kept as one example rather than duplicated here since it drifts out of sync with reality otherwise (as it already had, for a while).
 
@@ -646,7 +646,7 @@ plex-to-big-query/
 ├── spreadsheets/                  Google Sheet → BigQuery mapping docs (MFG Job Schedule, etc.)
 │
 ├── terraform/
-│   ├── main.tf                    All GCP resources — 27 Cloud Run jobs, 30 schedulers, GCS objects, IAM, deploy guard
+│   ├── main.tf                    All GCP resources — 29 Cloud Run jobs, 29 schedulers, GCS objects, IAM, deploy guard
 │   ├── variables.tf                Input variable definitions
 │   ├── outputs.tf                  Post-apply copy-paste commands
 │   ├── terraform.tfvars.example    Template for your tfvars (tracked in git)

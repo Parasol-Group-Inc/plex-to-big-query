@@ -14,6 +14,8 @@ changes and open items. Clicking a card opens:
 
 Report, tile, raw-table and pipeline modals also have a **Data** tab: row counts in Prod and Test, the view's columns and its first 25 rows. The Schedules & probe tab lays Prod and Test out side by side and shows the newest dispatch, job-run and probe-log rows.
 
+- **Label Design tab:** how the Plex → Monday queue works end to end (flow diagram, what one push does, every job, table, board and secret, what was retired), the colour rule with its evidence, the colour catalog (filter by column or to labels that do not match), the push's emails, a runbook with SQL, traps and the `L` open items.
+
 The Scorecard tab also carries the open decisions, the manual-data forms and hand-edited tables, vocabulary traps, "what might not be true", both glossaries (scorecard terms and Plex field names) and recent scorecard changes. It merges two artifacts that stay where they are: the Vox Migration Board (shared with Jennilyn, still published from `scripts/board/`) and the Scorecard Field Manual.
 
 Published as an artifact: https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt
@@ -23,6 +25,7 @@ Published as an artifact: https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt
 
 ```bash
 python scripts/hub/snapshot_data.py   # optional: refresh the live data (read-only, ~1 min)
+python scripts/hub/label_colours.py   # optional: refresh the Label Design colour catalog (read-only)
 python scripts/hub/build_hub.py
 ```
 
@@ -47,7 +50,8 @@ Edit the page in `scripts/hub/template.html`, never `index.html`.
 | `reports/plex_sql/*.sql` | Plex SQL Developer equivalents and their header (`confidence`, `plex_views`, `notes`) |
 | `docs/reports/*.md` | status line and business doc |
 | `catalog/full_schema_catalog.csv` | columns and types of each Plex view |
-| `docs/hub/platform.json` | jobs, schedules, probe, functions, ops tables, Mermaid, changelog, open items, traps |
+| `docs/hub/platform.json` | jobs, schedules, probe, functions, ops tables, Mermaid, changelog, open items, traps; `label_design` = the Label Design tab's text |
+| `docs/hub/label_design_colours.json` | the Label Design tab's colour catalog: each pushed status label's colour on Plex Import Test and Design & QA, what a move turns it into, how often Plex sent it. Written by `scripts/hub/label_colours.py` (read-only; `--check` fails on drift) |
 | `scripts/board/board_data.py` | scorecard tiles, open decisions, forms, glossary, recent changes: imported, so the hub and the Migration Board never disagree |
 | `score-card-reference/vox_scorecard_navigator.html` | the per-figure Looker audit, read from its `tile-data` JSON; `FIGURE_TILES` in `build_hub.py` ties each figure to a board tile |
 | `docs/hub/data_snapshot.json` (gitignored) | written by `snapshot_data.py`: per-view row counts and samples, raw-table counts, run logs and each figure's current value, for PlexProd and PlexTest |

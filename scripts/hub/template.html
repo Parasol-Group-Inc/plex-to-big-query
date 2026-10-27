@@ -236,6 +236,9 @@ pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; b
   .kv dt { margin-top: 6px; }
   .m-head, .m-body { padding-left: 14px; padding-right: 14px; }
 }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.15); }
+.sw-pair { white-space: nowrap; font-family: var(--f-mono); font-size: 12px; }
+pre.sql { white-space: pre-wrap; background: var(--code-bg); padding: 10px; border-radius: 6px; font-size: 12px; margin: 6px 0 0; }
 @media (prefers-reduced-motion: reduce) { .card { transition: none; } .card:hover { transform: none; } }
 </style>
 
@@ -424,6 +427,49 @@ pre.struct { white-space: pre-wrap; background: var(--code-bg); padding: 10px; b
     </div>
   </section>
 
+  <section id="s-label" data-tab="label" hidden>
+    <div class="ref">
+      <div class="block">
+        <h2>How Label Design works</h2>
+        <p class="lede" id="ld-overview"></p>
+        <div class="diagram"><pre class="mermaid"><!--MERMAID:label_design_flow--></pre></div>
+      </div>
+      <div class="block">
+        <h2>The colour rule</h2>
+        <div id="ld-rule"></div>
+      </div>
+      <div class="block">
+        <h2>Colour catalog</h2>
+        <p class="lede" id="ld-cat-lede"></p>
+        <div class="toolbar" id="ld-filters"></div>
+        <div class="tbl-wrap"><table id="ld-colours"></table></div>
+      </div>
+      <div class="block">
+        <h2>What one push does</h2>
+        <div class="panel"><ol class="steps" id="ld-steps"></ol></div>
+      </div>
+      <div class="block">
+        <h2>Moving parts</h2>
+        <div class="tbl-wrap"><table id="ld-parts"></table></div>
+        <div class="panel"><h3>Retired</h3><ul class="plain" id="ld-retired"></ul></div>
+      </div>
+      <div class="block">
+        <h2>Emails</h2>
+        <p class="lede" id="ld-email-note"></p>
+        <div class="tbl-wrap"><table id="ld-emails"></table></div>
+      </div>
+      <div class="block">
+        <h2>Runbook</h2>
+        <div class="grid" id="ld-runbook"></div>
+      </div>
+      <div class="block">
+        <h2>Known traps and open items</h2>
+        <div class="two"><div class="panel"><h3>Traps</h3><ul class="plain" id="ld-traps"></ul></div>
+        <div class="panel"><h3>Open items (L)</h3><div class="tbl-wrap"><table id="ld-open"></table></div></div></div>
+      </div>
+    </div>
+  </section>
+
   <section id="s-history" data-tab="history" hidden>
     <div class="two">
       <div class="block ref"><div class="block"><h2>Recent changes</h2><div class="timeline" id="changelog"></div></div></div>
@@ -455,7 +501,7 @@ $("#built").textContent = `voxdatalake · built ${D.built}`;
 /* ---------- tabs ---------- */
 const SC = D.scorecard || { tiles: [] };
 const TL = byName(SC.tiles, "id");
-const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["board", "Scorecard view", Object.keys(SC.figures || {}).length], ["platform", "Schedules & probe", ""], ["history", "History", ""]];
+const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["board", "Scorecard view", Object.keys(SC.figures || {}).length], ["platform", "Schedules & probe", ""], ["label", "Label Design", ""], ["history", "History", ""]];
 $("#tabs").innerHTML = TABS.map(([k, l, n]) => `<button role="tab" data-k="${k}" aria-selected="false">${l}${n !== "" ? `<span class="n">${n}</span>` : ""}</button>`).join("");
 function show(k) {
   document.querySelectorAll("main section").forEach(s => s.hidden = s.dataset.tab !== k);
@@ -774,6 +820,49 @@ function renderPlatform() {
   $("#open").innerHTML = tbl([["id", "ID", "", mono], ["title", "Item"], ["owner", "Owner"], ["next", "Next step"]], P.open_items || []);
 }
 
+/* ---------- Label Design ---------- */
+const LD = P.label_design || {}, LC = D.label_colours || {};
+const LD_STATE = { ok: ["ok", "same colour"], wrong: ["bad", "moves wrong"], blank: ["warn", "arrives blank"], dqa_only: ["none", "Design & QA only"] };
+const ldf = { col: "", issues: false };
+const sw = x => x ? `<span class="sw-pair"><span class="sw" style="background:${esc(x.hex)}"></span>${esc(x.hex)}${x.off ? " (off)" : ""}</span>` : `<span style="color:var(--muted)">—</span>`;
+function renderLabel() {
+  $("#ld-overview").textContent = LD.overview || "";
+  const r = LD.colour_rule || {};
+  $("#ld-rule").innerHTML = `<div class="callout why"><b class="l">The rule</b>${esc(r.summary)}</div>` +
+    `<div class="two"><div class="panel"><h3>Evidence</h3><p style="margin:0">${esc(r.evidence)}</p></div>` +
+    `<div class="panel"><h3>What it cost, and how it stays fixed</h3><p style="margin-top:0">${esc(r.damage)}</p><p style="margin:0">${esc(r.keep_it)}</p></div></div>`;
+  const cols = LC.columns || [];
+  const all = cols.flatMap(c => c.labels.map(l => ({ ...l, column: c.title })));
+  const bad = all.filter(l => l.state === "wrong" || (l.state === "blank" && l.sent)).length;
+  $("#ld-cat-lede").innerHTML = cols.length
+    ? `Every status label the push writes, on <b>${esc((LC.push_board || {}).name)}</b> (where items are created) and <b>${esc((LC.dqa_board || {}).name)}</b> (where they are moved). <b>Lands as</b> is what a move shows, matched by colour. <b>Sent</b> counts items the prod push created with that label. ${bad ? `<span class="pill bad">${bad} label(s) Plex sends would move wrong</span>` : `<span class="pill ok">nothing Plex sends moves wrong</span>`} <span class="mono">snapshot ${esc(LC.taken_at)}</span>`
+    : "No catalog yet: run <code>python scripts/hub/label_colours.py</code>, then rebuild.";
+  $("#ld-filters").innerHTML = `<span class="lbl">Column</span>` +
+    [["", "All", all.length], ...cols.map(c => [c.title, c.title, c.labels.length])].map(([v, l, n]) =>
+      `<button class="chip" data-ldcol="${esc(v)}" aria-pressed="${ldf.col === v}">${esc(l)} <span class="mono">${n}</span></button>`).join("") +
+    `<button class="chip" data-ldissues="1" aria-pressed="${ldf.issues}" style="margin-left:12px">Only not matching</button>`;
+  const rows = all.filter(l => (!ldf.col || l.column === ldf.col) && (!ldf.issues || l.state !== "ok"));
+  $("#ld-colours").innerHTML = rows.length ? tbl([["column", "Column"], ["label", "Label", "", v => `<b>${esc(v)}</b>`],
+    ["push", esc((LC.push_board || {}).name || "Push board"), "", sw], ["dqa", "Design & QA", "", sw],
+    ["lands_as", "Lands as", "", (v, l) => l.push ? (v ? esc(v) : `<i style="color:var(--muted)">blank</i>`) : ""],
+    ["state", "State", "", v => `<span class="pill ${LD_STATE[v][0]}">${esc(LD_STATE[v][1])}</span>`],
+    ["sent", "Sent", "", v => v ? `<span class="mono">${esc(v)}</span>` : ""]], rows) : `<tbody><tr><td><div class="empty">Nothing to show.</div></td></tr></tbody>`;
+  $("#ld-steps").innerHTML = (LD.push_steps || []).map(s => `<li>${esc(s)}</li>`).join("");
+  $("#ld-parts").innerHTML = tbl([["name", "Part", "", mono], ["kind", "Kind"], ["what", "What it does"], ["where", "Where / settings"]], LD.components || []);
+  $("#ld-retired").innerHTML = (LD.retired || []).map(s => `<li>${esc(s)}</li>`).join("");
+  $("#ld-email-note").textContent = LD.email_note || "";
+  $("#ld-emails").innerHTML = tbl([["when", "When"], ["headline", "Email says"], ["items", "Items created?"]], LD.emails || []);
+  $("#ld-runbook").innerHTML = (LD.runbook || []).map(r => `<div class="panel"><h3>${esc(r.q)}</h3><p style="margin:0">${esc(r.a)}</p>${r.sql ? `<pre class="sql">${esc(r.sql)}</pre>` : ""}</div>`).join("");
+  $("#ld-traps").innerHTML = (LD.traps || []).map(s => `<li>${esc(s)}</li>`).join("");
+  $("#ld-open").innerHTML = tbl([["id", "ID", "", mono], ["title", "Item"], ["next", "Next step"]], (P.open_items || []).filter(o => /^L\d/.test(o.id)));
+}
+$("#ld-filters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ldcol !== undefined) ldf.col = b.dataset.ldcol;
+  if (b.dataset.ldissues) ldf.issues = !ldf.issues;
+  renderLabel();
+});
+
 /* ---------- recent runs (snapshot) ---------- */
 const rstate = { log: "dispatch", env: ENVS[0] || "PlexProd" };
 const RUN_LOGS = { dispatch: ["Prod dispatches", "PlexOps.etl_dispatch_log: every start the dispatcher made (prod only)"], job_run_log: ["Job runs", "job_run_log: one row per finished run, with its run_mode"], probe_log: ["Probe results", "probe_log: each report's fingerprint check and whether the run skipped"] };
@@ -970,7 +1059,7 @@ document.addEventListener("click", e => {
 dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
 
 /* ---------- boot ---------- */
-reportFilters(); tableFilters(); tileFilters(); renderReports(); renderTables(); renderPipelines(); renderTiles(); renderScorecard(); renderBoard(); renderPlatform();
+reportFilters(); tableFilters(); tileFilters(); renderReports(); renderTables(); renderPipelines(); renderTiles(); renderScorecard(); renderBoard(); renderPlatform(); renderLabel();
 const h = location.hash.slice(1);
 let first = "reports";
 try { first = localStorage.getItem("hub-tab") || first; } catch (e) {}

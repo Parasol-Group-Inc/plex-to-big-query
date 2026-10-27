@@ -11,7 +11,68 @@
 
 ---
 
-## UPDATE — 2026-10-22 (latest): repair job for board moves
+## UPDATE — 2026-10-27 (latest): push moves to "Plex Import Test"; repair retired
+
+**Problem emails (built, not deployed).** The push emails what went wrong
+(and labels it added to Design & QA), once a day per problem; until now a
+failed push showed only in Cloud Run logs. CHANGELOG 2026-10-27.
+
+**Smart push (built, not deployed).** `label_design_service/labels.py` aligns
+status label colours with Design & QA before each push creates items, adds a
+label Design & QA lacks to both boards with one colour, and creates items with
+`create_labels_if_missing` off. See CHANGELOG 2026-10-27. **Also removed:** the
+test push job and scheduler. **Monday clean-up done:** the duplicate test board
+and the `Bottle Material (Plex)` test columns are deleted; Design & QA has the
+two missing labels. **Not yet:** archive old "Plex Import" — prod pushes there
+until the deploy (order 454 landed there at 19:06 UTC and was moved with
+Priority shown as Normal and Bottle Material blank).
+
+Asked by Emilio after Ashley reported that moving items from "Plex Import Test"
+(18437236736) to Design & QA keeps Priority, Bottle Material and the rest.
+
+- **Root cause (proven 2026-10-27): a board move matches status labels by
+  COLOUR.** Not by name, not by label id. The destination gets its label with
+  the source label's colour; with no such colour, the column's default. The
+  Plex Import boards' labels were made by `scripts/replicate_board_columns.py`,
+  which copies names and lets Monday pick colours, so they did not match
+  Design & QA's.
+- **Evidence.** 10 `ZZTEST-MV-*` items covering every pushed label were moved
+  from Plex Import Test to a structure-only duplicate of Design & QA
+  (18437349725, identical columns, ids and labels). Run 1: 12 of 48 status
+  values lost or changed (PET and HDPE blank, 4 Reason Codes and 3 Inside
+  Sales Reps swapped for the same-coloured label, Julianni Pacheco became N/A);
+  every text, date, email and link value arrived. The 27 mismatched labels on
+  Plex Import Test were then recoloured to Design & QA's colours and the two
+  missing labels added on the duplicate. Run 2, same items: 1 of 48, the
+  predicted `RUSH ⚠️️` (not on Design & QA, never sent by Plex).
+- **Damage already on Design & QA** (31 pushed items there): Priority `Medium`
+  arrived as `Normal` on all 31; Reason Code swapped on 8 (order 408 ×6,
+  order 358 ×2); Printing Material blank on 2. Bottle Material is right only
+  because the repair job refilled it. The repair could fill blanks but never
+  see a wrong label. List for the team: OPEN_ITEMS L16.
+- **Push:** `MONDAY_BOARD_ID` = 18437236736 on both push jobs (prod live, test
+  still paused). Same group "New from Plex". Dry run against PlexProd: 22/22
+  columns mapped, 34 rows in the view, 0 new.
+- **Dedupe is now board-agnostic.** `pending_count` and `audited_lcrs` used to
+  read only the target board's audit rows. Against the new board they would have
+  reported all 34 rows in the view as new (all were pushed to the old board),
+  and 34 is under the 60-item alarm, so they would have been re-created.
+  Both now read every board's `created`/`partial` rows.
+- **Repair retired:** `plex-etl-label-design-repair`, `plex-label-design-repair-sync`
+  and `label_design_service/repair.py` removed. Its 35 `repaired` rows stay in
+  the push log; `label_design_push_latency` still ignores them.
+- **The new board, compared with the old one:** same columns by title and
+  type, same groups, same label names; colours now Design & QA's.
+- **Design & QA labels added** (Emilio ran `recolour.py`): Printing Material
+  `White BOPP - Matte Lamination` (`#9d50dd`) and Sales Rep (`color_mm076254`)
+  `Julianni Pacheco` (`#faa1f1`), the colours tested on the duplicate board.
+- **New labels:** handled by the push itself from now on (`labels.py`).
+- **A text column `Bottle Material (Plex)`** carried 9/9 in the test but was not
+  needed once colours matched; deleted from both boards.
+
+---
+
+## UPDATE — 2026-10-22: repair job for board moves (RETIRED 2026-10-27)
 
 Ashley reported that Bottle Material does not carry over when she moves an
 item from "Plex Import" (18432111755) to "Design & QA" (18395121955).

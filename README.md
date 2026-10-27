@@ -8,7 +8,7 @@ Cloud Storage, deployed from this repo by Terraform.
 
 **GCP project:** `voxdatalake` · **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
 
-**14 pipelines, 31 Cloud Run jobs (prod + test, plus the two Label Design push jobs and the repair job), about 68 BigQuery views.**
+**14 pipelines, 29 Cloud Run jobs (prod + test, plus the Label Design push job), about 68 BigQuery views.**
 The pipelines are Sales Orders, Sales Quotes, Sales Returns, Work Orders,
 Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence,
 Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality

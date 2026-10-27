@@ -1,0 +1,1429 @@
+{
+ "taken_at": "2026-10-27 19:39 UTC",
+ "push_board": {
+  "id": "18437236736",
+  "name": "Plex Import Test"
+ },
+ "dqa_board": {
+  "id": "18395121955",
+  "name": "Design & QA"
+ },
+ "sent_counted": true,
+ "columns": [
+  {
+   "title": "Reason Code",
+   "push_column": "color_mm8heyt8",
+   "dqa_column": "color_mkzk1b5m",
+   "labels": [
+    {
+     "label": "3D Rendering",
+     "state": "ok",
+     "lands_as": "3D Rendering",
+     "sent": 0,
+     "push": {
+      "hex": "#007eb5",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 4,
+      "off": false
+     }
+    },
+    {
+     "label": "3D Rendering | Vox Initiated",
+     "state": "ok",
+     "lands_as": "3D Rendering | Vox Initiated",
+     "sent": 0,
+     "push": {
+      "hex": "#ff5ac4",
+      "id": 13,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff5ac4",
+      "id": 13,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer initiated Label Edit",
+     "state": "ok",
+     "lands_as": "Customer initiated Label Edit",
+     "sent": 0,
+     "push": {
+      "hex": "#7f5347",
+      "id": 18,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#7f5347",
+      "id": 18,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer initiated: Label edit",
+     "state": "ok",
+     "lands_as": "Customer initiated: Label edit",
+     "sent": 0,
+     "push": {
+      "hex": "#fdab3d",
+      "id": 7,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#fdab3d",
+      "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer Initiated: Label Edit",
+     "state": "ok",
+     "lands_as": "Customer Initiated: Label Edit",
+     "sent": 2,
+     "push": {
+      "hex": "#9aadbd",
+      "id": 105,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9aadbd",
+      "id": 105,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer initiated: Label edit/review",
+     "state": "ok",
+     "lands_as": "Customer initiated: Label edit/review",
+     "sent": 0,
+     "push": {
+      "hex": "#037f4c",
+      "id": 110,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#037f4c",
+      "id": 110,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer initiated: Label review",
+     "state": "ok",
+     "lands_as": "Customer initiated: Label review",
+     "sent": 4,
+     "push": {
+      "hex": "#9cd326",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9cd326",
+      "id": 0,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer initiated: Label review & New label review (Customer design)",
+     "state": "ok",
+     "lands_as": "Customer initiated: Label review & New label review (Customer design)",
+     "sent": 0,
+     "push": {
+      "hex": "#66ccff",
+      "id": 16,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#66ccff",
+      "id": 16,
+      "off": false
+     }
+    },
+    {
+     "label": "Label Edit",
+     "state": "ok",
+     "lands_as": "Label Edit",
+     "sent": 0,
+     "push": {
+      "hex": "#563e3e",
+      "id": 151,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#563e3e",
+      "id": 151,
+      "off": false
+     }
+    },
+    {
+     "label": "Label Review",
+     "state": "ok",
+     "lands_as": "Label Review",
+     "sent": 0,
+     "push": {
+      "hex": "#faa1f1",
+      "id": 102,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#faa1f1",
+      "id": 102,
+      "off": false
+     }
+    },
+    {
+     "label": "Master Template",
+     "state": "ok",
+     "lands_as": "Master Template",
+     "sent": 0,
+     "push": {
+      "hex": "#401694",
+      "id": 6,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#401694",
+      "id": 6,
+      "off": false
+     }
+    },
+    {
+     "label": "New Label Design",
+     "state": "ok",
+     "lands_as": "New Label Design",
+     "sent": 0,
+     "push": {
+      "hex": "#5559df",
+      "id": 109,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#5559df",
+      "id": 109,
+      "off": false
+     }
+    },
+    {
+     "label": "New label design (Customer design)",
+     "state": "ok",
+     "lands_as": "New label design (Customer design)",
+     "sent": 0,
+     "push": {
+      "hex": "#216edf",
+      "id": 153,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#216edf",
+      "id": 153,
+      "off": false
+     }
+    },
+    {
+     "label": "New Label Design (Vox Design)",
+     "state": "dqa_only",
+     "lands_as": null,
+     "sent": 0,
+     "push": null,
+     "dqa": {
+      "hex": "#bca58a",
+      "id": 157,
+      "off": false
+     }
+    },
+    {
+     "label": "New label design (Vox design)",
+     "state": "ok",
+     "lands_as": "New label design (Vox design)",
+     "sent": 4,
+     "push": {
+      "hex": "#ff6d3b",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff6d3b",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "New label design - Vox | Standard Matt Lam.",
+     "state": "ok",
+     "lands_as": "New label design - Vox | Standard Matt Lam.",
+     "sent": 0,
+     "push": {
+      "hex": "#225091",
+      "id": 11,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#225091",
+      "id": 11,
+      "off": false
+     }
+    },
+    {
+     "label": "New Label Review",
+     "state": "ok",
+     "lands_as": "New Label Review",
+     "sent": 0,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 156,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 156,
+      "off": false
+     }
+    },
+    {
+     "label": "New label Review (Customer Design)",
+     "state": "ok",
+     "lands_as": "New label Review (Customer Design)",
+     "sent": 0,
+     "push": {
+      "hex": "#bb3354",
+      "id": 8,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#bb3354",
+      "id": 8,
+      "off": false
+     }
+    },
+    {
+     "label": "New label review (Customer design)",
+     "state": "ok",
+     "lands_as": "New label review (Customer design)",
+     "sent": 21,
+     "push": {
+      "hex": "#175a63",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#175a63",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "Pre-Approved Label",
+     "state": "ok",
+     "lands_as": "Pre-Approved Label",
+     "sent": 0,
+     "push": {
+      "hex": "#e484bd",
+      "id": 15,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#e484bd",
+      "id": 15,
+      "off": false
+     }
+    },
+    {
+     "label": "Pre-Approved Label | Shipment Date: October 10, 2026",
+     "state": "ok",
+     "lands_as": "Pre-Approved Label | Shipment Date: October 10, 2026",
+     "sent": 0,
+     "push": {
+      "hex": "#579bfc",
+      "id": 155,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#579bfc",
+      "id": 155,
+      "off": false
+     }
+    },
+    {
+     "label": "Pre-Approved Outsourced Labels.",
+     "state": "ok",
+     "lands_as": "Pre-Approved Outsourced Labels.",
+     "sent": 0,
+     "push": {
+      "hex": "#ffcb00",
+      "id": 14,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ffcb00",
+      "id": 14,
+      "off": false
+     }
+    },
+    {
+     "label": "Pre-Approved Standard",
+     "state": "ok",
+     "lands_as": "Pre-Approved Standard",
+     "sent": 0,
+     "push": {
+      "hex": "#757575",
+      "id": 17,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#757575",
+      "id": 17,
+      "off": false
+     }
+    },
+    {
+     "label": "REWORK - New label review.",
+     "state": "ok",
+     "lands_as": "REWORK - New label review.",
+     "sent": 0,
+     "push": {
+      "hex": "#ff007f",
+      "id": 12,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff007f",
+      "id": 12,
+      "off": false
+     }
+    },
+    {
+     "label": "RUSH - Vox initiated: Label edit/review",
+     "state": "ok",
+     "lands_as": "RUSH - Vox initiated: Label edit/review",
+     "sent": 0,
+     "push": {
+      "hex": "#a9bee8",
+      "id": 154,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#a9bee8",
+      "id": 154,
+      "off": false
+     }
+    },
+    {
+     "label": "Silver Onyx",
+     "state": "ok",
+     "lands_as": "Silver Onyx",
+     "sent": 0,
+     "push": {
+      "hex": "#00c875",
+      "id": 10,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#00c875",
+      "id": 10,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox initiaded: Label edit/review",
+     "state": "ok",
+     "lands_as": "Vox initiaded: Label edit/review",
+     "sent": 0,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 103,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 103,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated",
+     "state": "ok",
+     "lands_as": "Vox Initiated",
+     "sent": 0,
+     "push": {
+      "hex": "#7e3b8a",
+      "id": 104,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#7e3b8a",
+      "id": 104,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated  - 3D Rendering",
+     "state": "ok",
+     "lands_as": "Vox Initiated  - 3D Rendering",
+     "sent": 0,
+     "push": {
+      "hex": "#ffadad",
+      "id": 101,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ffadad",
+      "id": 101,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated - 3D Rendering",
+     "state": "ok",
+     "lands_as": "Vox Initiated - 3D Rendering",
+     "sent": 0,
+     "push": {
+      "hex": "#333333",
+      "id": 19,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#333333",
+      "id": 19,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox initiated - Label edit/review",
+     "state": "ok",
+     "lands_as": "Vox initiated - Label edit/review",
+     "sent": 0,
+     "push": {
+      "hex": "#cab641",
+      "id": 9,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#cab641",
+      "id": 9,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox initiated - Label Review",
+     "state": "ok",
+     "lands_as": "Vox initiated - Label Review",
+     "sent": 0,
+     "push": {
+      "hex": "#ff7575",
+      "id": 107,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff7575",
+      "id": 107,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated - Label Review/ Edit",
+     "state": "ok",
+     "lands_as": "Vox Initiated - Label Review/ Edit",
+     "sent": 0,
+     "push": {
+      "hex": "#bda8f9",
+      "id": 152,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#bda8f9",
+      "id": 152,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated: Label Edit/Review",
+     "state": "ok",
+     "lands_as": "Vox Initiated: Label Edit/Review",
+     "sent": 44,
+     "push": {
+      "hex": "#74afcc",
+      "id": 106,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#74afcc",
+      "id": 106,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox initiated: Label edit/review",
+     "state": "ok",
+     "lands_as": "Vox initiated: Label edit/review",
+     "sent": 0,
+     "push": {
+      "hex": "#9d99b9",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d99b9",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "Vox Initiated: Label Edit/Review | Standard Label",
+     "state": "ok",
+     "lands_as": "Vox Initiated: Label Edit/Review | Standard Label",
+     "sent": 0,
+     "push": {
+      "hex": "#784bd1",
+      "id": 108,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#784bd1",
+      "id": 108,
+      "off": false
+     }
+    }
+   ]
+  },
+  {
+   "title": "Sales Rep",
+   "push_column": "color_mm8h410b",
+   "dqa_column": "color_mm076254",
+   "labels": [
+    {
+     "label": "Aishah Alqasim",
+     "state": "ok",
+     "lands_as": "Aishah Alqasim",
+     "sent": 0,
+     "push": {
+      "hex": "#784bd1",
+      "id": 14,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#784bd1",
+      "id": 14,
+      "off": false
+     }
+    },
+    {
+     "label": "Andres Martinez",
+     "state": "ok",
+     "lands_as": "Andres Martinez",
+     "sent": 1,
+     "push": {
+      "hex": "#333333",
+      "id": 10,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#333333",
+      "id": 10,
+      "off": false
+     }
+    },
+    {
+     "label": "Ashley Quintana",
+     "state": "ok",
+     "lands_as": "Ashley Quintana",
+     "sent": 6,
+     "push": {
+      "hex": "#757575",
+      "id": 17,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#757575",
+      "id": 17,
+      "off": false
+     }
+    },
+    {
+     "label": "Camilo Montano",
+     "state": "ok",
+     "lands_as": "Camilo Montano",
+     "sent": 0,
+     "push": {
+      "hex": "#ff5ac4",
+      "id": 13,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff5ac4",
+      "id": 13,
+      "off": false
+     }
+    },
+    {
+     "label": "Claudio Soto",
+     "state": "ok",
+     "lands_as": "Claudio Soto",
+     "sent": 3,
+     "push": {
+      "hex": "#ff007f",
+      "id": 12,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff007f",
+      "id": 12,
+      "off": false
+     }
+    },
+    {
+     "label": "Emily Gray",
+     "state": "ok",
+     "lands_as": "Emily Gray",
+     "sent": 0,
+     "push": {
+      "hex": "#9cd326",
+      "id": 15,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9cd326",
+      "id": 15,
+      "off": false
+     }
+    },
+    {
+     "label": "Janet Pacheco",
+     "state": "ok",
+     "lands_as": "Janet Pacheco",
+     "sent": 5,
+     "push": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "Johnsie Mays",
+     "state": "ok",
+     "lands_as": "Johnsie Mays",
+     "sent": 0,
+     "push": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     }
+    },
+    {
+     "label": "Julianni Pacheco",
+     "state": "ok",
+     "lands_as": "Julianni Pacheco",
+     "sent": 0,
+     "push": {
+      "hex": "#faa1f1",
+      "id": 19,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#faa1f1",
+      "id": 102,
+      "off": false
+     }
+    },
+    {
+     "label": "Kai Butcher",
+     "state": "dqa_only",
+     "lands_as": null,
+     "sent": 0,
+     "push": null,
+     "dqa": {
+      "hex": "#ff7575",
+      "id": 101,
+      "off": false
+     }
+    },
+    {
+     "label": "Kami Butcher",
+     "state": "ok",
+     "lands_as": "Kami Butcher",
+     "sent": 20,
+     "push": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "Landen Epperson",
+     "state": "ok",
+     "lands_as": "Landen Epperson",
+     "sent": 0,
+     "push": {
+      "hex": "#66ccff",
+      "id": 16,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#66ccff",
+      "id": 16,
+      "off": false
+     }
+    },
+    {
+     "label": "N/A",
+     "state": "dqa_only",
+     "lands_as": null,
+     "sent": 0,
+     "push": null,
+     "dqa": {
+      "hex": "#ff6d3b",
+      "id": 19,
+      "off": false
+     }
+    },
+    {
+     "label": "Ruben Espinosa",
+     "state": "ok",
+     "lands_as": "Ruben Espinosa",
+     "sent": 21,
+     "push": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     }
+    },
+    {
+     "label": "Steve Kim",
+     "state": "ok",
+     "lands_as": "Steve Kim",
+     "sent": 0,
+     "push": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "Tanner Wach",
+     "state": "ok",
+     "lands_as": "Tanner Wach",
+     "sent": 0,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     }
+    },
+    {
+     "label": "Test",
+     "state": "ok",
+     "lands_as": "Test",
+     "sent": 0,
+     "push": {
+      "hex": "#ffcb00",
+      "id": 9,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ffcb00",
+      "id": 9,
+      "off": false
+     }
+    },
+    {
+     "label": "Tyler Hall",
+     "state": "ok",
+     "lands_as": "Tyler Hall",
+     "sent": 19,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "Zac Riggs",
+     "state": "ok",
+     "lands_as": "Zac Riggs",
+     "sent": 0,
+     "push": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     }
+    },
+    {
+     "label": "Zeijan",
+     "state": "ok",
+     "lands_as": "Zeijan",
+     "sent": 0,
+     "push": {
+      "hex": "#7f5347",
+      "id": 18,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#7f5347",
+      "id": 18,
+      "off": false
+     }
+    },
+    {
+     "label": "Zeljan Avdic",
+     "state": "ok",
+     "lands_as": "Zeljan Avdic",
+     "sent": 0,
+     "push": {
+      "hex": "#bb3354",
+      "id": 11,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#bb3354",
+      "id": 11,
+      "off": false
+     }
+    }
+   ]
+  },
+  {
+   "title": "Inside Sales Rep",
+   "push_column": "color_mm8hgb85",
+   "dqa_column": "color_mm7z64ph",
+   "labels": [
+    {
+     "label": "Andres Martinez",
+     "state": "ok",
+     "lands_as": "Andres Martinez",
+     "sent": 1,
+     "push": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     }
+    },
+    {
+     "label": "Camilo Montano",
+     "state": "ok",
+     "lands_as": "Camilo Montano",
+     "sent": 2,
+     "push": {
+      "hex": "#037f4c",
+      "id": 7,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     }
+    },
+    {
+     "label": "Claudio Soto",
+     "state": "ok",
+     "lands_as": "Claudio Soto",
+     "sent": 0,
+     "push": {
+      "hex": "#c4c4c4",
+      "id": 6,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#c4c4c4",
+      "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "Done",
+     "state": "ok",
+     "lands_as": "Done",
+     "sent": 0,
+     "push": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "Ruben Espinosa",
+     "state": "ok",
+     "lands_as": "Ruben Espinosa",
+     "sent": 0,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     }
+    },
+    {
+     "label": "Stuck",
+     "state": "ok",
+     "lands_as": "Stuck",
+     "sent": 0,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "Taylor Yates",
+     "state": "ok",
+     "lands_as": "Taylor Yates",
+     "sent": 0,
+     "push": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "Working on it",
+     "state": "ok",
+     "lands_as": "Working on it",
+     "sent": 0,
+     "push": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     }
+    }
+   ]
+  },
+  {
+   "title": "Priority",
+   "push_column": "color_mm8h94bp",
+   "dqa_column": "color_mkzvyt93",
+   "labels": [
+    {
+     "label": "Blanket",
+     "state": "ok",
+     "lands_as": "Blanket",
+     "sent": 0,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     }
+    },
+    {
+     "label": "High",
+     "state": "ok",
+     "lands_as": "High",
+     "sent": 0,
+     "push": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "Low",
+     "state": "ok",
+     "lands_as": "Low",
+     "sent": 0,
+     "push": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "Medium",
+     "state": "ok",
+     "lands_as": "Medium",
+     "sent": 74,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "Normal",
+     "state": "ok",
+     "lands_as": "Normal",
+     "sent": 0,
+     "push": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "RUSH",
+     "state": "ok",
+     "lands_as": "RUSH",
+     "sent": 1,
+     "push": {
+      "hex": "#333333",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#333333",
+      "id": 10,
+      "off": false
+     }
+    },
+    {
+     "label": "RUSH ⚠️️",
+     "state": "blank",
+     "lands_as": null,
+     "sent": 0,
+     "push": {
+      "hex": "#037f4c",
+      "id": 10,
+      "off": false
+     },
+     "dqa": null
+    }
+   ]
+  },
+  {
+   "title": "Bottle Material",
+   "push_column": "color_mm8hxmn4",
+   "dqa_column": "color_mkzvbses",
+   "labels": [
+    {
+     "label": "-",
+     "state": "ok",
+     "lands_as": "-",
+     "sent": 0,
+     "push": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#579bfc",
+      "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "Amber",
+     "state": "ok",
+     "lands_as": "Amber",
+     "sent": 0,
+     "push": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#cab641",
+      "id": 8,
+      "off": false
+     }
+    },
+    {
+     "label": "Amber Glass",
+     "state": "dqa_only",
+     "lands_as": null,
+     "sent": 0,
+     "push": null,
+     "dqa": {
+      "hex": "#333333",
+      "id": 10,
+      "off": false
+     }
+    },
+    {
+     "label": "Glass",
+     "state": "ok",
+     "lands_as": "Glass",
+     "sent": 0,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "HDPE",
+     "state": "ok",
+     "lands_as": "HDPE",
+     "sent": 56,
+     "push": {
+      "hex": "#784bd1",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#784bd1",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "N/A",
+     "state": "ok",
+     "lands_as": "N/A",
+     "sent": 0,
+     "push": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "Opt In",
+     "state": "ok",
+     "lands_as": "Opt In",
+     "sent": 0,
+     "push": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": true
+     }
+    },
+    {
+     "label": "Opt Out",
+     "state": "ok",
+     "lands_as": "Opt Out",
+     "sent": 0,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": true
+     }
+    },
+    {
+     "label": "PET",
+     "state": "ok",
+     "lands_as": "PET",
+     "sent": 13,
+     "push": {
+      "hex": "#ff7575",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ff7575",
+      "id": 0,
+      "off": false
+     }
+    },
+    {
+     "label": "White",
+     "state": "ok",
+     "lands_as": "White",
+     "sent": 0,
+     "push": {
+      "hex": "#ffcb00",
+      "id": 9,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#ffcb00",
+      "id": 9,
+      "off": false
+     }
+    }
+   ]
+  },
+  {
+   "title": "Printing Material",
+   "push_column": "color_mm8hx4rv",
+   "dqa_column": "color_mm7xs7cd",
+   "labels": [
+    {
+     "label": "Lamination",
+     "state": "ok",
+     "lands_as": "Lamination",
+     "sent": 0,
+     "push": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#df2f4a",
+      "id": 2,
+      "off": false
+     }
+    },
+    {
+     "label": "Outsourced",
+     "state": "ok",
+     "lands_as": "Outsourced",
+     "sent": 1,
+     "push": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#007eb5",
+      "id": 3,
+      "off": false
+     }
+    },
+    {
+     "label": "White BOPP",
+     "state": "ok",
+     "lands_as": "White BOPP",
+     "sent": 0,
+     "push": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#00c875",
+      "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "White BOPP - Matte",
+     "state": "ok",
+     "lands_as": "White BOPP - Matte",
+     "sent": 0,
+     "push": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#fdab3d",
+      "id": 0,
+      "off": false
+     }
+    },
+    {
+     "label": "White BOPP - Matte Lamination",
+     "state": "ok",
+     "lands_as": "White BOPP - Matte Lamination",
+     "sent": 2,
+     "push": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9d50dd",
+      "id": 4,
+      "off": false
+     }
+    }
+   ]
+  }
+ ],
+ "problems": []
+}

@@ -10,19 +10,22 @@ import urllib.error
 import urllib.request
 
 API_VERSION = "2024-10"
+# Status label colours (`columns { settings }`) and `update_status_column` exist
+# only from this version; labels.py asks for it per call.
+LABELS_API_VERSION = "2025-10"
 
 
 class Monday:
     def __init__(self, api_key):
         self.api_key = api_key
 
-    def __call__(self, query, variables=None, tries=5):
+    def __call__(self, query, variables=None, tries=5, version=API_VERSION):
         payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
         for attempt in range(tries):
             req = urllib.request.Request("https://api.monday.com/v2", data=payload, method="POST",
                                          headers={"Authorization": self.api_key,
                                                   "Content-Type": "application/json",
-                                                  "API-Version": API_VERSION})
+                                                  "API-Version": version})
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     body = json.loads(resp.read().decode("utf-8"))

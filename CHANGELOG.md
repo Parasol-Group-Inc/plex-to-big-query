@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Label Design honours the Plex outage breaker
+
+### Fixed
+- `plex-etl-label-design` (prod) is started by its own 15-minute Cloud Scheduler, not the dispatcher, so the outage breaker never held it: it failed to connect 18 times between 2026-10-22 and 2026-10-27 while the dispatcher was holding every other job, and each failure mailed. `main.py` gains `OUTAGE_BREAKER_TABLE`: when set and the run was not dispatched, it reads `PlexOps.etl_dispatch_log` with the dispatcher's own rule (2+ newest connect-evidence runs failed `ODBC connection failed`) and, while the breaker is open, ends as a silent `skipped` with `detail = "Held — Plex outage breaker open since ..."` instead of calling Plex. A failed read connects anyway. Set on the prod job only in Terraform; the test job and every dispatched run are unchanged. Code change: needs an image build (Cloud Build) as well as `./scripts/deploy.sh`.
+
 ## 2026-10-27 (dev) - Bottling open jobs with orders: upload its view SQL
 
 ### Fixed

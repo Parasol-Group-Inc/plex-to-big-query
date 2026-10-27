@@ -4927,6 +4927,14 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           name  = "POST_RUN_JOB"
           value = google_cloud_run_v2_job.label_design_push.name
         }
+        # Its own scheduler, not the dispatcher, starts this job, so it reads
+        # the dispatcher's outage breaker itself (2026-10-27): while Plex is
+        # down it ends as a silent `skipped` instead of a failed connect
+        # every 15 minutes. See OUTAGE_BREAKER_TABLE in main.py.
+        env {
+          name  = "OUTAGE_BREAKER_TABLE"
+          value = "PlexOps.etl_dispatch_log"
+        }
         env {
           name  = "GCP_REGION"
           value = var.gcp_region

@@ -72,6 +72,16 @@ JOB_RUN_LOG_TABLE = os.environ.get("JOB_RUN_LOG_TABLE", "job_run_log")
 DISPATCH_ID        = os.environ.get("DISPATCH_ID", "")
 DISPATCH_LOG_TABLE = os.environ.get("DISPATCH_LOG_TABLE", "etl_dispatch_log")  # "dataset.table" or "table"
 
+# The dispatcher's Plex outage breaker, for a run it did NOT start (2026-10-27).
+# Label Design runs every 15 minutes from its own Cloud Scheduler, so while the
+# dispatcher held every other job through a Plex outage, Label Design kept
+# connecting and failing (18 failed runs, 10-22 to 10-27). Set to the
+# dispatcher's log ("PlexOps.etl_dispatch_log") and such a run reads the
+# breaker first: while it is open the run ends as a silent `skipped` without
+# calling Plex. The next run after a canary connects catches up, so it needs
+# no recovery run. Empty (the default) turns the check off.
+OUTAGE_BREAKER_TABLE = os.environ.get("OUTAGE_BREAKER_TABLE", "")
+
 # Emails show times in this zone, and the subject's date is this zone's date —
 # an 11 PM Mountain run would otherwise land in the next day's UTC thread.
 REPORT_TIME_ZONE  = os.environ.get("REPORT_TIME_ZONE", "America/Denver")
@@ -660,6 +670,37 @@ def record_dispatch_outcome(status: str, detail: str = ""):
             return
         except Exception:
             log.exception(f"Failed to record dispatch outcome for {DISPATCH_ID} (attempt {attempt}).")
+
+
+def outage_open_since(bq: bigquery.Client) -> Optional[str]:
+    """When the dispatcher's Plex outage breaker opened, or None while it is
+    closed. Same rule as outage_state() in deploy/etl_dispatcher/main.py: the
+    newest 2 or more finished runs in the last day that say anything about
+    Plex all failed to connect. A failed read returns None: one more connect
+    attempt is better than a run held on a guess."""
+    query = f"""
+        WITH evidence AS (
+          SELECT finished_at, outcome IN UNNEST(@healthy) AS up
+          FROM `{GCP_PROJECT}.{OUTAGE_BREAKER_TABLE}`
+          WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+            AND finished_at IS NOT NULL
+            AND (outcome IN UNNEST(@healthy)
+                 OR (outcome = 'failed' AND STARTS_WITH(IFNULL(detail, ''), 'ODBC connection failed'))))
+        SELECT COUNT(*) AS failures, CAST(MIN(finished_at) AS STRING) AS since
+        FROM evidence
+        WHERE NOT up
+          AND finished_at > IFNULL((SELECT MAX(finished_at) FROM evidence WHERE up), TIMESTAMP '1970-01-01')
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ArrayQueryParameter("healthy", "STRING",
+                                     ["success", "partial", "skipped", "succeeded-unrecorded"]),
+    ])
+    try:
+        row = list(bq.query(query, job_config=job_config).result())[0]
+    except Exception:
+        log.exception("Outage breaker check failed; connecting anyway.")
+        return None
+    return row.since if row.failures >= 2 else None
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -1427,6 +1468,7 @@ def main():
         # Same identity the run-log writer at the bottom of this file uses,
         # so the retry and probe reads find the rows it wrote.
         job_identity = run_identity()
+        skip_event, held = "", False
         if RUN_MODE == "retry":
             todays_status = get_todays_run_status(bq, job_identity)
             if todays_status in ("success", "partial"):
@@ -1435,29 +1477,38 @@ def main():
                     f"scheduled run already completed with status={todays_status} "
                     f"— skipping."
                 )
-                return {
-                    "rows_fetched":           0,
-                    "rows_written":           0,
-                    "events":                 [f"Retry skipped — today's scheduled run already {todays_status}"],
-                    "partial_errors":         [],
-                    "gcp_project":            GCP_PROJECT,
-                    "bq_dataset":             BQ_DATASET,
-                    "bq_table":               email_bq_table,
-                    "report_name":            report_name,
-                    "report_category":        report_category,
-                    "reports_detail":         email_reports_detail,
-                    "plex_view":              email_plex_view,
-                    "plex_filter":            email_plex_filter,
-                    "plex_host":              PLEX_HOST,
-                    "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
-                    "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
-                    "job_identity":           job_identity,
-                    "skipped":                True,
-                }
-            log.info(
-                f"Retry trigger fired for {job_identity} (today's status: "
-                f"{todays_status or 'not logged'}) — proceeding with a full run."
-            )
+                skip_event = f"Retry skipped — today's scheduled run already {todays_status}"
+            else:
+                log.info(
+                    f"Retry trigger fired for {job_identity} (today's status: "
+                    f"{todays_status or 'not logged'}) — proceeding with a full run."
+                )
+        if not skip_event and OUTAGE_BREAKER_TABLE and not DISPATCH_ID:
+            outage_since = outage_open_since(bq)
+            if outage_since:
+                log.info(f"Plex outage breaker open since {outage_since} — {job_identity} held, Plex not called.")
+                skip_event, held = f"Held — Plex outage breaker open since {outage_since} UTC", True
+        if skip_event:
+            return {
+                "rows_fetched":           0,
+                "rows_written":           0,
+                "events":                 [skip_event],
+                "skip_detail":            skip_event if held else "",
+                "partial_errors":         [],
+                "gcp_project":            GCP_PROJECT,
+                "bq_dataset":             BQ_DATASET,
+                "bq_table":               email_bq_table,
+                "report_name":            report_name,
+                "report_category":        report_category,
+                "reports_detail":         email_reports_detail,
+                "plex_view":              email_plex_view,
+                "plex_filter":            email_plex_filter,
+                "plex_host":              PLEX_HOST,
+                "report_config_gcs_path": REPORT_CONFIG_GCS_PATH,
+                "execution_name":         os.environ.get("CLOUD_RUN_EXECUTION", ""),
+                "job_identity":           job_identity,
+                "skipped":                True,
+            }
     else:
         bq = None
         log.info("LOCAL MODE — skipping BigQuery, full extract.")
@@ -1919,12 +1970,14 @@ def run_and_report():
         result = main()
         if result.get("skipped"):
             probe_skip = result.get("skip_reason") == "probe"
-            log.info(f"Run skipped ({'probe unchanged' if probe_skip else 'retry no-op'}) for {job_identity}.")
+            why = "probe unchanged" if probe_skip else ("Plex outage breaker" if result.get("skip_detail") else "retry no-op")
+            log.info(f"Run skipped ({why}) for {job_identity}.")
             end_time = datetime.now(timezone.utc)
             if OUTPUT_MODE == "bigquery":
                 try:
                     log_job_run(bigquery.Client(project=GCP_PROJECT), job_identity, status="skipped", run_mode=RUN_MODE,
-                                details=run_details(result, [], start_time, end_time, batch))
+                                details=run_details(result, [result["skip_detail"]] if result.get("skip_detail") else [],
+                                                    start_time, end_time, batch))
                 except Exception:
                     log.exception("Failed to log skipped run status.")
             record_dispatch_outcome("skipped")

@@ -407,7 +407,7 @@ resource "google_cloud_run_v2_job" "etl" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -597,7 +597,7 @@ resource "google_cloud_run_v2_job" "etl_test" {
       max_retries = 1
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -797,7 +797,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -934,7 +934,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
       max_retries = 1
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -4698,6 +4698,13 @@ resource "google_storage_bucket_object" "bottling_job_open_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "bottling_job_open_with_orders_view_sql" {
+  name         = "sql/bottling_job_open_with_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/bottling_job_open_with_orders_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "inventory_valuation_total_view_sql" {
   name         = "sql/inventory_valuation_total_view.sql"
   bucket       = google_storage_bucket.report_configs.name
@@ -4919,6 +4926,14 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
         env {
           name  = "POST_RUN_JOB"
           value = google_cloud_run_v2_job.label_design_push.name
+        }
+        # Its own scheduler, not the dispatcher, starts this job, so it reads
+        # the dispatcher's outage breaker itself (2026-10-27): while Plex is
+        # down it ends as a silent `skipped` instead of a failed connect
+        # every 15 minutes. See OUTAGE_BREAKER_TABLE in main.py.
+        env {
+          name  = "OUTAGE_BREAKER_TABLE"
+          value = "PlexOps.etl_dispatch_log"
         }
         env {
           name  = "GCP_REGION"
@@ -6223,5 +6238,19 @@ resource "google_cloud_scheduler_job" "etl_dispatcher" {
       service_account_email = google_service_account.etl.email
       audience              = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
     }
+  }
+}
+
+# Weekly snapshots of the BigQuery-only tables (no Plex source, no copy in git) into
+# voxdatalake.Backups, 90-day expiry. The table list lives in backup_snapshots.sql.
+# Monday 06:00 UTC, as the ETL service account (project-wide dataEditor + jobUser).
+resource "google_bigquery_data_transfer_config" "backup_snapshots_weekly" {
+  display_name         = "backup_snapshots_weekly"
+  location             = "US"
+  data_source_id       = "scheduled_query"
+  schedule             = "every monday 06:00"
+  service_account_name = google_service_account.etl.email
+  params = {
+    query = file("${path.module}/backup_snapshots.sql")
   }
 }

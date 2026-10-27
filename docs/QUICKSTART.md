@@ -24,8 +24,8 @@ There are two phases:
 > project**.
 >
 > **Reality check for Phase 2:** the first deploy doesn't create just one job —
-> `terraform/main.tf` defines all **30** Cloud Run jobs (14 pipelines ×
-> prod/test, plus the two Label Design push jobs) and 30 schedulers with no conditional gating, so one deploy stands
+> `terraform/main.tf` defines all **29** Cloud Run jobs (14 pipelines ×
+> prod/test, plus the Label Design push job) and 29 schedulers with no conditional gating, so one deploy stands
 > up the entire stack at once. The job this guide walks through testing,
 > `plex-etl-sales-orders`, runs the **Sales Orders** pipeline
 > (`reports/sales_orders.yaml` — 27 Plex views) via `report_config_gcs_path`
@@ -271,8 +271,8 @@ your `PATH` and Git Bash to run `deploy.sh`.
 - Every `reports/` YAML and SQL file, uploaded to the report-configs bucket
 - An Artifact Registry repository (where your Docker image lives)
 - **Six** Secret Manager secrets (empty containers — you'll fill in the IAM token next step): `plex-access-token`, `sendgrid-api-key`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `monday-api-key`
-- All 30 Cloud Run job definitions (14 pipelines × prod/test, plus the two Label Design push jobs)
-- All 30 Cloud Scheduler jobs — the ETL dispatcher trigger, one nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers (prod pipelines have no scheduler of their own; they run from `PlexOps.etl_schedule`)
+- All 29 Cloud Run job definitions (14 pipelines × prod/test, plus the Label Design push job)
+- All 29 Cloud Scheduler jobs — the ETL dispatcher trigger, one nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers (prod pipelines have no scheduler of their own; they run from `PlexOps.etl_schedule`)
 
 **Check it worked:** In GCP Console → **Secret Manager**, you should see 6 secrets listed.
 

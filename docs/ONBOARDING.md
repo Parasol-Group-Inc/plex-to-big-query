@@ -23,7 +23,7 @@ production with it.
 | **Storage:** Object Viewer on `voxdatalake-terraform-state` | the tfvars backup and the repo backups | GCP IAM, on the bucket |
 | **BigQuery:** Data Viewer + Job User on `voxdatalake` | query the views and raw tables | GCP IAM, project |
 | **Cloud Run Viewer + Logs Viewer** on `voxdatalake` | see the jobs, their runs and their logs | GCP IAM, project |
-| **Monday:** a seat on the "Plex Import" board | see what the Label Design push creates | Monday admin |
+| **Monday:** a seat on the "Plex Import Test" board (the push target since 2026-10-27) | see what the Label Design push creates | Monday admin |
 | **Plex test** web login (`vox.test.on.plex.com`) | enter test orders, check the links the push writes | Plex admin |
 
 **Deploying is a separate grant,** given once you know the flow:

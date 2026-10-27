@@ -756,3 +756,112 @@ def send_digest(digest: Dict[str, object]) -> bool:
     subject = f"[Plex ETL] - Digest — {batch_date}"
     _send(config, subject, html_content, text_content)
     return True
+
+
+# ── Label Design push alert (2026-10-27) ─────────────────────────────────────
+# label_design_service/push.py sends this when a run could not push cleanly or
+# changed Design & QA's labels. The push decides WHEN (once a day per problem);
+# this only renders and sends.
+
+def render_push_alert(alert: Dict[str, object]):
+    """(subject, html, text) for one push alert. `alert` keys: kind (blocked |
+    alarm | crash | failed | blank | labels), date, problems [{text, action,
+    blocking}], label_changes [str], items [{order, name, outcome, url,
+    detail}], in_view, new_rows, created, not_clean, board_id, board_name,
+    run_id, gcp_project, bq_dataset, execution_name."""
+    kind = str(alert.get("kind", ""))
+    status_label, status_class = {
+        "alarm":   ("Nothing pushed: too many new lines at once", "badge-error"),
+        "crash":   ("The push stopped before finishing", "badge-error"),
+        "blocked": ("Nothing created: a label would show wrong on Design & QA", "badge-error"),
+        "failed":  ("Some items were not created", "badge-error"),
+        "blank":   ("Created, but some fields will arrive blank on Design & QA", "badge-warning"),
+        "labels":  ("New labels added to Design & QA", "badge-success"),
+    }.get(kind, ("Label Design push needs a look", "badge-warning"))
+    summary = {
+        "alarm":   "More new lines than the safety limit appeared at once, which usually means the order-line "
+                   "keys changed, not a busy day. Nothing was pushed; every run stops here until it is checked.",
+        "crash":   "The push hit an error and stopped. Items created before the error are on the board and "
+                   "logged; the rest will be tried again on the next run.",
+        "blocked": "Before creating items, the push checks that every status label it writes has the same "
+                   "colour as on Design & QA, because a board move matches labels by colour. That check "
+                   "failed, so nothing was created this run. New orders wait; the next run tries again.",
+        "failed":  "The push created what it could. The items below were not created, or were created "
+                   "without some values; the next run retries the ones not created.",
+        "blank":   "Items were created. A label could not be added to Design & QA, so when these items are "
+                   "moved there the field below will arrive blank instead of showing the value.",
+        "labels":  "The push added label(s) to Design & QA so that moved items keep their values. Nothing "
+                   "needs doing unless the new label is unwanted.",
+    }.get(kind, "")
+
+    problems = [p for p in (alert.get("problems") or []) if isinstance(p, dict)]
+    actions_html = ""
+    if problems:
+        lis = "".join(f'<li>{html.escape(str(p.get("text", "")))}'
+                      f'<span class="what">{html.escape(str(p.get("action", "")))}</span></li>' for p in problems)
+        actions_html = f'<p class="health-title"><b>What needs doing</b></p><ul class="actions">{lis}</ul>'
+    changes = [str(c) for c in (alert.get("label_changes") or [])]
+    changes_html = ""
+    if changes:
+        lis = "".join(f"<li>{html.escape(c)}</li>" for c in changes)
+        changes_html = f'<p class="health-title" style="color:#215a7c;"><b>Label changes made</b></p><ul class="changes">{lis}</ul>'
+    items = [i for i in (alert.get("items") or []) if isinstance(i, dict)]
+    items_html = ""
+    if items:
+        rows = []
+        for i in items:
+            name = html.escape(str(i.get("name", "")))
+            if i.get("url"):
+                name = f'<a class="link" href="{html.escape(str(i["url"]))}">{name}</a>'
+            rows.append(f'<tr><td class="d-name">{html.escape(str(i.get("order", "")))}</td><td>{name}</td>'
+                        f'<td>{html.escape(str(i.get("outcome", "")))}</td>'
+                        f'<td class="d-note">{html.escape(str(i.get("detail", ""))[:300])}</td></tr>')
+        items_html = ('<p class="health-title" style="color:#215a7c;"><b>Items</b></p><table class="d-table">'
+                      '<tr><th>Order</th><th>Item</th><th>Outcome</th><th>Detail</th></tr>' + "".join(rows) + "</table>")
+
+    bq_dataset = str(alert.get("bq_dataset", ""))
+    environment = "TEST" if "test" in bq_dataset.lower() else ("PRODUCTION" if bq_dataset else "")
+    env_class = "badge-env-test" if environment == "TEST" else "badge-env-prod"
+    board_id = str(alert.get("board_id", ""))
+    context = {
+        "alert_date": str(alert.get("date", "")),
+        "gcp_project": str(alert.get("gcp_project", "")),
+        "bq_dataset": bq_dataset,
+        "board_name": str(alert.get("board_name") or board_id),
+        "board_url": f"https://voxnutrition-company.monday.com/boards/{board_id}",
+        "status_label": status_label,
+        "status_class": status_class,
+        "environment_badge_html": f' <span class="badge {env_class}">{html.escape(environment)}</span>' if environment else "",
+        "in_view": str(alert.get("in_view", "—")),
+        "new_rows": str(alert.get("new_rows", "—")),
+        "created": str(alert.get("created", "—")),
+        "not_clean": str(alert.get("not_clean", "—")),
+        "summary": summary,
+        "actions_html": actions_html,
+        "changes_html": changes_html,
+        "items_html": items_html,
+        "run_id": str(alert.get("run_id", "")),
+        "execution_name": str(alert.get("execution_name") or "local"),
+        "company_name": os.environ.get("COMPANY_NAME", "Vox Nutrition"),
+    }
+    html_content = _render_template(_load_template("label_push_alert.html"), context)
+    text = [f"Label Design push — {context['alert_date']}", status_label, "", summary, ""]
+    for p in problems:
+        text += [f"- {p.get('text', '')}", f"  What to do: {p.get('action', '')}"]
+    if changes:
+        text += ["", "Label changes made:"] + [f"- {c}" for c in changes]
+    if items:
+        text += ["", "Items:"] + [f"- {i.get('order', '')} {i.get('name', '')}: {i.get('outcome', '')} "
+                                  f"{i.get('detail', '')} {i.get('url', '')}".rstrip() for i in items]
+    text += ["", f"Board: {context['board_url']}", f"Run: {context['run_id']}"]
+    subject = f"[Plex ETL] - Sales: Label Design push — {context['alert_date']}"
+    return subject, html_content, "\n".join(text) + "\n"
+
+
+def send_push_alert(alert: Dict[str, object]) -> bool:
+    config = _sendgrid_config()
+    if config is None:
+        return False
+    subject, html_content, text_content = render_push_alert(alert)
+    _send(config, subject, html_content, text_content)
+    return True

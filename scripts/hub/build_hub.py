@@ -15,7 +15,8 @@ Reads only what's in the repo, so re-run it after any report change:
   reports/plex_sql/*.sql                Plex SQL Developer equivalents
   docs/reports/*.md                     business-facing report docs
   catalog/full_schema_catalog.csv       column names/types of every Plex view
-  docs/hub/platform.json                jobs, schedules, probe, infra, history
+  docs/hub/platform.json                jobs, schedules, probe, infra, history, the Label Design tab
+  docs/hub/label_design_colours.json    Label Design colour catalog (scripts/hub/label_colours.py)
   scripts/board/board_data.py           scorecard tiles, decisions, forms, glossary (the Migration Board's content)
   docs/hub/field_manual.json            scorecard teardowns, traps, risks, Plex glossary (Field Manual snapshot)
   docs/hub/data_snapshot.json           (optional, gitignored) row counts, sample rows, run logs, figure values (scripts/hub/snapshot_data.py)
@@ -282,6 +283,9 @@ def main():
         "other_inputs": sorted(other_inputs.values(), key=lambda o: o["name"]),
         "platform": platform,
         "scorecard": scorecard,
+        # the Label Design tab: platform.json's hand-written part plus the colour
+        # catalog written by scripts/hub/label_colours.py
+        "label_colours": json.loads(read(ROOT / "docs" / "hub" / "label_design_colours.json") or "{}"),
         "snapshot": {},
     }
     # live data, refreshed only by scripts/hub/snapshot_data.py; never in the committed page
@@ -289,7 +293,7 @@ def main():
 
     template = read(ROOT / "scripts" / "hub" / "template.html")
     mermaid = platform.get("mermaid", {})
-    for key in ("architecture", "env_paths", "probe_flow", "dispatch_sequence", "deploy_flow"):
+    for key in ("architecture", "env_paths", "probe_flow", "dispatch_sequence", "deploy_flow", "label_design_flow"):
         src = mermaid.get(key, "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         template = template.replace(f"<!--MERMAID:{key}-->", src)
     page = lambda d: template.replace("/*__HUB_DATA__*/", json.dumps(d, ensure_ascii=False).replace("</", "<\\/"))

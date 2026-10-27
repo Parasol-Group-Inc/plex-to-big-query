@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Bottling open jobs with orders: upload its view SQL
+
+### Fixed
+- `terraform/main.tf` had no `google_storage_bucket_object` for `sql/bottling_job_open_with_orders_view.sql`, so the file never reached GCS while `work_orders.yaml` (prod and test, live since 2026-10-26 21:54 UTC) pointed at it. Every `plex-etl-work-orders` run since then ended PARTIAL with a 404 on that SQL, and the probe logged it `inconclusive`. Added the upload; a check of every `sql_file:` in `reports/*.yaml` and `reports/test/*.yaml` against Terraform found no other gap.
+
 ## 2026-10-27 (dev) - Weekly snapshots of the BigQuery-only tables
 
 ### Added

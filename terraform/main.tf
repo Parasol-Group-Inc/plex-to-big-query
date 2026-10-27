@@ -4698,6 +4698,13 @@ resource "google_storage_bucket_object" "bottling_job_open_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "bottling_job_open_with_orders_view_sql" {
+  name         = "sql/bottling_job_open_with_orders_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/bottling_job_open_with_orders_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "inventory_valuation_total_view_sql" {
   name         = "sql/inventory_valuation_total_view.sql"
   bucket       = google_storage_bucket.report_configs.name

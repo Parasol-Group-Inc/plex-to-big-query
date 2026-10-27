@@ -407,7 +407,7 @@ resource "google_cloud_run_v2_job" "etl" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -597,7 +597,7 @@ resource "google_cloud_run_v2_job" "etl_test" {
       max_retries = 1
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -797,7 +797,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -934,7 +934,7 @@ resource "google_cloud_run_v2_job" "etl_work_orders_test" {
       max_retries = 1
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout     = "1200s"
+      timeout = "1200s"
     }
   }
 
@@ -6223,5 +6223,19 @@ resource "google_cloud_scheduler_job" "etl_dispatcher" {
       service_account_email = google_service_account.etl.email
       audience              = "https://${var.gcp_region}-${var.gcp_project}.cloudfunctions.net/etl-dispatcher"
     }
+  }
+}
+
+# Weekly snapshots of the BigQuery-only tables (no Plex source, no copy in git) into
+# voxdatalake.Backups, 90-day expiry. The table list lives in backup_snapshots.sql.
+# Monday 06:00 UTC, as the ETL service account (project-wide dataEditor + jobUser).
+resource "google_bigquery_data_transfer_config" "backup_snapshots_weekly" {
+  display_name         = "backup_snapshots_weekly"
+  location             = "US"
+  data_source_id       = "scheduled_query"
+  schedule             = "every monday 06:00"
+  service_account_name = google_service_account.etl.email
+  params = {
+    query = file("${path.module}/backup_snapshots.sql")
   }
 }

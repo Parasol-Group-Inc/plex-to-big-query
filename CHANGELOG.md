@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Weekly snapshots of the BigQuery-only tables
+
+### Added
+- Scheduled query `backup_snapshots_weekly` (Terraform `google_bigquery_data_transfer_config`, runs as the ETL service account, Mondays 06:00 UTC). It snapshots the 31 tables listed in `terraform/backup_snapshots.sql` into `voxdatalake.Backups` as `<Dataset>__<table>_<YYYYMMDD>`, expiring after 90 days; a snapshot that already exists for the day is skipped. Add a table to the list in that file to cover it. The SQL was run once by hand and works. `docs/OPERATIONS.md` "Backups" updated.
+
 ## 2026-10-27 (dev) - Backups: Terraform state versioned, BigQuery-only tables snapshotted
 
 ### Added

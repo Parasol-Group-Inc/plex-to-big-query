@@ -120,20 +120,21 @@ cfg AS (
   FROM rules
 ),
 
--- NetSuite figures: newest row per NetSuite item, then newest per Plex part so two
--- NetSuite items pointing at one part never double the join.
+-- NetSuite figures: newest row per NetSuite item, then ONE row per Plex part. Two NetSuite
+-- items can be the same material (e.g. two Inositol codes pointing at one Plex part): their
+-- usage ADDS, the reorder point takes the larger, the figures date from the older of the two.
 ns AS (
-  SELECT part_no, ns_avg_daily_usage, ns_reorder_point, as_of_date
+  SELECT
+    part_no,
+    SUM(ns_avg_daily_usage) AS ns_avg_daily_usage,
+    MAX(ns_reorder_point)   AS ns_reorder_point,
+    MIN(as_of_date)         AS as_of_date
   FROM (
-    SELECT part_no, ns_avg_daily_usage, ns_reorder_point, as_of_date,
-           ROW_NUMBER() OVER (PARTITION BY part_no ORDER BY updated_at DESC) AS rn
-    FROM (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY ns_item_id ORDER BY updated_at DESC) AS k
-      FROM `{gcp_project}.{dataset}.msl_item_inputs`
-    )
-    WHERE k = 1 AND NOT IFNULL(is_deleted, FALSE) AND IFNULL(part_no, '') != ''
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY ns_item_id ORDER BY updated_at DESC) AS k
+    FROM `{gcp_project}.{dataset}.msl_item_inputs`
   )
-  WHERE rn = 1
+  WHERE k = 1 AND NOT IFNULL(is_deleted, FALSE) AND IFNULL(part_no, '') != ''
+  GROUP BY part_no
 ),
 
 -- One row per PART NUMBER. Plex holds two Part_Keys per number (the stocked one carries the

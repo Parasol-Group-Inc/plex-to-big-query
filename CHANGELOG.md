@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - Approaching MSL: NetSuite items that share a Plex part add up
+
+### Changed
+- `approaching_msl_view.sql`: when two NetSuite items map to one Plex part (7 parts, e.g. two Inositol codes), their usage now adds instead of one being dropped; the reorder point takes the larger and the as-of date the older. PlexProd dry run with the corrected 10-27 seed (75 mappings fixed): 990 parts, 585 on NetSuite usage (was 523), 331 with no usage (was 370).
+
 ## 2026-10-26 (dev) - Approaching MSL: one row per part number
 
 ### Fixed

@@ -737,7 +737,7 @@ Code is on GitHub (every branch pushed). Terraform state lives in `gs://voxdatal
 - **Restore one (to a new table, then compare before swapping):** `bq cp -f voxdatalake:Backups.PlexOps__etl_schedule_20261027 voxdatalake:PlexOps.etl_schedule_restored`
 - **Take a fresh one:** `bq cp --snapshot --expiration=7776000 voxdatalake:PlexProd.safety_incidents voxdatalake:Backups.PlexProd__safety_incidents_<YYYYMMDD>`
 - **Not covered:** the manual-data app's Google Sheet is the record for its tables (the BigQuery tables mirror it), and the three Apps Script projects hold their own deployed copies.
-- **Not yet scheduled:** snapshots are taken by hand; they go stale until a recurring job exists.
+- **Weekly:** scheduled query `backup_snapshots_weekly` takes a fresh snapshot of every covered table each Monday 06:00 UTC. The table list is `terraform/backup_snapshots.sql`; add a table there to cover it.
 
 ## Data Safety Guards
 

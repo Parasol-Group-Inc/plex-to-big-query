@@ -729,6 +729,16 @@ from the primary folder. `terraform.tfvars` exists only there.
 
 ---
 
+## Backups
+
+Code is on GitHub (every branch pushed). Terraform state lives in `gs://voxdatalake-terraform-state`, which has object versioning on since 2026-10-27 (not Terraform-managed). Tables that exist only in BigQuery, with no Plex source and no copy in git, are snapshotted into `voxdatalake.Backups` as `<Dataset>__<table>_<YYYYMMDD>`, expiring after 90 days. BigQuery time travel alone reaches back only 7 days.
+
+- **List them:** `bq ls --project_id=voxdatalake Backups`
+- **Restore one (to a new table, then compare before swapping):** `bq cp -f voxdatalake:Backups.PlexOps__etl_schedule_20261027 voxdatalake:PlexOps.etl_schedule_restored`
+- **Take a fresh one:** `bq cp --snapshot --expiration=7776000 voxdatalake:PlexProd.safety_incidents voxdatalake:Backups.PlexProd__safety_incidents_<YYYYMMDD>`
+- **Not covered:** the manual-data app's Google Sheet is the record for its tables (the BigQuery tables mirror it), and the three Apps Script projects hold their own deployed copies.
+- **Not yet scheduled:** snapshots are taken by hand; they go stale until a recurring job exists.
+
 ## Data Safety Guards
 
 These are enforced by `main.py` (added in the 2026-07-14 code review — see [archive/CODE_REVIEW_2026-07-14.md](archive/CODE_REVIEW_2026-07-14.md)):

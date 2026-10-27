@@ -10,6 +10,8 @@ only and was never deployed.
 |---|---|---|---|
 | **Goals** | three tabs — Sales, Production, Revenue | `scorecard_goals_app` | Targets are negotiated, not recorded |
 | **Safety incidents** | one tab | `safety_incidents` | Not in Plex at all; "days without an incident" counts from these |
+| **MSL inputs** (2026-10-26) | one tab, CSV upload | `msl_item_inputs` | NetSuite usage and reorder point per part, until Plex has the history. Rows need the exact Plex part number; each upload is all-or-nothing |
+| **MSL rules** (2026-10-26) | one tab | `msl_rules` | Thresholds for Approaching MSL (defaults live in `approaching_msl_view.sql`, a row only overrides). Four prefilled inputs, one Save; only changed rules are written. The inputs tab shows a panel of what the report flags |
 
 The three goal tabs are a **presentation split only** (asked for by Jennilyn,
 2026-09-21) — they all write the one `goals` dataset, one sheet tab and one
@@ -37,6 +39,30 @@ hides and the form still works.
 Adding another is a **registry entry in `Code.gs` plus `setupSheets()`** — no
 new form code. If adding one requires editing `Index.html`, the registry is
 missing a field type; that's the thing to fix.
+
+## Goal seed: `scorecard_goals` → the goals tab
+
+`scorecard_goals` in `BQ_DATASET` is the **seed table**. When goals change
+outside the app, reseed it from the originals (rep goals:
+`VoxScorecardsLive.sales_goals`; company-wide sales goal: the live Looker view
+`VoxScorecardsLive.vw_sales_mtd_vs_goal`), and the app picks it up:
+
+- **Automatically.** `pushAll()`, the hourly trigger, first runs `seedGoals_()`.
+  It acts only when the seed's newest `updated_at` differs from the last seed it
+  applied to this dataset (Script Property `GOALS_SEEDED_<dataset>`). So a
+  reseed reaches the sheet, and BigQuery, within the hour, and switching
+  `BQ_DATASET` to `PlexProd` seeds there on the first push.
+- **Immediately.** Run `importLegacyGoals()` from the editor.
+
+**Newest edit wins, as in the resolver.** Per (metric, month, scope), a seed row
+is appended only when the app has no row for that key, or its newest row is
+older and holds a different figure. The appended row keeps the seed's own
+`updated_at`, so an edit made in the app afterwards stays on top, and
+re-running changes nothing.
+
+Reseeded 2026-10-19 in `PlexTest` and `PlexProd` (backups:
+`scorecard_goals_backup_20261019`). Revenue and production goals there are
+still the labelled 2026-10-02 placeholders: no original exists in BigQuery.
 
 ## How it flows, and why the sheet is in the middle
 

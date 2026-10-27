@@ -1,6 +1,6 @@
 # Vox | Allocation Report
 
-> **Status:** ✅ Deployed to test 2026-08-21, decided open-status proxy — currently returns 0 rows on real data, needs a data-scientist/Vox answer · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Deployed to test 2026-08-21, decided open-status proxy — currently returns 0 rows on real data, needs a data-scientist/Vox answer · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 
@@ -16,6 +16,8 @@ Starts from the same sales order and line data already extracted for the Sales O
 
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_order_allocation_report`
 - **SQL:** `reports/sql/sales_order_allocation_view.sql`
+
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
 
 ## Flags and open questions
 

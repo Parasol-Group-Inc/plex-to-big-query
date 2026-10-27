@@ -1,6 +1,6 @@
 # Label Design Queue
 
-> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** hourly, 5 AM - 5 PM Mountain, Monday to Friday (only does real work when something changed)
+> **Status:** ✅ Built and verified — `label_design_report` exists and is queryable on `PlexTest` · **Category:** Sales · **Runs:** every 15 minutes, 5 AM - 5:45 PM Mountain, Monday to Friday (only does real work when something changed)
 
 ## What this tells you
 
@@ -23,27 +23,46 @@ This is **not** a scorecard tile. It is an operational queue, which is why it
 runs through the working day rather than riding the overnight `sales_orders`
 pipeline.
 
-**It runs every hour, 5 AM - 5 PM Mountain, Monday to Friday**, so an order that
-reaches Label Design at 10:20 is on the board by 10:35 instead of waiting for
-the afternoon run. The 5 AM start is the team's own: they are working the queue
-before most of the office. The last board update of the day is 5:35 PM.
+**It checks every 15 minutes, 5 AM - 5:45 PM Mountain, Monday to Friday**,
+and a check that finds new orders sends them to Monday straight away (since
+22 Oct; before that it checked hourly and pushed at :35). The copy of Plex we
+read runs about 50 minutes behind Plex itself, so an order approved at 10:20
+is first seen around 11:15 and is normally on the board by about 11:20, about
+an hour after approval instead of about two. The 5 AM start is the team's own:
+they are working the queue before most of the office. The last check of the
+day is 5:45 PM, and a 6:05 PM sweep pushes anything a failed push left behind.
 
 **Nothing runs at weekends** (since 2026-10-02). Orders entered on Saturday or
 Sunday reach the board on Monday at 5 AM, ahead of the team arriving — so the
 queue is current when anyone looks at it, even though it sat still for two
 days. If the team ever starts working weekends, this needs changing back.
-Most of those hourly runs do almost nothing: the job first asks Plex which
-order lines are sitting on the Label Design status, and if that list is exactly
-what it was last time, it stops there — no extraction, no board update, no
-email. The same is true of the push: it checks in BigQuery whether anything is
-new before it opens Monday at all. A quiet hour costs seconds; an hour with a
-new order does the full job.
+Most of those runs do almost nothing: the job first asks Plex which
+order lines are sitting on the Label Design status, and which of their orders
+are approved (Pending Fulfillment, dated on or after 18 Oct). If both lists
+are exactly what they were last time, it stops there — no extraction, no board update, no
+email, and no push. The push itself also checks in BigQuery whether anything
+is new before it opens Monday at all. A quiet check costs seconds; one that
+finds a new order does the full job.
 
 ## How it's built (high level)
 
 Takes every sales-order release whose status is **Label Design**, keeps only
 those on an order that is **Pending Fulfillment** (approved), and limits it to
-orders placed in the **last 14 days**. Each row is joined to the customer, the
+orders placed **on or after 18 October 2026**.
+
+That date is the go-live cutoff, added 2026-10-19. Prod Plex also holds
+orders migrated in for cutover, dated back to early October, and the team works
+those by hand, so they must not appear on Monday. The 38 items pushed on the
+morning of the 19th stay on the board, because the cutoff only stops new ones.
+
+There used to be a 14-day window on the order date as well. It was removed on
+2026-10-20 because it dropped orders that sales approved more than two weeks
+after they were entered, and nothing flagged them. An order now reaches Monday
+whenever it becomes approved, however long that takes. It still appears only
+once: the push skips anything already on the board or in its log, including
+items the team has deleted.
+
+Each row is joined to the customer, the
 customer part number and description, the job note, and the sales reps on the
 order.
 
@@ -63,9 +82,14 @@ list would miss exactly the new orders it exists to surface.
 - **Pipeline:** `reports/label_design.yaml` → `label_design_report`
 - **SQL:** `reports/sql/label_design_view.sql`
 - **Downstream (from 2026-09-24):** `label_design_service/push.py`, a Cloud Run
-  job (`plex-etl-label-design-push-test`) that runs 30 minutes after the ETL and
-  creates one Monday item per new order **line**, straight from this view. No
-  sheet in between. It is test-only for now (PlexTest → the "Plex Import" board).
+  job that runs 30 minutes after the ETL and creates one Monday item per new
+  order **line**, straight from this view. No sheet in between. There are two
+  jobs: the **test** job `plex-etl-label-design-push-test` (PlexTest → the "Plex
+  Import" board), which runs today, and the **prod** job
+  `plex-etl-label-design-push` with scheduler `plex-label-design-push-sync`,
+  built 2026-10-08 but **paused** — it stays dormant until the 19 Oct cutover,
+  when the prod scheduler is un-paused and the test one is paused/repointed
+  (PlexProd → the same board; the view picks `vox.on.plex.com` for PlexProd).
 - **Retired:** `deploy/archive/label_design_sync/`, the Apps Script that used to decide
   which rows were new, write them to a sheet, and push them to Monday.
 
@@ -73,9 +97,13 @@ list would miss exactly the new orders it exists to surface.
 
 Each new row becomes an item in the **New from Plex** group, named after the
 label SKU. The job fills: Customer Name, Date (order date), Description, Sales
-Order ("Sales Order #…"), Email, Phone Number, **Item** (the Plex part number,
-in the text column next to Design File), **Sales Rep** (the BDM, see below) and
-LCR. The Job Note is split in two, in the view itself (`reason_code`,
+Order ("Sales Order #…"), Email, Phone Number, **Item** (the customer part
+number in the text column next to Design File, falling back to the Plex part
+number when a line has no customer part), **Sales Rep** (the BDM) and **Inside
+Sales Rep** (the AM) — see below, **Priority** (the line's Priority dropdown
+from Plex, see below) and LCR. The item is named after the customer part, or,
+when a line has none (component lines), the full part line
+("`12014-01VOXNU-1 Rev 00 | POWDER | Bacopa…`"). The Job Note is split in two, in the view itself (`reason_code`,
 `reason_code_label`, `memo`): if its **first character is a digit 1–6**, that
 digit sets Reason Code and the rest becomes Memo; otherwise the whole note goes
 to Memo and **nothing is written to Reason Code**. A note that only *starts
@@ -125,6 +153,16 @@ made from the order number + the Plex order line (one item per line, so an order
 with five lines gives five items, even when two lines carry the same part). A line whose code is already
 on the board is never pushed again. Every push is also recorded in the
 `label_design_push_log` table.
+
+**Moving an item to Design & QA no longer loses its details** (since 22 Oct).
+When Ashley moves an item from "Plex Import" to "Design & QA", Monday reuses
+the column matching chosen the first time anyone moved items between those
+boards, and that matching drops some fields. Bottle Material arrived blank on
+every move, even though both boards have the same labels. A separate job checks
+every 15 minutes (5 AM - 6:45 PM, weekdays). Within about 15 minutes of an
+item arriving on Design & QA, it puts back any field the push sent that came
+across blank. It does this **once per item**. It never changes a field that
+already has a value, and if the team clears a field later it stays cleared.
 
 ## Flags and open questions
 
@@ -193,12 +231,40 @@ on the board is never pushed again. Every push is also recorded in the
   has separately signalled that bottle/label size probably don't need a Monday
   column at all. Not wired to any Monday push yet either way.
 
-- **Sales Rep = the BDM (2026-09-24).** Plex's "BDM" fields are the order's
-  **Inside Salesperson** (`Sales_v_PO.Inside_Sales`) and the customer's
-  **Assigned To** (`Common_v_Customer.Assigned_To`). The `bdm` column takes
-  the order's first, then the customer's. The older primary/secondary
-  salesperson table is only a last fallback, because Plex barely uses it: one
-  row in all of test. All three are still exposed separately.
+- **Priority (2026-10-07).** The Priority dropdown (`PriorityKey`) shown on each
+  sales-order line in Plex. It lives on the **release**
+  (`Sales_v_Release.Priority_Key`), not the PO line, and is resolved to its word
+  through the `Part_v_Priority` lookup (its **`Description`** column — the lookup's
+  own `Priority` column is just a sort number). `Sales_v_Priority` replicates
+  empty on this tenant and is *not* the source. Keys: `1601 High`, `1602 Medium`,
+  `1603 Low`, `1912 RUSH`, `1915 Blanket`. The value carried is the one on the
+  release the row collapses to (the earliest-due), so it matches the Due Date
+  shown. The five Plex options are **RUSH / High / Medium / Low / Blanket**, and
+  the word is pushed **verbatim** to Monday's **Priority** status column — the
+  board's Priority column is set up to carry those same five labels. In PlexTest
+  every release currently sits on one priority key, so only one of the five is
+  exercised on test until production data varies. Because the push only ever
+  *creates* items, a priority changed on an order already on the board is not
+  re-pushed.
+
+- **Sales Rep = the BDM, Inside Sales Rep = the AM (corrected 2026-10-08).**
+  Plex splits the rep into two different people, and they had been conflated —
+  the "Sales Rep" column was really the AM. They are now separate:
+  - **Sales Rep → the BDM** (Business Development Manager / **Outside
+    Salesperson**): the rep *to the customer*. This comes from the
+    **Order Salesperson** table (`Sales_v_Order_Salesperson`), *not* the order's
+    "Outside Sales" field — that field replicates as empty even when Plex shows a
+    BDM on screen. If an order lists more than one outside rep, one is chosen
+    deterministically. (`Sales_v_PO.Outside_Sales` and `Assigned_To2` are kept
+    only as last-resort fallbacks, and are empty on test data.)
+  - **Inside Sales Rep → the AM** (Account Manager / **Inside Salesperson**):
+    the order's **Inside Sales** (`Sales_v_PO.Inside_Sales`), else the
+    customer's **Assigned To** (`Common_v_Customer.Assigned_To`).
+
+  Verified on PlexTest order 16: Inside Sales Rep **Ashley Quintana**, Sales Rep
+  **Janet Pacheco** — matching the Plex order screen. Orders with no outside rep
+  assigned leave Sales Rep blank. The board needs an **Inside Sales Rep** status
+  column, or that field is logged and skipped.
 
 - **Two sheet columns cannot be filled from Plex.** *WO Number* (the work order
   is raised *after* the label is approved, so an order still in Label Design

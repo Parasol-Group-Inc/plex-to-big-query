@@ -1,6 +1,6 @@
 # Vox | Open Sales Orders
 
-> **Status:** ✅ Built and deployed 2026-08-10, confirmed against real data · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-10, confirmed against real data · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 
@@ -19,8 +19,12 @@ Starts from the exact same sales order data as the main [Sales Orders report](sa
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_open_report`
 - **SQL:** `reports/sql/sales_orders_open_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
+- **Quotes are not open orders (2026-10-19, Jennilyn).** Orders in a quote-stage status (Plex's "Quote", flagged `Is_Quote`) are excluded, alongside Closed and Cancelled. On go-live day that removed 136 of 600 prod lines (78 orders).
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 - **⚠ Fixed 2026-09-24 — `product_group` was always blank.** It joined `Part_v_Part.Part_Group_Key` to `Part_v_Part_Product_Group`, which is empty in test and prod. It now reads Plex's **Part Group** (`Part_v_Part_Group`: Capsule, Softgel, Label, Packaging, ...), which is what that key actually points at; the column keeps its `product_group` name. `raw_Part_v_Part_Group` is newly extracted by this pipeline, and the fix was **deployed 2026-09-25** — the names show in PlexTest now, and in PlexProd from the first scheduled Sales Orders run after the deploy.
 - Otherwise none known. The "open" filter logic was confirmed with the report requester and cross-checked against Plex's status-code reference before deployment, and the report was verified against a real Cloud Run execution (3 open orders out of 4 total on the test tenant) rather than just a schema-level check.
 

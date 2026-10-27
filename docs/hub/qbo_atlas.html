@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  QBO Pipeline Atlas - standalone copy, travels with the repo.
+  Open it by double-clicking; no server, no build step, no dependencies.
+  Every diagram is inline SVG and all styling is inline, so the only thing
+  that needs the internet is the Google Fonts stylesheet - offline it falls
+  back to the declared system stacks and stays perfectly readable.
+  Also published at claude.ai for sharing; this file is the source of truth.
+-->
+<title>QBO Pipeline Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  :root {
+    --ink: #0f1720;
+    --paper: #f8f7f4;
+    --surface: #ffffff;
+    --surface-sunk: #f1efe9;
+    --line: #d8d4c9;
+    --line-soft: #e7e3da;
+    --muted: #5b6672;
+    --pipe: #0d5c63;
+    --pipe-soft: #e2eeed;
+    --fault: #b4332a;
+    --fault-soft: #f8e7e4;
+    --verified: #3f6f3a;
+    --verified-soft: #e7efe4;
+    --token: #a35a00;
+    --token-soft: #fbeedd;
+
+    --display: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+    --measure: 68ch;
+    --wide: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e8e6e1;
+      --paper: #12171c;
+      --surface: #1a2027;
+      --surface-sunk: #161c22;
+      --line: #333c46;
+      --line-soft: #262e36;
+      --muted: #98a2ae;
+      --pipe: #5cc9c2;
+      --pipe-soft: #16302f;
+      --fault: #f08a7e;
+      --fault-soft: #331d1a;
+      --verified: #8fc084;
+      --verified-soft: #1c2a1a;
+      --token: #e0a355;
+      --token-soft: #33240f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #e8e6e1;
+    --paper: #12171c;
+    --surface: #1a2027;
+    --surface-sunk: #161c22;
+    --line: #333c46;
+    --line-soft: #262e36;
+    --muted: #98a2ae;
+    --pipe: #5cc9c2;
+    --pipe-soft: #16302f;
+    --fault: #f08a7e;
+    --fault-soft: #331d1a;
+    --verified: #8fc084;
+    --verified-soft: #1c2a1a;
+    --token: #e0a355;
+    --token-soft: #33240f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .col { max-width: var(--measure); margin-inline: auto; }
+  .band { max-width: var(--wide); margin-inline: auto; }
+
+  /* ---- masthead ---------------------------------------------------- */
+  header.mast {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 56px 0 28px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pipe);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.6rem, 6vw, 4.1rem);
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.14rem;
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0 0 30px;
+  }
+
+  .statusbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .statusbar div {
+    flex: 1 1 150px;
+    padding: 10px 14px;
+    border-right: 1px solid var(--line-soft);
+    background: var(--surface);
+  }
+  .statusbar div:last-child { border-right: 0; }
+  .statusbar b {
+    display: block;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+  .statusbar span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .ok b { color: var(--verified); }
+
+  /* ---- page map ---------------------------------------------------- */
+  nav.map {
+    max-width: var(--wide);
+    margin: 0 auto 12px;
+    padding: 22px 0 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 2px 28px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  nav.map a {
+    color: var(--ink);
+    text-decoration: none;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  nav.map a:hover { color: var(--pipe); border-bottom-color: var(--pipe); }
+  nav.map a i { color: var(--muted); font-style: normal; }
+
+  /* ---- sections ---------------------------------------------------- */
+  section { padding-top: 62px; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 0.5em;
+    font-weight: 500;
+    color: var(--pipe);
+    vertical-align: 0.55em;
+    margin-right: 0.5em;
+    letter-spacing: 0.06em;
+  }
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.18rem;
+    letter-spacing: -0.005em;
+    margin: 34px 0 8px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin: 0 0 22px;
+  }
+  p { margin: 0 0 16px; }
+  a { color: var(--pipe); }
+  code, .mono { font-family: var(--mono); font-size: 0.885em; }
+  code {
+    background: var(--surface-sunk);
+    padding: 0.1em 0.34em;
+    border-radius: 2px;
+    word-break: break-word;
+  }
+  strong { font-weight: 600; }
+
+  /* ---- figures ----------------------------------------------------- */
+  figure {
+    margin: 32px 0;
+    max-width: var(--wide);
+    margin-inline: auto;
+  }
+  .figframe {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 26px 22px 18px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; width: 100%; max-width: 100%; height: auto; min-width: 620px; }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 12px;
+    max-width: 74ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  svg text { font-family: var(--mono); fill: currentColor; }
+  .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.3; }
+  .box-sunk { fill: var(--surface-sunk); stroke: var(--line); stroke-width: 1.2; }
+  .flow { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .lbl { font-size: 12px; }
+  .lbl-sm { font-size: 10.5px; fill: var(--muted); }
+  .ttl { font-size: 12.5px; font-weight: 600; }
+  .pipe { color: var(--pipe); }
+  .fault { color: var(--fault); }
+  .verified { color: var(--verified); }
+  .tok { color: var(--token); }
+
+  /* ---- tables ------------------------------------------------------ */
+  .tablewrap { overflow-x: auto; margin: 26px 0; max-width: var(--wide); margin-inline: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    font-weight: 500;
+  }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; padding-right: 22px; }
+  th.num { text-align: right; padding-right: 22px; }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  /* ---- callouts ---------------------------------------------------- */
+  .note {
+    border-left: 3px solid var(--pipe);
+    background: var(--pipe-soft);
+    padding: 14px 18px;
+    margin: 24px 0;
+    border-radius: 0 3px 3px 0;
+  }
+  .note.trap { border-left-color: var(--fault); background: var(--fault-soft); }
+  .note.good { border-left-color: var(--verified); background: var(--verified-soft); }
+  .note.tokenote { border-left-color: var(--token); background: var(--token-soft); }
+  .note p:last-child { margin-bottom: 0; }
+  .note .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+  }
+  .note.trap .tag { color: var(--fault); }
+  .note .tag { color: var(--pipe); }
+  .note.good .tag { color: var(--verified); }
+  .note.tokenote .tag { color: var(--token); }
+
+  /* ---- quirk list -------------------------------------------------- */
+  ol.quirks, ul.plain { padding-left: 0; list-style: none; margin: 26px 0; }
+  ol.quirks > li {
+    border-top: 1px solid var(--line);
+    padding: 18px 0 16px;
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+  }
+  ol.quirks > li:last-child { border-bottom: 1px solid var(--line); }
+  ol.quirks .q {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fault);
+    font-weight: 600;
+    padding-top: 3px;
+  }
+  ol.quirks h4 {
+    font-family: var(--body);
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 0 0 5px;
+  }
+  ol.quirks p { margin: 0 0 8px; font-size: 14.5px; }
+  ol.quirks p:last-child { margin-bottom: 0; }
+  .cost {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .cost b { color: var(--fault); font-weight: 600; }
+
+  /* ---- runbook ----------------------------------------------------- */
+  ol.run { counter-reset: step; list-style: none; padding-left: 0; margin: 28px 0; }
+  ol.run > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 26px 46px;
+    border-left: 1px solid var(--line);
+    margin-left: 12px;
+  }
+  ol.run > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  ol.run > li::before {
+    content: counter(step);
+    position: absolute;
+    left: -13px;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--pipe);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+  }
+  ol.run h4 { font-family: var(--body); font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+  ol.run p { font-size: 14.5px; margin: 0 0 10px; }
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 0 0 12px;
+    line-height: 1.5;
+  }
+
+  footer {
+    max-width: var(--wide);
+    margin: 84px auto 0;
+    padding-top: 26px;
+    border-top: 2px solid var(--ink);
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  footer b { color: var(--ink); }
+
+  :focus-visible { outline: 2px solid var(--pipe); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header class="mast">
+  <p class="eyebrow">Parasol Group · parasoldatalake · verified 2026-09-10</p>
+  <h1>QBO Pipeline Atlas</h1>
+  <p class="standfirst">Seven Cloud Run services pull QuickBooks Online data into BigQuery for four client
+  companies. Two Python modules do all of it. This is how the pieces fit, why the OAuth tokens are the
+  dangerous part, and every trap that has actually drawn blood.</p>
+  <div class="statusbar">
+    <div class="ok"><b>7 / 7</b><span>pipelines green</span></div>
+    <div><b>4</b><span>companies live</span></div>
+    <div class="ok"><b>06:00</b><span>monitor runs daily</span></div>
+    <div class="ok"><b>104</b><span>tests passing</span></div>
+    <div><b>2</b><span>OAuth incidents</span></div>
+  </div>
+</header>
+
+<nav class="map">
+  <a href="#fleet"><span>The fleet</span><i>01</i></a>
+  <a href="#creds"><span>Six kinds of credential</span><i>02</i></a>
+  <a href="#window"><span>The rotation window</span><i>03</i></a>
+  <a href="#reuse"><span>Why rotation looks broken</span><i>04</i></a>
+  <a href="#land"><span>How data lands</span><i>05</i></a>
+  <a href="#kaya"><span>Kaya's two homes</span><i>06</i></a>
+  <a href="#odd"><span>What Kaya's numbers say</span><i>07</i></a>
+  <a href="#traps"><span>Quirks &amp; traps</span><i>08</i></a>
+  <a href="#runbook"><span>When it breaks</span><i>09</i></a>
+</nav>
+
+<!-- ================= 01 FLEET ================= -->
+<section id="fleet">
+  <div class="col">
+    <h2><span class="num">01</span>The fleet</h2>
+    <p class="kicker">Two modules · six services · three companies</p>
+    <p>There is no company-specific code anywhere in this project. Which company a service syncs is decided
+    entirely by its environment variables — the realm ID and the three Secret Manager names. That is why
+    adding Kaya and ODF took configuration and no code at all.</p>
+    <p><b>But not every client gets every pipeline.</b> Two of the four record no invoices worth syncing, and
+    they are the two largest. Which QBO entity carries a company's revenue is a fact about its business model
+    and has to be measured — see section 07.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 468" role="img" aria-label="Seven Cloud Scheduler jobs across four companies trigger seven Cloud Run services, which run just two Python modules; ODF has a reports service only. Each service reads its company identity from environment variables and talks to Secret Manager, Intuit, BigQuery and SendGrid.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <text class="lbl-sm" x="0" y="12">CLOUD SCHEDULER — 7 jobs, one per service, every slot staggered so no two share a refresh-token minute</text>
+
+        <!-- scheduler chips, grouped by company -->
+        <g class="pipe">
+          <rect class="box" x="0" y="22" width="224" height="46" rx="3"></rect>
+          <text class="ttl" x="12" y="40">PCS</text>
+          <text class="lbl-sm" x="52" y="40">reports 01:00 · invoices 05:00</text>
+          <text class="lbl-sm" x="12" y="58">two pipelines · realm 1231460…</text>
+
+          <rect class="box" x="240" y="22" width="224" height="46" rx="3"></rect>
+          <text class="ttl" x="252" y="40">QSM</text>
+          <text class="lbl-sm" x="296" y="40">invoices 01:30 · reports 02:00</text>
+          <text class="lbl-sm" x="252" y="58">two pipelines · realm 1935145…</text>
+
+          <rect class="box" x="480" y="22" width="224" height="46" rx="3"></rect>
+          <text class="ttl" x="492" y="40">Kaya</text>
+          <text class="lbl-sm" x="536" y="40">reports 04:00 · invoices 04:30</text>
+          <text class="lbl-sm" x="492" y="58">two pipelines · realm 1935147…</text>
+        </g>
+        <g class="fault">
+          <rect class="box" x="720" y="22" width="220" height="46" rx="3"></rect>
+          <text class="ttl" x="732" y="40">ODF</text>
+          <text class="lbl-sm" x="774" y="40">reports 03:00 only</text>
+          <text class="lbl-sm" x="732" y="58">no invoice sync — see §07</text>
+        </g>
+
+        <!-- arrows down to modules -->
+        <g class="pipe">
+          <path class="flow" d="M 112 68 L 112 88 L 200 88 L 200 108" marker-end="url(#a)"></path>
+          <path class="flow" d="M 352 68 L 352 88 L 270 88 L 270 108" marker-end="url(#a)"></path>
+          <path class="flow" d="M 592 68 L 592 96 L 330 96 L 330 108" marker-end="url(#a)"></path>
+          <path class="flow" d="M 132 68 L 132 78 L 620 78 L 620 108" marker-end="url(#a)"></path>
+          <path class="flow" d="M 372 68 L 372 82 L 680 82 L 680 108" marker-end="url(#a)"></path>
+          <path class="flow" d="M 612 68 L 612 86 L 740 86 L 740 108" marker-end="url(#a)"></path>
+          <text class="lbl-sm" x="392" y="104">HTTPS + OIDC token</text>
+        </g>
+        <g class="fault">
+          <path class="flow" d="M 830 68 L 830 92 L 790 92 L 790 108" marker-end="url(#a)"></path>
+        </g>
+
+        <!-- modules -->
+        <rect class="box" x="120" y="108" width="270" height="66" rx="3"></rect>
+        <text class="ttl" x="134" y="132">qbo_invoice_sync.py</text>
+        <text class="lbl-sm" x="134" y="150">entry point: run · 3 services</text>
+        <text class="lbl-sm" x="134" y="165">PCS · QSM · Kaya invoices</text>
+
+        <rect class="box" x="560" y="108" width="270" height="66" rx="3"></rect>
+        <text class="ttl" x="574" y="132">qbo_reports.py</text>
+        <text class="lbl-sm" x="574" y="150">entry point: run_reports · 4 services</text>
+        <text class="lbl-sm" x="574" y="165">P&amp;L · Balance Sheet · AR/AP aging</text>
+
+        <!-- env var determinant -->
+        <g class="tok">
+          <rect class="box" x="120" y="196" width="710" height="52" rx="3" stroke-dasharray="4 3"></rect>
+          <text class="ttl" x="134" y="216">company identity comes from env vars only</text>
+          <text class="lbl-sm" x="134" y="234">QBO_COMPANY_ID · SECRET_CLIENT_ID · SECRET_CLIENT_SECRET · SECRET_REFRESH_TOKEN · BQ_DATASET · BQ_TABLE</text>
+        </g>
+        <path class="flow" d="M 475 174 L 475 196" marker-end="url(#a)"></path>
+
+        <!-- externals -->
+        <path class="flow" d="M 475 248 L 475 276" marker-end="url(#a)"></path>
+        <line class="flow" x1="90" y1="290" x2="860" y2="290"></line>
+        <g>
+          <path class="flow" d="M 90 290 L 90 316" marker-end="url(#a)"></path>
+          <path class="flow" d="M 347 290 L 347 316" marker-end="url(#a)"></path>
+          <path class="flow" d="M 604 290 L 604 316" marker-end="url(#a)"></path>
+          <path class="flow" d="M 860 290 L 860 316" marker-end="url(#a)"></path>
+        </g>
+
+        <g class="tok">
+          <rect class="box" x="0" y="316" width="182" height="72" rx="3"></rect>
+          <text class="ttl" x="12" y="338">Secret Manager</text>
+          <text class="lbl-sm" x="12" y="356">reads client id + secret</text>
+          <text class="lbl-sm" x="12" y="371">writes rotated token</text>
+        </g>
+        <g class="pipe">
+          <rect class="box" x="256" y="316" width="182" height="72" rx="3"></rect>
+          <text class="ttl" x="268" y="338">Intuit / QBO API</text>
+          <text class="lbl-sm" x="268" y="356">token refresh, then</text>
+          <text class="lbl-sm" x="268" y="371">invoices or 4 reports</text>
+        </g>
+        <g class="verified">
+          <rect class="box" x="513" y="316" width="182" height="72" rx="3"></rect>
+          <text class="ttl" x="525" y="338">BigQuery</text>
+          <text class="lbl-sm" x="525" y="356">MERGE invoices ·</text>
+          <text class="lbl-sm" x="525" y="371">append reports · audit row</text>
+        </g>
+        <g>
+          <rect class="box" x="769" y="316" width="171" height="72" rx="3"></rect>
+          <text class="ttl" x="781" y="338">SendGrid</text>
+          <text class="lbl-sm" x="781" y="356">summary email on</text>
+          <text class="lbl-sm" x="781" y="371">every run, pass or fail</text>
+        </g>
+
+        <g class="fault">
+          <rect class="box-sunk" x="0" y="416" width="940" height="44" rx="3"></rect>
+          <text class="lbl" x="14" y="437">Naming trap: the service called</text>
+          <text class="lbl" x="222" y="437" font-weight="600">qsm-reports</text>
+          <text class="lbl" x="320" y="437">is the QSM</text>
+          <text class="lbl" x="392" y="437" font-style="italic">invoice</text>
+          <text class="lbl" x="440" y="437">sync. QSM's reports service is</text>
+          <text class="lbl" x="672" y="437" font-weight="600">qsm-financial-reports</text>
+          <text class="lbl-sm" x="14" y="452">Kept because renaming a live service is not worth the churn. New services (kaya-invoices, kaya-reports) are named honestly.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Seven services, two modules.</b> The dashed band is the whole trick: every service runs
+    identical code and differs only in the environment variables it was deployed with. Before 2026-09-06 the
+    invoice sync existed as two near-identical files, and a one-line OAuth fix had to be found and applied in
+    each copy. ODF is drawn in the fault colour because it is the exception that proves the rule — the module
+    would run there perfectly and return nothing.</figcaption>
+  </figure>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Company</th><th>Realm ID</th><th>Secrets</th><th>Dataset</th><th class="num">Invoices</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>PCS — Premium Container Supply<br><span class="cost">legal: Herbal Extracts LLC.</span></td><td class="mono">123146088264819</td><td class="mono">qbo-*</td><td class="mono">pcs_quickbooks_prod</td><td class="num">86</td></tr>
+        <tr><td>QSM — Quality Supplement Manufacturing</td><td class="mono">193514514441684</td><td class="mono">qsm-qbo-*</td><td class="mono">qsm_quickbooks_prod</td><td class="num">41</td></tr>
+        <tr><td>Kaya Naturals<br><span class="cost">legal: Kaya Naturals, LLC.</span></td><td class="mono">193514758651234</td><td class="mono">kaya-qbo-*</td><td class="mono">kaya_quickbooks_prod</td><td class="num">68</td></tr>
+        <tr><td>ODF — On Demand Fulfillment<br><span class="cost">reports only, by measurement</span></td><td class="mono">123145824327969</td><td class="mono">odf-qbo-*</td><td class="mono">odf_quickbooks_prod</td><td class="num">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note trap">
+      <span class="tag">four digits apart</span>
+      <p>QSM is <code>193514514441684</code>. Kaya is <code>193514758651234</code>. A realm ID tells you nothing
+      about itself, so every credential load ends with a <code>companyinfo</code> call that prints the company
+      name. If the name is not the one you expected, stop — you are one step from writing another client's books
+      into this one's dataset.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 CREDENTIALS ================= -->
+<section id="creds">
+  <div class="col">
+    <h2><span class="num">02</span>Six kinds of credential</h2>
+    <p class="kicker">Lifetimes from ten minutes to never</p>
+    <p>Nearly every incident here came from mistaking one of these for another. They are not
+    interchangeable and they do not live in the same places.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Credential</th><th>Lives</th><th>Uses</th><th>Stored where</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>Authorization code</b></td><td class="mono" style="color:var(--fault)">~10 minutes</td><td>exactly one</td><td>nowhere — spend it or lose it</td></tr>
+        <tr><td><b>Access token</b></td><td class="mono">60 minutes</td><td>many, within the hour</td><td>nowhere — deliberately disposable</td></tr>
+        <tr><td><b>Refresh token</b></td><td class="mono" style="color:var(--token)">100 days</td><td>one rotation at a time</td><td>Secret Manager, one per company</td></tr>
+        <tr><td><b>Client ID + secret</b></td><td class="mono">no expiry</td><td>unlimited</td><td>Secret Manager</td></tr>
+        <tr><td><b>Google OIDC token</b></td><td class="mono">minted per request</td><td>one call</td><td>nowhere — automatic</td></tr>
+        <tr><td><b>SendGrid API key</b></td><td class="mono">no expiry</td><td>unlimited</td><td>Secret Manager, shared</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 300" role="img" aria-label="An Intuit dump yields a realm ID, a client pair and an auth code; the auth code is exchanged for an access token and a refresh token; secret values go only to Secret Manager while Cloud Run environment variables carry only secret names; logs, git and the build context never receive credentials.">
+        <defs>
+          <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <rect class="box" x="0" y="60" width="176" height="96" rx="3"></rect>
+        <text class="ttl" x="12" y="82">Intuit dump</text>
+        <text class="lbl-sm" x="12" y="100">*.env, local, gitignored</text>
+        <text class="lbl-sm" x="12" y="118">realm ID · Basic blob</text>
+        <text class="lbl-sm" x="12" y="133">auth code</text>
+        <text class="lbl-sm" x="12" y="148">(access tokens: discard)</text>
+
+        <g class="pipe">
+          <path class="flow" d="M 176 108 L 236 108" marker-end="url(#b)"></path>
+          <text class="lbl-sm" x="180" y="100">exchange</text>
+          <rect class="box" x="236" y="60" width="188" height="96" rx="3"></rect>
+          <text class="ttl" x="248" y="82">/oauth2/v1/tokens</text>
+          <text class="lbl-sm" x="248" y="100">grant_type=</text>
+          <text class="lbl-sm" x="248" y="115">authorization_code</text>
+          <text class="lbl-sm" x="248" y="136">returns BOTH tokens</text>
+        </g>
+
+        <g class="tok">
+          <path class="flow" d="M 424 90 L 500 90" marker-end="url(#b)"></path>
+          <text class="lbl-sm" x="430" y="82">refresh token</text>
+          <rect class="box" x="500" y="60" width="200" height="60" rx="3"></rect>
+          <text class="ttl" x="512" y="82">Secret Manager</text>
+          <text class="lbl-sm" x="512" y="100">the only durable home</text>
+        </g>
+
+        <g>
+          <path class="flow" d="M 424 130 L 500 130" marker-end="url(#b)"></path>
+          <text class="lbl-sm" x="430" y="148">access token</text>
+          <rect class="box-sunk" x="500" y="132" width="200" height="42" rx="3"></rect>
+          <text class="lbl" x="512" y="152">held in memory only</text>
+          <text class="lbl-sm" x="512" y="166">gone when the container dies</text>
+        </g>
+
+        <g class="verified">
+          <path class="flow" d="M 700 90 L 764 90" marker-end="url(#b)"></path>
+          <text class="lbl-sm" x="704" y="82">by NAME</text>
+          <rect class="box" x="764" y="52" width="176" height="76" rx="3"></rect>
+          <text class="ttl" x="776" y="74">Cloud Run env var</text>
+          <text class="lbl-sm" x="776" y="92">SECRET_REFRESH_TOKEN</text>
+          <text class="lbl-sm" x="776" y="107">= kaya-qbo-refresh-token</text>
+          <text class="lbl-sm" x="776" y="122">a name, never a value</text>
+        </g>
+
+        <!-- never crosses -->
+        <g class="fault">
+          <line class="flow" x1="0" y1="220" x2="940" y2="220" stroke-dasharray="7 5"></line>
+          <text class="lbl" x="0" y="212" font-weight="600">credential values never cross this line</text>
+          <rect class="box-sunk" x="0" y="238" width="220" height="46" rx="3"></rect>
+          <text class="lbl" x="12" y="258">Cloud Logging</text>
+          <text class="lbl-sm" x="12" y="274">far wider read audience</text>
+          <rect class="box-sunk" x="240" y="238" width="220" height="46" rx="3"></rect>
+          <text class="lbl" x="252" y="258">git / GitHub</text>
+          <text class="lbl-sm" x="252" y="274">*.env is ignored wholesale</text>
+          <rect class="box-sunk" x="480" y="238" width="220" height="46" rx="3"></rect>
+          <text class="lbl" x="492" y="258">Cloud Build context</text>
+          <text class="lbl-sm" x="492" y="274">.gcloudignore, verified</text>
+          <rect class="box-sunk" x="720" y="238" width="220" height="46" rx="3"></rect>
+          <text class="lbl" x="732" y="258">commit messages</text>
+          <text class="lbl-sm" x="732" y="274">names only, never values</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Values go to Secret Manager; names go to Cloud Run.</b> Secret names are not secrets and are
+    documented freely. The dashed line is enforced in code — <code>update_secret()</code> deliberately never logs a
+    token even when it fails, because a logged credential outlives the incident that justified it.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 03 THE WINDOW ================= -->
+<section id="window">
+  <div class="col">
+    <h2><span class="num">03</span>The rotation window</h2>
+    <p class="kicker">The mechanism behind both outages</p>
+    <p>Intuit invalidates the old refresh token <em>the instant</em> it issues a new one. If the replacement is
+    not stored, the pipeline is locked out permanently — recoverable only by a human re-authorising in the OAuth
+    Playground. Everything between the refresh and the write is a window in which the only live copy of a
+    credential exists in memory.</p>
+    <p>On 2026-09-02 a read timeout on a <em>cosmetic company-name lookup</em> landed in that window, and four
+    pipelines stayed down for six days.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 336" role="img" aria-label="Before the fix, fetch_company_info sat between the token refresh and the secret write, creating a window in which a timeout caused a permanent lockout. After the fix, the write happens immediately after the refresh and the window is closed.">
+        <defs>
+          <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+          <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="2.2" opacity="0.28"></line>
+          </pattern>
+        </defs>
+
+        <!-- BEFORE -->
+        <g class="fault">
+          <text class="ttl" x="0" y="16">BEFORE — until 2026-09-06</text>
+          <rect x="150" y="30" width="330" height="82" fill="url(#hatch)" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"></rect>
+          <text class="lbl" x="166" y="48" font-weight="600">lockout window</text>
+          <text class="lbl-sm" x="166" y="62">old token already dead,</text>
+          <text class="lbl-sm" x="166" y="76">new one only in memory</text>
+
+          <rect class="box" x="0" y="66" width="150" height="46" rx="3"></rect>
+          <text class="lbl" x="12" y="86">refresh_access</text>
+          <text class="lbl" x="12" y="100">_token()</text>
+
+          <path class="flow" d="M 150 89 L 196 89" marker-end="url(#c)"></path>
+          <rect class="box" x="196" y="66" width="176" height="46" rx="3"></rect>
+          <text class="lbl" x="208" y="86">fetch_company</text>
+          <text class="lbl" x="208" y="100">_info()  ← 20s timeout</text>
+
+          <path class="flow" d="M 372 89 L 418 89" marker-end="url(#c)"></path>
+          <rect class="box" x="418" y="66" width="150" height="46" rx="3"></rect>
+          <text class="lbl" x="430" y="86">update_secret()</text>
+          <text class="lbl-sm" x="430" y="100">never reached</text>
+
+          <path class="flow" d="M 284 112 L 284 146" marker-end="url(#c)"></path>
+          <text class="lbl" x="298" y="132" font-weight="600">ReadTimeout, not an HTTPError</text>
+          <rect class="box" x="196" y="146" width="372" height="44" rx="3"></rect>
+          <text class="lbl" x="208" y="166" font-weight="600">run aborts · new token lost · 6 days down</text>
+          <text class="lbl-sm" x="208" y="181">only a human in the OAuth Playground can recover this</text>
+        </g>
+
+        <line x1="0" y1="216" x2="940" y2="216" stroke="var(--line)" stroke-width="1"></line>
+
+        <!-- AFTER -->
+        <g class="verified">
+          <text class="ttl" x="0" y="242">NOW — the write moved one step left</text>
+
+          <rect class="box" x="0" y="258" width="150" height="46" rx="3"></rect>
+          <text class="lbl" x="12" y="278">refresh_access</text>
+          <text class="lbl" x="12" y="292">_token()</text>
+
+          <path class="flow" d="M 150 281 L 186 281" marker-end="url(#c)"></path>
+          <rect class="box" x="186" y="258" width="164" height="46" rx="3" stroke-width="2.2"></rect>
+          <text class="lbl" x="198" y="278" font-weight="600">update_secret()</text>
+          <text class="lbl-sm" x="198" y="292">retries 5× with backoff</text>
+
+          <path class="flow" d="M 350 281 L 386 281" marker-end="url(#c)"></path>
+          <rect class="box" x="386" y="258" width="176" height="46" rx="3"></rect>
+          <text class="lbl" x="398" y="278">fetch_company_info()</text>
+          <text class="lbl-sm" x="398" y="292">now swallows every failure</text>
+
+          <path class="flow" d="M 562 281 L 598 281" marker-end="url(#c)"></path>
+          <rect class="box" x="598" y="258" width="160" height="46" rx="3"></rect>
+          <text class="lbl" x="610" y="278">fetch + MERGE</text>
+          <text class="lbl-sm" x="610" y="292">the actual work</text>
+
+          <text class="lbl" x="782" y="272" font-weight="600">window: closed</text>
+          <text class="lbl-sm" x="782" y="288">nothing that can raise</text>
+          <text class="lbl-sm" x="782" y="302">sits inside it</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>The entire fix is one reordering.</b> Verified in production on 2026-09-09 at 14:53 UTC, where
+    the logs read <code>Rotated secret</code> <em>before</em> <code>Fetched 53 invoices</code> — the new token
+    reached Secret Manager before any other network call could fail.</figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>What the code now guarantees</h3>
+    <ul class="plain">
+      <li>— The persist is the <b>very next statement</b> after the refresh. Nothing that can raise goes between.</li>
+      <li>— <code>update_secret()</code> retries 5× with backoff, because it is itself inside the window.</li>
+      <li>— An <code>invalid_grant</code> retries <b>once</b>, after re-reading the secret: two services can share
+      one token, and the other may have legitimately rotated it a second ago. Unchanged value means a dead token,
+      and we stop rather than loop.</li>
+      <li>— A persist that ultimately fails <b>does not abort the run</b>. We are locked out of the next run
+      either way; the access token is good for an hour, so today's data still lands.</li>
+      <li>— The token is <b>never logged</b>, even on total failure.</li>
+    </ul>
+    <div class="note good">
+      <span class="tag">tested, not hoped</span>
+      <p><code>tests/test_token_rotation.py</code> and <code>tests/test_token_resilience.py</code> fail if any of
+      the five guarantees above is undone. The <code>invalid_grant</code> retry and the persist-failure path have
+      never fired in production — which is the desired state.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 REUSE WINDOW ================= -->
+<section id="reuse">
+  <div class="col">
+    <h2><span class="num">04</span>Why rotation looks broken when it isn't</h2>
+    <p class="kicker">Intuit's 24-hour reuse window</p>
+    <p>Refresh twice inside about a day and Intuit hands back the <em>same</em> refresh token. So
+    <code>token_rotated = false</code> is the normal case, not a symptom — and a daily schedule sits right on the
+    boundary, which is why rotation happens intermittently.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 244" role="img" aria-label="A timeline showing three refreshes: two within 24 hours of the token being issued return the same token and write nothing, while a refresh past 24 hours receives a new token and writes a new secret version.">
+        <defs>
+          <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <!-- reuse band -->
+        <g class="tok">
+          <rect x="70" y="52" width="560" height="46" fill="currentColor" opacity="0.1" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"></rect>
+          <text class="lbl" x="82" y="72" font-weight="600">~24h reuse window — same token returned</text>
+          <text class="lbl-sm" x="82" y="88">the pipeline correctly writes nothing, and reports token_rotated = false</text>
+        </g>
+
+        <!-- axis -->
+        <line class="flow" x1="70" y1="140" x2="900" y2="140" marker-end="url(#d)"></line>
+        <text class="lbl-sm" x="856" y="160">time</text>
+
+        <!-- events -->
+        <g class="tok">
+          <circle cx="70" cy="140" r="5.5" fill="currentColor"></circle>
+          <text class="lbl" x="46" y="182" font-weight="600">issued</text>
+          <text class="lbl-sm" x="30" y="196">09-08 14:46</text>
+          <text class="lbl-sm" x="42" y="210">version 83</text>
+        </g>
+        <g>
+          <circle cx="330" cy="140" r="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"></circle>
+          <text class="lbl" x="300" y="182">refresh</text>
+          <text class="lbl-sm" x="286" y="196">09-09 01:00</text>
+          <text class="lbl-sm" x="282" y="210">no write · +10h</text>
+        </g>
+        <g>
+          <circle cx="520" cy="140" r="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"></circle>
+          <text class="lbl" x="490" y="182">refresh</text>
+          <text class="lbl-sm" x="476" y="196">09-09 05:00</text>
+          <text class="lbl-sm" x="472" y="210">no write · +14h</text>
+        </g>
+        <g class="verified">
+          <line class="flow" x1="630" y1="112" x2="630" y2="168" stroke-dasharray="3 3"></line>
+          <text class="lbl-sm" x="596" y="106">24h boundary</text>
+          <circle cx="700" cy="140" r="6.5" fill="currentColor"></circle>
+          <text class="lbl" x="664" y="182" font-weight="600">NEW token</text>
+          <text class="lbl-sm" x="660" y="196">09-09 14:53</text>
+          <text class="lbl-sm" x="646" y="210">version 84 written · +24.1h</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>The success check people reach for is wrong.</b> "A new secret version appeared" proves nothing
+    on the day a token is restored — the reuse window means no version <em>should</em> appear. Check the load
+    counts and the audit row instead.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 05 HOW DATA LANDS ================= -->
+<section id="land">
+  <div class="col">
+    <h2><span class="num">05</span>How data lands</h2>
+    <p class="kicker">A truncating load quietly deleted history for months</p>
+    <p>The invoice query filters on <code>MetaData.LastUpdatedTime</code> — a 30-day window by default, at
+    Jennilyn's request. That window was never the bug. Pairing it with a <code>WRITE_TRUNCATE</code> load was:
+    every run <em>replaced</em> the whole table with just the recently-modified slice, so anything untouched for a
+    month was deleted. QSM was down to 39 rows; PCS to 33.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 330" role="img" aria-label="Before, a windowed fetch loaded straight into the target with WRITE_TRUNCATE and destroyed older rows. Now the fetch loads into a staging table, is deduplicated on invoice_id, and is merged into the target, so 33 existing rows plus 53 fetched rows yields 86.">
+        <defs>
+          <marker id="e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <!-- BEFORE -->
+        <g class="fault">
+          <text class="ttl" x="0" y="16">BEFORE</text>
+          <rect class="box" x="0" y="32" width="150" height="52" rx="3"></rect>
+          <text class="lbl" x="12" y="52">QBO fetch</text>
+          <text class="lbl-sm" x="12" y="68">30-day window</text>
+          <text class="lbl-sm" x="12" y="79">53 rows</text>
+
+          <path class="flow" d="M 150 58 L 210 58" marker-end="url(#e)"></path>
+          <text class="lbl-sm" x="152" y="50">WRITE_TRUNCATE</text>
+
+          <rect class="box" x="210" y="32" width="176" height="52" rx="3"></rect>
+          <text class="lbl" x="222" y="52" font-weight="600">pcs_invoices</text>
+          <text class="lbl-sm" x="222" y="68">= 53 rows. Everything</text>
+          <text class="lbl-sm" x="222" y="79">older is gone.</text>
+
+          <text class="lbl" x="402" y="56">33 pre-existing rows</text>
+          <text class="lbl" x="402" y="72" font-weight="600">deleted, silently, nightly</text>
+        </g>
+
+        <line x1="0" y1="112" x2="940" y2="112" stroke="var(--line)" stroke-width="1"></line>
+
+        <!-- NOW -->
+        <g class="verified">
+          <text class="ttl" x="0" y="140">NOW</text>
+
+          <rect class="box" x="0" y="156" width="140" height="56" rx="3"></rect>
+          <text class="lbl" x="12" y="176">QBO fetch</text>
+          <text class="lbl-sm" x="12" y="192">same 30-day window</text>
+          <text class="lbl-sm" x="12" y="204">53 rows</text>
+
+          <path class="flow" d="M 140 184 L 190 184" marker-end="url(#e)"></path>
+          <rect class="box" x="190" y="150" width="186" height="68" rx="3" stroke-dasharray="4 3"></rect>
+          <text class="lbl" x="202" y="170" font-weight="600">…_staging_a1b2c3</text>
+          <text class="lbl-sm" x="202" y="186">WRITE_TRUNCATE is safe</text>
+          <text class="lbl-sm" x="202" y="198">here — throwaway table</text>
+          <text class="lbl-sm" x="202" y="211">6h expiry, dropped in finally</text>
+
+          <path class="flow" d="M 376 184 L 426 184" marker-end="url(#e)"></path>
+          <rect class="box" x="426" y="150" width="196" height="68" rx="3"></rect>
+          <text class="lbl" x="438" y="170" font-weight="600">dedup, then MERGE</text>
+          <text class="lbl-sm" x="438" y="186">ROW_NUMBER() PARTITION BY</text>
+          <text class="lbl-sm" x="438" y="198">invoice_id ORDER BY</text>
+          <text class="lbl-sm" x="438" y="211">updated_at DESC</text>
+
+          <path class="flow" d="M 622 184 L 672 184" marker-end="url(#e)"></path>
+          <text class="lbl-sm" x="626" y="176">ON invoice_id</text>
+          <rect class="box" x="672" y="150" width="182" height="68" rx="3" stroke-width="2.2"></rect>
+          <text class="lbl" x="684" y="170" font-weight="600">pcs_invoices</text>
+          <text class="lbl-sm" x="684" y="186">33 existing + 53 merged</text>
+          <text class="lbl" x="684" y="204" font-weight="600">= 86 rows, all distinct</text>
+        </g>
+
+        <g class="pipe">
+          <rect class="box-sunk" x="0" y="252" width="940" height="66" rx="3"></rect>
+          <text class="lbl" x="14" y="274" font-weight="600">Why the dedup is mandatory, not defensive</text>
+          <text class="lbl-sm" x="14" y="292">QBO paginates by OFFSET, so an invoice modified mid-run can appear on two pages — and BigQuery aborts a MERGE whose source</text>
+          <text class="lbl-sm" x="14" y="307">matches a target row more than once. Newest updated_at wins. Jennilyn asked for deduplication; this is where it is enforced.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>33 + 53 = 86.</b> Measured on 2026-09-09, when PCS ran for the first time in 61 days: a fetch
+    covering a completely different window left the older invoices untouched. Under the old loader that table
+    would now hold 53 rows.</figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="note tokenote">
+      <span class="tag">per-client decision</span>
+      <p><code>DAYS_BACK</code> is 30 for PCS and QSM — Jennilyn's requirement, not a default to tune. Kaya runs
+      <code>0</code> (fetch everything, nightly) because its data feeds a marketing scorecard instead, and at 68
+      invoices a full fetch is a single page. The payoff: an exact mirror of QBO that cannot drift. A windowed
+      fetch permanently misses any edit made while the pipeline was down, which after a six-day outage is not
+      hypothetical.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06 KAYA TWO HOMES ================= -->
+<section id="kaya">
+  <div class="col">
+    <h2><span class="num">06</span>Kaya's two homes</h2>
+    <p class="kicker">Views over one copy, not a second pipeline</p>
+    <p>Kaya's QBO data also has to be reachable from <code>marketing-dashboard-506920</code>, alongside its
+    Shopify, Walmart and ShipStation datasets. Both projects are BigQuery multi-region <code>US</code>, which
+    makes the cheap answer the correct one.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 288" role="img" aria-label="Chosen design: the marketing dashboard project holds six views reading the single copy of Kaya's tables in parasoldatalake. Rejected design: a second pipeline writing a second copy, where two services share one refresh token across projects and neither can see the other's rotation.">
+        <defs>
+          <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <!-- CHOSEN -->
+        <g class="verified">
+          <text class="ttl" x="0" y="16">CHOSEN — views over one copy</text>
+          <rect class="box" x="0" y="32" width="188" height="62" rx="3"></rect>
+          <text class="lbl" x="12" y="52">kaya-invoices</text>
+          <text class="lbl" x="12" y="68">kaya-reports</text>
+          <text class="lbl-sm" x="12" y="84">one refresh token, one rotation</text>
+
+          <path class="flow" d="M 188 63 L 246 63" marker-end="url(#f)"></path>
+          <text class="lbl-sm" x="192" y="55">MERGE / append</text>
+
+          <rect class="box" x="246" y="32" width="230" height="62" rx="3" stroke-width="2.2"></rect>
+          <text class="lbl" x="258" y="52" font-weight="600">parasoldatalake</text>
+          <text class="lbl-sm" x="258" y="68">kaya_quickbooks_prod · US</text>
+          <text class="lbl-sm" x="258" y="84">the single copy of the data</text>
+
+          <path class="flow" d="M 476 63 L 534 63" marker-end="url(#f)"></path>
+          <text class="lbl-sm" x="480" y="55">6 views</text>
+
+          <rect class="box" x="534" y="32" width="250" height="62" rx="3"></rect>
+          <text class="lbl" x="546" y="52" font-weight="600">marketing-dashboard-506920</text>
+          <text class="lbl-sm" x="546" y="68">kaya_quickbooks_prod · US</text>
+          <text class="lbl-sm" x="546" y="84">looks local · cannot drift</text>
+
+          <text class="lbl-sm" x="800" y="52">no extra storage,</text>
+          <text class="lbl-sm" x="800" y="66">current the moment</text>
+          <text class="lbl-sm" x="800" y="80">the sync finishes</text>
+        </g>
+
+        <line x1="0" y1="124" x2="940" y2="124" stroke="var(--line)" stroke-width="1"></line>
+
+        <!-- REJECTED -->
+        <g class="fault">
+          <text class="ttl" x="0" y="152">REJECTED — a second pipeline</text>
+          <rect class="box" x="0" y="168" width="188" height="62" rx="3" stroke-dasharray="4 3"></rect>
+          <text class="lbl" x="12" y="188">a second service</text>
+          <text class="lbl-sm" x="12" y="204">in the other project</text>
+          <text class="lbl-sm" x="12" y="219">its own copy of the secret</text>
+
+          <path class="flow" d="M 94 230 L 94 258" marker-end="url(#f)" stroke-dasharray="4 3"></path>
+          <path class="flow" d="M 340 94 L 340 118" stroke-dasharray="4 3"></path>
+
+          <rect class="box" x="246" y="168" width="230" height="62" rx="3" stroke-dasharray="4 3"></rect>
+          <text class="lbl" x="258" y="188">a second copy of the rows</text>
+          <text class="lbl-sm" x="258" y="204">two datasets that can</text>
+          <text class="lbl-sm" x="258" y="219">silently disagree</text>
+
+          <rect class="box-sunk" x="0" y="258" width="784" height="30" rx="3"></rect>
+          <text class="lbl" x="12" y="278" font-weight="600">unrecoverable: each rotation invalidates the other's stored token, and across projects neither side can see it happen</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Two services for the same company may share one token; two projects may not.</b> A schedule
+    stagger cannot help when neither side can observe the other's rotation — so the second project reads, and
+    never refreshes.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 07 ODD STUFF ================= -->
+<section id="odd">
+  <div class="col">
+    <h2><span class="num">07</span>What Kaya's numbers actually say</h2>
+    <p class="kicker">The oddest thing in the whole project</p>
+    <p>Kaya's invoice pipeline is technically perfect and almost empty: 68 invoices worth $30k across eight
+    years, one of them in 2026 for $951. Meanwhile the P&amp;L shows $2.24M of income this year. Marketplace
+    sellers get paid at the point of sale, so there is nothing to invoice — the revenue is in
+    <code>SalesReceipt</code>, and AR Aging returns zero rows because no receivable ever exists.</p>
+  </div>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 940 300" role="img" aria-label="Bar chart of Kaya's 2026 revenue by marketplace: Amazon 1,574,016 dollars, eBay 362,275, TikTok Shop 236,319, Walmart 83,723, Faire Wholesale 6,558. Amazon, eBay and TikTok are not tracked in the marketing warehouse; Walmart is.">
+        <!-- scale: 0 to 1.6M over 640px starting x=190 -->
+        <g class="lbl-sm">
+          <line x1="190" y1="246" x2="850" y2="246" stroke="var(--line)" stroke-width="1"></line>
+          <line x1="190" y1="30" x2="190" y2="246" stroke="var(--line)" stroke-width="1"></line>
+          <text x="190" y="264" text-anchor="middle">$0</text>
+          <text x="355" y="264" text-anchor="middle">$400k</text>
+          <text x="520" y="264" text-anchor="middle">$800k</text>
+          <text x="685" y="264" text-anchor="middle">$1.2M</text>
+          <text x="850" y="264" text-anchor="middle">$1.6M</text>
+          <line x1="355" y1="30" x2="355" y2="246" stroke="var(--line-soft)" stroke-width="1"></line>
+          <line x1="520" y1="30" x2="520" y2="246" stroke="var(--line-soft)" stroke-width="1"></line>
+          <line x1="685" y1="30" x2="685" y2="246" stroke="var(--line-soft)" stroke-width="1"></line>
+          <line x1="850" y1="30" x2="850" y2="246" stroke="var(--line-soft)" stroke-width="1"></line>
+        </g>
+
+        <!-- Amazon 1,574,016 -> 649px -->
+        <g class="fault">
+          <rect x="190" y="36" width="649" height="30" fill="currentColor" opacity="0.82"></rect>
+          <text class="lbl" x="182" y="56" text-anchor="end" fill="currentColor">Amazon</text>
+          <text class="lbl" x="829" y="56" text-anchor="end" fill="var(--paper)" font-weight="600">$1,574,016 · 69.6%</text>
+          <text class="lbl-sm" x="0" y="70" fill="currentColor">not in the warehouse</text>
+        </g>
+        <!-- eBay 362,275 -> 149px -->
+        <g class="fault">
+          <rect x="190" y="80" width="149" height="30" fill="currentColor" opacity="0.82"></rect>
+          <text class="lbl" x="182" y="100" text-anchor="end" fill="currentColor">eBay</text>
+          <text class="lbl" x="349" y="100" fill="currentColor">$362,275 · 16.0%</text>
+          <text class="lbl-sm" x="0" y="114" fill="currentColor">not in the warehouse</text>
+        </g>
+        <!-- TikTok 236,319 -> 97px -->
+        <g class="fault">
+          <rect x="190" y="124" width="97" height="30" fill="currentColor" opacity="0.82"></rect>
+          <text class="lbl" x="182" y="144" text-anchor="end" fill="currentColor">TikTok Shop</text>
+          <text class="lbl" x="297" y="144" fill="currentColor">$236,319 · 10.4%</text>
+          <text class="lbl-sm" x="0" y="158" fill="currentColor">not in the warehouse</text>
+        </g>
+        <!-- Walmart 83,723 -> 35px -->
+        <g class="verified">
+          <rect x="190" y="168" width="35" height="30" fill="currentColor" opacity="0.82"></rect>
+          <text class="lbl" x="182" y="188" text-anchor="end" fill="currentColor">Walmart</text>
+          <text class="lbl" x="235" y="188" fill="currentColor">$83,723 · 3.7%</text>
+          <text class="lbl-sm" x="0" y="202" fill="currentColor">tracked · dataset exists</text>
+        </g>
+        <!-- Faire 6,558 -> 3px -->
+        <g class="fault">
+          <rect x="190" y="212" width="3" height="30" fill="currentColor" opacity="0.82"></rect>
+          <text class="lbl" x="182" y="232" text-anchor="end" fill="currentColor">Faire</text>
+          <text class="lbl" x="203" y="232" fill="currentColor">$6,558 · 0.3%</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>96% of Kaya's revenue comes from channels the marketing warehouse cannot see.</b> It has
+    datasets for Shopify, Walmart, ShipStation, Mailchimp, LinkedIn and SEMrush — and none for Amazon, eBay or
+    TikTok Shop. Walmart, which it does track, is 3.7%. QBO is currently the only source in either project that
+    sees the other 96%, which makes this feed far more valuable to the scorecard than "financial data" suggests.</figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>ODF is the same lesson, harder</h3>
+    <p>On Demand Fulfillment is the largest client on the platform and records <b>zero revenue documents of any
+    kind</b> — no invoices, no sales receipts, not even a Payment. Its <b>$12,303,996</b> of 2026 revenue arrives
+    as <b>1,010 bank deposits</b>, categorised straight to income with no customer-level document in between.</p>
+    <p>The confirmation is exact: the P&amp;L's month-to-date income is <code>$331,115.46</code>, and September's
+    deposits total <code>$331,115.46</code>. Same money, to the cent.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Client</th><th>Revenue lives in</th><th class="num">2026 revenue</th><th>Invoice sync?</th></tr></thead>
+        <tbody>
+          <tr><td>PCS</td><td class="mono">Invoice</td><td class="num">—</td><td>yes, built</td></tr>
+          <tr><td>QSM</td><td class="mono">Invoice</td><td class="num">—</td><td>yes, built</td></tr>
+          <tr><td>Kaya</td><td class="mono">SalesReceipt</td><td class="num">$2,262,889</td><td>built, near-empty</td></tr>
+          <tr><td>ODF</td><td class="mono">Deposit</td><td class="num">$12,303,996</td><td><b>no — would be empty</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note trap">
+      <span class="tag">before building anything for a new client</span>
+      <p>Run <code>scripts/qbo_entity_survey.py --company &lt;name&gt; --year 2026</code>. Two of four clients do
+      not use invoices at all, and they are the two largest. Kaya's invoice sync was built before the survey
+      existed and carries $951 of a $2.26M year; ODF's was never built, because the survey said it would return
+      nothing. <b>"QuickBooks pipeline" is not one thing.</b></p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08 TRAPS ================= -->
+<section id="traps">
+  <div class="col">
+    <h2><span class="num">08</span>Quirks &amp; traps</h2>
+    <p class="kicker">Every one of these has actually cost time</p>
+  </div>
+
+  <div class="col">
+    <ol class="quirks">
+      <li>
+        <span class="q">01</span>
+        <div>
+          <h4>Two different <code>400</code>s that mean opposite things</h4>
+          <p><code>invalid_client</code> means the client pair is wrong and <b>consumes nothing</b> — your token is
+          still good. <code>invalid_grant</code> means the token is dead and nothing in GCP can fix it. Same status
+          code, no overlap in the fix. Always read the response <em>body</em>, which the app logs on its own line.</p>
+          <p class="cost">cost: <b>the first hour</b> of the September diagnosis</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">02</span>
+        <div>
+          <h4>Never retype a credential — decode the Basic blob</h4>
+          <p>Kaya's dump listed its client ID as text <em>and</em> as base64, and they disagreed: <code>l</code> and
+          <code>I</code> transposed at two positions. The typed one fails <code>invalid_client</code>.</p>
+          <p class="cost">cost: this class of bug has bitten <b>twice</b> — also a <code>2</code>/<code>4</code> typo in July</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">03</span>
+        <div>
+          <h4><code>printf '%s'</code>, never <code>echo</code></h4>
+          <p><code>echo</code> appends a newline, and Intuit rejects the token with <code>invalid_grant</code> —
+          indistinguishable from the bug you are trying to fix.</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">04</span>
+        <div>
+          <h4><code>GOOGLE_FUNCTION_SOURCE</code> persists across redeploys</h4>
+          <p>The buildpack wants a file called <code>main.py</code>. Cloud Run remembers each service's build
+          config, so renaming a module breaks nothing <em>today</em> — and then fails the next deploy, months
+          later, looking for a file that no longer exists.</p>
+          <p class="cost">latent for <b>two months</b> after the July renames</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">05</span>
+        <div>
+          <h4>Streaming inserts don't create their table</h4>
+          <p>The audit row goes in with <code>insert_rows_json</code>, which — unlike a load job — will not create
+          its destination. A missing table meant the audit row vanished with only an error log, so the
+          <em>observability layer</em> was the broken part and nothing reported it. The code now creates the table
+          itself.</p>
+          <p class="cost">cost: <b>weeks</b> of silently lost QSM audit history</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">06</span>
+        <div>
+          <h4>Named time zones drift apart</h4>
+          <p>Three jobs are <code>20:00</code> local across <code>Pacific/Easter</code> and
+          <code>America/Denver</code>. They were simultaneous, then an hour apart after a DST change. Anything
+          sharing a refresh-token secret must stay staggered, so new jobs are pinned to <code>Etc/UTC</code>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">07</span>
+        <div>
+          <h4>Credential files start life exposed</h4>
+          <p>Both ignore files used to list credential files <em>by name</em>, so every new dump was committable
+          and uploadable until someone remembered. <code>full-dump.env</code> arrived that way. Now <code>*.env</code>
+          in both, with an explicit <code>.gcloudignore</code> — without one, exclusions are merely <em>inferred</em>
+          from <code>.gitignore</code>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">08</span>
+        <div>
+          <h4>A service nobody triggers looks healthy</h4>
+          <p><code>quickbooks-prod</code> had no scheduler job and went 61 days without running. A service that
+          never runs never emails a failure, so the absence of runs looked intentional.
+          <code>scripts/pipeline_health.py</code> now flags silence as well as failure — and deliberately flags
+          unscheduled pipelines too, on a longer fuse.</p>
+          <p class="cost">cost: <b>61 days</b> of stale PCS invoices</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">09</span>
+        <div>
+          <h4>Silence is the house failure mode</h4>
+          <p>The SendGrid key died for three weeks while loads succeeded — the only symptom was email that stopped
+          arriving. Then the docs carried it as an open blocker for seven weeks <em>after</em> it was fixed. Verify
+          against the cloud, not the docs.</p>
+          <p>Closed on 2026-09-10: <code>pipeline-monitor</code> now watches for absence as well as failure, and
+          signals twice — an email, and a 500 that Cloud Scheduler records whether or not anyone reads mail.</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">10</span>
+        <div>
+          <h4>Zero rows is not always a failure</h4>
+          <p>Kaya's first run fetched 0 invoices on a 30-day window and 68 on an unbounded one. Nothing had been
+          touched in a month.</p>
+        </div>
+      </li>
+      <li>
+        <span class="q">11</span>
+        <div>
+          <h4>The pipeline a client needs is a measurement, not an assumption</h4>
+          <p>Half the clients here record no invoices worth syncing, and they are the two largest by revenue. An
+          invoice sync for ODF would run flawlessly forever and return an empty table.</p>
+          <p class="cost">cost so far: <b>one pipeline built for the wrong entity</b> (Kaya), before the survey existed</p>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================= 09 RUNBOOK ================= -->
+<section id="runbook">
+  <div class="col">
+    <h2><span class="num">09</span>When it breaks</h2>
+    <p class="kicker">The order matters more than the commands</p>
+
+    <ol class="run">
+      <li>
+        <h4>Read the fleet, not your inbox</h4>
+        <p>Reads BigQuery through ADC, so it survives a <code>gcloud</code> session hitting its reauth wall.
+        Exits non-zero when anything is failed <em>or</em> silent.</p>
+        <pre>python scripts/pipeline_health.py</pre>
+        <p>The same module runs unattended as <code>pipeline-monitor</code> at 06:00 UTC. It emails only when
+        something is wrong, and returns <b>HTTP 500</b> on any problem so Cloud Scheduler records a failed
+        attempt — so its verdict is visible in <code>gcloud scheduler jobs list</code> without trusting the
+        monitor to email about itself.</p>
+      </li>
+      <li>
+        <h4>Read the error body before deciding anything</h4>
+        <p><code>invalid_client</code> and <code>invalid_grant</code> are both <code>400</code> and share no fix.</p>
+        <pre>gcloud logging read 'resource.type="cloud_run_revision"
+  AND resource.labels.service_name="qsm-reports"
+  AND textPayload:"token refresh failed"' \
+  --project=parasoldatalake --limit=5 \
+  --format="value(timestamp,textPayload)"</pre>
+      </li>
+      <li>
+        <h4>Date the outage from the secret's history</h4>
+        <p>The gap in the version list <em>is</em> the timeline.</p>
+        <pre>gcloud secrets versions list qsm-qbo-refresh-token \
+  --project=parasoldatalake --limit=10</pre>
+      </li>
+      <li>
+        <h4>Redeploy first, if the running revision predates the fixes</h4>
+        <p>Deploying needs no valid token. Loading a good token onto vulnerable code risks one slow Intuit night
+        undoing the whole recovery.</p>
+      </li>
+      <li>
+        <h4>Then store the token — as one step</h4>
+        <p>Stores what Intuit <em>returns</em>, not what you pasted, and confirms which company you actually
+        authenticated as. If that name is wrong, stop.</p>
+        <pre>python scripts/restore_qbo_token.py \
+  --secret kaya-qbo-refresh-token \
+  --realm 193514758651234 \
+  --basic-auth '&lt;Basic blob&gt;' \
+  --auth-code '&lt;fresh code, ~10 min fuse&gt;'</pre>
+      </li>
+      <li>
+        <h4>Trigger everything and check load counts</h4>
+        <p>Not secret versions — see section 04.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  <p><b>Where the detail lives.</b> <code>docs/TOKENS.md</code> for every credential ·
+  <code>docs/INCIDENT_AND_CLEANUP_2026-07-02.md</code> for the verified-live config and both post-mortems ·
+  <code>docs/QBO_INVOICE_SYNC.md</code> and <code>docs/QBO_REPORTS.md</code> per module ·
+  <code>docs/CREDENTIAL_HANDOVER.md</code> for onboarding a client's credentials ·
+  <code>docs/KAYA_SCORECARD_FINDINGS.md</code> for the channel analysis ·
+  <code>docs/GCLOUD_CHEATSHEET.md</code> §7b for the lockout playbook.</p>
+  <p>Live configuration is verified with <code>gcloud run services describe</code>. Every incident in this
+  project's history involved a document that had drifted from reality — including, at times, this one.</p>
+</footer>
+</body>
+</html>

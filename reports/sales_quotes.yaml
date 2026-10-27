@@ -22,16 +22,22 @@ description: "Vox | Open Quotes (NetSuite parity) — prod (PlexProd dataset)"
 #   Change SQL    → edit reports/sql/sales_quotes_open_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Sales_v_Quote
     bq_table: raw_Sales_v_Quote
     filter: ""
     date_col: ""
+    probe: [Update_Date, Quote_Key]
 
   - plex_view: Sales_v_Quote_Status
     bq_table: raw_Sales_v_Quote_Status
     filter: ""
     date_col: ""
+    probe: [Quote_Status_Key]
 
 # Common_v_Customer is intentionally NOT extracted here — reuse
 # raw_Common_v_Customer from the sales_orders pipeline.

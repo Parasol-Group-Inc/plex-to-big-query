@@ -6,7 +6,7 @@ Quick-reference commands for every common error. Copy-paste ready — substitute
 
 > **Deploying a fix:** anything Terraform manages (`terraform.tfvars`, `main.tf`, `reports/` YAML/SQL) goes out with `./scripts/deploy.sh` from the primary folder on a clean, pushed `main` — never a bare `terraform apply`. Terraform's own deploy guard refuses plan/apply anywhere else. See `CONTRIBUTING.md` § "Branches, folders and locks".
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **27** live jobs (13 pipelines × prod/test, plus the Label Design push job). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **30** jobs (14 pipelines × prod/test, plus the two Label Design push jobs). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -156,6 +156,17 @@ separate entitlements). Contact Plex Support and ask them to confirm ODBC
 report-session access is enabled for the account on the affected
 environment. Rule out the four causes above first if this recurs somewhere
 new, since a fresh occurrence could have a different root cause.
+
+**2026-10-26: 2404 can also be transient.** Prod refused sessions in two windows
+(about 9:20-9:33 AM MDT, and before that a connection-reset outage from Sun 1:00 PM
+to Mon ~6:10 AM MDT) and then accepted them again with no change on our side. In the
+9:20 window the same account connected from a laptop (9:50 AM) and from Cloud Run
+(9:51 AM), and the test host accepted sessions throughout, including 5:07 AM while
+prod was failing. So before concluding the account lost ODBC access: check whether
+other jobs fail in the same window (`PlexProd.job_run_log`, `PlexOps.etl_dispatch_log`),
+and try the Docker health check against the prod host
+(`docker compose run --rm -e PLEX_HOST=vox.odbc.plex.com etl`). Do not retry by hand
+in a loop; the dispatcher's outage breaker already re-runs held jobs once a canary connects.
 
 ### `HY000 [3059] Token is expired / invalid`
 
@@ -311,7 +322,7 @@ docker push us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:$SHA --region=us-central1
 ```
-or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 27 jobs in one build (see "Full rebuild procedure" below).
+or run `deploy/cloudbuild.yaml`'s `deploy-all` step, which does this for all 30 jobs in one build (see "Full rebuild procedure" below).
 
 ### `denied: Unauthenticated request`
 
@@ -438,7 +449,7 @@ Use this when you've changed Python code, the email template, or Python dependen
 # 1. Refuses unless you're on a clean main (an image deploy has no guard inside it)
 ./scripts/deploy_preflight.sh
 
-# 2. Build, push, move all 27 jobs onto the new image (deploy-all step), then
+# 2. Build, push, move all 30 jobs onto the new image (deploy-all step), then
 #    smoke-test plex-etl-sales-orders-test. SHORT_SHA must be passed by hand.
 gcloud builds submit --config deploy/cloudbuild.yaml --project=voxdatalake \
   --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .
@@ -487,7 +498,7 @@ Secrets (token, API key, password) can be rotated with a single `gcloud secrets 
 
 ## Nuke and redeploy to a new project
 
-Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (27 jobs, 51 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
+Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (30 jobs, 30 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
 
 ```bash
 # 1. Destroy all GCP resources (from terraform/, after TEARDOWN.md steps 1-4)

@@ -33,6 +33,9 @@ LABEL_DESIGN = re.compile(
 SCORECARD = re.compile(
     r"^(score-card-reference/|deploy/manual_data_app/|scripts/board/|docs/SCORECARD_DATA_LOAD\.md$"
     r"|scripts/scorecard_sandbox/|docs/SCORECARD_SANDBOX_FINDINGS\.md$)")
+PART_LOT = re.compile(
+    r"^(reports/(test/)?part_lot\.yaml$|reports/sql/part_lot_[a-z_]+_view\.sql$"
+    r"|docs/reports/part_lot_[a-z_]+\.md$)")
 
 # Branch each worktree folder is FOR. A `git switch` inside a project folder
 # is how today's second session ended up committing on the wrong branch.
@@ -41,10 +44,11 @@ FOLDER_BRANCH = {
     "ptbq-scorecard": "dev-scorecard",
     "ptbq-sandbox": "dev-sandbox",
     "ptbq-label-design": "dev-label-design",
+    "ptbq-part-lot": "dev-part-lot",
     "ptbq-dev": "dev",
 }
 PROJECT_OF_BRANCH = {"dev-label-design": "label-design", "dev-scorecard": "scorecard",
-                     "dev-sandbox": "scorecard"}
+                     "dev-sandbox": "scorecard", "dev-part-lot": "part-lot"}
 
 
 def project(path):
@@ -52,6 +56,8 @@ def project(path):
         return "label-design"
     if SCORECARD.match(path):
         return "scorecard"
+    if PART_LOT.match(path):
+        return "part-lot"
     return "shared"
 
 

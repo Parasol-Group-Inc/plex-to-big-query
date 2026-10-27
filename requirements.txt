@@ -24,3 +24,8 @@ google-cloud-storage==2.18.2
 
 # YAML parser — deserialize report config files
 PyYAML==6.0.2
+
+# Time-zone data for zoneinfo (email times/subject date in America/Denver).
+# pandas pulls it in too; pinned so the slim image can never silently fall
+# back to UTC dates and split a pipeline's Gmail thread.
+tzdata==2024.2

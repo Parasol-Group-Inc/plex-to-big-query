@@ -17,8 +17,13 @@ Plex doesn't store an order-total dollar amount anywhere on the order or its lin
 - **Pipeline:** `reports/sales_orders.yaml` → `sales_orders_over_10k_report`
 - **SQL:** `reports/sql/sales_orders_over_10k_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
+- **An order can be understated.** An order's total sums its priced lines only; a line with no price (23 of 606 in prod on 2026-10-19) adds nothing, so an order with an unpriced line can read below its real value, or miss the $10,000 cut.
+- **It was empty until 2026-10-19 for this reason.** No order's total could be computed, so none reached $10,000. With line prices, 81 orders qualify, in both prod and test.
 - **The $10k basis is a best-criteria decision, not NetSuite-confirmed.** Because no real "order total" field exists in Plex, the computed base-price × quantity total was chosen as "the only basis with real data behind it" — nobody has verified this matches how NetSuite (or Vox's own definition) actually measures "$10k" per order. A data-scientist review should confirm whether this computed total is the right yardstick, or whether `Master_Price` (where it's actually populated) should be used instead.
 - **Tax and freight are excluded** from the computed total by design — an order could be under $10k here but over $10k once tax/freight is added, or vice versa if those aren't normally material.
 - **Report is untested against real production order volume.** It was confirmed to deploy and query correctly, but has only been checked against the small number of live orders on the test tenant so far — the $10k cutoff hasn't been validated against a real, larger book of business yet.

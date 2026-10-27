@@ -19,7 +19,10 @@
 --     only on the RELEASE status being Label Design, which also returned lines
 --     whose order had not been approved yet.
 --  3. A rolling date window on the order date, so the queue is current work
---     rather than everything ever in Label Design.
+--     rather than everything ever in Label Design. REMOVED 2026-10-20: it
+--     dropped orders approved more than 14 days after their order date. The
+--     2026-10-18 go-live floor and the push's dedupe do that job now (see the
+--     WHERE clause).
 --
 -- Deduplication against what is already on the sheet happens in the Apps
 -- Script, not here, on ORDER NUMBER + CUSTOMER PART NUMBER — her rule, chosen
@@ -27,32 +30,36 @@
 -- the same customer part on a *different* order legitimately repeats.
 --
 -- ── ONE DELIBERATE DIFFERENCE FROM THE STORED PROCEDURE ─────────────────────
--- Hers joins `Common_v_Customer` on `Customer_No`. That is kept, but note the
--- rep columns come from `Sales_v_Order_Salesperson`, which is per ORDER, not
--- per line — so every line of an order carries the same rep, which is what
--- "so they know which rep to ask" wants.
+-- Hers joins `Common_v_Customer` on `Customer_No`. That is kept. The rep
+-- columns are per ORDER, not per line — so every line of an order carries the
+-- same reps, which is what "so they know which rep to ask" wants. The BDM comes
+-- from `Sales_v_Order_Salesperson` and the AM from `Sales_v_PO.Inside_Sales`
+-- (with customer-level fallbacks); see the AM/BDM block below for the full
+-- sourcing.
 --
--- BDM vs primary rep is NOT guessed at: both are exposed. `Sort_Order = 1` is
--- the primary and `2` the secondary, and which of those Vox calls the BDM has
--- never been stated. The consumer picks; nothing here silently decides.
+-- The BDM (Outside Salesperson) lands in `Sales_v_Order_Salesperson`, one or
+-- more rows per ORDER — NOT in `Sales_v_PO.Outside_Sales`, which replicates as
+-- 0 even when the Plex UI shows a BDM (order 16 / PO_Key 5021015 has BDM Janet
+-- Pacheco on screen, Outside_Sales = 0 in BigQuery, and her user_no lands here
+-- instead). This is the same "the field the picker writes isn't the field that
+-- replicates" trap `Sales_v_Priority` already sprang.
+--
+-- `Sort_Order` is 0 on EVERY row across PlexTest, so it cannot rank anything —
+-- an earlier build filtered `= 1` / `= 2` and matched nothing, which is why the
+-- BDM read NULL. Some orders carry more than one outside rep (orders 4, 5, 12
+-- each have two); the lowest Plexus_User_No is taken so one deterministic BDM
+-- lands per order. The Order_Salesperson rep is never the order's Inside_Sales
+-- AM — confirmed across every populated order — so it is unambiguously the BDM.
 --
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
 
-WITH rep_primary AS (
+WITH rep_outside AS (
   SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
+    SAFE_CAST(sp.PO_Key AS INT64) AS PO_Key,
+    MIN(SAFE_CAST(sp.Plexus_User_No AS INT64)) AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 1
-),
-
-rep_secondary AS (
-  SELECT
-    SAFE_CAST(sp.PO_Key AS INT64)         AS PO_Key,
-    SAFE_CAST(sp.Plexus_User_No AS INT64) AS Plexus_User_No
-  FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson` AS sp
-  WHERE SAFE_CAST(sp.Sort_Order AS INT64) = 2
+  GROUP BY 1
 ),
 
 -- `Plexus_Control_v_Plexus_User` has NO `Name` column — it holds `First_Name`,
@@ -338,6 +345,18 @@ release_lines AS (
     cust.Name                                     AS customer_name,
     cp.Customer_Part_No                           AS customer_part_no,
     rs.Release_Status                             AS line_status,
+
+    -- The line's Priority (2026-10-07, Emilio). In the Plex sales-order screen
+    -- each line/release row carries a Priority dropdown; it lives on the
+    -- RELEASE (`Sales_v_Release.Priority_Key`), not the PO line, and resolves to
+    -- its word through `Part_v_Priority` — NOT `Sales_v_Priority`, which
+    -- replicates empty on this tenant (confirmed 2026-10-07). The label is that
+    -- view's `Description` column (High/Medium/Low/RUSH/Blanket); its own
+    -- `Priority` column is just a sort number (10/20/30/1/40). The value is
+    -- carried from whichever release the QUALIFY below keeps (the earliest-due),
+    -- so the surfaced priority matches the surfaced due date. Goes to Monday's
+    -- Priority column.
+    pr.Description                                AS priority,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS INT64), 0), 1000))),
       NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
@@ -347,23 +366,27 @@ release_lines AS (
     jn.Job_Note                                   AS job_note,
     NULLIF(TRIM(jn.Job_Note), '')                 AS _note,
 
-    -- Addition 1: who to ask. Both, because "BDM" has never been pinned to one.
-    up.user_name                                  AS sales_rep_primary,
-    us.user_name                                  AS sales_rep_secondary,
-
-    -- The BDM (2026-09-24). Order_Salesperson above turned out to be nearly
-    -- empty in Plex: one row in all of test, with Sort_Order 0, which the = 1
-    -- filter misses too. Vox records the rep in two other places, both in
-    -- Plex's "BDM" field group:
-    --   Sales_v_PO.Inside_Sales        "Inside Salesperson" on the ORDER, set
-    --                                   on every order entered since SO 4.
-    --   Common_v_Customer.Assigned_To  "Assigned To" on the CUSTOMER, the
-    --                                   account owner. 16 of 24 test customers.
-    -- `bdm` takes the order first (the most specific), then the customer, then
-    -- the old salesperson table. This is what goes to Monday's Sales Rep.
+    -- ── Sales roles: AM and BDM are DIFFERENT people (2026-10-08, Emilio) ──────
+    -- Plex (and Vox's glossary) split the sales rep in two, and they were being
+    -- conflated: everything below used to feed one `bdm` column that was really
+    -- the AM. The glossary origins pin each one down, but the FIELD each one
+    -- actually replicates into had to be found by chasing order 16 (below):
+    --   AM  (Account Manager / Inside Salesperson), terms "Assigned To /
+    --        Inside Sales / Inside Salesperson":
+    --        Sales_v_PO.Inside_Sales  -> Common_v_Customer.Assigned_To
+    --   BDM (Business Dev. Manager / Outside Salesperson), terms "Outside Sales /
+    --        Outside Salesperson / Assigned To 2", picker "Outside Sales Dialog":
+    --        lands in Sales_v_Order_Salesperson (see rep_outside above);
+    --        Sales_v_PO.Outside_Sales / Common_v_Customer.Assigned_To2 replicate
+    --        empty, so they are only trailing fallbacks.
+    -- Monday's "Sales Rep" is the BDM; the AM goes to a new "Inside Sales Rep".
     ui.user_name                                  AS sales_rep_inside,
     ua.user_name                                  AS customer_account_rep,
-    COALESCE(ui.user_name, ua.user_name, up.user_name) AS bdm,
+    -- AM: the order's Inside_Sales first, then the customer's Assigned_To.
+    COALESCE(ui.user_name, ua.user_name)          AS am,
+    -- BDM: the Order_Salesperson outside rep first (the only field populated in
+    -- PlexTest), then Outside_Sales, then Assigned_To2 as last resorts.
+    COALESCE(uo2.user_name, uo.user_name, ub.user_name) AS bdm,
 
     -- Added 2026-09-12, to fill columns the Monday-tab layout already has and
     -- the sheet was otherwise leaving blank (Email, Phone Number, Description).
@@ -436,6 +459,11 @@ release_lines AS (
   JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release_Status` AS rs
     ON SAFE_CAST(rs.Release_Status_Key AS INT64) = SAFE_CAST(rel.Release_Status_Key AS INT64)
 
+  -- Priority lookup (2026-10-07). LEFT so a release with no/unknown priority
+  -- key still produces its queue row rather than being dropped.
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Priority` AS pr
+    ON SAFE_CAST(pr.Priority_Key AS INT64) = SAFE_CAST(rel.Priority_Key AS INT64)
+
   -- Addition 2: the ORDER must be approved, not just the release in Label
   -- Design. Matched on the status NAME rather than the key on purpose — Vox cut
   -- the status list from 10 to 7 in September and three keys vanished, which is
@@ -455,12 +483,15 @@ release_lines AS (
   LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
     ON SAFE_CAST(cust.Customer_No AS INT64) = SAFE_CAST(po.Customer_No AS INT64)
 
-  LEFT JOIN rep_primary   AS rp ON rp.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN rep_secondary AS rq ON rq.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
-  LEFT JOIN users         AS up ON up.Plexus_User_No = rp.Plexus_User_No
-  LEFT JOIN users         AS us ON us.Plexus_User_No = rq.Plexus_User_No
+  -- AM side: the order's Inside_Sales and the customer's Assigned_To.
   LEFT JOIN users         AS ui ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
   LEFT JOIN users         AS ua ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
+  -- BDM side (2026-10-08): the real source is Order_Salesperson (rep_outside);
+  -- Outside_Sales and Assigned_To2 replicate empty and are trailing fallbacks.
+  LEFT JOIN rep_outside   AS ro  ON ro.PO_Key = SAFE_CAST(po.PO_Key AS INT64)
+  LEFT JOIN users         AS uo2 ON uo2.Plexus_User_No = ro.Plexus_User_No
+  LEFT JOIN users         AS uo  ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
+  LEFT JOIN users         AS ub  ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
 
   LEFT JOIN bottles AS bt
     ON bt.Part_Key = SAFE_CAST(pol.Part_Key AS INT64)
@@ -478,10 +509,22 @@ release_lines AS (
   -- silently empty the queue (2026-09-29, matching the Plex version).
   WHERE UPPER(TRIM(rs.Release_Status)) = 'LABEL DESIGN'
     AND UPPER(TRIM(ps.PO_Status)) = 'PENDING FULFILLMENT'
-    -- Addition 3: a rolling window. 14 days per "keep this like within the last
-    -- two weeks or something"; widen here rather than in the Apps Script, since
-    -- the sheet's own dedupe stops a widened window re-adding old rows.
-    AND po.order_date_resolved >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+    -- Addition 3 (the 14-day rolling window on the order date) was REMOVED
+    -- 2026-10-20. The order date is fixed at entry, but an order only reaches
+    -- Pending Fulfillment once sales approves it or the deposit clears, and in
+    -- PlexProd Quote / Pending Sales Approval orders routinely sit 25+ days.
+    -- An order approved after day 14 never entered the view, so it was never
+    -- pushed and nothing flagged it. The queue stays current without the
+    -- window: a release leaves this view once its status moves off Label
+    -- Design, and the push never re-creates an LCR it has on the board or in
+    -- label_design_push_log, even if the team deleted the item.
+    --
+    -- Addition 4 (2026-10-19, Emilio), now the permanent floor: nothing ordered
+    -- before the cutover weekend reaches BigQuery or Monday. Prod Plex holds
+    -- orders migrated in with order dates back to early October. The team
+    -- works those by hand, so the push must not create items for them. The 38
+    -- already pushed on 2026-10-19 stay on the board.
+    AND po.order_date_resolved >= DATE '2026-10-18'
 )
 
 -- ── Collapse to one row per order + customer part ───────────────────────────
@@ -501,13 +544,13 @@ SELECT
   customer_name,
   customer_part_no,
   line_status,
+  priority,
   MIN(due_date_resolved) OVER (PARTITION BY po_line_key) AS due_date,
   order_date,
   job_note,
-  sales_rep_primary,
-  sales_rep_secondary,
   sales_rep_inside,
   customer_account_rep,
+  am,
   bdm,
   customer_email,
   customer_phone,

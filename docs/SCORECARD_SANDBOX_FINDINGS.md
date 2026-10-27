@@ -10,6 +10,9 @@ This is the build list for the Looker Studio report. Every issue below was
 seen in the sandbox and then **checked against the real Plex record** before
 it was written down.
 
+How to wire each tile in Looker Studio (chart, data source, metric,
+date range, filter) is in [`SCORECARD_LOOKER_SETUP.md`](SCORECARD_LOOKER_SETUP.md).
+
 **Status key**
 
 | Symbol | Meaning |

@@ -62,7 +62,7 @@ output "cloud_run_execute_command" {
 # ── Cloud Scheduler ───────────────────────────────────────────────────────────
 output "scheduler_job_name" {
   description = "Cloud Scheduler job name and cron schedule."
-  value       = "${google_cloud_scheduler_job.etl.name} — schedule: ${var.scheduler_cron} ${var.scheduler_time_zone}"
+  value       = "prod runs are started by ${google_cloud_scheduler_job.etl_dispatcher.name} from PlexOps.etl_schedule (no per-job prod scheduler since 2026-10-19)"
 }
 
 # ── Test environment ───────────────────────────────────────────────────────────

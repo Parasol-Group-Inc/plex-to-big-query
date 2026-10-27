@@ -30,12 +30,17 @@ description: "Inventory Activity Detail Usage Per Month (NetSuite parity) — pr
 #   Change SQL    → edit reports/sql/inventory_activity_view.sql and save to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Production events — one row per cell produced, with Quantity + Part_Key + date
   - plex_view: Part_v_Cell_Production
     bq_table: raw_Part_v_Cell_Production
     filter: ""
     date_col: Production_Date
+    probe: [Production_Date, Cell_Production_Key, sum:Quantity]
 
   # Depletion (usage/consumption) events — one row per cell depleted, with
   # Quantity + Part_Key + date; Cell_Production_Key links back to what was produced
@@ -43,6 +48,7 @@ extractions:
     bq_table: raw_Part_v_Cell_Depletion
     filter: ""
     date_col: Production_Date
+    probe: [Production_Date, Cell_Depletion_Key, sum:Quantity]
 
 # Part_v_Part is intentionally NOT extracted here — it's owned by the
 # sales_orders pipeline. Reuse raw_Part_v_Part in the JOIN view instead of

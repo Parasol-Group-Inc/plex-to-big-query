@@ -4,7 +4,7 @@ Last reviewed: 2026-09-25
 
 > **Scope check:** this walks through bootstrapping the pipeline **from
 > zero** in a **new GCP project**. One deploy creates the whole stack — 13
-> pipelines, 27 Cloud Run jobs, 51 schedulers — though the walkthrough follows
+> pipelines, 27 Cloud Run jobs, 30 schedulers — though the walkthrough follows
 > one job (`plex-etl-sales-orders`) as its example. It's the right doc for a
 > first-time setup (a new GCP project, disaster recovery) or for understanding
 > how the pieces fit together. **Don't run it against the existing
@@ -55,7 +55,7 @@ If you're coming from frontend, here's a mental model for each service this pipe
 |---|---|---|
 | **Artifact Registry** | npm registry / Docker Hub | Stores your built Docker image |
 | **Cloud Run Job** | Vercel/Lambda serverless function | Runs the ETL container on demand |
-| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — this deployment's evening cascade runs 12 pipelines between 7:00 PM and 10:50 PM America/Denver (Mountain), plus Label Design hourly 5 AM - 5 PM and a 9:45 PM retry for every job except Label Design; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
+| **Cloud Scheduler** | `cron` / GitHub Actions schedule | Triggers the Cloud Run jobs — in prod, one `plex-etl-dispatcher` scheduler (every 5 min) starts 13 pipelines at the times in `PlexOps.etl_schedule`, and Label Design keeps its own 15-minute scheduler; test jobs run in an evening cascade with a 9:45 PM retry; see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time |
 | **BigQuery** | Postgres / Supabase (analytics-focused, read-heavy) | Stores the extracted Plex data as queryable tables |
 | **Secret Manager** | `.env` file, but encrypted + access-controlled | Holds the Plex IAM token and ODBC credentials |
 | **Service Account** | API key your app authenticates with | What Cloud Run uses to talk to BigQuery, Secret Manager, etc. |
@@ -135,8 +135,8 @@ slowest part.
 - An Artifact Registry repo to store your Docker image
 - Six Secret Manager secret containers (empty for now — you'll fill them in 1.3)
 - The report-configs bucket and every `reports/` YAML and SQL file in it
-- 27 Cloud Run job definitions (13 pipelines × prod/test, plus the Label Design push job) pointing at your image
-- 51 Cloud Scheduler jobs (a daily trigger per job, a 9:45 PM Mountain retry on every job except Label Design and its push)
+- 30 Cloud Run job definitions (14 pipelines × prod/test, plus the two Label Design push jobs) pointing at your image
+- 30 Cloud Scheduler jobs (the ETL dispatcher trigger, a nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines run from `PlexOps.etl_schedule`)
 
 > **If the deploy fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `./scripts/deploy.sh`.
 
@@ -231,7 +231,7 @@ The ODBC driver is **not in git** — it must be present in `driver/` on your ma
 ```bash
 gcloud run jobs update JOB_NAME --image=us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:TAG --region=us-central1
 ```
-`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 27 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
+`deploy/cloudbuild.yaml`'s `deploy-all` step does this for all 30 jobs from one build. Use a commit-SHA tag, never `:latest` — see `variables.tf`'s `image_url` description for why.
 
 You only need to rebuild when **code or files inside the image change**:
 - `main.py`, `email_utils.py`, `templates/report.html` — Python logic or email design
@@ -322,7 +322,7 @@ bq query --project_id=voxdatalake --nouse_legacy_sql \
 
 ## Step 5 — Verify Cloud Scheduler
 
-With the `variables.tf` defaults, the Sales Orders scheduler runs at `0 2 * * *` UTC (test `0 3 * * *`), and every other pipeline's time is a literal in `main.tf` interpreted in `scheduler_time_zone` (default `UTC`). This live project's `terraform.tfvars` sets `scheduler_time_zone = "America/Denver"` and Sales Orders to 7:00/7:10 PM, so `gcloud scheduler jobs list` against `voxdatalake` shows the Mountain-time cascade — see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time:
+Since 2026-10-19 **prod pipelines have no Cloud Scheduler job of their own**: the `plex-etl-dispatcher` scheduler calls the ETL dispatcher every 5 minutes, and it starts prod jobs from the BigQuery table `PlexOps.etl_schedule` (see [OPERATIONS.md](OPERATIONS.md#etl-schedule-prod--plexopsetl_schedule)). The per-pipeline schedulers that remain are the **test** ones (`plex-<pipeline>-sync-test` plus `-test-retry`) and Label Design's. With the `variables.tf` defaults, the Sales Orders test scheduler runs at `0 3 * * *` UTC, and every other pipeline's time is a literal in `main.tf` interpreted in `scheduler_time_zone` (default `UTC`). This live project's `terraform.tfvars` sets `scheduler_time_zone = "America/Denver"`, so `gcloud scheduler jobs list` against `voxdatalake` shows the Mountain-time test cascade — see [docs/EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) for every job's time:
 
 ```bash
 gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
@@ -330,16 +330,16 @@ gcloud scheduler jobs list --location=us-central1 --project=voxdatalake
 
 Trigger it immediately to confirm end-to-end scheduling works:
 ```bash
-gcloud scheduler jobs run plex-sales-orders-sync --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs run plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake
 ```
 
-**GCP Console path:** Console → **Cloud Scheduler** → `plex-sales-orders-sync` → **Run now** button.
+**GCP Console path:** Console → **Cloud Scheduler** → `plex-sales-orders-sync-test` → **Run now** button. (To start a prod job, use `gcloud run jobs execute plex-etl-sales-orders --region=us-central1 --project=voxdatalake`.)
 
 ---
 
 ## Step 6 — CI/CD with Cloud Build (optional)
 
-`deploy/cloudbuild.yaml` builds the image, pushes it, moves all 27 jobs onto it (`deploy-all`), and smoke-tests `plex-etl-sales-orders-test`. This project runs it **by hand**, from the primary folder on an up-to-date `main`, after the preflight:
+`deploy/cloudbuild.yaml` builds the image, pushes it, moves all 30 jobs onto it (`deploy-all`), and smoke-tests `plex-etl-sales-orders-test`. This project runs it **by hand**, from the primary folder on an up-to-date `main`, after the preflight:
 
 ```bash
 ./scripts/deploy_preflight.sh
@@ -365,7 +365,7 @@ gcloud storage cp -r driver/* gs://voxdatalake-build-assets/plex-odbc-driver/
 - Configuration: **Cloud Build configuration file** → `deploy/cloudbuild.yaml`
 - Click **Create**
 
-With a trigger, every `git push origin main` rebuilds and redeploys the image to all 27 jobs — which is only safe because nothing reaches `main` except reviewed merges (`CONTRIBUTING.md`).
+With a trigger, every `git push origin main` rebuilds and redeploys the image to all 30 jobs — which is only safe because nothing reaches `main` except reviewed merges (`CONTRIBUTING.md`).
 
 ---
 
@@ -443,19 +443,24 @@ echo -n 'NEW_TOKEN' | gcloud secrets versions add plex-access-token --data-file=
 ```
 
 **Change the sync schedule** (e.g. run at a different Mountain-time hour instead of the current 7:00 PM cascade):
-Update `scheduler_cron` and `scheduler_time_zone` in `terraform.tfvars` (Sales Orders only — every other pipeline's cron is a literal in `terraform/main.tf`, changed by a commit to `main`; `scheduler_time_zone` applies to all of them), back the file up (command in its header), then from the primary folder:
+**Prod** times are rows in `PlexOps.etl_schedule`: change them with SQL, no deploy (see [OPERATIONS.md](OPERATIONS.md#etl-schedule-prod--plexopsetl_schedule)). **Test** times: update `scheduler_cron_test` and `scheduler_time_zone` in `terraform.tfvars` (Sales Orders only — every other pipeline's cron is a literal in `terraform/main.tf`, changed by a commit to `main`; `scheduler_time_zone` applies to all of them), back the file up (command in its header), then from the primary folder:
 ```bash
 ./scripts/deploy.sh
 ```
 
-**Pause the pipeline:**
-```bash
-gcloud scheduler jobs pause plex-sales-orders-sync --location=us-central1 --project=voxdatalake
+**Pause the pipeline (prod):** disable its rows in the dispatcher's table; takes effect within 5 minutes.
+```sql
+UPDATE `voxdatalake.PlexOps.etl_schedule`
+SET enabled = FALSE, updated_by = 'your-name', updated_at = CURRENT_TIMESTAMP()
+WHERE job_name = 'plex-etl-sales-orders';
 ```
 
-**Resume the pipeline:**
+**Resume the pipeline (prod):** the same statement with `enabled = TRUE`.
+
+**Pause / resume the test pipeline:**
 ```bash
-gcloud scheduler jobs resume plex-sales-orders-sync --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs pause plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake
+gcloud scheduler jobs resume plex-sales-orders-sync-test --location=us-central1 --project=voxdatalake
 ```
 
 **View recent job history:**
@@ -475,7 +480,7 @@ Then update `terraform.tfvars` to match so the next `./scripts/deploy.sh` doesn'
 **Tear down all infrastructure** (move to a different GCP project):
 See [TEARDOWN.md](TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 13 pipelines (27 Cloud Run jobs — prod+test for each, plus the Label Design push job — and 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 14 pipelines (30 Cloud Run jobs — prod+test for each, plus the two Label Design push jobs — and 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
 - **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
 - **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
 - **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

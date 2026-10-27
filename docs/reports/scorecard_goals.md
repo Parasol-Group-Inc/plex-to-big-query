@@ -1,6 +1,6 @@
 # Vox Scorecard | Goals Table
 
-> **Status:** 🗄 **Legacy** — created 2026-09-04 in `PlexTest` and `PlexProd`; no longer pushed since 2026-09-22; **re-used 2026-10-02 to hold the labelled reference placeholders** (revenue and production, both datasets) and the 68 sales goals copied into `PlexProd`; kept as the fallback behind [`scorecard_goals_resolved`](scorecard_goals_resolved.md) until retired · **Category:** Reference data · **Fed by:** nothing any more (goals are now entered in the Manual Data app) — *not* the ETL
+> **Status:** 🗄 **Legacy** — created 2026-09-04 in `PlexTest` and `PlexProd`; no longer pushed since 2026-09-22; **re-used 2026-10-02 to hold the labelled reference placeholders** (revenue and production, both datasets) and the 68 sales goals copied into `PlexProd`; **reseeded 2026-10-19 in both datasets** from the originals (rep goals from `VoxScorecardsLive.sales_goals`, company-wide sales goals from the live Looker view `vw_sales_mtd_vs_goal`; old contents in `scorecard_goals_backup_20261019`), and now the **seed table the Manual Data app copies from** on its hourly push; kept as the fallback behind [`scorecard_goals_resolved`](scorecard_goals_resolved.md) until retired · **Category:** Reference data · **Fed by:** a hand reseed from the originals when they change outside the app (goals are otherwise entered in the Manual Data app) — *not* the ETL
 
 ## What this is
 

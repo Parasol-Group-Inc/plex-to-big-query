@@ -1,6 +1,6 @@
 # Current Inventory Snapshot
 
-> **Status:** ✅ Built and deployed 2026-08-10/11 · **Category:** Inventory · **Runs:** `plex-etl-inventory-snapshot` 8:40 PM / `plex-etl-inventory-snapshot-test` 8:50 PM Mountain
+> **Status:** ✅ Built and deployed 2026-08-10/11 · **Category:** Inventory · **Runs:** prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 
@@ -25,8 +25,9 @@ Plex records a cost "snapshot" roughly every hour, and for each snapshot it trac
 
 ## Flags and open questions
 
+- **It was empty in both prod and test until the 2026-10-19 fix.** It required a match in Plex's snapshot pointer table, which real Plex never fills. It now picks the cost rows in force at each snapshot the same way the Inventory Valuation Summary does: Plex's pointer rows if a snapshot ever has them, otherwise the latest cost change on or before the snapshot date (`cost_source` says which). PlexProd: about 1.49 million rows over 35 snapshots and 14,713 parts. That is large, so filter on `snapshot_date` (or the latest snapshot) in Looker.
 - **Cost-component labels aren't resolved yet.** Each row shows a raw numeric code for which cost component it is (material vs. labor vs. overhead, etc.) rather than a readable label — no Plex source with a name-to-code lookup for these could be found. Until one turns up, reading this report means matching the numeric code to a component by cross-referencing Plex directly.
-- **Join chain is confirmed live, not just built.** This isn't a caveat so much as a note of confidence: the three-table join this report depends on was tested against real tenant data and came back with matching, non-empty rows every time — it's not resting on an assumption about how the tables relate.
+- **The original join chain stopped working (superseded 2026-10-19).** In August, the three-table join through Plex's snapshot pointer table was tested and returned rows. Real Plex (test and prod) has since stopped filling that pointer table, so the view was empty until the fix below.
 
 ## More detail
 

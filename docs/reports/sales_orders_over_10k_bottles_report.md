@@ -1,6 +1,6 @@
 # Orders over 10k bottles
 
-> **Status:** ✅ Built and deployed 2026-08-21, best-criteria assumption not yet unit-confirmed · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-21, best-criteria assumption not yet unit-confirmed · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 
@@ -16,6 +16,8 @@ Uses the same Sales Order header, line, release, status, and customer data alrea
 
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_over_10k_bottles_report`
 - **SQL:** `reports/sql/sales_orders_over_10k_bottles_view.sql`
+
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
 
 ## Flags and open questions
 

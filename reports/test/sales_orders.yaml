@@ -6,31 +6,40 @@ description: "16-field sales orders report — TEST environment (vox.odbc.plex.c
 # BQ_DATASET=PlexTest is injected by the plex-etl-sales-orders-test Cloud Run job,
 # so all raw tables land in PlexTest and the BQ view is created there too.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Sales_v_PO
     bq_table: raw_Sales_v_PO
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Key]
 
   - plex_view: Sales_v_PO_Line
     bq_table: raw_Sales_v_PO_Line
     filter: ""
     date_col: ""
+    probe: [Update_Date, PO_Line_Key]
 
   - plex_view: Sales_v_PO_Change
     bq_table: raw_Sales_v_PO_Change
     filter: ""
     date_col: Change_Date
+    probe: [Change_Date]
 
   - plex_view: Sales_v_PO_Status
     bq_table: raw_Sales_v_PO_Status
     filter: ""
     date_col: ""
+    probe: [PO_Status_Key]
 
   - plex_view: Sales_v_PO_Type
     bq_table: raw_Sales_v_PO_Type
     filter: ""
     date_col: ""
+    probe: [PO_Type_Key]
 
   - plex_view: Sales_v_Order_Salesperson
     bq_table: raw_Sales_v_Order_Salesperson
@@ -41,6 +50,7 @@ extractions:
     bq_table: raw_Sales_v_Release
     filter: ""
     date_col: ""
+    probe: [Update_Date, Release_Key]
 
   # Added 2026-08-21 for sales_order_allocation_report — see reports/sales_orders.yaml
   - plex_view: Sales_v_Release_Job
@@ -54,36 +64,43 @@ extractions:
     bq_table: raw_Sales_v_Shipper
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Shipper_Key]
 
   - plex_view: Sales_v_Shipper_Line
     bq_table: raw_Sales_v_Shipper_Line
     filter: ""
     date_col: ""
+    probe: [Shipper_Line_Key, sum:Quantity, sum:Price]
 
   - plex_view: Sales_v_Shipper_Status
     bq_table: raw_Sales_v_Shipper_Status
     filter: ""
     date_col: ""
+    probe: [Shipper_Status_Key]
 
   - plex_view: Sales_v_Shipper_Container
     bq_table: raw_Sales_v_Shipper_Container
     filter: ""
     date_col: ""
+    probe: [Shipper_Container_Key, Loaded_Date]
 
   - plex_view: Sales_v_Shipper_AR_Invoice
     bq_table: raw_Sales_v_Shipper_AR_Invoice
     filter: ""
     date_col: ""
+    probe: [Add_Date]
 
   - plex_view: Sales_v_Shipper_Line_Release
     bq_table: raw_Sales_v_Shipper_Line_Release
     filter: ""
     date_col: ""
+    probe: [Updated_Date]
 
   - plex_view: Sales_v_Release_Allocation
     bq_table: raw_Sales_v_Release_Allocation
     filter: ""
     date_col: ""
+    probe: [Add_Date, Release_Allocation_Key, sum:Quantity_Allocated, sum:Quantity_Needed]
 
   # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
   # Jennilyn: "No, it'll always have a price in there. So it needs to be the
@@ -96,21 +113,25 @@ extractions:
     bq_table: raw_Sales_v_Price
     filter: ""
     date_col: ""
+    probe: [Update_Date, Price_Key]
 
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""
     date_col: ""
+    probe: [Change_Date]
 
   - plex_view: Part_v_Customer_Part_Price
     bq_table: raw_Part_v_Customer_Part_Price
     filter: ""
     date_col: ""
+    probe: [Customer_Part_Price_Key, Price_Updated_Date]
 
   - plex_view: Part_v_Part
     bq_table: raw_Part_v_Part
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Part_Key]
 
   - plex_view: Part_v_Part_Product_Type
     bq_table: raw_Part_v_Part_Product_Type
@@ -121,16 +142,19 @@ extractions:
     bq_table: raw_Part_v_Part_Product_Group
     filter: ""
     date_col: ""
+    probe: [Part_Product_Group_Key]
 
   - plex_view: Part_v_Part_Group
     bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
+    probe: [Part_Group_Key]
 
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
     filter: ""
     date_col: ""
+    probe: [Update_Date]
 
   # Added 2026-09-22 — the Inside Sales roster behind sales_reps_report.
   # See reports/sales_orders.yaml for why the goals dropdown needed it.
@@ -138,6 +162,7 @@ extractions:
     bq_table: raw_Plexus_Control_v_Role
     filter: ""
     date_col: ""
+    probe: [Role_Key]
 
   - plex_view: Plexus_Control_v_User_Role
     bq_table: raw_Plexus_Control_v_User_Role
@@ -151,11 +176,13 @@ extractions:
     bq_table: raw_Part_v_Flat_BOM
     filter: ""
     date_col: ""
+    probe: [Flat_BOM_Key]
 
   - plex_view: Part_v_BOM
     bq_table: raw_Part_v_BOM
     filter: ""
     date_col: ""
+    probe: [BOM_Key]
 
 # See reports/sales_orders.yaml for why bq_view is a list — the same
 # deploy-ordering caveat (main.py's bq_view-list support must ship before
@@ -218,6 +245,9 @@ bq_view:
   - name: inventory_available_to_sell_report
     display_name: "Inventory | Available to Sell (On-Hand less Demand)"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_available_to_sell_view.sql
+  - name: approaching_msl_report
+    display_name: "Inventory | Approaching MSL"
+    sql_file: gs://voxdatalake-report-configs/sql/approaching_msl_view.sql
   - name: inventory_out_of_stock_report
     display_name: "Vox Scorecard | Out of Stock (33-parts)"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_out_of_stock_view.sql

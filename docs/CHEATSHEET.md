@@ -20,11 +20,15 @@ This pipeline **copies Plex ERP data into BigQuery** so the data team can query 
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report YAML/SQL the jobs read at run time. Terraform writes those objects from `reports/` on `main` (via `./scripts/deploy.sh`), so a YAML/SQL change needs **no image rebuild — but it does need a deploy**
 
-**13 pipelines** (`reports/*.yaml`) → **27 Cloud Run jobs** (prod + test each, plus the Label Design push job) →
-**51 schedulers** (every job but Label Design and its push has a `-retry` twin) → **68 BigQuery views**. The
-nightly cascade runs **7:00 PM → 10:50 PM Mountain** (`America/Denver`), 10
-minutes apart; Label Design runs **hourly, 5 AM - 5 PM Mountain**
-(test at :05, push at :35). Full schedule and run history:
+**14 pipelines** (`reports/*.yaml`) → **31 Cloud Run jobs** (prod + test each, plus the two Label Design push jobs and the Label Design repair job) →
+**31 Cloud Scheduler jobs** (the 5-minute ETL dispatcher, the test jobs' nightly schedulers with a `-retry` twin on 12 of them, and Label Design's) → **68 BigQuery views**. Prod
+jobs have no scheduler of their own: the dispatcher runs them from
+`PlexOps.etl_schedule` (1 / 6 / 11 PM probe + 4 AM full). The test nightly
+cascade runs **7:10 PM → 10:50 PM Mountain** (`America/Denver`), 20 minutes
+apart; Label Design probes **every 15 minutes, 5:00 AM - 5:45 PM Mountain**
+and a run that finds new orders starts the Monday push itself (6:05 PM
+sweep; test hourly at :05, test push paused). Every 15 minutes the repair
+job refills columns a move from Plex Import to Design & QA left blank. Full schedule and run history:
 [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be run by hand.
 
 ---
@@ -287,7 +291,7 @@ graph TB
 ```
 
 *Shown: the Sales Orders pipeline as a worked example — the same shape repeats
-for all 13 pipelines.*
+for all 14 pipelines.*
 
 ---
 
@@ -299,7 +303,7 @@ graph LR
 
     subgraph PROD["🟢 Production"]
         PJ["Cloud Run Job\nplex-etl-sales-orders"]
-        PS["Scheduler\nplex-sales-orders-sync\n7:00 PM Mountain"]
+        PS["ETL dispatcher (every 5 min)\nreads PlexOps.etl_schedule\n1/6/11 PM probe, 4 AM full"]
         PH["Plex Host\nvox.odbc.plex.com"]
         PD["BigQuery\nPlexProd dataset"]
         PS --> PJ
@@ -324,26 +328,26 @@ graph LR
 ```
 
 - **YAML is per-environment** (`reports/` vs `test/` in GCS, from `reports/*.yaml` vs `reports/test/*.yaml` in git — two hand-kept files, change both). **SQL is shared** (`sql/`).
-- **Failure retry:** each of the 24 non-Label-Design jobs has a `-retry` scheduler at **9:45 PM Mountain** that re-runs the job only if today's scheduled run genuinely FAILED (not PARTIAL), checked against `job_run_log`. See [OPERATIONS.md → Failure Retry](OPERATIONS.md#failure-retry-945-pm-mountain).
-- **Naming:** jobs `plex-etl-<pipeline>[-test]`; schedulers `plex-<pipeline>-sync[-test][-retry]`. Names are immutable — a rename is a destroy/recreate (CLAUDE.md → *Job naming*).
+- **Failure retry:** prod has no `-retry` scheduler; the dispatcher runs one follow-up probe 15 minutes after a failed run. 12 **test** jobs have a `-test-retry` scheduler at **9:45 PM Mountain** that re-runs the job only if today's scheduled run genuinely FAILED (not PARTIAL), checked against `job_run_log`. See [OPERATIONS.md → Failure Retry](OPERATIONS.md#failure-retry-945-pm-mountain).
+- **Naming:** jobs `plex-etl-<pipeline>[-test]`; test schedulers `plex-<pipeline>-sync-test[-retry]` (prod has none, except Label Design's `plex-label-design-sync`, `plex-label-design-push-sync` and `plex-label-design-repair-sync`). Names are immutable — a rename is a destroy/recreate (CLAUDE.md → *Job naming*).
 
 ## Active Reports
 
-| Pipeline (`reports/*.yaml`) | Cloud Run job (prod; test adds `-test`) | Schedule prod / test (Mountain) | Plex views | BQ views | Headline views |
+| Pipeline (`reports/*.yaml`) | Cloud Run job (prod; test adds `-test`) | Test schedule (Mountain); prod runs from `PlexOps.etl_schedule` | Plex views | BQ views | Headline views |
 |---|---|---|---|---|---|
-| `sales_orders` | `plex-etl-sales-orders` | 7:00 / 7:10 PM | 27 | 27 | `sales_orders_report`, `sales_orders_open_report`, `shipping_revenue_report`, `sales_mtd_summary_report`, `revenue_vs_goal_report`, `sales_vs_goal_report` |
-| `work_orders` | `plex-etl-work-orders` | 7:20 / 7:30 PM | 15 | 19 | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report`, `*_daily_report`, `production_vs_goal_report` |
-| `purchasing_open_orders` | `plex-etl-purchasing-open-orders` | 7:40 / 7:50 PM | 6 | 2 | `purchasing_open_orders_report`, `purchasing_po_pending_approval_report` |
-| `part_obsolescence` | `plex-etl-part-obsolescence` | 8:00 / 8:10 PM | 1 | 1 | `part_obsolescence_report` |
-| `inventory_activity` | `plex-etl-inventory-activity` | 8:20 / 8:30 PM | 2 | 2 | `inventory_activity_report`, `inventory_avg_daily_usage_report` |
-| `inventory_snapshot` | `plex-etl-inventory-snapshot` | 8:40 / 8:50 PM | 3 | 3 | `inventory_snapshot_report`, `inventory_valuation_summary_report`, `inventory_valuation_total_report` |
-| `quality_nonconformance` | `plex-etl-quality-nonconformance` | 9:00 / 9:10 PM | 13 | 5 | `quality_nonconformance_report`, `quality_turnaround_time_report`, `quality_deviation_report`, `quality_disposition_cost_report` |
-| `part_on_hand_inventory` | `plex-etl-part-on-hand-inventory` | 9:20 / 9:30 PM | 4 | 5 | `part_on_hand_inventory_report`, `inventory_risk_analysis_report`, `part_cycle_count_report` |
-| `purchasing_pending_requisitions` | `plex-etl-purchasing-pending-requisitions` | 9:40 / 9:50 PM | 4 | 1 | `purchasing_pending_requisitions_report` |
-| `sales_quotes` | `plex-etl-sales-quotes` | 10:00 / 10:10 PM | 2 | 1 | `sales_quotes_open_report` |
-| `sales_returns` | `plex-etl-sales-returns` | 10:20 / 10:30 PM | 2 | 1 | `sales_returns_open_report` |
-| `quality_supplier_returns` | `plex-etl-quality-supplier-returns` | 10:40 / 10:50 PM | 3 | 1 | `quality_supplier_returns_pending_report` |
-| `label_design` | `plex-etl-label-design` | hourly 5 AM - 5 PM / hourly :05 | 14 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
+| `sales_orders` | `plex-etl-sales-orders` | 7:10 PM | 27 | 27 | `sales_orders_report`, `sales_orders_open_report`, `shipping_revenue_report`, `sales_mtd_summary_report`, `revenue_vs_goal_report`, `sales_vs_goal_report` |
+| `work_orders` | `plex-etl-work-orders` | 7:30 PM | 15 | 19 | `work_orders_report`, `mfg_job_schedule_report`, `labeling_open_work_orders_report`, `*_daily_report`, `production_vs_goal_report` |
+| `purchasing_open_orders` | `plex-etl-purchasing-open-orders` | 7:50 PM | 6 | 2 | `purchasing_open_orders_report`, `purchasing_po_pending_approval_report` |
+| `part_obsolescence` | `plex-etl-part-obsolescence` | 8:10 PM | 1 | 1 | `part_obsolescence_report` |
+| `inventory_activity` | `plex-etl-inventory-activity` | 8:30 PM | 2 | 2 | `inventory_activity_report`, `inventory_avg_daily_usage_report` |
+| `inventory_snapshot` | `plex-etl-inventory-snapshot` | 8:50 PM | 3 | 3 | `inventory_snapshot_report`, `inventory_valuation_summary_report`, `inventory_valuation_total_report` |
+| `quality_nonconformance` | `plex-etl-quality-nonconformance` | 9:10 PM | 13 | 5 | `quality_nonconformance_report`, `quality_turnaround_time_report`, `quality_deviation_report`, `quality_disposition_cost_report` |
+| `part_on_hand_inventory` | `plex-etl-part-on-hand-inventory` | 9:30 PM | 4 | 5 | `part_on_hand_inventory_report`, `inventory_risk_analysis_report`, `part_cycle_count_report` |
+| `purchasing_pending_requisitions` | `plex-etl-purchasing-pending-requisitions` | 9:50 PM | 4 | 1 | `purchasing_pending_requisitions_report` |
+| `sales_quotes` | `plex-etl-sales-quotes` | 10:10 PM | 2 | 1 | `sales_quotes_open_report` |
+| `sales_returns` | `plex-etl-sales-returns` | 10:30 PM | 2 | 1 | `sales_returns_open_report` |
+| `quality_supplier_returns` | `plex-etl-quality-supplier-returns` | 10:50 PM | 3 | 1 | `quality_supplier_returns_pending_report` |
+| `label_design` | `plex-etl-label-design` | prod every 15 min 5 AM - 5:45 PM / test hourly :05 | 15 | 1 | `label_design_report` (feeds the Monday.com queue — [label-design/STATUS.md](../label-design/STATUS.md)) |
 
 Counts are `grep -c -E '^\s*-\s*plex_view:'` and the `bq_view` entries per
 YAML; `scorecard_goals_resolved` is listed in both `sales_orders` and
@@ -427,7 +431,7 @@ plex-to-big-query/
   .githooks/                 # hooks.py (every lock + project file map), pre-commit, pre-push
   *.code-workspace           # 5 VS Code workspaces, one per folder (table above)
   deploy/
-    cloudbuild.yaml        # image build + update all 27 jobs (_ALL_JOBS)
+    cloudbuild.yaml        # image build + update all 30 jobs (_ALL_JOBS)
     setup.sh               # DEPRECATED bootstrap script, kept for reference (use terraform/)
     manual_data_app/       # [Scorecard] goals + safety-incident web app (Apps Script)
     archive/               # retired, kept for the record - label_design_sync/ (Apps Script)
@@ -562,7 +566,7 @@ gcloud secrets versions access latest --secret=plex-access-token --project=voxda
 3. **Terraform** (`terraform/main.tf`) — copy the `work_orders` set:
    - `google_storage_bucket_object`s: `*_config_prod`, `*_config_test`, and one per new SQL file (this is what puts them in GCS);
    - two `google_cloud_run_v2_job`s (prod + `-test`);
-   - four `google_cloud_scheduler_job`s (prod, test, and a `-retry` each).
+   - two `google_cloud_scheduler_job`s (test and its `-retry`). Prod needs none: add its rows to `PlexOps.etl_schedule` instead.
 
    Every job needs this block — without it the next unrelated apply reverts the
    job to `var.image_url`:
@@ -610,8 +614,8 @@ To discover view names: open **Plex SQL Dev** → expand the database tree → r
 
 | GCP Service | What it is (in general) | What it does in this pipeline |
 |---|---|---|
-| **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery (27 jobs, one shared image) |
-| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers each job (the nightly cascade, Label Design hourly 5 AM - 5 PM, and a 9:45 PM `-retry` per job except Label Design — see Active Reports) |
+| **Cloud Run Jobs** | Serverless container executor — run a Docker container on demand, pay per second | Runs `main.py` — queries Plex, loads BigQuery (30 jobs, one shared image) |
+| **Cloud Scheduler** | Managed cron — fires HTTP requests on a schedule | Triggers the ETL dispatcher every 5 minutes (which starts prod jobs from `PlexOps.etl_schedule`), each test job (the nightly cascade plus a 9:45 PM `-test-retry` on 12 of them), and Label Design every 15 min 5 AM - 5:45 PM — see Active Reports |
 | **BigQuery** | Serverless data warehouse — query terabytes with SQL, pay per query | Stores the raw Plex tables + the views the data team queries (`PlexProd`, `PlexTest`, `ScorecardSandbox`) |
 | **Cloud Storage (GCS)** | Object storage — like S3, stores files | `voxdatalake-report-configs`: YAML configs and view SQL (written by Terraform); `voxdatalake-terraform-state`: Terraform state |
 | **Secret Manager** | Encrypted secret store | Stores the Plex IAM token and SendGrid API key |

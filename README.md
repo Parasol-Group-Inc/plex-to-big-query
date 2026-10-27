@@ -8,7 +8,7 @@ Cloud Storage, deployed from this repo by Terraform.
 
 **GCP project:** `voxdatalake` · **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
 
-**13 pipelines, 26 Cloud Run jobs (prod + test), about 68 BigQuery views.**
+**14 pipelines, 31 Cloud Run jobs (prod + test, plus the two Label Design push jobs and the repair job), about 68 BigQuery views.**
 The pipelines are Sales Orders, Sales Quotes, Sales Returns, Work Orders,
 Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence,
 Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality
@@ -24,7 +24,7 @@ view has a business-facing doc:
 |---|---|---|---|---|---|
 | **Vox Scorecard** | Plex views behind every tile of the Vox MTD scorecard; manual-data app for goals and safety | `dev-scorecard` | `ptbq-scorecard` | `scorecard.code-workspace` | [Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9) |
 | **Scorecard Sandbox** | `voxdatalake.ScorecardSandbox`: a full simulated year under every tile, for designing Looker Studio | `dev-sandbox` | `ptbq-sandbox` | `sandbox-scorecard.code-workspace` | [findings](docs/SCORECARD_SANDBOX_FINDINGS.md) |
-| **Label Design** | Plex → BigQuery → Monday.com artwork queue, plus an on-demand sync app | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` | [label-design/STATUS.md](label-design/STATUS.md) |
+| **Label Design** | Plex → BigQuery → Monday.com artwork queue (new orders checked every 15 min, 5 AM - 5:45 PM weekdays, and pushed as soon as they are found), plus an on-demand sync app | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` | [label-design/STATUS.md](label-design/STATUS.md) |
 | *Shared tooling* | `main.py`, Terraform structure, hooks, deploy scripts | `dev` | `ptbq-dev` | `dev-shared.code-workspace` | [CHANGELOG.md](CHANGELOG.md) |
 | ***Deploy*** | merges and deploys only, no edits | `main` | `plex-to-big-query` | `main-deploy.code-workspace` | `git tag -l 'deploy/*'` |
 
@@ -123,8 +123,10 @@ graph LR
 | Learn the stack as a frontend developer | [docs/FRONTEND_GUIDE.md](docs/FRONTEND_GUIDE.md) |
 | Look up gcloud / docker / terraform detail | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| Know what Claude Code can and can't touch in GCP (`claude-readonly`) | [docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md) |
 | See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
 | Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
+| Find any report, raw table or pipeline, with its SQL and Plex SQL | [Plex Data Hub](https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt) (built from `docs/hub/`, see its README) |
 | Look up a Plex field | [docs/PLEX_GLOSSARY.md](docs/PLEX_GLOSSARY.md), [catalog/plex_catalog_index.md](catalog/plex_catalog_index.md) |
 | Understand the scorecard, tile by tile | [Scorecard Field Manual](https://claude.ai/code/artifact/2e629322-e24f-4402-87bd-77217143011a) |
 | Recover from a lost project, or tear down | [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md), [docs/TEARDOWN.md](docs/TEARDOWN.md) |
@@ -141,7 +143,7 @@ graph LR
 | `reports/*.yaml`, `reports/test/*.yaml` | Per-pipeline extractions and views; prod and test are **separate, hand-kept** files | shared |
 | `reports/sql/*.sql` | One file per BigQuery view (used by prod and test) | shared |
 | `terraform/` | All GCP infrastructure, including the deploy guard | shared |
-| `deploy/cloudbuild.yaml` | Image build and deploy to all 26 jobs | shared |
+| `deploy/cloudbuild.yaml` | Image build and deploy to all 30 jobs | shared |
 | `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
 | `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
 | `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |
@@ -160,6 +162,12 @@ cd C:/F/Parasol/plex-to-big-query
 ./scripts/dev_setup.sh --worktrees   # driver, .env from Secret Manager, hooks, one folder per project
 docker compose build && docker compose up   # local, read-only health check
 ```
+
+**On a Mac, read [docs/ONBOARDING.md](docs/ONBOARDING.md) § "On a Mac" first:**
+Apple Silicon needs `export DOCKER_DEFAULT_PLATFORM=linux/amd64` (the Plex
+driver is x86-64), `docker-compose` may replace `docker compose`, and gcloud's
+active configuration must be `default`, not the Claude Code read-only one
+([docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md)).
 
 `dev_setup.sh` needs read access to the secrets and the driver bucket; the
 list to ask an Owner for is in [docs/ONBOARDING.md](docs/ONBOARDING.md). Add

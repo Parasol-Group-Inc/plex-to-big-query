@@ -7,17 +7,21 @@ hand, upload to Monday). **Not related to the Vox Nutrition scorecard work**
 this repo otherwise tracks — this folder exists so the two don't blend
 together.
 
-> **Where it stands (2026-09-25).** The Google Sheet is being dropped from
-> the flow.
-> - **Replacement:** `label_design_service/push.py` compares BigQuery
->   directly with the Monday board. It is built and verified against the
->   "Plex Import" board, but not yet scheduled in prod: its terraform waits
->   for a Monday API key secret version and a rebuilt image.
-> - **Refreshing on demand:** `deploy/label_design_trigger/` is a one-button
->   web app that runs the ETL (test job first).
-> - **Retired 2026-10-02:** the Sheet-based Apps Script, archived to
->   `deploy/archive/label_design_sync/`. Its triggers never pushed to Monday
->   (check-only); the push service replaced it.
+> **Where it stands (2026-10-22).** Live in prod since the 2026-10-19 cutover.
+> - **ETL:** `plex-etl-label-design` probes Plex every 15 minutes, 5:00 AM -
+>   5:45 PM Mountain, weekdays, and extracts only when an order, line, release
+>   or approval changed.
+> - **Push:** a run that extracts starts `plex-etl-label-design-push`
+>   (`label_design_service/push.py`). It creates one item per new order line
+>   on "Plex Import" (18432111755), deduped by an LCR hash and audited in
+>   `label_design_push_log`. A 6:05 PM sweep catches a push that failed.
+> - **Repair (2026-10-22):** Ashley moves items on to "Design & QA"
+>   (18395121955), and Monday's saved column matching drops some values on
+>   the way (Bottle Material). `plex-etl-label-design-repair`
+>   (`label_design_service/repair.py`, every 15 min) fills each moved item's
+>   blank pushed columns once, from the push log.
+> - **Retired:** the Sheet-based Apps Script (`deploy/archive/label_design_sync/`)
+>   and the Plex REST API push (`deploy/plex_api_function/ARCHIVED.md`).
 >
 > For what's built, verified and blocked, read [`STATUS.md`](STATUS.md) first.
 
@@ -35,7 +39,8 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 | The board's real column ids + full option lists | [`monday_board_catalog.md`](monday_board_catalog.md) |
 | The business-facing report doc | [`docs/reports/label_design_report.md`](../docs/reports/label_design_report.md) |
 | The technical design of the Sheet-based Apps Script (**retired**) | [`deploy/archive/label_design_sync/README.md`](../deploy/archive/label_design_sync/README.md) |
-| The Plex → Monday push service (replacing the Sheet) | [`label_design_service/push.py`](../label_design_service/push.py) docstring |
+| The Plex → Monday push service | [`label_design_service/push.py`](../label_design_service/push.py) docstring |
+| The repair job (refills what a board move dropped) | [`label_design_service/repair.py`](../label_design_service/repair.py) docstring |
 | Run the ETL on demand (web app) | [`deploy/label_design_trigger/README.md`](../deploy/label_design_trigger/README.md) |
 | How to work on this project: its folder, branch, hooks, deploy | [`CONTRIBUTING.md`](../CONTRIBUTING.md): folder `ptbq-label-design`, branch `dev-label-design` |
 
@@ -43,14 +48,18 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 
 ```
 Plex ERP
-  │  (Cloud Run job: plex-etl-label-design, 09:30 / 13:30 Mountain, every day)
+  │  (Cloud Run job: plex-etl-label-design, probe every 15 min, 5:00 AM - 5:45 PM MT, weekdays)
   ▼
 BigQuery — label_design_report view
-  │  (also on demand: deploy/label_design_trigger web app)
-  ├──── TODAY: Apps Script → Google Sheet (MONDAY tab, reviewed) → Monday "Design & QA" (18395121955)
-  │
-  └──── REPLACING IT: label_design_service/push.py (Cloud Run job) → Monday "Plex Import" (18432111755)
-             dedupes by LCR hash + an audit table; no Sheet in the middle
+  │  (a run that extracts starts the push; 6:05 PM sweep as a safety net)
+  ▼
+label_design_service/push.py (plex-etl-label-design-push) → Monday "Plex Import" (18432111755)
+  │  dedupes by LCR hash; every attempt in label_design_push_log
+  ▼  (Ashley moves items by hand)
+Monday "Design & QA" (18395121955)
+  ▲
+  └── label_design_service/repair.py (plex-etl-label-design-repair, every 15 min)
+        fills the pushed columns a move left blank, once per item
 ```
 
 ## Where everything actually lives

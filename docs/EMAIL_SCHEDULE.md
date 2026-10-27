@@ -31,23 +31,42 @@ page.
 
 ## The short version
 
-- **13 pipelines, 27 Cloud Run Jobs** (prod + test, plus the Label Design push
-  job), 68 BigQuery views. Twelve pipelines run once a day in an evening
-  cascade; **Label Design runs hourly, 5 AM - 5 PM Mountain, Mon-Fri** (prod at :00,
-  test at :05, push at :35).
-- **Every evening-cascade run sends one email** — so a normal day is **24
-  scheduled emails**, plus whatever the 9:45 PM retries send (see the caution
+- **14 pipelines, 31 Cloud Run Jobs** (prod + test, plus the Label Design push
+  jobs for prod and test and the prod repair job), 71 BigQuery views (2026-10-19).
+- **Prod (13 pipelines), since probe phase 2 stage B, 2026-10-19:** started by
+  the ETL dispatcher from `PlexOps.etl_schedule`.
+  - At **1 PM, 6 PM and 11 PM** a probe runs first; when nothing changed it
+    sends the short "Probe ran — nothing to update" email.
+  - At **4 AM** it always runs in full.
+  - The 13 jobs are 4 minutes apart: 13:00 … 13:48, 18:00 … 18:48, and so on.
+  - Same subject per pipeline and day, so each pipeline's day is one Gmail
+    thread.
+  - **No prod retry scheduler:** a failed run gets one follow-up probe 15 min
+    later.
+  - Times are changed with SQL (docs/OPERATIONS.md § ETL schedule).
+- **Test (14 pipelines):** once a day in the evening cascade, 7:10-11:10 PM, as
+  before, with the 9:45 PM retry; **Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain, Mon-Fri**
+  (test hourly at :05). A prod run that extracts starts the Monday push itself;
+  the push scheduler is a 6:05 PM sweep (since 2026-10-22). The repair job
+  (`plex-label-design-repair-sync`, every 15 min 5:00 AM - 6:45 PM) sends no
+  email; a failed run shows only in Cloud Run.
+- **Every run sends one email:** prod up to 13 × 4 = **52 a day** (threaded per
+  pipeline), test **13 a day**, plus whatever the 9:45 PM retries send (see the caution
   under the table). Label Design is the exception: it runs `EMAIL_MODE=on_error`,
-  so its hourly runs mail only when partial or failed; a clean run is recorded
+  so its 15-minute runs mail only when partial or failed; a clean run is recorded
   in `job_run_log` and `probe_log` instead.
 - **Every email goes to the same 3 people, prod and test alike** —
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
-- **51 Cloud Scheduler jobs** back these 27 jobs — one normal trigger each
-  (27), plus one retry trigger on every job except Label Design's two and its
-  push (24). Named `plex-<pipeline>-sync[-test]` and
-  `plex-<pipeline>-sync[-test]-retry`. (Two *other* schedulers —
+- **31 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
+  5 minutes, starts all prod pipelines except Label Design), one nightly
+  trigger per test pipeline plus a retry on 12 of them
+  (`plex-<pipeline>-sync-test[-retry]`), and Label Design's `plex-label-design-sync`,
+  `plex-label-design-sync-test`, `plex-label-design-push-sync` (live),
+  `plex-label-design-repair-sync` (live) and
+  `plex-label-design-push-sync-test` (PAUSED until a sandbox board exists).
+  Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (Two *other* schedulers —
   `monday-daily-sync` and `monday-daily-sync-VoxScorecardsLive` — also live in
   this GCP project but belong to an unrelated Monday.com integration, not this
   pipeline.)
@@ -55,26 +74,30 @@ page.
 ## Full schedule
 
 All times are Mountain (`America/Denver`, handles MST/MDT automatically).
-Every job's retry fires at **9:45 PM** and only does real work if that day's
+Prod times are the first probe of the day; every prod pipeline also runs at
+6 PM and 11 PM (probe) and 4 AM (full), staggered 4 minutes apart. Each
+**test** job's retry fires at **9:45 PM** and only does real work if that day's
 scheduled run `failed` (a `success`/`partial` day makes it a silent no-op) —
 but see the caution below the table.
 
-| Category | Pipeline | Reports produced (email body lists each by this name) | Prod job | Prod time | Test job | Test time |
+| Category | Pipeline | Reports produced (email body lists each by this name) | Prod job | Prod time (`PlexOps.etl_schedule`) | Test job | Test time |
 |---|---|---|---|---|---|---|
-| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | hourly 5 AM - 5 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
-| **Sales** | `sales_orders` | 27 reports — see `bq_view` in `reports/sales_orders.yaml` | `plex-etl-sales-orders` | 7:00 PM | `plex-etl-sales-orders-test` | 7:10 PM |
-| **Production** | `work_orders` | 19 reports — see `bq_view` in `reports/work_orders.yaml` | `plex-etl-work-orders` | 7:20 PM | `plex-etl-work-orders-test` | 7:30 PM |
-| **Supply Chain** | `purchasing_open_orders` | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 7:40 PM | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
-| **Supply Chain** | `part_obsolescence` | Vox \| Products to be Discontinued | `plex-etl-part-obsolescence` | 8:00 PM | `plex-etl-part-obsolescence-test` | 8:10 PM |
-| **Supply Chain** | `inventory_activity` | Inventory Activity Detail Usage Per Month, Vox Scorecard \| Avg Daily Usage | `plex-etl-inventory-activity` | 8:20 PM | `plex-etl-inventory-activity-test` | 8:30 PM |
-| **Inventory** | `inventory_snapshot` | Current Inventory Snapshot, Vox \| Inventory Valuation Summary, Vox Scorecard \| Inventory Value Total | `plex-etl-inventory-snapshot` | 8:40 PM | `plex-etl-inventory-snapshot-test` | 8:50 PM |
-| **Quality** | `quality_nonconformance` | Quality Nonconformance, Turn Around Time Report, Quality Deviations, Vox Scorecard \| NC Cost by Category, Vox Scorecard \| NC Cost by Disposition (Destruction/Rework) | `plex-etl-quality-nonconformance` | 9:00 PM | `plex-etl-quality-nonconformance-test` | 9:10 PM |
-| **Supply Chain** | `part_on_hand_inventory` | Part On-Hand Inventory, Inventory Risk Analysis, MFG Job Schedule - Inventory Availability (partial), Vox Scorecard \| Top Quantity Ranking, Vox Scorecard \| Cycle Count Accuracy | `plex-etl-part-on-hand-inventory` | 9:20 PM | `plex-etl-part-on-hand-inventory-test` | 9:30 PM |
-| **Supply Chain** | `purchasing_pending_requisitions` | Vox \| Purchasing \| Pending Order Requisitions | `plex-etl-purchasing-pending-requisitions` | 9:40 PM | `plex-etl-purchasing-pending-requisitions-test` | 9:50 PM |
-| **Sales** | `sales_quotes` | Open Quotes | `plex-etl-sales-quotes` | 10:00 PM | `plex-etl-sales-quotes-test` | 10:10 PM |
-| **Sales** | `sales_returns` | Open RMA's | `plex-etl-sales-returns` | 10:20 PM | `plex-etl-sales-returns-test` | 10:30 PM |
-| **Supply Chain** | `quality_supplier_returns` | Approve Vendor Return Authorizations | `plex-etl-quality-supplier-returns` | 10:40 PM | `plex-etl-quality-supplier-returns-test` | 10:50 PM |
-| *all* | *retry* | — | `plex-<pipeline>-sync-retry` | 9:45 PM | `plex-<pipeline>-sync-test-retry` | 9:45 PM |
+| **Sales** | `label_design` | Label Design Queue | `plex-etl-label-design` | every 15 min 5 AM - 5:45 PM, Mon-Fri | `plex-etl-label-design-test` | hourly :05, 5 AM - 5 PM, Mon-Fri |
+| **Sales** | `sales_orders` | 27 reports — see `bq_view` in `reports/sales_orders.yaml` | `plex-etl-sales-orders` | 1:00 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-sales-orders-test` | 7:10 PM |
+| **Production** | `work_orders` | 19 reports — see `bq_view` in `reports/work_orders.yaml` | `plex-etl-work-orders` | 1:04 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-work-orders-test` | 7:30 PM |
+| **Supply Chain** | `purchasing_open_orders` | Vox \| Open Purchase Orders, Purchase Orders to Approve: Results | `plex-etl-purchasing-open-orders` | 1:08 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-purchasing-open-orders-test` | 7:50 PM |
+| **Supply Chain** | `part_obsolescence` | Vox \| Products to be Discontinued | `plex-etl-part-obsolescence` | 1:12 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-part-obsolescence-test` | 8:10 PM |
+| **Supply Chain** | `inventory_activity` | Inventory Activity Detail Usage Per Month, Vox Scorecard \| Avg Daily Usage | `plex-etl-inventory-activity` | 1:16 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-inventory-activity-test` | 8:30 PM |
+| **Inventory** | `inventory_snapshot` | Current Inventory Snapshot, Vox \| Inventory Valuation Summary, Vox Scorecard \| Inventory Value Total | `plex-etl-inventory-snapshot` | 1:20 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-inventory-snapshot-test` | 8:50 PM |
+| **Quality** | `quality_nonconformance` | Quality Nonconformance, Turn Around Time Report, Quality Deviations, Vox Scorecard \| NC Cost by Category, Vox Scorecard \| NC Cost by Disposition (Destruction/Rework) | `plex-etl-quality-nonconformance` | 1:24 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-quality-nonconformance-test` | 9:10 PM |
+| **Supply Chain** | `part_on_hand_inventory` | Part On-Hand Inventory, Inventory Risk Analysis, MFG Job Schedule - Inventory Availability (partial), Vox Scorecard \| Top Quantity Ranking, Vox Scorecard \| Cycle Count Accuracy | `plex-etl-part-on-hand-inventory` | 1:28 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-part-on-hand-inventory-test` | 9:30 PM |
+| **Supply Chain** | `purchasing_pending_requisitions` | Vox \| Purchasing \| Pending Order Requisitions | `plex-etl-purchasing-pending-requisitions` | 1:32 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-purchasing-pending-requisitions-test` | 9:50 PM |
+| **Sales** | `sales_quotes` | Open Quotes | `plex-etl-sales-quotes` | 1:36 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-sales-quotes-test` | 10:10 PM |
+| **Sales** | `sales_returns` | Open RMA's | `plex-etl-sales-returns` | 1:40 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-sales-returns-test` | 10:30 PM |
+| **Supply Chain** | `quality_supplier_returns` | Approve Vendor Return Authorizations | `plex-etl-quality-supplier-returns` | 1:44 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-quality-supplier-returns-test` | 10:50 PM |
+| **Production** | `part_routing` | Audit - Part Info and Routing, Audit - Part Info and Routing (Container Types), Vox Nutrition Item List with Shelf Life Details | `plex-etl-part-routing` | 1:48 PM probe (+ 6 PM, 11 PM probe, 4 AM full) | `plex-etl-part-routing-test` | 11:10 PM (no retry) |
+| **Quality** | `part_lot` | Part Lot Attribute Specs, Part Lot Inheritance | `plex-etl-part-lot` | 1:52 PM probe (+ 6 PM, 11 PM probe, 4 AM full), once its `etl_schedule` rows are added | `plex-etl-part-lot-test` | 11:20 PM (no retry) |
+| *all except `label_design`, `part_routing` and `part_lot`* | *retry* | — | none (removed 2026-10-19; the dispatcher sends one follow-up probe 15 min later) | — | `plex-<pipeline>-sync-test-retry` | 9:45 PM |
 
 Prod/test pairs are staggered 10 minutes apart. `scorecard_goals_resolved` is
 built by both `sales_orders` and `work_orders`, which is why the per-pipeline
@@ -98,18 +121,20 @@ view counts add up to 69 while there are 68 distinct views.
 > history, not `job_run_log`:
 >
 > ```bash
-> gcloud scheduler jobs describe plex-sales-orders-sync-retry --location=us-central1 --project=voxdatalake
+> gcloud scheduler jobs describe plex-sales-orders-sync-test-retry --location=us-central1 --project=voxdatalake
 > ```
 >
 > **Until that is answered, no pipeline has a working automatic retry** — a
 > failed nightly run waits for a human. Label Design is the exception by
-> design: no retry trigger, because its hourly probe re-runs a failed cycle
+> design: no retry trigger, because its 15-minute probe re-runs a failed cycle
 > within the hour.
 
-**Changing a time:** Sales Orders' pair is `scheduler_cron`/`scheduler_cron_test`
-in `terraform.tfvars`; every other job's `schedule` is a literal in
-`terraform/main.tf`; the retry is `retry_scheduler_cron`. Commit, merge to
-`main`, `./scripts/deploy.sh` — then update this table in the same commit.
+**Changing a time:** a **prod** time is a row in `PlexOps.etl_schedule` —
+change it with SQL (docs/OPERATIONS.md § ETL schedule), no deploy. A **test**
+time: Sales Orders' is `scheduler_cron_test` in `terraform.tfvars`; every other
+job's `schedule` is a literal in `terraform/main.tf`; the retry is
+`retry_scheduler_cron`. Commit, merge to `main`, `./scripts/deploy.sh` — then
+update this table in the same commit.
 
 ## What "category" actually controls
 
@@ -270,7 +295,7 @@ retry-skip logic):
   unrelated `terraform apply`. `image_url` in `terraform.tfvars` is now
   always a pinned commit SHA (never `:latest`) and only matters for
   first-time job creation; `deploy/cloudbuild.yaml`'s single `deploy-all`
-  step (all 27 jobs today, one loop) — or a manual `gcloud run jobs update
+  step (all 30 jobs today, one loop) — or a manual `gcloud run jobs update
   --image=...`— is the only thing that ever moves a job onto a new image.
   Verified live: `terraform plan` shows `No changes` immediately after a
   real `gcloud run jobs update`, both right after adding the lifecycle

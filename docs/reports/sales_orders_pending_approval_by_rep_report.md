@@ -1,6 +1,6 @@
 # Orders Pending Approval by Sales Rep
 
-> **Status:** ✅ Built 2026-08-21, decided best-criteria — same underlying data as "Pending Approval Orders," not independently confirmed as a distinct report · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Built 2026-08-21, decided best-criteria — same underlying data as "Pending Approval Orders," not independently confirmed as a distinct report · **Category:** Sales · **Runs:** rides the Sales Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

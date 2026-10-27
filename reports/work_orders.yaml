@@ -27,6 +27,10 @@ description: "Work orders by workcenter — Vox Nutrition production report (Ple
 # Jobs are the shop-floor execution records that carry actual production data
 # (qty per operation, times, workcenter assignments). This report uses Jobs.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   # Job header — one row per production job (Job_No, part, qty, status, dates)
   # Also read (not extracted) by the sales_orders pipeline's
@@ -35,24 +39,28 @@ extractions:
     bq_table: raw_Part_v_Job
     filter: ""
     date_col: ""
+    probe: [Update_Date, Job_Key]
 
   # Job operations — one row per workcenter step per job (qty, setup/run time, dates)
   - plex_view: Part_v_Job_Op
     bq_table: raw_Part_v_Job_Op
     filter: ""
     date_col: ""
+    probe: [Update_Date, Job_Op_Key]
 
   # Workcenter master — Name and Workcenter_Type are inline (no extra join needed)
   - plex_view: Part_v_Workcenter
     bq_table: raw_Part_v_Workcenter
     filter: ""
     date_col: ""
+    probe: [Workcenter_Key]
 
   # Workcenter log — actual hours logged by operators per job operation
   - plex_view: Part_v_Workcenter_Log
     bq_table: raw_Part_v_Workcenter_Log
     filter: ""
     date_col: ""
+    probe: [Update_Date]
 
   # ── Added 2026-08-11 for mfg_job_schedule_report (see bq_view list below) ──
 
@@ -63,18 +71,21 @@ extractions:
     bq_table: raw_Part_v_Job_Status
     filter: ""
     date_col: ""
+    probe: [Job_Status_Key]
 
   # Employee master — resolves Job_Op.Started_By/Completed_By to an operator name
   - plex_view: Personnel_v_Employee
     bq_table: raw_Personnel_v_Employee
     filter: ""
     date_col: ""
+    probe: [Employee_Key]
 
   # Lot master — Job.Lot_Key joins here for lot number + manufactured date
   - plex_view: Part_v_Lot
     bq_table: raw_Part_v_Lot
     filter: ""
     date_col: ""
+    probe: [Update_Date, Lot_Key]
 
   # Lot shelf life — raw value only, see mfg_job_schedule_view.sql header for why
   # this isn't converted into an expiration date
@@ -82,6 +93,7 @@ extractions:
     bq_table: raw_Part_v_Lot_Shelf_Life
     filter: ""
     date_col: ""
+    probe: [Lot_Shelf_Life_Key]
 
   # QC inspection records — Job_Op_Key joins directly, closest analog to the
   # manual tracker's "Raw Material in Testing" / "Raws Released" columns
@@ -89,24 +101,28 @@ extractions:
     bq_table: raw_Quality_v_Checksheet
     filter: ""
     date_col: ""
+    probe: [Checksheet_No, Inspection_Date]
 
   # Checksheet status lookup — text label + Approved/Rejected/Expired flags
   - plex_view: Quality_v_Checksheet_Status
     bq_table: raw_Quality_v_Checksheet_Status
     filter: ""
     date_col: ""
+    probe: [Checksheet_Status_Key]
 
   # Equipment/asset master — Workcenter_Key resolves an operation to its asset ID
   - plex_view: Maintenance_v_Equipment
     bq_table: raw_Maintenance_v_Equipment
     filter: ""
     date_col: ""
+    probe: [Updated_Date, Equipment_Key]
 
   # Building master — Job.Building_Key resolves to a room/building name
   - plex_view: Common_v_Building
     bq_table: raw_Common_v_Building
     filter: ""
     date_col: ""
+    probe: [Building_Key]
 
   # ── Added 2026-08-11 for the FG Testing Pending tab's Stock/Custom lead ──
 
@@ -117,6 +133,7 @@ extractions:
     bq_table: raw_Part_v_Job_Type
     filter: ""
     date_col: ""
+    probe: [Job_Type_Key]
 
   # Job distribution — a job with a distribution row tied to a Release_Key
   # is fulfilling a specific customer order; no row = stock replenishment.
@@ -125,6 +142,7 @@ extractions:
     bq_table: raw_Part_v_Job_Distribution
     filter: ""
     date_col: ""
+    probe: [Job_Distribution_Key, sum:Quantity]
 
   # ── Added 2026-08-21 for the 4 Daily Reports (see bq_view list below) ──
   # Initially built on Part_v_Cell_Production, corrected same day: a live
@@ -150,6 +168,7 @@ extractions:
     bq_table: raw_Part_v_Production
     filter: ""
     date_col: Record_Date
+    probe: [Record_Date, sum:Quantity]
 
 # NOTE: Part_v_Part is intentionally NOT extracted here.
 # raw_Part_v_Part is owned by the sales_orders pipeline (runs 7:00 PM Mountain).
@@ -258,6 +277,11 @@ bq_view:
   - name: bottling_job_open_report
     display_name: "Vox Scorecard | Open Bottles (Bottling)"
     sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_view.sql
+  # Added 2026-10-26 — Jennilyn's hand-made workaround (Job_Distribution is empty in Plex),
+  # now in the repo. Reads sales_orders_report, so the sales_orders pipeline must have run.
+  - name: bottling_job_open_with_orders_report
+    display_name: "Bottling | Open Jobs with Sales Orders"
+    sql_file: gs://voxdatalake-report-configs/sql/bottling_job_open_with_orders_view.sql
   # Added 2026-09-04 — "production by work center group by month", asked for
   # directly in the Sep 1 requirements meeting. Complements (does not
   # replace) the 4 per-day, per-workcenter Daily Reports: this is the grain

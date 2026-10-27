@@ -10,7 +10,7 @@ description: "Label Design queue — TEST environment (vox.test.odbc.plex.com ->
 # Two tiny queries that fingerprint the only thing that can produce a new
 # Monday item: the set of release lines sitting on the 'Label Design' release
 # status. When the fingerprint matches the last clean run's, main.py skips all
-# 14 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
+# 15 extractions below. Typical day: ~10 probes costing seconds, 1-3 real runs.
 #
 # Why the key SET and not a count or a MAX(Update_Date): a count misses
 # one-in-one-out, and nothing guarantees Plex stamps Update_Date on a status
@@ -37,6 +37,15 @@ probe:
       columns: [Release_Key, PO_Line_Key]
       filter: "WHERE t.Release_Status_Key IN ({status_keys})"
 
+    - plex_view: Sales_v_PO_Status
+      columns: [PO_Status_Key]
+      filter: "WHERE t.PO_Status = 'Pending Fulfillment'"
+      bind: po_status_keys
+
+    - plex_view: Sales_v_PO
+      columns: [PO_Key]
+      filter: "WHERE t.PO_Status_Key IN ({po_status_keys}) AND t.PO_Date >= '2026-10-18' AND t.PO_Key IN (SELECT pl.PO_Key FROM Sales_v_PO_Line AS pl JOIN Sales_v_Release AS r ON r.PO_Line_Key = pl.PO_Line_Key WHERE r.Release_Status_Key IN ({status_keys}))"
+
 extractions:
   - plex_view: Sales_v_PO
     bq_table: raw_Sales_v_PO
@@ -61,6 +70,16 @@ extractions:
   # New — not extracted anywhere else in the repo before 2026-09-11.
   - plex_view: Sales_v_Release_Status
     bq_table: raw_Sales_v_Release_Status
+    filter: ""
+    date_col: ""
+
+  # Priority lookup — added 2026-10-07 for the Monday Priority column. Resolves
+  # Sales_v_Release.Priority_Key (the per-line Priority dropdown in the Plex
+  # sales-order screen) to its word. Part_v_Priority, NOT Sales_v_Priority —
+  # the latter replicates empty on this tenant; the word is Part_v_Priority's
+  # Description column. Small code table, pulled whole.
+  - plex_view: Part_v_Priority
+    bq_table: raw_Part_v_Priority
     filter: ""
     date_col: ""
 
@@ -118,3 +137,6 @@ bq_view:
   - name: label_design_report
     display_name: "Label Design Queue"
     sql_file: gs://voxdatalake-report-configs/sql/label_design_view.sql
+  - name: label_design_push_latency
+    display_name: "Label Design Push Latency"
+    sql_file: gs://voxdatalake-report-configs/sql/label_design_push_latency_view.sql

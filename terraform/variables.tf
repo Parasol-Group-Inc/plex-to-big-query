@@ -128,7 +128,22 @@ variable "image_url" {
     pinned rather than floating means a from-scratch `terraform apply`
     always creates jobs on a known-good build instead of whatever ":latest"
     happens to resolve to at apply time.
+
+    Since 2026-10-22 this is only the fallback for image_reference_job = "":
+    new jobs normally start on the reference job's live image instead.
   EOT
+}
+
+variable "image_reference_job" {
+  type        = string
+  description = <<-EOT
+    A live plex-etl-* job whose current image every NEWLY CREATED job starts
+    on (local.etl_image in main.tf). Cloud Build's deploy-all moves every job
+    to each new build, so this is always the newest deployed image, where a
+    hand-kept var.image_url went stale. "" falls back to var.image_url, for a
+    project whose jobs do not exist yet.
+  EOT
+  default     = "plex-etl-sales-orders"
 }
 
 # ── Plex query config ─────────────────────────────────────────────────────────

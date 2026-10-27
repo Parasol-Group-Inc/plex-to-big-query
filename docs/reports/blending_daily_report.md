@@ -1,6 +1,6 @@
 # Blending Daily Report
 
-> **Status:** ✅ Fixed 2026-09-01 (join bug, see Flags below) and reverified against `PlexTest` — first real row ever returned: Preweigh 1, 2026-08-31/09-01, 429.185 actual qty, 0 scrap · **Category:** Production · **Runs:** rides the Work Orders pipeline, 7:20 PM / 7:30 PM Mountain (prod/test)
+> **Status:** ✅ Fixed 2026-09-01 (join bug, see Flags below) and reverified against `PlexTest` — first real row ever returned: Preweigh 1, 2026-08-31/09-01, 429.185 actual qty, 0 scrap · **Category:** Production · **Runs:** rides the Work Orders pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

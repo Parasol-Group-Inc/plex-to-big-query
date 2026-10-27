@@ -1,6 +1,6 @@
 # Vox Scorecard | Cycle Count Accuracy
 
-> **Status:** ✅ Deployed 2026-09-11 · 🔧 date fix 2026-09-22, per-location accuracy fix 2026-09-24 (deployed 2026-09-25) · **Category:** Supply Chain · **Runs:** rides the Part On-Hand Inventory pipeline, 9:20 PM / 9:30 PM Mountain (prod/test)
+> **Status:** ✅ Deployed 2026-09-11 · 🔧 date fix 2026-09-22, per-location accuracy fix 2026-09-24 (deployed 2026-09-25) · **Category:** Supply Chain · **Runs:** rides the Part On-Hand Inventory pipeline, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

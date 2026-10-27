@@ -6,11 +6,16 @@ description: "Current Inventory Snapshot / Vox | Inventory Valuation Summary (+ 
 # the confirmed join chain and the standard-cost-vs-quantity caveat.
 # bq_view is a list — two views built from this one extraction run.
 
+# Change probe — see main.py and docs/PROBE_BUILD_PLAN.md. Columns per
+# extraction were picked by scripts/generate_probe_columns.py.
+probe_mode: auto
+
 extractions:
   - plex_view: Part_v_Snapshot
     bq_table: raw_Part_v_Snapshot
     filter: ""
     date_col: Snapshot_Date
+    probe: [Snapshot_Date, Snapshot_Key]
 
   - plex_view: Part_v_Snapshot_Cost_Sub_Type_Breakdown
     bq_table: raw_Part_v_Snapshot_Cost_Sub_Type_Breakdown
@@ -21,6 +26,7 @@ extractions:
     bq_table: raw_Part_v_Cost_Sub_Type_Breakdown_History
     filter: ""
     date_col: Change_Date
+    probe: [Change_Date]
 
 bq_view:
   - name: inventory_snapshot_report

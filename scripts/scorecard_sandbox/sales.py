@@ -71,7 +71,7 @@ def generate(sb):
     # view since the 2026-09-24 tenant cut-back, so the ETL's
     # keep-yesterday-on-zero-rows guard left it frozen at its 2026-10-02
     # contents, whose Customer_Part_Keys join 0/2,119 to the 6,179 current
-    # customer parts (OPEN_ITEMS S14). Seeding from it aborted the build
+    # customer parts (OPEN_ITEMS S18). Seeding from it aborted the build
     # outright, and it carries only 2 distinct prices in any case.
     #
     # Every price below is a REAL Sales_v_Price value copied from PlexTest

@@ -19,8 +19,11 @@ From there it reuses the same order → line → release → part join already u
 - **Pipeline:** `reports/sales_orders.yaml` -> `sales_orders_rush_open_report`
 - **SQL:** `reports/sql/sales_orders_rush_open_view.sql`
 
+Each row carries the order's **Order number** (`order_no`, added 2026-10-26, shown first, next to the PO number `document_so`), as in the Sales Orders report.
+
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 - **Unconfirmed against real RUSH orders.** Plex and NetSuite are entered separately, so it isn't proven that whoever enters orders in Plex uses the same "RUSH | ..." memo convention Vox uses in NetSuite. On the test tenant's 9 real live sales orders, none currently contain "RUSH" in the note field — inconclusive on a sample this small, not disproven. Flag for data-scientist review before trusting row counts once more real orders exist.
 - **"Billed" status has no Plex equivalent.** NetSuite's version of this search also excludes orders marked "Billed." Plex's order-status workflow has no separate billed/invoiced state, so this report assumes those orders are already covered by "Closed" rather than guessing at a different status. If an order is ever seen sitting in "Closed" while still unbilled, that assumption needs revisiting.
 - **Line-level noise filters not applied.** NetSuite's search also excludes certain non-physical line types (discounts, kits, service charges, etc.) and non-taxable items. This report doesn't filter those out — same as every other Sales Orders report in this pipeline — because it's unconfirmed whether Plex's line data even has that kind of distinction to filter on.

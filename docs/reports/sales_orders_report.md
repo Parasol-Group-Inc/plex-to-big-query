@@ -1,6 +1,6 @@
 # Sales Orders
 
-> **Status:** ✅ Built and deployed to production 2026-08-22 (has been running against real Vox Nutrition data since 2026-07-13) · **Category:** Sales · **Runs:** `plex-etl-sales-orders`, 7:00 PM / 7:10 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed to production 2026-08-22 (has been running against real Vox Nutrition data since 2026-07-13) · **Category:** Sales · **Runs:** `plex-etl-sales-orders`, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 
@@ -14,6 +14,8 @@ This is not a Google Sheet replacement — it's an original Plex-native report b
 
 Starts from the sales order header and line items, then attaches everything a person would want to see next to an order: the customer's name, the primary and secondary sales rep, which part and how much was ordered, a price per unit (and a computed line total), the order's overall dollar total, and the product's type/group classification. It also figures out "Date Approved" by looking back through the order's status history for the first time it reached the "Pending Fulfillment" stage.
 
+Each row carries both the order's **Order number** (`order_no`, added 2026-10-26, shown first) and its **PO number** (`document_so`), the two separate numbers Plex keeps on a sales order.
+
 Because it returns one row per order line (not one row per order), an order with several parts on it will show up as several rows — that's expected, not a duplicate.
 
 - **Pipeline:** `reports/sales_orders.yaml` → `sales_orders_report`
@@ -21,6 +23,7 @@ Because it returns one row per order line (not one row per order), an order with
 
 ## Flags and open questions
 
+- **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 - **⚠ Fixed 2026-09-24 — `product_group` was always blank.** It joined `Part_v_Part.Part_Group_Key` to `Part_v_Part_Product_Group`, which is empty in test and prod. It now reads Plex's **Part Group** (`Part_v_Part_Group`: Capsule, Softgel, Label, Packaging, ...), which is what that key actually points at; the column keeps its `product_group` name. `raw_Part_v_Part_Group` is newly extracted by this pipeline, and the fix was **deployed 2026-09-25** — the names show in PlexTest now, and in PlexProd from the first scheduled Sales Orders run after the deploy.
 - **The per-unit price is a best-effort estimate, not a confirmed number.** Plex stores a customer's price in tiers based on order quantity; this report always picks the lowest-quantity tier as "the price." Nobody has confirmed this is the tier the business actually wants shown here — the SQL leaves a note to revisit if a different tier turns out to be the right one.
 - **The line total (price × quantity) is computed, not a real Plex field.** There is no dollar-amount column on the order or line-item records in Plex at all, so this figure is this pipeline's own multiplication of the estimated price above by the ordered quantity, and excludes tax and freight. The order's overall total (`order_total`) is a real Plex value and is more trustworthy than the computed line total.

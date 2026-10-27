@@ -1,6 +1,6 @@
 # Vox | Inventory Valuation Summary
 
-> **Status:** ✅ Built and deployed 2026-08-10/11, join chain and business intent both confirmed against live data · **Category:** Inventory · **Runs:** `plex-etl-inventory-snapshot` job, 8:40 PM / 8:50 PM Mountain (prod/test)
+> **Status:** ✅ Built and deployed 2026-08-10/11, join chain and business intent both confirmed against live data · **Category:** Inventory · **Runs:** `plex-etl-inventory-snapshot` job, prod 1 PM / 6 PM / 11 PM probe + 4 AM full (`PlexOps.etl_schedule`), test nightly
 
 ## What this tells you
 

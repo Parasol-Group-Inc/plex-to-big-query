@@ -124,6 +124,7 @@ graph LR
 | Look up gcloud / docker / terraform detail | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Know what Claude Code can and can't touch in GCP (`claude-readonly`) | [docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md) |
+| Hand over or take over: backups, people-tied credentials, the Claude Code setup | [docs/AI_WORKFLOW_HANDOVER.md](docs/AI_WORKFLOW_HANDOVER.md) |
 | See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
 | Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
 | Find any report, raw table or pipeline, with its SQL and Plex SQL | [Plex Data Hub](https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt) (built from `docs/hub/`, see its README) |

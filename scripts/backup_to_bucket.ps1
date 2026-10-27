@@ -108,7 +108,9 @@ foreach ($rel in $LocalOnly) {
 
 Write-Host 'Local-only files (gitignored — the point of this script):' -ForegroundColor Yellow
 foreach ($f in $Present) {
-    $size = (Get-Item (Join-Path $RepoRoot $f)).Length
+    # -Force: on macOS/Linux PowerShell treats dot-files (.env) as hidden, so Test-Path
+    # finds them but Get-Item does not unless asked (found 2026-10-24).
+    $size = (Get-Item -Force (Join-Path $RepoRoot $f)).Length
     Write-Host ("  + {0,-42} {1,10:N0} bytes" -f $f, $size)
 }
 foreach ($f in $Absent) {

@@ -107,11 +107,17 @@ Do **not** export it in `~/.zshrc`, and do not leave `claude` as the activated
 configuration: either would switch your own terminal, and
 `deploy.sh` and Terraform, onto the read-only account.
 
-On 2026-10-23 the variable was present in the running Claude session but not in
-any of `~/.claude/settings*.json`, `.claude/settings*.json` or the zsh
-startup files. It is being injected some other way (likely the VS Code extension's
-environment setting). Whoever owns this setup should note where, so it can be
-recreated.
+On a Mac with the VS Code extension the variable is set in VS Code's user
+settings (`~/Library/Application Support/Code/User/settings.json`), not in any
+Claude settings file or the zsh startup files:
+
+```
+"claudeCode.environmentVariables": [{"name": "CLOUDSDK_ACTIVE_CONFIG_NAME", "value": "claude"}]
+```
+
+(Found 2026-10-24.) In the terminal CLI, use `env` in `~/.claude/settings.json`
+instead. The full setup, backup and rotation procedure is in
+[AI_WORKFLOW_HANDOVER.md](AI_WORKFLOW_HANDOVER.md).
 
 ## Open question: the exact roles
 

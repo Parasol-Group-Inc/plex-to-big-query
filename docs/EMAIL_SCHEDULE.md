@@ -31,8 +31,8 @@ page.
 
 ## The short version
 
-- **14 pipelines, 31 Cloud Run Jobs** (prod + test, plus the Label Design push
-  jobs for prod and test and the prod repair job), 71 BigQuery views (2026-10-19).
+- **14 pipelines, 29 Cloud Run Jobs** (prod + test, plus the prod Label Design
+  push job), 71 BigQuery views (2026-10-19).
 - **Prod (13 pipelines), since probe phase 2 stage B, 2026-10-19:** started by
   the ETL dispatcher from `PlexOps.etl_schedule`.
   - At **1 PM, 6 PM and 11 PM** a probe runs first; when nothing changed it
@@ -48,24 +48,25 @@ page.
   before, with the 9:45 PM retry; **Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain, Mon-Fri**
   (test hourly at :05). A prod run that extracts starts the Monday push itself;
   the push scheduler is a 6:05 PM sweep (since 2026-10-22). The repair job
-  (`plex-label-design-repair-sync`, every 15 min 5:00 AM - 6:45 PM) sends no
-  email; a failed run shows only in Cloud Run.
+  (2026-10-22 to 10-27) is retired.
 - **Every run sends one email:** prod up to 13 × 4 = **52 a day** (threaded per
   pipeline), test **13 a day**, plus whatever the 9:45 PM retries send (see the caution
   under the table). Label Design is the exception: it runs `EMAIL_MODE=on_error`,
   so its 15-minute runs mail only when partial or failed; a clean run is recorded
-  in `job_run_log` and `probe_log` instead.
+  in `job_run_log` and `probe_log` instead. Its Monday push sends its own
+  **`[Plex ETL] - Sales: Label Design push — <date>`** only when something went
+  wrong or it added a label to Design & QA, at most once a day per problem
+  (since 2026-10-27).
 - **Every email goes to the same 3 people, prod and test alike** —
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
-- **31 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
+- **29 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
   5 minutes, starts all prod pipelines except Label Design), one nightly
   trigger per test pipeline plus a retry on 12 of them
   (`plex-<pipeline>-sync-test[-retry]`), and Label Design's `plex-label-design-sync`,
-  `plex-label-design-sync-test`, `plex-label-design-push-sync` (live),
-  `plex-label-design-repair-sync` (live) and
-  `plex-label-design-push-sync-test` (PAUSED until a sandbox board exists).
+  `plex-label-design-sync-test` and `plex-label-design-push-sync` (live; the
+  test push and its scheduler were removed 2026-10-27).
   Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (Two *other* schedulers —
   `monday-daily-sync` and `monday-daily-sync-VoxScorecardsLive` — also live in
   this GCP project but belong to an unrelated Monday.com integration, not this

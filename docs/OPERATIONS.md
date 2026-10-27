@@ -29,8 +29,8 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-14 pipelines, 31 Cloud Run jobs (prod + test, plus the two Label Design push
-jobs and the prod Label Design repair job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
+14 pipelines, 29 Cloud Run jobs (prod + test, plus the Label Design push
+job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
 - `extractions[]` — list of Plex views to pull, with optional filters and destination table names
@@ -320,7 +320,7 @@ never in the subject — check the body for those.
 | Setting | Production | Test |
 |---|---|---|
 | Cloud Run jobs (14 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
-| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) and `plex-label-design-repair-sync` (every 15 min) | `plex-<pipeline>-sync-test` (`plex-label-design-push-sync-test` is PAUSED) |
+| Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) | `plex-<pipeline>-sync-test` |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
 | Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
@@ -481,23 +481,37 @@ quiet hour costs no Monday API calls at all. It can over-count (a hand-typed
 board item has no audit row) but never under-count, so the board scan stays the
 final authority.
 
-**The repair job refills what a board move dropped (2026-10-22).** Ashley moves
-items from "Plex Import" to "Design & QA". Monday matches columns only on the
-first move between two boards and reuses that answer, so a column it left
-unmatched (Bottle Material) arrives blank on every move.
-`plex-etl-label-design-repair` (`label_design_service/repair.py`, scheduler
-`plex-label-design-repair-sync`, every 15 min 5:00 AM - 6:45 PM weekdays) looks
-up each pushed item from the last 30 days that has no `repaired` row yet. Once
-an item is on Design & QA, it fills every pushed column that is blank there and
-logs `outcome = 'repaired'` in `label_design_push_log`. It never touches a
-filled column and never checks an item twice, so a value the team clears
-afterwards stays cleared. It never creates items, so it cannot race the push.
-To see what it did:
+**The push board is "Plex Import Test" (18437236736) since 2026-10-27.** The
+team moves items from it to "Design & QA". A move carries a status value across
+by the label's colour (not its name), and the old "Plex Import" board's colours
+did not match Design & QA's. Before creating items, the push gives every status
+label it writes the colour that label has on Design & QA (`MOVE_TO_BOARD_ID`),
+adding a missing label to both boards (`label_design_service/labels.py`). Its
+log shows each change as `Label colours: ...`; a label it cannot make safe is a
+`WARNING` and a non-zero exit. A label someone adds by hand should get the same
+colour on both boards.
+
+**The push emails its problems (2026-10-27).** Subject `[Plex ETL] - Sales:
+Label Design push — <date>`, to the ETL's recipients: nothing created (a label
+check failed), a field that will arrive blank (Design & QA refused a label),
+items failed or partial, the alarm, a crash, and labels it added to Design &
+QA. Once a day per problem; each email is recorded as `outcome = 'alert'` rows:
 
 ```sql
-SELECT pushed_at, monday_item_id, customer_part_no, detail
+SELECT pushed_at, detail FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE outcome = 'alert' ORDER BY pushed_at DESC LIMIT 20;
+``` From 2026-10-22 to 10-27 a repair job
+(`plex-etl-label-design-repair`) refilled those columns; it is retired, and its
+`outcome = 'repaired'` rows stay in `label_design_push_log`. The push dedupes
+against the push log for every board, so nothing pushed to the old board is
+pushed again. To check a move kept its values, compare the item on Design & QA
+with its push log row:
+
+```sql
+SELECT pushed_at, monday_item_id, customer_part_no, column_values
 FROM `voxdatalake.PlexProd.label_design_push_log`
-WHERE outcome = 'repaired' ORDER BY pushed_at DESC LIMIT 20;
+WHERE board_id = '18437236736' AND outcome IN ('created', 'partial')
+ORDER BY pushed_at DESC LIMIT 20;
 ```
 
 ### Checking it is actually working

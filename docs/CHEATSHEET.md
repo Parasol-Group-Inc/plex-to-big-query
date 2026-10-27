@@ -20,8 +20,8 @@ This pipeline **copies Plex ERP data into BigQuery** so the data team can query 
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report YAML/SQL the jobs read at run time. Terraform writes those objects from `reports/` on `main` (via `./scripts/deploy.sh`), so a YAML/SQL change needs **no image rebuild — but it does need a deploy**
 
-**14 pipelines** (`reports/*.yaml`) → **29 Cloud Run jobs** (prod + test each, plus the Label Design push job) →
-**29 Cloud Scheduler jobs** (the 5-minute ETL dispatcher, the test jobs' nightly schedulers with a `-retry` twin on 12 of them, and Label Design's) → **68 BigQuery views**. Prod
+**15 pipelines** (`reports/*.yaml`) → **31 Cloud Run jobs** (prod + test each, plus the Label Design push job) →
+**30 Cloud Scheduler jobs** (the 5-minute ETL dispatcher, the test jobs' nightly schedulers with a `-retry` twin on 12 of them, and Label Design's) → **68 BigQuery views**. Prod
 jobs have no scheduler of their own: the dispatcher runs them from
 `PlexOps.etl_schedule` (1 / 6 / 11 PM probe + 4 AM full). The test nightly
 cascade runs **7:10 PM → 10:50 PM Mountain** (`America/Denver`), 20 minutes
@@ -291,7 +291,7 @@ graph TB
 ```
 
 *Shown: the Sales Orders pipeline as a worked example — the same shape repeats
-for all 14 pipelines.*
+for all 15 pipelines.*
 
 ---
 

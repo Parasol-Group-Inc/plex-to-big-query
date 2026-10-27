@@ -31,7 +31,7 @@ page.
 
 ## The short version
 
-- **14 pipelines, 29 Cloud Run Jobs** (prod + test, plus the prod Label Design
+- **15 pipelines, 31 Cloud Run Jobs** (prod + test, plus the prod Label Design
   push job), 71 BigQuery views (2026-10-19).
 - **Prod (13 pipelines), since probe phase 2 stage B, 2026-10-19:** started by
   the ETL dispatcher from `PlexOps.etl_schedule`.
@@ -44,7 +44,7 @@ page.
   - **No prod retry scheduler:** a failed run gets one follow-up probe 15 min
     later.
   - Times are changed with SQL (docs/OPERATIONS.md § ETL schedule).
-- **Test (14 pipelines):** once a day in the evening cascade, 7:10-11:10 PM, as
+- **Test (15 pipelines):** once a day in the evening cascade, 7:10-11:10 PM, as
   before, with the 9:45 PM retry; **Label Design probes every 15 minutes, 5:00 AM - 5:45 PM Mountain, Mon-Fri**
   (test hourly at :05). A prod run that extracts starts the Monday push itself;
   the push scheduler is a 6:05 PM sweep (since 2026-10-22). The repair job
@@ -61,7 +61,7 @@ page.
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
-- **29 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
+- **30 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
   5 minutes, starts all prod pipelines except Label Design), one nightly
   trigger per test pipeline plus a retry on 12 of them
   (`plex-<pipeline>-sync-test[-retry]`), and Label Design's `plex-label-design-sync`,

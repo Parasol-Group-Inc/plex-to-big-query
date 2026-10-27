@@ -19,6 +19,10 @@ don't need an entry.
 ### Added
 - Object versioning is ON for `gs://voxdatalake-terraform-state` (set once with `gcloud storage buckets update --versioning`; the bucket is not Terraform-managed, so a plan shows nothing). Before, a bad overwrite of the state file was recoverable only inside the 7-day soft-delete window.
 - Dataset `voxdatalake.Backups` holds 31 table snapshots dated 20261027, each expiring after 90 days: the Label Design push log, safety incidents, both goals tables, MSL inputs and rules, turnaround standards, `job_run_log`, `PlexOps.etl_schedule` and `etl_dispatch_log`, all 18 `VoxScorecardsLive` tables and the three `PlexTest.plex_api_*` tables. They are one-time copies; nothing refreshes them yet. Restore steps: `docs/OPERATIONS.md` section "Backups".
+## 2026-10-27 (dev) - Approaching MSL: NetSuite items that share a Plex part add up
+
+### Changed
+- `approaching_msl_view.sql`: when two NetSuite items map to one Plex part (7 parts, e.g. two Inositol codes), their usage now adds instead of one being dropped; the reorder point takes the larger and the as-of date the older. PlexProd dry run with the corrected 10-27 seed (75 mappings fixed): 990 parts, 585 on NetSuite usage (was 523), 331 with no usage (was 370).
 
 ## 2026-10-26 (dev) - Approaching MSL: one row per part number
 

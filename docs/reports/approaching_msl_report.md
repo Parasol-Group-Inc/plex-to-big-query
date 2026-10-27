@@ -1,5 +1,7 @@
 # Inventory | Approaching MSL
 
+**One row per part number.** Plex keeps two internal records for many parts (one holds the stock and the minimum, the other holds the demand and production usage). The report adds them together, so each part appears once.
+
 > **Status:** 🛠 Built 2026-10-26, validated on PlexProd, deploy pending. NetSuite fallback built 2026-10-26, needs the two app tables first (see below) · **Category:** Supply Chain · **Runs:** rides the Sales Orders pipeline
 
 ## What this tells you

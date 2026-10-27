@@ -2,7 +2,7 @@
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime. Do NOT hardcode them.
 --
--- GRAIN: one row per part that has a reorder point (Part.Minimum_Inventory_Quantity > 0)
+-- GRAIN: one row per part NUMBER (Part_Keys rolled up, see the inv CTE) that has a reorder point (Part.Minimum_Inventory_Quantity > 0)
 -- or any measured usage.
 --
 -- COLUMNS, in the sheet's order:
@@ -136,29 +136,44 @@ ns AS (
   WHERE rn = 1
 ),
 
+-- One row per PART NUMBER. Plex holds two Part_Keys per number (the stocked one carries the
+-- minimum and the on-hand; a second one carries BOM demand and production usage), so keys are
+-- rolled up here: quantities add, the reorder point takes the larger.
+inv AS (
+  SELECT
+    a.part_no,
+    ANY_VALUE(a.part_name)                      AS part_name,
+    MAX(a.minimum_inventory_quantity)           AS plex_reorder_point,
+    SUM(a.on_hand_qty)                          AS on_hand_qty,
+    SUM(a.available_vs_total_demand)            AS quantity_available,
+    SUM(u.qty_used)                             AS qty_used,
+    SUM(COALESCE(oj.open_job_qty, 0))           AS open_job_qty
+  FROM `{gcp_project}.{dataset}.inventory_available_to_sell_report` a
+  LEFT JOIN usage u      ON u.part_key = SAFE_CAST(a.part_key AS INT64)
+  LEFT JOIN open_jobs oj ON oj.part_key = SAFE_CAST(a.part_key AS INT64)
+  GROUP BY a.part_no
+),
+
 base AS (
   SELECT
-    a.part_key,
-    a.part_no,
-    a.part_name,
-    a.minimum_inventory_quantity AS plex_reorder_point,
+    i.part_no,
+    i.part_name,
+    i.plex_reorder_point,
     NULLIF(ns.ns_reorder_point, 0) AS ns_reorder_point,
-    a.on_hand_qty,
-    a.available_vs_total_demand  AS quantity_available,
-    u.qty_used / NULLIF(DATE_DIFF(s.last_d, s.first_d, DAY) + 1, 0) AS plex_usage,
+    i.on_hand_qty,
+    i.quantity_available,
+    i.qty_used / NULLIF(DATE_DIFF(s.last_d, s.first_d, DAY) + 1, 0) AS plex_usage,
     ns.ns_avg_daily_usage        AS ns_usage,
     ns.as_of_date                AS ns_as_of,
     DATE_DIFF(s.last_d, s.first_d, DAY) + 1                          AS usage_days,
     COALESCE(oo.on_order_qty, 0) AS on_order_qty,
-    COALESCE(oj.open_job_qty, 0) AS open_job_qty,
+    i.open_job_qty,
     c.usage_min_days, c.reorder_source, c.disagree_pct, c.stale_days
-  FROM `{gcp_project}.{dataset}.inventory_available_to_sell_report` a
+  FROM inv i
   CROSS JOIN span s
   CROSS JOIN cfg c
-  LEFT JOIN usage u      ON u.part_key = SAFE_CAST(a.part_key AS INT64)
-  LEFT JOIN ns           ON ns.part_no = a.part_no
-  LEFT JOIN on_order oo  ON oo.part_number = a.part_no
-  LEFT JOIN open_jobs oj ON oj.part_key = SAFE_CAST(a.part_key AS INT64)
+  LEFT JOIN ns           ON ns.part_no = i.part_no
+  LEFT JOIN on_order oo  ON oo.part_number = i.part_no
 ),
 
 chosen AS (

@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-26 (dev) - Approaching MSL: one row per part number
+
+### Fixed
+- `approaching_msl_view.sql` returned 1,330 rows for 981 parts: Plex holds two Part_Keys per part number (stock and minimum on one, BOM demand and usage on the other), and each got its own row. A new `inv` CTE rolls them up (quantities add, reorder point takes the larger). PlexProd dry run: 987 rows, 987 distinct parts. Docs updated.
+
 ## 2026-10-26 (dev) - Approaching MSL: Terraform now uploads the view SQL
 
 ### Fixed

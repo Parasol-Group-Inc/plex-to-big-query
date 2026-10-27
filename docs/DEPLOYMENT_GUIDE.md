@@ -3,8 +3,8 @@
 Last reviewed: 2026-09-25
 
 > **Scope check:** this walks through bootstrapping the pipeline **from
-> zero** in a **new GCP project**. One deploy creates the whole stack — 14
-> pipelines, 29 Cloud Run jobs, 29 schedulers — though the walkthrough follows
+> zero** in a **new GCP project**. One deploy creates the whole stack — 15
+> pipelines, 31 Cloud Run jobs, 30 schedulers — though the walkthrough follows
 > one job (`plex-etl-sales-orders`) as its example. It's the right doc for a
 > first-time setup (a new GCP project, disaster recovery) or for understanding
 > how the pieces fit together. **Don't run it against the existing
@@ -135,8 +135,8 @@ slowest part.
 - An Artifact Registry repo to store your Docker image
 - Six Secret Manager secret containers (empty for now — you'll fill them in 1.3)
 - The report-configs bucket and every `reports/` YAML and SQL file in it
-- 29 Cloud Run job definitions (14 pipelines × prod/test, plus the Label Design push job) pointing at your image
-- 29 Cloud Scheduler jobs (the ETL dispatcher trigger, a nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines run from `PlexOps.etl_schedule`)
+- 31 Cloud Run job definitions (15 pipelines × prod/test, plus the Label Design push job) pointing at your image
+- 30 Cloud Scheduler jobs (the ETL dispatcher trigger, a nightly trigger per test job plus a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines run from `PlexOps.etl_schedule`)
 
 > **If the deploy fails "API not yet enabled":** GCP API enablement is eventually consistent. Wait 60 seconds and re-run `./scripts/deploy.sh`.
 
@@ -480,7 +480,7 @@ Then update `terraform.tfvars` to match so the next `./scripts/deploy.sh` doesn'
 **Tear down all infrastructure** (move to a different GCP project):
 See [TEARDOWN.md](TEARDOWN.md) for the full procedure, including unlocking Terraform-protected resources and redeploying to a new project.
 
-**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 14 pipelines (29 Cloud Run jobs — prod+test for each, plus the Label Design push job — and 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
+**Add a second Plex table / a whole new report:** this guide walks through bootstrapping the stack from zero — it's not the process for adding to an already-running deployment. The project has since grown to 15 pipelines (31 Cloud Run jobs — prod+test for each, plus the Label Design push job — and 68 BigQuery views) driven by YAML configs rather than hardcoded views, with no code changes needed for a new extraction. For that process:
 - **Adding a new report from scratch:** [docs/OPERATIONS.md](OPERATIONS.md) § "Add a Brand-New Report" — the canonical, most detailed walkthrough (Plex view discovery, YAML/SQL scaffolding, `SAFE_CAST` patterns, shared-table rules).
 - **Specifically tackling the next NetSuite-parity report:** [docs/NETSUITE_REPORT_BUILD_PLAN.md](NETSUITE_REPORT_BUILD_PLAN.md) § "Tackling the next NetSuite report" — the same process, with the NetSuite-specific investigative steps (saved-search criteria, business-rule confirmation) layered on top.
 - **Condensed/quick-reference versions of the same steps:** [docs/CHEATSHEET.md](CHEATSHEET.md) § "How to Add a New Report" and [docs/CLICKUP_TEAM_GUIDE.md](CLICKUP_TEAM_GUIDE.md) § 6.

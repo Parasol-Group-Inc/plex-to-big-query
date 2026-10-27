@@ -13,11 +13,13 @@
 
 ## UPDATE — 2026-10-27 (latest): push moves to "Plex Import Test"; repair retired
 
-**Problem emails (built, not deployed).** The push emails what went wrong
+**DEPLOYED 2026-10-27** (image `38860dd`, `deploy/2026-10-27T2010Z`); old "Plex Import" archived. Team review list of the 43 changed values: https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5
+
+**Problem emails.** The push emails what went wrong
 (and labels it added to Design & QA), once a day per problem; until now a
 failed push showed only in Cloud Run logs. CHANGELOG 2026-10-27.
 
-**Smart push (built, not deployed).** `label_design_service/labels.py` aligns
+**Smart push.** `label_design_service/labels.py` aligns
 status label colours with Design & QA before each push creates items, adds a
 label Design & QA lacks to both boards with one colour, and creates items with
 `create_labels_if_missing` off. See CHANGELOG 2026-10-27. **Also removed:** the

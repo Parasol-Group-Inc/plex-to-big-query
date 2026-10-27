@@ -29,7 +29,7 @@ gs://voxdatalake-report-configs/
 └── sql/<view>.sql            ← BigQuery view SQL — ONE copy, read by BOTH prod and test
 ```
 
-14 pipelines, 29 Cloud Run jobs (prod + test, plus the Label Design push
+15 pipelines, 31 Cloud Run jobs (prod + test, plus the Label Design push
 job), 68 BigQuery views. Schedule for all of them: [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md).
 
 **Each YAML file contains:**
@@ -319,7 +319,7 @@ never in the subject — check the body for those.
 
 | Setting | Production | Test |
 |---|---|---|
-| Cloud Run jobs (14 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
+| Cloud Run jobs (15 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
 | Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) | `plex-<pipeline>-sync-test` |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
 | Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |

@@ -12,12 +12,12 @@ Last reviewed: 2026-09-25
 
 ## What gets deleted
 
-As of 2026-10-27 there are **29 Cloud Run jobs** (14 pipelines × prod/test, plus the Label Design push job), **29 Cloud Scheduler jobs** (the ETL dispatcher, a nightly trigger per test job + a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines have none of their own), **94** GCS objects (every file under `reports/`), **6** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (189 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
+As of 2026-10-27 there are **31 Cloud Run jobs** (15 pipelines × prod/test, plus the Label Design push job), **30 Cloud Scheduler jobs** (the ETL dispatcher, a nightly trigger per test job + a 9:45 PM Mountain retry on 12 of them, and the Label Design triggers; prod pipelines have none of their own), **94** GCS objects (every file under `reports/`), **6** Secret Manager containers, and **2** BigQuery datasets (`PlexProd` + `PlexTest`) — about **200** Terraform-managed resources in all (189 `resource` blocks in `terraform/main.tf`, two of them `for_each` over 8 APIs and 5 IAM roles). `terraform destroy` removes all of it in one pass regardless — the table below is just for understanding what's actually in scope, not something you enumerate by hand.
 
 | Resource | Managed by | Deleted how |
 |---|---|---|
-| All 29 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
-| All 29 Cloud Scheduler jobs (dispatcher, test nightly + 12 retry, Label Design) | Terraform | `terraform destroy` |
+| All 31 Cloud Run jobs (`plex-etl-sales-orders(-test)`, `plex-etl-work-orders(-test)`, etc.) | Terraform | `terraform destroy` |
+| All 30 Cloud Scheduler jobs (dispatcher, test nightly + 12 retry, Label Design) | Terraform | `terraform destroy` |
 | BigQuery datasets `PlexProd` + `PlexTest` + all tables/views in both | Terraform | `terraform destroy` (after unlocking — see Step 2) |
 | `report_configs` GCS bucket (`voxdatalake-report-configs`) and its 94 YAML/SQL objects | Terraform | `terraform destroy` |
 | Artifact Registry repo (`plex-pipeline`) | Terraform | `terraform destroy` (after clearing images) |

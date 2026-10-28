@@ -23,7 +23,9 @@ Reason Codes are fixed, so the 43-value move review is complete. The WO column
 is gone from Design & QA. Probe since 10-21: 27 applied, 185 skipped, 1 failed,
 0 inconclusive, with the 4-part snapshot, so the approval fingerprint works.
 
-**Label-only order lines (SQL, not deployed yet).** SO 435 (`73066-10KAYAN-0`)
+**Label-only order lines (DEPLOYED and verified 2026-10-28:** SO 435 now reads
+`73066-10KAYAN-0`; the 14:49 MT probe logged `applied` with only `(config + SQL)`
+changed, which closes L10 too).** SO 435 (`73066-10KAYAN-0`)
 and SO 388 ordered the label part itself, so Label Part # arrived blank. The
 view's `labels` CTE now also treats a line whose part is a label (name starts
 `LABEL`, not a Service part) as its own label. Checked as a query: PlexProd 42

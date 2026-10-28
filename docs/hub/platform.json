@@ -976,12 +976,6 @@
       "next": "Fix the tile read and lastIncident_()."
     },
     {
-      "id": "L17",
-      "title": "Label-only order lines get their own Label Part # (SQL fixed 2026-10-28, not deployed)",
-      "owner": "Emilio",
-      "next": "deploy.sh after merge; SO 435 shows label_part_no 73066-10KAYAN-0. Also proves L10."
-    },
-    {
       "id": "L3",
       "title": "Should a pushed item start with a Design Status?",
       "owner": "Ashley (via Emilio)",
@@ -1004,12 +998,6 @@
       "title": "Reconfirm part attributes go to Monday",
       "owner": "Emilio",
       "next": "Confirm with Jennilyn."
-    },
-    {
-      "id": "L10",
-      "title": "Prove the SQL-only deploy fix",
-      "owner": "Claude",
-      "next": "Next SQL-only deploy must log applied."
     },
     {
       "id": "L11",

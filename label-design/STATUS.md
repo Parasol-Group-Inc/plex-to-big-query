@@ -15,6 +15,19 @@
 
 **DEPLOYED 2026-10-27** (image `38860dd`, `deploy/2026-10-27T2010Z`); old "Plex Import" archived. Team review list of the 43 changed values: https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5
 
+**Verified 2026-10-28.** The first real push after the deploy (order 494, Ascent
+Nutrition, 2 lines, run `600a7d1b7a52` at 17:11 MT on 10-27) logged `22/22 mapped
+columns found`, `35 already on the board, 2 new`, `0 with problems`, and no
+`Label colours:` line. The team moved both items to Design & QA, and every
+pushed value arrived: Priority `Medium` (not `Normal`), Bottle Material `HDPE`,
+Reason Code, Sales Rep, Memo, links, LCR, Label Part #. The 18:05 sweep and the
+10-28 09:07 push found nothing new.
+
+**Move damage, 2026-10-28: 41 of 43 fixed.** The team fixed 39 on the board
+(all 33 Priority, order 408's 6 Reason Codes); the 2 blank Printing Materials on
+SO 358 were set through the API. Left: SO 358's 2 Reason Codes, which the API
+key cannot edit (restricted column, 403). Review page updated to match.
+
 **Problem emails.** The push emails what went wrong
 (and labels it added to Design & QA), once a day per problem; until now a
 failed push showed only in Cloud Run logs. CHANGELOG 2026-10-27.
@@ -25,9 +38,9 @@ label Design & QA lacks to both boards with one colour, and creates items with
 `create_labels_if_missing` off. See CHANGELOG 2026-10-27. **Also removed:** the
 test push job and scheduler. **Monday clean-up done:** the duplicate test board
 and the `Bottle Material (Plex)` test columns are deleted; Design & QA has the
-two missing labels. **Not yet:** archive old "Plex Import" — prod pushes there
-until the deploy (order 454 landed there at 19:06 UTC and was moved with
-Priority shown as Normal and Bottle Material blank).
+two missing labels. Old "Plex Import" (18432111755) is archived, 0 items; the
+last order pushed there before the deploy, 454 (19:06 UTC), was moved with
+Priority shown as Normal and Bottle Material blank.
 
 Asked by Emilio after Ashley reported that moving items from "Plex Import Test"
 (18437236736) to Design & QA keeps Priority, Bottle Material and the rest.

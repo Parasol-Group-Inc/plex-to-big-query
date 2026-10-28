@@ -116,12 +116,46 @@
 -- legitimately be empty on a given run/tenant, and an empty table's columns
 -- come back typed from the ODBC schema rather than inferred from values.
 --
+-- ─────────────────────────────────────────────────────────────────────────
+-- WRAPPER KEYS (fixed 2026-10-28)
+-- ─────────────────────────────────────────────────────────────────────────
+-- Plex keeps up to four Part_Keys per Part_No. The extra ones ("wrappers")
+-- have one BOM line pointing at the stocked (root) key of the same Part_No,
+-- and that line's Quantity converts the wrapper's unit (1, 0.001 for grams,
+-- 1e-6 for mg). Flat_BOM lists BOTH the wrapper and the root under a parent,
+-- and the root's line already carries the wrapper's quantity converted, so:
+--   * component demand is taken on root keys only; counting the wrapper too
+--     showed 387 wrapper rows as short and doubled any sum by part_no;
+--   * stock held on a wrapper key (18 parts) is converted and added to the
+--     root's availability as wrapper_on_hand_qty. on_hand_qty itself stays
+--     the key's own containers, because approaching_msl_report converts and
+--     sums on_hand_qty across keys and would otherwise count it twice.
+-- Same wrapper rule as approaching_msl_view.sql.
+--
 -- Not re-extracted — bq_view entry in reports/sales_orders.yaml. MUST be
 -- listed BEFORE inventory_out_of_stock_report, which SELECTs from it.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
--- GRAIN: one row per part that has either on-hand inventory or open demand.
+-- GRAIN: one row per part that has either on-hand inventory or open demand
+-- (or is the stocked key of a wrapper holding stock).
 
 WITH
+
+wrap AS (
+  SELECT
+    SAFE_CAST(b.Part_Key AS INT64)            AS wrapper_key,
+    SAFE_CAST(b.Component_Part_Key AS INT64)  AS root_key,
+    MAX(SAFE_CAST(b.Quantity AS FLOAT64))     AS factor
+  FROM `{gcp_project}.{dataset}.raw_Part_v_BOM` b
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` pw
+    ON SAFE_CAST(pw.Part_Key AS INT64) = SAFE_CAST(b.Part_Key AS INT64)
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` pc
+    ON SAFE_CAST(pc.Part_Key AS INT64) = SAFE_CAST(b.Component_Part_Key AS INT64)
+  WHERE pw.Part_No = pc.Part_No
+    AND SAFE_CAST(pw.Part_Key AS INT64) != SAFE_CAST(pc.Part_Key AS INT64)
+    AND COALESCE(SAFE_CAST(b.Active AS INT64), 1) != 0
+    AND SAFE_CAST(b.Quantity AS FLOAT64) > 0
+  GROUP BY wrapper_key, root_key
+),
 
 -- ── Direct sales-order demand ("Orders" on Plex's screen) ────────────────
 -- Sales_v_Release is the schedule line under a PO_Line and is where the
@@ -195,6 +229,11 @@ component_demand AS (
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` fb
     ON SAFE_CAST(fb.Part_Key AS INT64) = od.part_key
 
+  -- Root keys only: the root's line already includes the wrapper's demand.
+  LEFT JOIN wrap w
+    ON w.wrapper_key = SAFE_CAST(fb.Component_Part_Key AS INT64)
+
+  WHERE w.wrapper_key IS NULL
   GROUP BY part_key
 ),
 
@@ -214,6 +253,16 @@ on_hand AS (
   FROM `{gcp_project}.{dataset}.part_on_hand_inventory_report` oh
 ),
 
+-- Stock on wrapper keys, converted into the root's unit.
+wrapper_stock AS (
+  SELECT
+    w.root_key                            AS part_key,
+    SUM(oh.on_hand_qty * w.factor)        AS on_hand_qty
+  FROM on_hand oh
+  JOIN wrap w ON w.wrapper_key = oh.part_key
+  GROUP BY w.root_key
+),
+
 -- Every part that appears on either side, so the FULL OUTER JOIN below has
 -- a single spine to hang both halves off and no part can be dropped.
 part_keys AS (
@@ -222,6 +271,8 @@ part_keys AS (
   SELECT part_key FROM order_demand
   UNION DISTINCT
   SELECT part_key FROM component_demand
+  UNION DISTINCT
+  SELECT part_key FROM wrapper_stock
 )
 
 SELECT
@@ -267,9 +318,10 @@ SELECT
   -- Jennilyn's own formula, 2026-09-09: "inventory would be quantity on
   -- hand. Required is going to be our sold and inventory minus required
   -- should be the quantity available."
-  COALESCE(oh.on_hand_qty, 0) - COALESCE(od.demand_qty, 0)
-                                                          AS available_vs_orders,
-  COALESCE(oh.on_hand_qty, 0)
+  -- Both include stock held on this part's wrapper keys (wrapper_on_hand_qty).
+  COALESCE(oh.on_hand_qty, 0) + COALESCE(ws.on_hand_qty, 0)
+    - COALESCE(od.demand_qty, 0)                          AS available_vs_orders,
+  COALESCE(oh.on_hand_qty, 0) + COALESCE(ws.on_hand_qty, 0)
     - (COALESCE(od.demand_qty, 0) + COALESCE(cd.demand_qty, 0))
                                                           AS available_vs_total_demand,
 
@@ -280,13 +332,20 @@ SELECT
   -- silently reading as a real zero.
   (oh.part_key IS NULL)                                   AS no_inventory_on_hand,
   (od.part_key IS NULL AND cd.part_key IS NULL)           AS no_open_demand,
-  (cd.part_key IS NOT NULL)                               AS demand_includes_bom_explosion
+  (cd.part_key IS NOT NULL)                               AS demand_includes_bom_explosion,
+
+  -- Appended 2026-10-28 (see WRAPPER KEYS above).
+  COALESCE(ws.on_hand_qty, 0)                             AS wrapper_on_hand_qty,
+  (wk.wrapper_key IS NOT NULL)                            AS is_unit_wrapper
 
 FROM part_keys k
 
 LEFT JOIN on_hand oh          ON k.part_key = oh.part_key
 LEFT JOIN order_demand od     ON k.part_key = od.part_key
 LEFT JOIN component_demand cd ON k.part_key = cd.part_key
+LEFT JOIN wrapper_stock ws    ON k.part_key = ws.part_key
+LEFT JOIN (SELECT DISTINCT wrapper_key FROM wrap) wk
+                              ON k.part_key = wk.wrapper_key
 
 JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON k.part_key = SAFE_CAST(p.Part_Key AS INT64)

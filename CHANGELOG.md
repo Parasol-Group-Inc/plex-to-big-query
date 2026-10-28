@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (dev) - Inventory and purchasing reports: wrapper keys, received releases, one row per part (code review)
+
+A review of every report that sums part quantities, after the Approaching MSL fix, found the same wrapper-key problem in two more views, plus two purchasing gaps. Checked against PlexProd before merging.
+
+### Fixed
+- `inventory_available_to_sell_report`: BOM (component) demand is now counted on the stocked key only. Flat_BOM lists both a wrapper key and its stocked key, and the stocked key's line already carries the wrapper's demand, so 387 wrapper rows showed as short and any sum by part number doubled. Stock held on wrapper keys (18 parts) is converted into the stocked key's availability: 12665-01VOXNU-1 goes from -113 to +401, 12277-01VOXNU-1 from -3,310 to -769. Rows: 3,192 to 2,824 (wrapper rows that only carried the duplicate demand). New columns `wrapper_on_hand_qty`, `is_unit_wrapper`; `on_hand_qty` is unchanged, so `approaching_msl_report` is unaffected. `inventory_out_of_stock_report` inherits the fix (still 18 rows today).
+- `purchasing_open_orders_report`: releases already marked Received on an open PO are left out (9 releases, 35,602 units). New column `release_status`; a Partial release still counts in full, because Plex's Release view has no received quantity. Every join now SAFE_CASTs both sides.
+- `mfg_job_schedule_inventory_availability_report`: really one row per part number. On order was joined by part number to one row per Part_Key, so every key repeated the full PO quantity. Wrapper keys are converted, and parts on order with no stock are listed (27 were missing). On order is read from the raw Purchasing tables by Part_Key, with the same open rule, so the view no longer depends on another pipeline's view. 2,024 to 2,032 rows.
+- Plex SQL Developer copies of all three updated to match.
+
 ## 2026-10-28 (label-design) - Label-only order lines get their own Label Part #; trigger app removed
 
 **Not deployed yet** (SQL-only: `./scripts/deploy.sh` after merge, no Cloud Build).

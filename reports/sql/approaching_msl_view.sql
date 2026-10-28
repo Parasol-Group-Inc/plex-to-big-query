@@ -17,7 +17,10 @@
 --                        sheet's "Current QTY Available"). It goes NEGATIVE on purpose:
 --                        finished goods on open orders will consume more of the part than
 --                        is in stock. Same number as inventory_out_of_stock_report.
---   at_reorder_point     quantity_available <= reorder_point
+--   at_reorder_point     quantity_available <= reorder_point when the part has one (at or
+--                        below, the usual reorder rule; the sheet used <, which differs on 4
+--                        parts); with no reorder point, only when available is negative
+--                        (2026-10-28: 0 <= 0 flagged 23 parts with nothing set and nothing due).
 --   avg_daily_usage      DERIVED, see usage CTE. Plex stores no average.
 --   days_on_hand         on_hand_qty / avg_daily_usage
 --   days_to_reorder      (quantity_available - reorder_point) / avg_daily_usage; negative
@@ -305,7 +308,8 @@ SELECT
   reorder_point,
   on_hand_qty,
   quantity_available,
-  (quantity_available <= reorder_point)      AS at_reorder_point,
+  (quantity_available < 0
+   OR (reorder_point > 0 AND quantity_available <= reorder_point)) AS at_reorder_point,
   avg_daily_usage,
   usage_days,
   SAFE_DIVIDE(on_hand_qty, avg_daily_usage)  AS days_on_hand,

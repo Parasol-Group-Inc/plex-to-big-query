@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (dev) - Approaching MSL: part type, group and source columns (replaces Jennilyn's v2 view)
+
+Jennilyn built `approaching_msl_report_v2` in PlexProd on 2026-10-27: the 10-27 view plus three filter columns. It predates the 10-28 fixes, and now counts stock on wrapper keys twice (e.g. 12277-01VOXNU-1 shows 3,996 available against 3,701 on hand) and leaves out the 440 zero-stock parts. The columns move into the main report so v2 can be retired.
+
+### Added
+- `approaching_msl_report`: `part_type`, `part_group_key`, `part_group` (name, e.g. Capsule, Label, Raw Ingredient) and `part_source_key`, taken from the part's stocked key. Wrapper keys are all Part_Type `WIP`, so this is the same rule as v2's "non-WIP key wins". Appended at the end; no existing column moves. Checked against PlexProd: still 1,435 rows and 880 at reorder point; the three v2 columns match v2 on all 995 parts the two share.
+- Plex SQL Developer copy updated to match.
+
 ## 2026-10-28 (dev) - Inventory and purchasing reports: wrapper keys, received releases, one row per part (code review)
 
 A review of every report that sums part quantities, after the Approaching MSL fix, found the same wrapper-key problem in two more views, plus two purchasing gaps. Checked against PlexProd before merging.

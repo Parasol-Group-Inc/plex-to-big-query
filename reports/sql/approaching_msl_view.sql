@@ -25,6 +25,9 @@
 --   in_mfg_or_ordered    on_order_qty > 0 OR open_job_qty > 0
 --   Every quantity is in the unit of the part's stocked key (unit column; blank in Plex
 --   for most raw materials, which are kg).
+--   part_type / part_group_key / part_group / part_source_key   filter attributes of the
+--                        stocked key (added 2026-10-28 from Jennilyn's v2 view, which this
+--                        replaces).
 --
 -- WRAPPER KEYS (fixed 2026-10-28): Plex holds up to four Part_Keys per part number. One is
 --   the stocked key; each other one is a "wrapper" whose own BOM is a single line pointing at
@@ -74,6 +77,9 @@ part AS (
     Name                                                 AS part_name,
     NULLIF(TRIM(Unit), '')                               AS unit,
     SAFE_CAST(Product_Type_Key AS FLOAT64)               AS product_type_key,
+    Part_Type                                            AS part_type,
+    SAFE_CAST(Part_Group_Key AS INT64)                   AS part_group_key,
+    SAFE_CAST(Part_Source_Key AS INT64)                  AS part_source_key,
     SAFE_CAST(Minimum_Inventory_Quantity AS FLOAT64)     AS minimum_inventory_quantity
   FROM `{gcp_project}.{dataset}.raw_Part_v_Part`
 ),
@@ -211,6 +217,10 @@ inv AS (
     MAX(IF(w.wrapper_key IS NULL, p.unit, NULL))                            AS unit,
     COALESCE(MAX(IF(w.wrapper_key IS NULL, p.product_type_key, NULL)),
              MAX(p.product_type_key))                                       AS product_type_key,
+    -- Filter attributes (Jennilyn's approaching_msl_report_v2, 2026-10-27) from the stocked
+    -- key: wrapper keys are all Part_Type 'WIP' and disagree on all three.
+    ARRAY_AGG(STRUCT(p.part_type, p.part_group_key, p.part_source_key)
+              ORDER BY IF(w.wrapper_key IS NULL, 0, 1), p.part_key LIMIT 1)[OFFSET(0)] AS attr,
     MAX(p.minimum_inventory_quantity * COALESCE(w.factor, 1))               AS plex_reorder_point,
     SUM(COALESCE(a.on_hand_qty, 0) * COALESCE(w.factor, 1))                 AS on_hand_qty,
     SUM(COALESCE(a.on_hand_qty, 0) * COALESCE(w.factor, 1)
@@ -236,6 +246,10 @@ base AS (
     i.part_name,
     i.unit,
     pt.Product_Type              AS product_type,
+    i.attr.part_type,
+    i.attr.part_group_key,
+    pg.Part_Group                AS part_group,
+    i.attr.part_source_key,
     i.plex_reorder_point,
     NULLIF(ns.ns_reorder_point, 0) AS ns_reorder_point,
     i.on_hand_qty,
@@ -254,6 +268,8 @@ base AS (
   LEFT JOIN ns ON ns.part_no = i.part_no
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Product_Type` pt
     ON SAFE_CAST(pt.Product_Type_Key AS FLOAT64) = i.product_type_key
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pg
+    ON SAFE_CAST(pg.Part_Group_Key AS INT64) = i.attr.part_group_key
 ),
 
 chosen AS (
@@ -316,6 +332,10 @@ SELECT
        'On order includes a partly received PO line, counted in full', NULL)
   ], '; '), '') AS data_flag,
   unit,
-  product_type
+  product_type,
+  part_type,
+  part_group_key,
+  part_group,
+  part_source_key
 FROM final
 WHERE reorder_point > 0 OR avg_daily_usage > 0

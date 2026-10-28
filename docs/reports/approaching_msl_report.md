@@ -19,6 +19,7 @@ Which parts are at or approaching their reorder point (minimum inventory), how m
 - **days_on_hand / days_to_reorder:** stock divided by daily usage. A negative days_to_reorder means the part is already past its reorder point by that many days of usage.
 - **on_order_qty / open_job_qty / in_mfg_or_ordered:** open purchase order deliveries, and open jobs making the part. A delivery already marked Received is left out; a partly received one counts in full and is flagged, because Plex does not say how much of it arrived.
 - **unit / product_type:** the unit every quantity on the row is in (the stocked record's; blank in Plex for most raw materials, which are kilos), and the Plex product type, for filtering out labels or bottles.
+- **part_type / part_group / part_group_key / part_source_key:** Plex's part type (Finished Goods, Raw Materials, ...), part group (Capsule, Label, Raw Ingredient, Packaging, ...) and source, for filtering the list. Taken from the stocked record. Added 2026-10-28 from Jennilyn's `approaching_msl_report_v2`, which this replaces.
 
 ## NetSuite fallback and the rules behind it
 
@@ -43,6 +44,9 @@ CREATE TABLE IF NOT EXISTS `voxdatalake.PlexProd.msl_rules` (rule STRING, value 
 ```
 
 ## Flags and open questions
+
+- **`approaching_msl_report_v2` (Jennilyn's copy, 2026-10-27) should be retired.** It added the filter columns above to the 10-27 version of this view and missed the 10-28 fixes: it counts stock on a part's second Plex record twice (12277-01VOXNU-1: 3,996 available against 3,701 on hand) and leaves out parts with no stock. Use this report's new columns instead.
+- **Compared with the Approaching MSL Google Sheet (2026-10-28).** The sheet covers 105 items, almost all stock formula capsules (13xxx). 68 are in the report; 52 of those agree on at reorder point. The 16 that don't: older stock figures in the sheet (7), demand from open orders, which the sheet does not subtract (5), a NetSuite reorder point of 0, which the sheet treats as "no reorder point" and the report replaces with Plex's minimum (4). The sheet flags at `<`, the report at `<=`. 35 of its items have no NetSuite row in the MSL inputs (mostly the "13xxx - Blend" items).
 
 - **Plex production history starts 2026-10-18**, so Plex usage rests on about 10 days (2026-10-28). It takes over from NetSuite automatically around 2026-11-16. Until it reaches `usage_min_days` the NetSuite figure is used where there is one.
 - **NetSuite and Plex reorder points differ a lot** (33001: 9.19M in NetSuite vs 4.30M in Plex). Jennilyn to say which is right; the default follows NetSuite because her sheet did.

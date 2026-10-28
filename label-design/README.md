@@ -46,7 +46,6 @@ pipeline's conventions expect them (Terraform's GCS paths, the pipeline's
 | The Plex → Monday push service | [`label_design_service/push.py`](../label_design_service/push.py) docstring |
 | Why label colours matter, and how the push keeps them aligned | [`label_design_service/labels.py`](../label_design_service/labels.py) docstring |
 | The whole flow on one page, with the live colour catalog | Data Hub → **Label Design** tab (`docs/hub/`; refresh with `scripts/hub/label_colours.py`) |
-| Run the ETL on demand (web app) | [`deploy/label_design_trigger/README.md`](../deploy/label_design_trigger/README.md) |
 | How to work on this project: its folder, branch, hooks, deploy | [`CONTRIBUTING.md`](../CONTRIBUTING.md): folder `ptbq-label-design`, branch `dev-label-design` |
 
 ## How the data flows

@@ -1,4 +1,4 @@
-// Label Design: Plex -> Monday queue, push service, trigger app.
+// Label Design: Plex -> Monday queue, push service.
 // Opens ../ptbq-label-design, the git worktree bound to `dev-label-design`. Each project has its own
 // folder so two sessions can never share a working tree (CONTRIBUTING.md).
 {

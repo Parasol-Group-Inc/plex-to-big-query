@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-27 (dev) - BigQuery loads get a deadline; slow 6 PM batch no longer cuts jobs off
+
+### Fixed
+- `write_to_bigquery()` called `load_table_from_dataframe()` and `job.result()` with no timeout (the client default is None), so one stuck upload held a job until Cloud Run killed it. In the 6 PM Mountain batch of 2026-10-27 a 461-row load that normally takes 3 s took 8m43s, and `plex-etl-sales-orders` hit its 1200 s limit on the scheduled run and the follow-up, with Plex answering normally. The BigQuery audit log shows each load job inserted only at the end of the wait, so the time went on the upload, not the load. Each upload request now has a (30 s connect, 120 s read) deadline (`BQ_UPLOAD_TIMEOUT_SECONDS`) and the load job a 300 s wait (`BQ_LOAD_JOB_TIMEOUT_SECONDS`); a miss goes to the existing one retry. Test: `tests/test_bq_write_deadline.py`.
+
+### Changed
+- Prod task timeouts raised for the jobs the 6 PM batch was cutting off: `plex-etl-sales-orders` 1200 to 1800 s, `purchasing-open-orders` 600 to 1200 s, `part-on-hand-inventory` 600 to 1200 s, `part-routing` 900 to 1200 s, `part-lot` 1800 to 2400 s. The 00:00 UTC run of sales-orders took 416, 715, 741, 926, 1117 and 1241 s on successive nights against about 250 s in every other slot: some nights Plex reads are slow (`Part_v_Flat_BOM` 390 s against 8 s on 10-27), other nights BigQuery uploads are. Test jobs unchanged. The dispatcher's `LOST_AFTER_MINUTES` (120) still exceeds every limit.
+
+### Deploy
+- Code change: needs an image build (Cloud Build) as well as `./scripts/deploy.sh` for the timeouts.
+
 ## 2026-10-27 (label-design) - Push moves to "Plex Import Test", keeps label colours aligned; repair and test push retired
 
 **Deployed 2026-10-27:** image `38860dd` (Cloud Build), then `deploy/2026-10-27T2010Z` (4 changed, 4 destroyed). The prod push now runs against board 18437236736 with `MOVE_TO_BOARD_ID` and the email settings; the old "Plex Import" board (18432111755) is archived. The 43 values a move had changed are listed for the team to review at https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5.

@@ -149,6 +149,16 @@ CONNECT_DEADLINE_SECONDS = int(os.environ.get("CONNECT_DEADLINE_SECONDS", "60"))
 CONNECT_ATTEMPTS         = int(os.environ.get("CONNECT_ATTEMPTS", "3"))
 CONNECT_BACKOFF_SECONDS  = int(os.environ.get("CONNECT_BACKOFF_SECONDS", "20"))
 
+# BigQuery load deadlines (2026-10-27). The client's default timeout is None:
+# a stuck upload waits forever. In the 6 PM Mountain batch of 2026-10-27 a
+# 461-row load that normally takes 3 s took 8m43s and the next one never
+# returned, so sales-orders hit its task timeout twice with Plex answering
+# fine. UPLOAD is per HTTP request (the client retries connection errors
+# itself; a read timeout reaches the one retry in write_to_bigquery). JOB caps
+# the wait for the load job, which normally finishes in about 2 s.
+BQ_UPLOAD_TIMEOUT_SECONDS = int(os.environ.get("BQ_UPLOAD_TIMEOUT_SECONDS", "120"))
+BQ_LOAD_JOB_TIMEOUT_SECONDS = int(os.environ.get("BQ_LOAD_JOB_TIMEOUT_SECONDS", "300"))
+
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
 PLEX_DATE_COL = os.environ.get("PLEX_DATE_COL", "")
@@ -1364,11 +1374,14 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
     # to expand table ... matched no files" (its staged upload went missing).
     # It hit raw_Sales_v_PO_Line when Label Design and Sales Orders loaded it
     # in the same minute. WRITE_TRUNCATE makes a second try safe; a real
-    # schema error just fails twice.
+    # schema error just fails twice. A load that blows its deadline also
+    # retries; if the first job lands later anyway, both carry the same rows.
     for attempt in (1, 2):
         try:
-            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-            job.result()
+            job = bq.load_table_from_dataframe(
+                df, table_ref, job_config=job_config,
+                timeout=(30, BQ_UPLOAD_TIMEOUT_SECONDS))
+            job.result(timeout=BQ_LOAD_JOB_TIMEOUT_SECONDS)
             if job.errors:
                 raise RuntimeError(f"BigQuery load job failed: {job.errors}")
             break

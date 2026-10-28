@@ -407,7 +407,9 @@ resource "google_cloud_run_v2_job" "etl" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout = "1200s"
+      # 1800s (2026-10-27): the 6 PM run has grown every night since (926s,
+      # 1117s, then 1241s and cut off). Normal runs take about 250s.
+      timeout = "1800s"
     }
   }
 
@@ -1144,7 +1146,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -2987,7 +2991,9 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -5553,7 +5559,9 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
       max_retries = 0
-      timeout     = "900s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -5864,7 +5872,9 @@ resource "google_cloud_run_v2_job" "etl_part_lot" {
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
       max_retries = 0
-      timeout     = "1800s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "2400s"
     }
   }
 

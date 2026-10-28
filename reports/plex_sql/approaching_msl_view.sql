@@ -79,6 +79,9 @@ inv AS (
   SELECT
     p.Part_No AS part_no,
     MAX(CASE WHEN w.wrapper_key IS NULL THEN p.Name END) AS description,
+    MAX(CASE WHEN w.wrapper_key IS NULL THEN p.Part_Type END) AS part_type,
+    MAX(CASE WHEN w.wrapper_key IS NULL THEN p.Part_Group_Key END) AS part_group_key,
+    MAX(CASE WHEN w.wrapper_key IS NULL THEN p.Part_Source_Key END) AS part_source_key,
     MAX(p.Minimum_Inventory_Quantity * ISNULL(w.factor, 1)) AS reorder_point,
     SUM(ISNULL(oh.on_hand_qty, 0) * ISNULL(w.factor, 1)) AS on_hand_qty,
     SUM(u.qty_used * ISNULL(w.factor, 1)) AS qty_used,
@@ -102,7 +105,12 @@ SELECT
   s.usage_days,
   i.on_hand_qty / NULLIF(i.qty_used * 1.0 / NULLIF(s.usage_days, 0), 0) AS days_on_hand,
   i.on_order_qty,
-  i.open_job_qty
+  i.open_job_qty,
+  i.part_type,
+  i.part_group_key,
+  pg.Part_Group AS part_group,
+  i.part_source_key
 FROM inv AS i
 CROSS JOIN span AS s
+LEFT JOIN Part_v_Part_Group AS pg ON pg.Part_Group_Key = i.part_group_key
 WHERE i.reorder_point > 0 OR i.qty_used > 0

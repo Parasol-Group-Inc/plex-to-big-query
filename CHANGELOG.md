@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (dev) - Approaching MSL: at reorder point needs a reorder point (or negative stock)
+
+### Changed
+- `approaching_msl_report.at_reorder_point` is `quantity_available <= reorder_point` only when the part has a reorder point; with none, it is true only when `quantity_available` is negative. Before, `0 <= 0` flagged 23 parts with no reorder point and nothing available or due. Kept `<=` (the usual reorder rule; the sheet's `<` differs on 4 parts). Tested on PlexProd: 854 of 1,435 at reorder point (was 877).
+
 ## 2026-10-28 (dev) - Approaching MSL: demand_qty column; reorder point from Plex only
 
 Jennilyn's answers (2026-10-28): the reorder point is Plex's only; at reorder point stays after open-order demand; no capsules-only default (the dashboard splits by part type); average daily usage stays NetSuite's until Plex has the history. Her "Vox Inventory Demand" dashboard showed `open_job_qty` (jobs making the part, i.e. incoming supply) as "Demand", so On Hand − Demand never matched Qty Avail.

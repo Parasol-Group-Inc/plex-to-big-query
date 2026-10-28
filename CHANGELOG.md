@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (label-design) - Label-only order lines get their own Label Part #; trigger app removed
+
+**Not deployed yet** (SQL-only: `./scripts/deploy.sh` after merge, no Cloud Build).
+
+### Changed
+- **`label_design_view.sql`: a line that orders the label itself is its own label.** SO 435 (`73066-10KAYAN-0`) and SO 388 ordered label parts, not finished goods, so Label Part # and the label attributes were blank. The `labels` CTE now unions each label part (name starts `LABEL`, Part_Type not `Service`) as its own label at BOM level 0. Checked as a query: PlexProd 42 rows, 42 unique keys, 0 blank Label Part #; PlexTest 37/37/0. Bottle Material stays blank on these lines. The push never rewrites items, so the 4 already on Monday keep a blank Label Part #.
+
+### Removed
+- **`deploy/label_design_trigger/`**, the on-demand Apps Script app. It was never deployed; the push runs after every ETL and the 15-min probe brings an approval to the board in about 2 h. References removed from README, CONTRIBUTING, the cheat sheet, `label-design/README.md` and the Data Hub.
+
 ## 2026-10-28 (dev) - Approaching MSL: demand counted once, wrapper units converted, zero-stock parts listed
 
 ### Fixed

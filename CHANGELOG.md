@@ -14,6 +14,20 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (dev) - Approaching MSL: demand counted once, wrapper units converted, zero-stock parts listed
+
+### Fixed
+- `approaching_msl_view.sql` summed every Part_Key of a part number. The 2026-10-26 roll-up assumed "stock on one key, demand on the other"; that is wrong. The second key is a **wrapper** whose own BOM is one line pointing at the stocked key, with a conversion factor (1, 0.001 for a gram key, 0.000001 for a milligram key; 615 wrappers in PlexProd). Flat_BOM explodes demand through the wrapper, so the stocked key already holds the wrapper's demand converted (checked on all 383 stocked keys), and the sum counted it twice, in mixed units for gram keys. 352 parts had availability understated and 39 showed at their reorder point wrongly. Demand now comes from the stocked key only; stock, minimum, usage, jobs and orders on a wrapper are converted by its factor.
+- Plex usage for gram wrappers was in grams against stock in kilos (riboflavin 11,045 a day vs NetSuite 2.6). Production recorded into a wrapper (1,607 rows) is now skipped and the wrapper's own consumption counted, converted, so each kilo counts once. Plex/NetSuite usage agreement: median ratio 2.1 to 1.1, parts off by 10x or more 38 to 16. This had to land before Plex usage takes over at `usage_min_days` (about 2026-11-16).
+- The view was driven from `inventory_available_to_sell_report`, which lists only parts with stock or open demand, so a part with a reorder point and nothing in stock or on order was missing. It is now driven from `Part_v_Part`: 1,435 parts (was 997), the 438 added are all at their reorder point (217 Product Labels, 131 Stock Labeled Bottles, mostly bottles otherwise; scope question for Jennilyn, D21).
+- `on_order_qty` counted a PO release already marked `Received` while its PO stayed open (9 releases on 7 parts). It now reads the raw `Purchasing_v_*` tables and skips those; a `Partial` release still counts in full (Plex holds no received quantity per release) and is flagged in `data_flag`.
+
+### Added
+- `approaching_msl_report` columns `unit` (the stocked key's) and `product_type`, at the end.
+- `reports/plex_sql/approaching_msl_view.sql` follows the same roll-up, adds on order, and counts only active containers in on-hand statuses.
+
+PlexProd dry run against the live view: the 615 single-key parts are unchanged except one on-order figure (the received release).
+
 ## 2026-10-27 (dev) - BigQuery loads get a deadline; slow 6 PM batch no longer cuts jobs off
 
 ### Fixed

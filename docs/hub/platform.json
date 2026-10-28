@@ -1065,7 +1065,7 @@
       "id": "L16",
       "title": "Push moved to Plex Import Test with label colour alignment and problem emails; repair job and test push retired. Deployed 2026-10-27; old Plex Import archived.",
       "owner": "Emilio / Ashley",
-      "next": "Confirm the first real push and move keep every value; team reviews the 43 changed values on the review page; delete Design & QA's empty second Sales Rep column."
+      "next": "Confirm the first real push and move keep every value. The 43 changed values are the Label Design team's to review (handed over). Delete Design & QA's empty second Sales Rep column."
     }
   ],
   "gotchas": [

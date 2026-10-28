@@ -11,7 +11,24 @@
 
 ---
 
-## UPDATE — 2026-10-28 (latest): audit, label-only order lines, trigger app sunset
+## UPDATE — 2026-10-28 (evening, latest): Kelli's answers; late label fields fill in
+
+Kelli Gooch answered the team questions (2026-10-28, to Emilio, Ashley and
+Jennilyn):
+- **Label attributes:** yes, they must be filled so printing knows how to
+  proceed once a label is approved. QA owns entering them in Plex. Because QA
+  often does this after the order is on Monday, the push now fills Label
+  Part #, Label Size, Printing Material and Allergen into an item's EMPTY
+  cells (`label_design_service/fill.py`, not deployed yet; L18).
+- **KAYA contact:** should be Jen's, "maybe Jennete Boone" (L11, email owed).
+- **Design Status:** stays blank; it follows the label on the design board.
+  L3 closed.
+- **Duplicate Sales Rep column:** deleted through the API the same day
+  (`color_mm7zxq8m`, empty on all 192 items). L16 closed.
+
+---
+
+## UPDATE — 2026-10-28: audit, label-only order lines, trigger app sunset
 
 **Audit of the 10-28 push** (run `fa38bc56f12f`, 13:07 MT): 5 items created on
 Plex Import Test (SO 449, SO 435, SO 415, SO 341 ×2), 22/22 columns. The only

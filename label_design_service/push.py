@@ -44,6 +44,12 @@ created and the run exits non-zero; the next run tries again. If it could only
 arrive blank (Design & QA refused a new label), items are created, the run
 still exits non-zero.
 
+LATE LABEL FIELDS. QA often fills a label part's attributes in Plex after the
+order is on Monday. Every run also writes Label Part #, Label Size, Printing
+Material and Allergen into the EMPTY cells of items it created that are still
+in the view, once per (item, field), never over a value already there. Logged
+as `outcome = 'filled'`. See fill.py.
+
 EMAIL. A run that ends badly (label check failed, Design & QA refused a label,
 items failed or partial, the alarm, a crash) or that ADDED labels to Design &
 QA emails the report recipients (email_utils.send_push_alert): what happened,
@@ -77,9 +83,10 @@ from zoneinfo import ZoneInfo
 from google.cloud import bigquery
 
 try:  # `python -m label_design_service.push` (container) or run from this folder
-    from . import labels
+    from . import fill, labels
     from .monday import Monday
 except ImportError:
+    import fill
     import labels
     from monday import Monday
 
@@ -105,7 +112,7 @@ AUDIT_SCHEMA = [
     bigquery.SchemaField("order_number", "STRING"),
     bigquery.SchemaField("customer_part_no", "STRING"),
     bigquery.SchemaField("monday_item_id", "STRING"),
-    bigquery.SchemaField("outcome", "STRING", mode="REQUIRED"),  # created | partial | failed | alert
+    bigquery.SchemaField("outcome", "STRING", mode="REQUIRED"),  # created | partial | failed | alert | filled
     bigquery.SchemaField("detail", "STRING"),
     bigquery.SchemaField("column_values", "STRING"),
 ]
@@ -320,6 +327,62 @@ def audited_lcrs(bq):
     return {r.lcr for r in bq.query(q).result()}
 
 
+def view_rows(bq):
+    rows = [dict(r) for r in bq.query(f"SELECT * FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}`").result()]
+    for r in rows:
+        r["_lcr"] = lcr_hash(r["dedupe_key"])
+    return rows
+
+
+def fill_candidates(bq, rows):
+    """View rows whose pushed item may be missing a label field (fill.plan)."""
+    q = (f"SELECT lcr, monday_item_id, outcome, column_values FROM `{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}` "
+         f"WHERE outcome IN ('created', 'partial', 'filled') AND monday_item_id IS NOT NULL ORDER BY pushed_at")
+    pushed, settled = {}, {}
+    for a in bq.query(q).result():
+        if a.outcome == "filled":
+            settled.setdefault(a.lcr, set()).update(json.loads(a.column_values or "{}"))
+        else:   # the latest creation wins
+            pushed[a.lcr] = a.monday_item_id
+    return fill.plan(rows, pushed, settled)
+
+
+def fill_blanks(api, bq, ctx, candidates):
+    """Write late label fields into empty cells (see LATE LABEL FIELDS). Never
+    fails the run: a problem is logged and the next run tries again."""
+    if not candidates:
+        return
+    log.info(f"{len(candidates)} pushed item(s) may be missing label fields")
+    def align_status(needed):
+        problems = labels.align(api, BOARD_ID, MOVE_TO_BOARD_ID, needed, apply=not DRY_RUN, log=log.info)
+        for blocking, p in problems:
+            log.warning(f"Label colours (fill){' (BLOCKING)' if blocking else ''}: {p}")
+        return not any(b for b, _ in problems)
+    try:
+        results = fill.fill(api, candidates, align_status, apply=not DRY_RUN, log=log.info)
+    except Exception as e:
+        log.warning(f"Filling label fields stopped ({type(e).__name__}: {str(e)[:300]}); the next run tries again")
+        return
+    audit = []
+    for res in results:
+        for e in res["errors"]:
+            log.warning(f"  fill item {res['item_id']}: {e}")
+        if DRY_RUN or not (res["written"] or res["already_set"]):
+            continue
+        r = res["row"]
+        detail = "; ".join([f"{t} = {v['label'] if isinstance(v, dict) else v}" for t, v in res["written"].items()]
+                           + [f"{t} already set on the board" for t in res["already_set"]])
+        audit.append({"run_id": ctx["run_id"], "pushed_at": dt.datetime.now(dt.timezone.utc), "board_id": BOARD_ID,
+                      "dedupe_key": r["dedupe_key"], "lcr": r["_lcr"], "order_number": r.get("order_number"),
+                      "customer_part_no": r.get("customer_part_no"), "monday_item_id": str(res["item_id"]),
+                      "outcome": "filled", "detail": detail[:1000],
+                      # Title -> value written, or null when the cell was already set: both are settled.
+                      "column_values": json.dumps({**res["written"], **{t: None for t in res["already_set"]}})})
+    write_audit(bq, audit)
+    log.info(f"Label fields: {sum(1 for a in results if a['written'])} item(s) filled, "
+             f"{sum(len(a['already_set']) for a in results)} field(s) already set")
+
+
 def write_audit(bq, rows):
     if not rows:
         return
@@ -430,18 +493,32 @@ def main(ctx):
             log.info(f"Pending check skipped ({type(e).__name__}: {e}) — doing the full pass")
             pending = None
         if pending == 0:
-            log.info("Nothing in the view that the audit table hasn't seen — nothing to push.")
+            candidates = fill_candidates(bq, view_rows(bq))
+            if not candidates:
+                log.info("Nothing in the view that the audit table hasn't seen, and no label fields to fill.")
+                return
+            log.info("Nothing new to push.")
+            fill_blanks(Monday(get_api_key()), bq, ctx, candidates)
             return
 
     api = Monday(get_api_key())
+    rc = push_new(api, bq, ctx)
+    fill_blanks(api, bq, ctx, fill_candidates(bq, view_rows(bq)))
+    if rc:
+        sys.exit(rc)
 
+
+def push_new(api, bq, ctx):
+    """Create an item for every view row not yet on Monday. Returns the exit
+    code; the alarm and a blocking label problem exit straight away."""
+    run_id = ctx["run_id"]
     board_name, col_ids, missing, group_id = resolve_board(api)
     ctx["board_name"] = board_name
     log.info(f"Board '{board_name}': {len(col_ids)}/{len(COLUMNS)} mapped columns found")
     for m in missing:
         log.warning(f"Board has no column {m} — that field will not be written")
 
-    rows = [dict(r) for r in bq.query(f"SELECT * FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}`").result()]
+    rows = view_rows(bq)
     on_board = existing_lcrs(api, col_ids["LCR"])
     try:
         in_audit = audited_lcrs(bq)
@@ -451,7 +528,6 @@ def main(ctx):
 
     fresh = []
     for r in rows:
-        r["_lcr"] = lcr_hash(r["dedupe_key"])
         if r["_lcr"] in on_board or r["_lcr"] in in_audit:
             continue
         fresh.append(r)
@@ -469,7 +545,7 @@ def main(ctx):
         sys.exit(2)
 
     if not fresh:
-        return
+        return 0
 
     # Status label colours, before anything is created (see LABEL COLOURS).
     needed = {}
@@ -497,7 +573,7 @@ def main(ctx):
     if DRY_RUN:
         for r in fresh:
             log.info(f"  would create: {r.get('customer_part_no')!r}  {r['dedupe_key']}  lcr={r['_lcr']}")
-        return
+        return 0
 
     if not group_id:
         group_id = api("mutation ($b: ID!, $n: String!) { create_group(board_id: $b, group_name: $n) { id } }",
@@ -581,8 +657,7 @@ def main(ctx):
     if bad_items or problems or label_changes:
         alert("failed" if bad_items else "blank" if problems else "labels", ctx,
               problems=problems, label_changes=label_changes, items=bad_items)
-    if failures or label_problems:
-        sys.exit(1)
+    return 1 if failures or label_problems else 0
 
 
 if __name__ == "__main__":

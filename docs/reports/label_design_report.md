@@ -307,8 +307,15 @@ the old board are never pushed again to the new one.
   those exact titles. The other `part_*` columns are in the report but feed no
   Monday column — there is nothing in them yet.
 - **Label-only order lines (2026-10-28):** a line whose part is itself a label
-  (`LABEL | …`, not a Service part) is its own label part. Items already on
-  the board are not rewritten; the push only creates.
+  (`LABEL | …`, not a Service part) is its own label part.
+- **Label fields filled in late reach the board (2026-10-28, Kelli Gooch):**
+  QA often fills a label part's attributes in Plex after the order is on
+  Monday, and printing needs them once the label is approved. Every push run
+  now writes `Label Part #`, `Label Size`, `Printing Material` and `Allergen`
+  into an item's EMPTY cells, on whichever board it sits, once per field.
+  Anything already in a cell is left alone, and a cell the team clears is not
+  refilled. Each write is an `outcome = 'filled'` row in
+  `label_design_push_log`.
 - **No on-demand button (2026-10-28):** the planned trigger web app was
   dropped and deleted from the repo, because the 15-minute probe already gets
   an approval to the board in about 2 hours.

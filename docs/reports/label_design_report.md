@@ -129,6 +129,12 @@ product and found nothing, so they never reached the board. The item name is
 unchanged — it is still the customer part number, and the label part number
 has its own column rather than replacing it.
 
+**When the order is for the label itself (since 2026-10-28).** Some orders
+carry the label part directly (`73066-10KAYAN-0` on SO 435) instead of a
+finished good. That line's own part number is now its Label Part #, and its
+label attributes come from it. Before, these lines reached Monday with Label
+Part # blank. Bottle Material stays blank on them: a label has no bottle.
+
 | First digit | Reason Code |
 |---|---|
 | 1 | Customer Initiated: Label Edit |
@@ -300,6 +306,12 @@ the old board are never pushed again to the new one.
   `Label Size`, `Printing Material` and `Allergen` are written to columns of
   those exact titles. The other `part_*` columns are in the report but feed no
   Monday column — there is nothing in them yet.
+- **Label-only order lines (2026-10-28):** a line whose part is itself a label
+  (`LABEL | …`, not a Service part) is its own label part. Items already on
+  the board are not rewritten; the push only creates.
+- **No on-demand button (2026-10-28):** the planned trigger web app was
+  dropped and deleted from the repo, because the 15-minute probe already gets
+  an approval to the board in about 2 hours.
 
 ## More detail
 

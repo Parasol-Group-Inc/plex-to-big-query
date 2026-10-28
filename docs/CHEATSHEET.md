@@ -435,7 +435,6 @@ plex-to-big-query/
     setup.sh               # DEPRECATED bootstrap script, kept for reference (use terraform/)
     manual_data_app/       # [Scorecard] goals + safety-incident web app (Apps Script)
     archive/               # retired, kept for the record - label_design_sync/ (Apps Script)
-    label_design_trigger/  # [Label Design] run-the-sync-on-demand web app (on dev-label-design)
   label-design/              # [Label Design] STATUS.md (read first), Monday board docs
   label_design_service/      # [Label Design] push service (reason-code parser + tests)
   docs/                      # guides: this file, OPERATIONS, TROUBLESHOOTING, EMAIL_SCHEDULE,

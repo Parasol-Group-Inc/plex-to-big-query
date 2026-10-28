@@ -11,7 +11,36 @@
 
 ---
 
-## UPDATE — 2026-10-27 (latest): push moves to "Plex Import Test"; repair retired
+## UPDATE — 2026-10-28 (latest): audit, label-only order lines, trigger app sunset
+
+**Audit of the 10-28 push** (run `fa38bc56f12f`, 13:07 MT): 5 items created on
+Plex Import Test (SO 449, SO 435, SO 415, SO 341 ×2), 22/22 columns. The only
+alert row was informational (`Inside Sales Rep: add 'Emily Gray' to Design &
+QA`); the label is now aligned on both boards. Approval to board took 1.7–1.85 h.
+All 42 PlexProd queue rows are on Monday; every active pushed item still holds
+what was sent. The team archived SO 372 ×2 and deleted SO 345/346. SO 358's two
+Reason Codes are fixed, so the 43-value move review is complete. The WO column
+is gone from Design & QA. Probe since 10-21: 27 applied, 185 skipped, 1 failed,
+0 inconclusive, with the 4-part snapshot, so the approval fingerprint works.
+
+**Label-only order lines (SQL, not deployed yet).** SO 435 (`73066-10KAYAN-0`)
+and SO 388 ordered the label part itself, so Label Part # arrived blank. The
+view's `labels` CTE now also treats a line whose part is a label (name starts
+`LABEL`, not a Service part) as its own label. Checked as a query: PlexProd 42
+rows, 42 keys, 0 blank Label Part #; PlexTest 37/37/0. Bottle Material stays
+blank on these lines. Existing items are not rewritten (OPEN_ITEMS L17).
+
+**Trigger app sunset.** `deploy/label_design_trigger/` was never deployed and
+is removed: with the push chained onto the ETL and the 15-min probe, an
+approval reaches the board in about 2 h. L2, L6, L1, L5, L12 and L14 closed.
+
+**Attributes (for Jennilyn, L7).** 351 label parts have Label Size, Printing
+Material and Trademark filled, but only 2 of the 38 label parts in the live
+queue have any attribute: new label parts are created without them.
+
+---
+
+## UPDATE — 2026-10-27: push moves to "Plex Import Test"; repair retired
 
 **DEPLOYED 2026-10-27** (image `38860dd`, `deploy/2026-10-27T2010Z`); old "Plex Import" archived. Team review list of the 43 changed values: https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5
 
@@ -629,11 +658,15 @@ See CHANGELOG 2026-10-01.
   - **The prod push targets "Plex Import".** Before 19 Oct, the test push
     moves to a sandbox board (e.g. Emilio's own).
   - **Part attributes won't go to Monday.** They stay on the part in Plex.
-  - **The on-demand trigger app** (L2) is Emilio's to deploy.
+  - **The on-demand trigger app** (L2) is Emilio's to deploy. *(Sunset
+    2026-10-28, never deployed.)*
 
 ---
 
 ## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
+
+> **Sunset 2026-10-28.** Never deployed; the folder was removed once the
+> push was chained onto the ETL and syncs reached the board in about 2 h.
 
 `deploy/label_design_trigger/` is a one-button Apps Script page that starts
 `plex-etl-label-design-test` and shows recent runs. It runs as the deployer,

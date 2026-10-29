@@ -78,6 +78,40 @@ def doc_info(path):
     return {"path": rel(path), "status": status, "mark": mark, "markdown": text}
 
 
+def plain(md):
+    # the History tab escapes text, so drop markdown emphasis and code ticks
+    return re.sub(r"\*\*|`", "", md).strip()
+
+
+def changelog_recent(limit=40):
+    # "## 2026-10-29 (dev) - Title" -> {date, title, summary}; summary = the
+    # entry's first section, so the History tab never lags CHANGELOG.md
+    out = []
+    for m in re.finditer(r"^## (\d{4}-\d{2}-\d{2})(?: \(([^)]+)\))? - (.+?)\n(.*?)(?=^## |\Z)",
+                         read(ROOT / "CHANGELOG.md"), re.M | re.S):
+        day, tag, title, body = m.groups()
+        first = re.split(r"^### ", body.strip(), maxsplit=2, flags=re.M)
+        section = next((s for s in first if s.strip()), "")
+        lines = section.split("\n", 1)[1] if re.match(r"^[A-Z][a-z]+\n", section) else section
+        summary = " ".join(l.strip().lstrip("- ") for l in lines.splitlines() if l.strip())
+        if len(summary) > 700:
+            summary = summary[:700].rsplit(" ", 1)[0] + " …"
+        out.append({"date": day, "title": plain(title) + (f" ({tag})" if tag else ""), "summary": plain(summary)})
+        if len(out) == limit:
+            break
+    return out
+
+
+def open_items():
+    # the "| ID | Item | Owner | Next step |" rows of docs/OPEN_ITEMS.md
+    out = []
+    for line in read(ROOT / "docs" / "OPEN_ITEMS.md").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 4 and re.fullmatch(r"[A-Z]+\d+", cells[0]):
+            out.append({"id": cells[0], "title": plain(cells[1]), "owner": plain(cells[2]), "next": plain(cells[3])})
+    return out
+
+
 def load_columns(views):
     cols = defaultdict(list)
     with open(ROOT / "catalog" / "full_schema_catalog.csv", encoding="utf-8", newline="") as f:
@@ -273,6 +307,8 @@ def main():
             other_inputs[o]["used_by"].append(r["name"])
 
     platform = json.loads(read(ROOT / "docs" / "hub" / "platform.json") or "{}")
+    platform["changelog_recent"] = changelog_recent() or platform.get("changelog_recent", [])
+    platform["open_items"] = open_items() or platform.get("open_items", [])
     scorecard = load_scorecard(reports, other_inputs)
 
     data = {

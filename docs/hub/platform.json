@@ -976,20 +976,8 @@
       "next": "Fix the tile read and lastIncident_()."
     },
     {
-      "id": "L17",
-      "title": "Label-only order lines get their own Label Part # (SQL fixed 2026-10-28, not deployed)",
-      "owner": "Emilio",
-      "next": "deploy.sh after merge; SO 435 shows label_part_no 73066-10KAYAN-0. Also proves L10."
-    },
-    {
-      "id": "L3",
-      "title": "Should a pushed item start with a Design Status?",
-      "owner": "Ashley (via Emilio)",
-      "next": "Decide: blank (team sets it) or a fixed start such as 'Received by Design'; one line in push.py if set."
-    },
-    {
       "id": "L7",
-      "title": "Attribute questions for Jennilyn: missing Bottle Material/PDP/Prop 65, dead Size, unfilled Hazardous/Material Classification, 36 of 38 queue labels with no attributes",
+      "title": "Attribute questions for Jennilyn: missing Bottle Material/PDP/Prop 65, dead Size, unfilled Hazardous/Material Classification",
       "owner": "Emilio",
       "next": "Ask on the next call. Nothing is blocked."
     },
@@ -1000,34 +988,28 @@
       "next": "Decision."
     },
     {
+      "id": "L18",
+      "title": "Late label fields fill into pushed items' empty cells (code 2026-10-28, not deployed); Sales enters attributes when the SO is made",
+      "owner": "Emilio",
+      "next": "Cloud Build, then check outcome = 'filled' rows in label_design_push_log; Sales fills the missing attributes."
+    },
+    {
       "id": "L9",
       "title": "Reconfirm part attributes go to Monday",
       "owner": "Emilio",
       "next": "Confirm with Jennilyn."
     },
     {
-      "id": "L10",
-      "title": "Prove the SQL-only deploy fix",
-      "owner": "Claude",
-      "next": "Next SQL-only deploy must log applied."
-    },
-    {
       "id": "L11",
-      "title": "Ashley's board points: optional people Sales Rep automation; line vs company contact; SO 435 KAYA placeholder contact in Plex",
-      "owner": "Ashley",
-      "next": "On the board; the KAYA contact is fixed in Plex."
+      "title": "Ashley's board points: optional people Sales Rep automation; line vs company contact; KAYA contact is Jennifer.jensen@kayanaturals.com",
+      "owner": "Emilio / Ashley",
+      "next": "Emilio updates KAYA's contact in Plex (email + placeholder phone); fix SO 435's Email on Design & QA by hand (restricted column)."
     },
     {
       "id": "L13",
       "title": "Plex REST API: extractor live in test, push ARCHIVED 2026-10-20",
       "owner": "Emilio",
       "next": "Nothing until the API path should replace ODBC; fix ARCHIVED.md first."
-    },
-    {
-      "id": "L16",
-      "title": "Push on Plex Import Test verified 2026-10-28; all 43 move losses fixed. Left: empty duplicate Sales Rep column",
-      "owner": "Ashley",
-      "next": "Delete color_mm7zxq8m on Design & QA."
     }
   ],
   "gotchas": [

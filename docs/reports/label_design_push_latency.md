@@ -27,10 +27,11 @@ entered, and when the order was last edited.
 ## What a row is
 
 One item the push service tried to create on the board (normally
-`outcome = created`). Two kinds of row in the same log are left out because
+`outcome = created`). Three kinds of row in the same log are left out because
 they are not pushes: `repaired` (22 to 27 Oct, a moved item's blank fields
-being refilled by the retired repair job) and `alert` (from 27 Oct, an email
-the push sent about a problem).
+being refilled by the retired repair job), `alert` (from 27 Oct, an email
+the push sent about a problem) and `filled` (from 28 Oct, a label field
+written into an item after it was created, once QA filled it in Plex).
 
 ## Things to know before trusting it
 

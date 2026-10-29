@@ -29,9 +29,24 @@
 -- same pipeline.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per Shipper_Line (one shipped part on one shipment).
+--
+-- ORDER / INVOICE NUMBERS (added 2026-10-29, Jennilyn's request):
+--   order_no   — Sales_v_PO.Order_No, Plex's internal order number (162, 170…)
+--   po_no      — Sales_v_PO.PO_No, the SO number plus customer PO as Plex
+--                shows it ("SO0119700 / 1070")
+--   invoice_no — Accounting_v_AR_Invoice.Invoice_No (INV0000004). The
+--                shipper's AR link only carries Invoice_Link, a key that
+--                does not equal the number, so the AR header is required.
+-- The order chain joins on Shipper_Line.Release_Key directly: it matched
+-- Sales_v_Shipper_Line_Release on every line in test and prod (2026-10-29),
+-- and each line reaches exactly one PO, so these joins cannot fan out
+-- revenue. A shipped-not-yet-invoiced line has a NULL invoice_no.
 
 SELECT
   s.Shipper_No                                          AS shipper_no,
+  po.Order_No                                           AS order_no,
+  po.PO_No                                              AS po_no,
+  ar.Invoice_No                                         AS invoice_no,
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(s.Ship_Date AS STRING) AS INT64), 0), 1000))),
     NULLIF(SAFE_CAST(CAST(s.Ship_Date AS STRING) AS DATE), DATE '1970-01-01'),
@@ -64,6 +79,18 @@ JOIN `{gcp_project}.{dataset}.raw_Sales_v_Shipper_Status` ss
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Shipper_AR_Invoice` inv
   ON SAFE_CAST(sl.Shipper_Line_Key AS INT64) = SAFE_CAST(inv.Shipper_Line_Key AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Accounting_v_AR_Invoice` ar
+  ON SAFE_CAST(inv.Invoice_Link AS INT64) = SAFE_CAST(ar.Invoice_Link AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Release` rel
+  ON SAFE_CAST(sl.Release_Key AS INT64) = SAFE_CAST(rel.Release_Key AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Line` pol
+  ON SAFE_CAST(rel.PO_Line_Key AS INT64) = SAFE_CAST(pol.PO_Line_Key AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO` po
+  ON SAFE_CAST(pol.PO_Key AS INT64) = SAFE_CAST(po.PO_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
   ON SAFE_CAST(s.Customer_No AS INT64) = SAFE_CAST(cust.Customer_No AS INT64)

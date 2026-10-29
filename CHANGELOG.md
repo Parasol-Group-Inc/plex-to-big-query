@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Shipping Revenue: order, PO and invoice numbers
+
+Jennilyn asked for the invoice number and the Plex order number on the shipping revenue report.
+
+### Added
+- `Accounting_v_AR_Invoice` extracted into `raw_Accounting_v_AR_Invoice` (Sales Orders pipeline, prod and test configs: 27 -> 28 extractions). It is the only place Plex keeps the invoice number; `Sales_v_Shipper_AR_Invoice` has just the `Invoice_Link` key.
+- `shipping_revenue_report`: `order_no` (`Sales_v_PO.Order_No`), `po_no` (`Sales_v_PO.PO_No`) and `invoice_no` (`Accounting_v_AR_Invoice.Invoice_No`), after `shipper_no`. The order chain joins on `Shipper_Line.Release_Key`, which matched `Sales_v_Shipper_Line_Release` on every line in test and prod. Checked on PlexProd (invoice table stubbed): 123 rows and $840,402.92, same as the live view; every line has one order (73 orders).
+- Docs: `docs/reports/shipping_revenue_report.md`; Plex SQL Developer copy updated to match.
+
 ## 2026-10-28 (dev) - Approaching MSL: at reorder point needs a reorder point (or negative stock)
 
 ### Changed
@@ -47,6 +56,17 @@ A review of every report that sums part quantities, after the Approaching MSL fi
 - `purchasing_open_orders_report`: releases already marked Received on an open PO are left out (9 releases, 35,602 units). New column `release_status`; a Partial release still counts in full, because Plex's Release view has no received quantity. Every join now SAFE_CASTs both sides.
 - `mfg_job_schedule_inventory_availability_report`: really one row per part number. On order was joined by part number to one row per Part_Key, so every key repeated the full PO quantity. Wrapper keys are converted, and parts on order with no stock are listed (27 were missing). On order is read from the raw Purchasing tables by Part_Key, with the same open rule, so the view no longer depends on another pipeline's view. 2,024 to 2,032 rows.
 - Plex SQL Developer copies of all three updated to match.
+
+## 2026-10-28 (label-design) - Label fields filled in Plex after the push reach the board
+
+**Not deployed yet** (push image: Cloud Build, then `./scripts/deploy.sh` for the latency view SQL).
+
+### Added
+- **`label_design_service/fill.py`: late label fields fill into pushed items.** Sales should enter a label part's attributes when the SO is made, so the designer knows what the label needs (Kelli Gooch), but they often reach Plex after the order is on Monday. Every push run now writes `Label Part #`, `Label Size`, `Printing Material` and `Allergen` into the EMPTY cells of items it created that are still in the view, on whichever board they sit, once per (item, field), never over a value already there. Each write, or a field found already set, is an `outcome = 'filled'` row in `label_design_push_log`. Status labels go through `labels.align()` first. Prod dry run: SO 435 and SO 388's three items get their Label Part #; SO 355 gets Label Size, Printing Material and Allergen. Tests: `tests/test_label_fill.py`.
+
+### Changed
+- `push.py`: the "nothing new" gate still runs the fill step when there are fields to fill; creation problems no longer skip it.
+- `label_design_push_latency_view.sql` leaves out `filled` rows (not pushes).
 
 ## 2026-10-28 (label-design) - Label-only order lines get their own Label Part #; trigger app removed
 

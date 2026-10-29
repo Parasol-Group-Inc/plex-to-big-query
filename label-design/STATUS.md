@@ -11,7 +11,65 @@
 
 ---
 
-## UPDATE — 2026-10-28 (latest): audit, label-only order lines, trigger app sunset
+## UPDATE — 2026-10-28 (evening, latest): Kelli's answers; late label fields fill in
+
+**Wrap-up: the project moves to monitoring.** Nothing is being built. What is
+left is to deploy, then watch:
+
+1. **Deploy** (Emilio): Cloud Build for the push image (the fill step is in
+   `push.py`), then `./scripts/deploy.sh` for the latency view (it skips
+   `filled` rows).
+2. **KAYA in Plex** (Emilio): set the customer contact to Jennifer Jensen,
+   `Jennifer.jensen@kayanaturals.com`, and replace the 800-100-1000
+   placeholder phone. SO 435's Monday Email is changed by hand (restricted
+   column).
+3. **Sales** fills the label parts missing attributes (list sent with Kelli's
+   thread; 41 parts on 10-28). Each one reaches the board through the fill
+   step, no action from us.
+
+**What to watch, once a day for the first week:**
+
+```sql
+-- Every outcome of the last day. Expect created / filled; repaired from the
+-- repair job. failed or partial needs a look at `detail`.
+SELECT outcome, COUNT(*) n, MAX(pushed_at) last
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE pushed_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+GROUP BY 1;
+
+-- What the fill step wrote. The first real run settles the ~43 fields that
+-- were already set (NULL values in column_values), so expect a burst once.
+SELECT pushed_at, order_number, monday_item_id, column_values
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE outcome = 'filled' ORDER BY pushed_at DESC LIMIT 50;
+```
+
+First real run should fill SO 388's three items (Label Part #) and SO 355
+(Label Size, Printing Material, Allergen). An `alert` row is informational (a
+status label missing on Design & QA); it does not stop the push.
+**Close L18** once filled rows appear and the items show the values on Monday.
+
+Kelli Gooch answered the team questions (2026-10-28, to Emilio, Ashley and
+Jennilyn):
+- **Label attributes:** yes, they must be filled. **Sales enters them when
+  the SO is made**, so the designer Kelli assigns knows what the label needs.
+  Because they often reach Plex after the order is on Monday (41 of 43 queue
+  label parts had none on 10-28), the push now fills Label
+  Part #, Label Size, Printing Material and Allergen into an item's EMPTY
+  cells (`label_design_service/fill.py`, not deployed yet; L18).
+- **KAYA contact:** Jennifer Jensen, `Jennifer.jensen@kayanaturals.com`.
+  Plex still needs the change (we only read Plex). On SO 435's Monday item
+  the API was refused (Email is a restricted column on Design & QA, like
+  Reason Code), so it is changed by hand. Its Label Part # was written through
+  the API the same day (L11).
+- **Design Status:** stays blank; it follows the label on the design board.
+  L3 closed.
+- **Duplicate Sales Rep column:** deleted through the API the same day
+  (`color_mm7zxq8m`, empty on all 192 items). L16 closed.
+
+---
+
+## UPDATE — 2026-10-28: audit, label-only order lines, trigger app sunset
 
 **Audit of the 10-28 push** (run `fa38bc56f12f`, 13:07 MT): 5 items created on
 Plex Import Test (SO 449, SO 435, SO 415, SO 341 ×2), 22/22 columns. The only
@@ -23,7 +81,9 @@ Reason Codes are fixed, so the 43-value move review is complete. The WO column
 is gone from Design & QA. Probe since 10-21: 27 applied, 185 skipped, 1 failed,
 0 inconclusive, with the 4-part snapshot, so the approval fingerprint works.
 
-**Label-only order lines (SQL, not deployed yet).** SO 435 (`73066-10KAYAN-0`)
+**Label-only order lines (DEPLOYED and verified 2026-10-28:** SO 435 now reads
+`73066-10KAYAN-0`; the 14:49 MT probe logged `applied` with only `(config + SQL)`
+changed, which closes L10 too).** SO 435 (`73066-10KAYAN-0`)
 and SO 388 ordered the label part itself, so Label Part # arrived blank. The
 view's `labels` CTE now also treats a line whose part is a label (name starts
 `LABEL`, not a Service part) as its own label. Checked as a query: PlexProd 42

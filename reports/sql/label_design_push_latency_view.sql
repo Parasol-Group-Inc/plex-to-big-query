@@ -40,8 +40,9 @@ WITH push AS (
   FROM `{gcp_project}.{dataset}.label_design_push_log` AS pl
   -- Not pushes: 'repaired' rows (the retired repair job, 2026-10-22 to 10-27)
   -- refilled an item already counted here; 'alert' rows (2026-10-27) record
-  -- an email the push sent.
-  WHERE pl.outcome NOT IN ('repaired', 'alert')
+  -- an email the push sent; 'filled' rows (2026-10-28) record a label field
+  -- written into an item after it was created.
+  WHERE pl.outcome NOT IN ('repaired', 'alert', 'filled')
 ),
 
 release_added AS (

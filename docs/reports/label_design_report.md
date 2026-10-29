@@ -123,8 +123,8 @@ Plex Import on 2026-09-29.
 
 **Four more since 2026-10-02, all about the label itself:** **Label Part #**
 (the Plex label part number, e.g. `73001-00KAYAN-0`), **Label Size**,
-**Printing Material** and **Allergen**. These are the attributes QA fills in
-on the label part in Plex; until this change the report looked for them on the
+**Printing Material** and **Allergen**. These are the attributes Sales fills in
+on the label part in Plex when the SO is made; until this change the report looked for them on the
 product and found nothing, so they never reached the board. The item name is
 unchanged — it is still the customer part number, and the label part number
 has its own column rather than replacing it.
@@ -175,7 +175,7 @@ the old board are never pushed again to the new one.
 
 - **Part-level columns**, pulled from Plex's generic Part Attribute system.
   Since 2026-10-02 they are keyed on the **label** part, not the product —
-  QA fills these in against the label (`73001-00KAYAN-0`), which reaches the
+  Sales fills these in against the label (`73001-00KAYAN-0`), which reaches the
   order line through the bill of materials, exactly like the bottle. Before
   that date they were looked up on the finished good and **every one read
   blank**, which is why the team's attributes never reached Monday.
@@ -307,8 +307,16 @@ the old board are never pushed again to the new one.
   those exact titles. The other `part_*` columns are in the report but feed no
   Monday column — there is nothing in them yet.
 - **Label-only order lines (2026-10-28):** a line whose part is itself a label
-  (`LABEL | …`, not a Service part) is its own label part. Items already on
-  the board are not rewritten; the push only creates.
+  (`LABEL | …`, not a Service part) is its own label part.
+- **Label fields filled in late reach the board (2026-10-28, Kelli Gooch):**
+  Sales should enter a label part's attributes when the SO is made, so the
+  designer knows what the label needs, but they often reach Plex after the
+  order is on Monday. Every push run
+  now writes `Label Part #`, `Label Size`, `Printing Material` and `Allergen`
+  into an item's EMPTY cells, on whichever board it sits, once per field.
+  Anything already in a cell is left alone, and a cell the team clears is not
+  refilled. Each write is an `outcome = 'filled'` row in
+  `label_design_push_log`.
 - **No on-demand button (2026-10-28):** the planned trigger web app was
   dropped and deleted from the repo, because the 15-minute probe already gets
   an approval to the board in about 2 hours.

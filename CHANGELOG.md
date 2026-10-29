@@ -22,6 +22,8 @@ don't need an entry.
 
 ## 2026-10-29 (dev) - Fixes from the post-release audit (prod data since 10-19)
 
+**Deployed 2026-10-29:** image `etl:800785e` on all 31 jobs (build f55f527b), Terraform (tag `deploy/2026-10-29T1914Z`), `etl-dispatcher` revision 00008. Adhoc prod runs at 20:38 UTC succeeded (inventory_snapshot, sales_orders, work_orders, purchasing_open_orders) and all 15 changed views were recreated with rows. `raw_Part_v_Cost_Model` has 6 models, primary 4402; inventory value on the primary model is $11,867,250.
+
 Two audits of what prod ran and produced since the 10-19 release found 23 issues (hub "Audit" tab). This entry fixes the ones code can fix. Numbers below are from PlexProd on 29 Oct.
 
 ### Fixed

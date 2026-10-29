@@ -14,6 +14,12 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Cloud Build's image check read an empty field
+
+### Fixed
+- `deploy/cloudbuild.yaml` deploy-all: the image check added this morning (audit A3) read `template.template.containers[0].image`, which `gcloud run jobs describe` always returns empty. Build f55f527b (SHORT_SHA=800785e) updated all 31 jobs to `etl:800785e`, then reported every job as "image:unknown" and failed before the smoke test. It now reads `spec.template.spec.template.spec.containers[0].image`, checked against `plex-etl-label-design`. Found by the Label Design session.
+- `docs/reports/inventory_valuation_summary_report.md`: Plex's Cost Models screen confirms Go-Live (primary) is material only and Standard Cost 2026 includes labor/overhead.
+
 ## 2026-10-29 (dev) - Fixes from the post-release audit (prod data since 10-19)
 
 Two audits of what prod ran and produced since the 10-19 release found 23 issues (hub "Audit" tab). This entry fixes the ones code can fix. Numbers below are from PlexProd on 29 Oct.

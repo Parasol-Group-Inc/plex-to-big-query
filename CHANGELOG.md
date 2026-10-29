@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Claude Code can deploy and run jobs via a `claude-operator` account
+
+### Added
+- `claude-operator@voxdatalake.iam.gserviceaccount.com` (created by hand, not Terraform). Roles: editor, projectIamAdmin, iam.roleAdmin, secretAccessor. It has no key; only `claude-readonly` may impersonate it, so Claude stays read-only unless a command names the operator. Cloud Resource Manager API enabled on `voxdatalake`, which Terraform needs when it runs as a service account.
+- `scripts/deploy_as_claude.sh`: runs `scripts/deploy.sh` with a one-hour operator token (`GOOGLE_OAUTH_ACCESS_TOKEN`). The guard, review and typed confirmation are unchanged. First plan as the operator: No changes.
+- `scripts/claude/auto-merge-pr.sh`: copy of the Claude Code hook that merges a PR right after `gh pr create`. Parasol PRs merge as `emiliodparasol` with a per-command token. The old version switched to `emiliodom`, which can't merge here, and never ran on Windows because `jq` is missing.
+
+### Changed
+- `docs/CLAUDE_CODE_IAM.md` rewritten around the two accounts, with a per-laptop checklist (gcloud, Claude settings, checks, Terraform, GitHub) for setting up the Mac. `CLAUDE.md`, `docs/AI_WORKFLOW_HANDOVER.md` §4 and §5, and OPEN_ITEMS D17/D23 match it.
+
 ## 2026-10-29 (dev) - Shipping Revenue: order, PO and invoice numbers
 
 Jennilyn asked for the invoice number and the Plex order number on the shipping revenue report.

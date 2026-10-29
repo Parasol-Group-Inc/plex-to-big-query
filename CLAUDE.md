@@ -76,12 +76,18 @@ or `sql/` paths:** that is how prod diverged and a fix got rolled back
   every prompt, and `ListAgents` shows peers. Stage by explicit path, never
   `git add -A`.
 
-## Claude Code runs as a read-only service account
+## Claude Code reads as a read-only account, writes only by impersonation
 
 Claude's gcloud/bq calls use `claude-readonly@voxdatalake.iam.gserviceaccount.com`
-(config `claude`), not your login. It can read BigQuery, Cloud Run and logs;
-it can't write, deploy, run jobs or read secrets or GCS. A PERMISSION_DENIED
-from Claude is expected: run that command yourself. Details:
+(config `claude`), not your login. It can read BigQuery, Cloud Run and logs
+and nothing else. **Writes go through `claude-operator`,** named in that one
+command (`--impersonate-service-account=claude-operator@voxdatalake.iam.gserviceaccount.com`).
+That covers running jobs, BigQuery and GCS writes, and secrets. A plain
+command's PERMISSION_DENIED is expected; add the flag only for an intended
+write. **Deploys:** `./scripts/deploy_as_claude.sh </dev/null` for the review,
+then pipe the change count in only after the user approves it. If
+`echo $CLOUDSDK_ACTIVE_CONFIG_NAME` is empty, Claude is running as the user's
+own login: stop and fix the setup. Details and the per-laptop setup:
 `docs/CLAUDE_CODE_IAM.md`.
 
 ## Quick health check after any repo move / long gap

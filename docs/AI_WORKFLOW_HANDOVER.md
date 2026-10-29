@@ -89,8 +89,11 @@ a chat, a ticket or an artifact.
 ## 4. Claude Code: how it is set up, and how to set it up again
 
 Claude Code runs gcloud and `bq` as the read-only service account, so a wrong
-command cannot write, deploy or read secrets. The mechanism and limits are in
-[CLAUDE_CODE_IAM.md](CLAUDE_CODE_IAM.md). To rebuild it on a machine:
+command cannot write. Since 2026-10-29 it writes (runs jobs, deploys, uses GCS)
+only by impersonating `claude-operator`, one command at a time. The mechanism,
+limits and the **full per-laptop checklist, including GitHub**, are in
+[CLAUDE_CODE_IAM.md](CLAUDE_CODE_IAM.md) "Set up on a machine". To rebuild it
+on a machine:
 
 1. Get a key for `claude-readonly@voxdatalake.iam.gserviceaccount.com` from a
    project Owner. Never from a chat or a repo.
@@ -112,15 +115,18 @@ command cannot write, deploy or read secrets. The mechanism and limits are in
 7. Check from inside a Claude session: `echo $CLOUDSDK_ACTIVE_CONFIG_NAME` prints
    `claude`, and a write such as `bq query --dry_run "CREATE TABLE ..."` is
    refused with `Access Denied`.
+8. Check impersonation and Terraform, and set up GitHub (`emiliodparasol`, the
+   auto-merge hook, the `gh pr` permissions): CLAUDE_CODE_IAM.md steps 3-5.
 
 **Rotating the service account key:** an Owner creates a new key, you activate it
 on the `claude` configuration, check step 7, then the Owner deletes the old key
 in IAM. Also record the key's creation date (open item D17).
 
-**What Claude will not do for you:** push to GitHub, open or merge a PR, or write
-to GCS unless a permission rule allows it. When the permission classifier
+**What Claude will not do without a rule allowing it:** push to GitHub, open or
+merge a PR, or use the operator account. When the permission classifier
 refuses, the commit is still made locally and you run the push yourself. Rules
-live in Claude Code settings, not in this repo.
+live in Claude Code settings, not in this repo. The ones in use are listed in
+CLAUDE_CODE_IAM.md step 5.
 
 ## 5. Acknowledgement
 
@@ -128,11 +134,13 @@ Everyone who uses Claude Code on this repo, or takes over a credential above,
 reads CLAUDE.md, CLAUDE_CODE_IAM.md and this page, then adds a line here in
 the PR that merges their access. It records that they know:
 
-- Claude's cloud access is read-only by design, and a `PERMISSION_DENIED` from it
-  means "run it yourself", not "widen the account";
+- Claude's cloud access is read-only unless a command explicitly impersonates
+  `claude-operator`, and a `PERMISSION_DENIED` means "decide whether this write
+  is intended", not "widen `claude-readonly`";
 - credentials, `.env` files and the service account key never go in git, chats,
   tickets or artifacts;
-- deploys are `./scripts/deploy.sh` from the primary folder, by a person;
+- deploys are `./scripts/deploy.sh` from the primary folder, by a person, or
+  `./scripts/deploy_as_claude.sh` by Claude after a person approved the reviewed plan;
 - `--no-verify` and the hook override variables are never used without the
   owner's say-so, and are named when they are;
 - the production pipeline depends on one person's Plex user and one person's

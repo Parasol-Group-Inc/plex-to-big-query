@@ -12,7 +12,7 @@ Built as part of the 2026-08-14 sweep to find Plex equivalents for every NetSuit
 
 ## How it's built (high level)
 
-Reuses the same computed revenue used by the "Orders over $10k" report — each order line's customer price times the quantity ordered, summed up per order, with no tax or freight added in — and attaches that total to whichever rep is marked as the order's primary salesperson. A secondary rep on the same order isn't also credited with that revenue, so the same dollars aren't counted twice. Orders that don't have a rep on file at all still show up, just grouped under "Unassigned" instead of being dropped from the numbers.
+Reuses the same computed revenue used by the "Orders over $10k" report — each order line's customer price times the quantity ordered, summed up per order, with no tax or freight added in — and attaches that total to the order's rep (the order's Inside Salesperson, else the customer's Assigned To, else the first Order Salesperson). A secondary rep on the same order isn't also credited with that revenue, so the same dollars aren't counted twice. Orders that don't have a rep on file at all still show up, just grouped under "Unassigned" instead of being dropped from the numbers.
 
 - **Pipeline:** `reports/sales_orders.yaml` → `sales_revenue_by_rep_report`
 - **SQL:** `reports/sql/sales_revenue_by_rep_view.sql`
@@ -21,11 +21,12 @@ Each row carries the order's **Order number** (`order_no`, added 2026-10-26, sho
 
 ## Flags and open questions
 
+- **Sales rep now resolves from the order, then the customer, then Order Salesperson (2026-10-29, audit B2).** The rep comes from the order's Inside Salesperson, then the customer's Assigned To, then Plex's Order Salesperson table, the same rule as the other sales views; the key and the name come from the same source. The rep-table lookup no longer requires a Sort Order of exactly 1 or 2, which Plex often leaves blank or numbers differently; it takes the first and second rep on each order by Sort Order. A new `sales_rep_source` column says which of the three the rep came from (`order`, `customer`, `order_salesperson`). Most reps in prod come from Order Salesperson; a blank rep means Plex has none anywhere.
 - **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 - **An order can be understated.** An order's total sums its priced lines only; a line with no price (23 of 606 in prod on 2026-10-19) adds nothing, so an order with an unpriced line can read below its real value, or miss the $10,000 cut.
 - **The revenue figure is a best-criteria computed total, not NetSuite-confirmed.** It's the same base-tier price × quantity calculation used by the Orders over $10k report, chosen because Plex has no real dollar-total field to read directly. It excludes tax and freight. The SQL file itself flags this for data-scientist review before anyone treats these totals as ground truth.
 - **Rep assignment is per-order, not a standing customer relationship.** Plex has no field that says "this customer belongs to this rep" — a rep only shows up because they're listed on that specific order. Same caveat that applies to Customer List by Sales Rep.
-- **"Unassigned" is a real bucket, size unknown.** Any order without a rep row rolls up into an "Unassigned" total rather than disappearing — nobody has checked yet how much revenue lands there once real order volume is flowing.
+- **"Unassigned" is a real bucket.** Any order without a rep rolls up into an "Unassigned" total rather than disappearing. On 29 Oct 2026, 20 of 480 prod orders had no rep in any of the three places.
 - **Report is untested against real production order volume.** It's confirmed to deploy and query correctly, but has only been checked against the small number of live orders on the test tenant so far.
 
 ## More detail

@@ -4998,7 +4998,9 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # 0 since 2026-10-29 (audit A5): a retry of a failed connect hit Plex twice
+      # per run during an outage. The next 15-minute run is the retry.
+      max_retries = 0
       timeout     = "600s"
     }
   }

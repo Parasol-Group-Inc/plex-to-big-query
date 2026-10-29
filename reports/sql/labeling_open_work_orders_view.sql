@@ -43,7 +43,9 @@ SELECT
   p.Name                                          AS part_name,
   wc.Name                                         AS workcenter,
   js.Job_Status                                   AS job_status,
-  SAFE_CAST(jo.Quantity AS FLOAT64)               AS qty,
+  -- Job quantity: Part_v_Job_Op.Quantity is NULL on every prod row, Part_v_Job's
+  -- is filled (audit B5, 2026-10-29). Job_Op's is kept as a fallback.
+  COALESCE(SAFE_CAST(j.Quantity AS FLOAT64), SAFE_CAST(jo.Quantity AS FLOAT64)) AS qty,
 
   COALESCE(
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(jo.Due_Date AS STRING) AS INT64), 0), 1000))),

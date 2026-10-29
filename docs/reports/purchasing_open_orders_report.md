@@ -19,6 +19,7 @@ Pulls every purchase order and its line-item release schedule from Plex's purcha
 
 ## Flags and open questions
 
+- **New `line_no` column (2026-10-29, audit B11).** Rows of one PO looked like duplicates. `line_no` is Plex's line item number, so two lines for the same part can be told apart.
 - **Fixed 2026-10-28: deliveries already received were still listed.** "Open" was judged on the whole PO only, so a delivery marked Received on a PO that is still open stayed in (9 deliveries, 35,602 units). Those are now left out. A **partly received** delivery still shows its full quantity, because Plex does not say how much of it arrived; `release_status` (Firmed / Partial) shows which.
 - Every join and status flag this report relies on was verified against live Plex data (not just schema) on 2026-08-10, including the full status workflow (New, Pending Approval, On Order, Approved, Cancelled, Received, Denied) and the "open" rule itself (not cancelled, not received). A test run confirmed it correctly excludes a cancelled test PO.
 

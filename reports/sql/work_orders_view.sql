@@ -64,11 +64,18 @@ SELECT
   wc.Workcenter_Type                              AS workcenter_type,
 
   -- ── Quantity ────────────────────────────────────────────────────────────────
-  SAFE_CAST(jo.Quantity AS FLOAT64)               AS qty,
+  -- Job quantity: Part_v_Job_Op.Quantity is NULL on every prod row, Part_v_Job's
+  -- is filled (audit B5, 2026-10-29). Job_Op's is kept as a fallback.
+  COALESCE(SAFE_CAST(j.Quantity AS FLOAT64), SAFE_CAST(jo.Quantity AS FLOAT64)) AS qty,
 
   -- ── Time (planned, from job operation routing) ──────────────────────────────
   SAFE_CAST(jo.Setup_Time AS FLOAT64)             AS setup_time_planned,
-  SAFE_CAST(jo.Fixed_Run_Time AS FLOAT64)         AS run_time_planned,
+  -- Hours: job quantity / Rate (units per hour). Fixed_Run_Time is 0 or NULL
+  -- on every prod row; it is used only when it carries a value (audit B5, 2026-10-29).
+  COALESCE(
+    NULLIF(SAFE_CAST(jo.Fixed_Run_Time AS FLOAT64), 0),
+    SAFE_DIVIDE(SAFE_CAST(j.Quantity AS FLOAT64), NULLIF(SAFE_CAST(jo.Rate AS FLOAT64), 0))
+  )                                               AS run_time_planned,
 
   -- ── Time (actual, from operator workcenter log entries) ─────────────────────
   -- productive_hours: Workcenter_Event_Key IS NULL (normal production run)

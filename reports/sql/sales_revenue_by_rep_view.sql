@@ -79,13 +79,27 @@ rep1 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
+  -- Ranked, not Sort_Order = 1: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 1
 )
 
 SELECT
 
-  COALESCE(u.Plexus_User_No, -1)                        AS sales_rep_key,
-  COALESCE(CONCAT(u.First_Name, ' ', u.Last_Name), 'Unassigned') AS sales_rep_name,
+  -- Order rep, then customer rep, then Order_Salesperson: the same resolution
+  -- as sales_mtd_by_status_change_view.sql (2026-10-29, audit B2).
+  COALESCE(SAFE_CAST(ui.Plexus_User_No AS INT64), SAFE_CAST(ua.Plexus_User_No AS INT64),
+           SAFE_CAST(u.Plexus_User_No AS INT64), -1) AS sales_rep_key,
+  COALESCE(CONCAT(ui.First_Name, ' ', ui.Last_Name), CONCAT(ua.First_Name, ' ', ua.Last_Name),
+           CONCAT(u.First_Name, ' ', u.Last_Name), 'Unassigned') AS sales_rep_name,
+  CASE
+    WHEN ui.Plexus_User_No IS NOT NULL THEN 'order'
+    WHEN ua.Plexus_User_No IS NOT NULL THEN 'customer'
+    WHEN u.Plexus_User_No IS NOT NULL THEN 'order_salesperson'
+  END                                                   AS sales_rep_source,
 
   po.Order_No                                           AS order_no,
   po.PO_No                                              AS document_so,
@@ -106,3 +120,10 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` u
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
   ON po.Customer_No = cust.Customer_No
+
+-- Rep on the order (Inside Salesperson) and on the customer (account owner);
+-- see sales_rep_1 above. Added 2026-10-29 (audit B2).
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)

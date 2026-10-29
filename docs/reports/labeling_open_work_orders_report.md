@@ -19,6 +19,7 @@ Rides the same Job/Job Operation data already extracted for Work Orders and MFG 
 
 ## Flags and open questions
 
+- **Quantity filled in (2026-10-29, audit B5).** The quantity read the operation's quantity, which is blank in prod. It now reads the job's quantity first.
 - **One NetSuite filter has no Plex equivalent yet.** The original search also excluded any item whose name contains "lot traced." Nobody has found a matching flag or naming convention on the Plex side, so this report simply doesn't apply that exclusion rather than guess at it — some lot-traced items may show up here that NetSuite would have hidden.
 - **"Open" is inferred, not NetSuite-confirmed.** NetSuite's "Released, In Process" statuses are mapped to the concept of a Plex job that isn't Completed, Cancelled, or on Hold, rather than to specific Plex status text — this is believed to be the right match conceptually, but nobody has verified it side-by-side against a real NetSuite result set.
 - **Workcenter naming is confirmed live**, not guessed: this tenant's actual Labeling Line 1-6 workcenters were confirmed directly in the extracted Plex data, and a separate "Label Approval"/"Label Design" step (artwork approval, not physical labeling) was identified and deliberately excluded.

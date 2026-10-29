@@ -35,6 +35,10 @@ difference.
 
 ## 1. Attributes stay out of Monday
 
+> **Superseded 2026-10-29.** Label Part #, Label Size, Printing Material and
+> Allergen are on the Monday board (pushed since 2026-10-02 via the BOM hop, which
+> did not exist on 09-21). Emilio confirmed they stay.
+
 Jennilyn, on the call: *"they decided today that we want most of those to just
 stay in Plex — we won't need to bring them in."* And later, on the Monday
 board: *"I'm gonna guess that they're gonna delete a bunch of these columns."*

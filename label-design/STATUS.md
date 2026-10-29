@@ -13,6 +13,42 @@
 
 ## UPDATE — 2026-10-28 (evening, latest): Kelli's answers; late label fields fill in
 
+**Wrap-up: the project moves to monitoring.** Nothing is being built. What is
+left is to deploy, then watch:
+
+1. **Deploy** (Emilio): Cloud Build for the push image (the fill step is in
+   `push.py`), then `./scripts/deploy.sh` for the latency view (it skips
+   `filled` rows).
+2. **KAYA in Plex** (Emilio): set the customer contact to Jennifer Jensen,
+   `Jennifer.jensen@kayanaturals.com`, and replace the 800-100-1000
+   placeholder phone. SO 435's Monday Email is changed by hand (restricted
+   column).
+3. **Sales** fills the label parts missing attributes (list sent with Kelli's
+   thread; 41 parts on 10-28). Each one reaches the board through the fill
+   step, no action from us.
+
+**What to watch, once a day for the first week:**
+
+```sql
+-- Every outcome of the last day. Expect created / filled; repaired from the
+-- repair job. failed or partial needs a look at `detail`.
+SELECT outcome, COUNT(*) n, MAX(pushed_at) last
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE pushed_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+GROUP BY 1;
+
+-- What the fill step wrote. The first real run settles the ~43 fields that
+-- were already set (NULL values in column_values), so expect a burst once.
+SELECT pushed_at, order_number, monday_item_id, column_values
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE outcome = 'filled' ORDER BY pushed_at DESC LIMIT 50;
+```
+
+First real run should fill SO 388's three items (Label Part #) and SO 355
+(Label Size, Printing Material, Allergen). An `alert` row is informational (a
+status label missing on Design & QA); it does not stop the push.
+**Close L18** once filled rows appear and the items show the values on Monday.
+
 Kelli Gooch answered the team questions (2026-10-28, to Emilio, Ashley and
 Jennilyn):
 - **Label attributes:** yes, they must be filled. **Sales enters them when

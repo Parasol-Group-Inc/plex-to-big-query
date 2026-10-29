@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Data Hub History tab reads CHANGELOG.md and OPEN_ITEMS.md
+
+### Fixed
+- The hub's History tab came from hand-kept lists in `docs/hub/platform.json`, last edited 10-22, so it still showed L7/L9/L11/L18 open and nothing after 10-27. `scripts/hub/build_hub.py` now builds "Recent changes" from the 40 newest `CHANGELOG.md` entries and "Open items" from the `docs/OPEN_ITEMS.md` tables on every build. The copies in platform.json are only a fallback.
+
 ## 2026-10-29 (dev) - approaching_msl_report_v2 retired
 
 ### Removed

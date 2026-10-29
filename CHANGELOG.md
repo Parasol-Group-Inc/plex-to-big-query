@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - approaching_msl_report_v2 retired
+
+### Removed
+- `voxdatalake.PlexProd.approaching_msl_report_v2`, Jennilyn's hand-made copy of the Approaching MSL view (2026-10-27). She moved her dashboard pages to `approaching_msl_report`, which has the same filter columns plus the 10-28 fixes v2 missed (double-counted wrapper stock, zero-stock parts left out). No view or config referenced it; its definition was backed up before the drop. Docs: D21, `docs/reports/approaching_msl_report.md`, `reports-list/supply-chain.md`.
+
+### Deployed
+- The AR invoice distribution entry below shipped the same day: PR #94, `deploy/2026-10-29T2215Z`. A prod adhoc run loaded 29 extractions and wrote 222 rows (90 invoices) to `raw_Accounting_v_AR_Invoice_Dist`; `shipping_revenue_report` recreated with 132 rows, $840,683.65.
+
 ## 2026-10-29 (dev) - AR invoice distribution extracted
 
 ### Added

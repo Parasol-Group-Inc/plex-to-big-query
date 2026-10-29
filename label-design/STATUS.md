@@ -11,7 +11,26 @@
 
 ---
 
-## UPDATE — 2026-10-28 (evening, latest): Kelli's answers; late label fields fill in
+## UPDATE — 2026-10-29 (latest): deployed, verified, open items closed
+
+- **Deployed 2026-10-29.** Image `etl:800785e` on every job, Terraform
+  `deploy/2026-10-29T1914Z`. The fill step works in prod: SO 388's three
+  items got their Label Part # (`label_design_push_log`, `outcome = 'filled'`).
+  `etl_label_design` no longer retries (`max_retries` 0).
+- **KAYA Naturals fixed in Plex** (Emilio, 2026-10-29): contact email and
+  phone replace the `accounting@parasolgroupinc.com` / 800-100-1000
+  placeholder. The four Monday items that carried the placeholder (SO 435:
+  13410208259; SO 388: 13389062325, 13389067446, 13389076821) get the new
+  phone; Email was already corrected by hand.
+- **Closed:** L18 (fill step deployed and seen), L9 (the four attribute
+  columns stay on the board; `SEP21_FAST_FOLLOW.md` item 1 is superseded),
+  L7 (blank or unused Plex attributes stay blank; no question for
+  Jennilyn), L11 (KAYA fixed; the Sales Rep automation and per-order
+  contact are only done if Ashley asks).
+- **Still open:** L8 (item name = customer part no. or label code, Ashley),
+  plus L13 (Plex REST API report) in `docs/OPEN_ITEMS.md`.
+
+## UPDATE — 2026-10-28 (evening): Kelli's answers; late label fields fill in
 
 **Wrap-up: the project moves to monitoring.** Nothing is being built. What is
 left is to deploy, then watch:

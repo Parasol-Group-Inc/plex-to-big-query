@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - AR invoice distribution extracted
+
+### Added
+- `raw_Accounting_v_AR_Invoice_Dist` in the Sales Orders pipeline (prod and test configs, 29 extractions each): one row per GL line per AR invoice (`Account_No` 12200 AR / 40200 revenue, `Debit`, `Credit`, `Shipper_Line_Key`, `Part_Key`). Jennilyn asked for both Accounting tables behind `shipping_revenue_report`'s invoice number; `Accounting_v_AR_Invoice` already landed with `invoice_no`. Raw table only, no view reads it yet. Confirmed in Plex SQL Developer before adding.
+
 ## 2026-10-29 (dev) - Cloud Build's image check read an empty field
 
 ### Fixed

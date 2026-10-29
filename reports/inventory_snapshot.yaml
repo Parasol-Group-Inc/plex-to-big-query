@@ -68,6 +68,13 @@ extractions:
     date_col: Change_Date
     probe: [Change_Date]
 
+  # Cost model names and flags; the valuation views value stock with the one
+  # Plex marks Primary_Model (added 2026-10-29, audit B1)
+  - plex_view: Part_v_Cost_Model
+    bq_table: raw_Part_v_Cost_Model
+    filter: ""
+    date_col: ""
+
 # Part_v_Part is intentionally NOT extracted here — it's owned by the
 # sales_orders pipeline. Reuse raw_Part_v_Part in the JOIN view instead of
 # re-extracting (same shared-table rule as work_orders.yaml).

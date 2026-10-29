@@ -18,6 +18,10 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 ./scripts/deploy_preflight.sh
+python scripts/check_sql_uploads.py || {
+  echo "REFUSING: a report YAML names view SQL with no Terraform upload (above). Add its google_storage_bucket_object." >&2
+  exit 1
+}
 git fetch -q origin main
 if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
   echo "REFUSING: local main $(git rev-parse --short HEAD) != origin/main $(git rev-parse --short origin/main)." >&2

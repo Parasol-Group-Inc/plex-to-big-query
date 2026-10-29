@@ -72,3 +72,4 @@ terraform/deploy.plan.json
 # artifact but never committed. scripts/hub/snapshot_data.py regenerates them.
 docs/hub/data_snapshot.json
 docs/hub/index_live.html
+docs/hub/audit.json

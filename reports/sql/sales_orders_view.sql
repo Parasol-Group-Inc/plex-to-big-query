@@ -63,7 +63,12 @@ rep1 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
+  -- Ranked, not Sort_Order = 1: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 1
 ),
 
 -- Secondary sales rep (Sort_Order = 2)
@@ -72,7 +77,12 @@ rep2 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 2
+  -- Ranked, not Sort_Order = 2: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 2
 ),
 
 -- Base price per customer part (lowest Breakpoint_Quantity tier).
@@ -153,10 +163,25 @@ SELECT
   cust.Name                                             AS customer_name,
 
   -- ── Sales reps ─────────────────────────────────────────────────────────────
-  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep_1,
+  -- Order rep, then customer rep, then Order_Salesperson: the same resolution
+  -- as sales_mtd_by_status_change_view.sql. Until 2026-10-29 this read only
+  -- Order_Salesperson with Sort_Order = 1 and was NULL on every row (audit B2).
+  COALESCE(
+    CONCAT(ui.First_Name, ' ', ui.Last_Name),
+    CONCAT(ua.First_Name, ' ', ua.Last_Name),
+    CONCAT(u1.First_Name, ' ', u1.Last_Name)
+  )                                                     AS sales_rep_1,
+  CASE
+    WHEN ui.Plexus_User_No IS NOT NULL THEN 'order'
+    WHEN ua.Plexus_User_No IS NOT NULL THEN 'customer'
+    WHEN u1.Plexus_User_No IS NOT NULL THEN 'order_salesperson'
+  END                                                   AS sales_rep_source,
   CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
 
   -- ── Line item / part ───────────────────────────────────────────────────────
+  -- Tells apart lines that repeat a part on one order (audit B11, 2026-10-29).
+  -- Numbered by PO_Line_Key: Plex prod fills Line_No with the same value on every line.
+  DENSE_RANK() OVER (PARTITION BY po.PO_Key ORDER BY SAFE_CAST(pol.PO_Line_Key AS INT64)) AS line_no,
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
 
@@ -170,7 +195,9 @@ SELECT
   COALESCE(lp.Price, bp.Price)                                              AS price_ea,
   IF(lp.Price IS NULL, bp.Breakpoint_Quantity, NULL)                                AS price_breakpoint_qty,
   (COALESCE(lp.Price, bp.Price) * rel.Quantity)                             AS price_total,
-  po.Master_Price                                       AS order_total,
+  -- Sum of the order's line totals. Sales_v_PO.Master_Price is 0 on every
+  -- prod order (audit B4, 2026-10-29).
+  SUM(COALESCE(lp.Price, bp.Price) * rel.Quantity) OVER (PARTITION BY po.PO_Key) AS order_total,
 
   -- ── Product classification ─────────────────────────────────────────────────
   -- NOTE: Part_Product_Type_Key / Part_Product_Group_Key column names on
@@ -195,6 +222,13 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Status` sts
 -- Customer name
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
   ON po.Customer_No = cust.Customer_No
+
+-- Rep on the order (Inside Salesperson) and on the customer (account owner);
+-- see sales_rep_1 above. Added 2026-10-29 (audit B2).
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)
 
 -- Sales reps
 LEFT JOIN rep1 ON po.PO_Key = rep1.PO_Key

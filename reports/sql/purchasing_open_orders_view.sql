@@ -48,6 +48,8 @@ SELECT
   sup.Name                                              AS supplier_name,
 
   -- ── Line item / part ───────────────────────────────────────────────────────
+  -- Line_Item_No tells apart lines that repeat a part on one PO (audit B11, 2026-10-29).
+  SAFE_CAST(li.Line_Item_No AS INT64)                   AS line_no,
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
 

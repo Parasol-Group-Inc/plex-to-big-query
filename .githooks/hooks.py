@@ -129,6 +129,16 @@ def pre_commit():
                               "Both files are hand-maintained; change them together.", "ALLOW_YAML_MISMATCH")
             break
 
+    # 6. Every view SQL a YAML names has its Terraform upload. (2026-10-26:
+    #    bottling_job_open_with_orders_view.sql never reached GCS and work-orders
+    #    ran PARTIAL daily; audit A4.)
+    if any(re.match(r"^(reports/(test/)?[^/]+\.yaml|terraform/main\.tf)$", p) for p in staged):
+        check = subprocess.run([sys.executable, os.path.join(top, "scripts", "check_sql_uploads.py"), "--staged"],
+                               capture_output=True, text=True, encoding="utf-8")
+        if check.returncode:
+            failed |= blocked("a report YAML names view SQL that Terraform never uploads:\n" + check.stdout.rstrip(),
+                              "ALLOW_MISSING_SQL_UPLOAD")
+
     return 1 if failed else 0
 
 

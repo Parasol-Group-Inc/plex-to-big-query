@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import threading
+import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from time import monotonic, sleep
 from typing import List, Optional
@@ -688,6 +689,13 @@ def outage_open_since(bq: bigquery.Client) -> Optional[str]:
     newest 2 or more finished runs in the last day that say anything about
     Plex all failed to connect. A failed read returns None: one more connect
     attempt is better than a run held on a guess."""
+    row = _breaker_streak(bq)
+    return row.since if row and row.failures >= 2 else None
+
+
+def _breaker_streak(bq: bigquery.Client):
+    """The connect failures since the last run that reached Plex, as a row
+    (failures, since), or None when the log cannot be read."""
     query = f"""
         WITH evidence AS (
           SELECT finished_at, outcome IN UNNEST(@healthy) AS up
@@ -706,11 +714,46 @@ def outage_open_since(bq: bigquery.Client) -> Optional[str]:
                                      ["success", "partial", "skipped", "succeeded-unrecorded"]),
     ])
     try:
-        row = list(bq.query(query, job_config=job_config).result())[0]
+        return list(bq.query(query, job_config=job_config).result())[0]
     except Exception:
         log.exception("Outage breaker check failed; connecting anyway.")
         return None
-    return row.since if row.failures >= 2 else None
+
+
+def record_breaker_evidence(status: str, detail: str = ""):
+    """Add this run's connect result to the dispatcher's breaker log, for a run
+    the dispatcher did not start (audit A5, 2026-10-29).
+
+    The breaker used to hear only from dispatcher runs, and none run between
+    4 AM and 1 PM MT, so during a morning outage Label Design failed every 15
+    minutes and the breaker never opened. Now a connect failure is written as
+    an `external` row, which the dispatcher counts like any other failed
+    connect but never follows up. A run that reached Plex is written only when
+    the log shows failures since the last good run, so it closes a streak
+    without adding a row every 15 minutes."""
+    if not OUTAGE_BREAKER_TABLE or DISPATCH_ID or OUTPUT_MODE != "bigquery":
+        return
+    down = status == "failed" and (detail or "").startswith("ODBC connection failed")
+    if not down and status not in ("success", "partial", "skipped"):
+        return
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        if not down:
+            streak = _breaker_streak(bq)
+            if not streak or not streak.failures:
+                return
+        bq.query(f"""
+            INSERT INTO `{GCP_PROJECT}.{OUTAGE_BREAKER_TABLE}`
+              (dispatch_id, job_name, mode, reason, dispatched_at, outcome, finished_at, detail)
+            VALUES (@id, @job, 'probe', 'external', CURRENT_TIMESTAMP(), @status, CURRENT_TIMESTAMP(), @detail)
+        """, job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("id", "STRING", "ext-" + uuid.uuid4().hex[:12]),
+            bigquery.ScalarQueryParameter("job", "STRING", os.environ.get("CLOUD_RUN_JOB", "")),
+            bigquery.ScalarQueryParameter("status", "STRING", status),
+            bigquery.ScalarQueryParameter("detail", "STRING", (detail or "")[:1000] or None),
+        ])).result()
+    except Exception:
+        log.exception("Failed to record breaker evidence.")
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -1994,6 +2037,8 @@ def run_and_report():
                 except Exception:
                     log.exception("Failed to log skipped run status.")
             record_dispatch_outcome("skipped")
+            if not result.get("skip_detail"):   # held by the breaker: says nothing about Plex
+                record_breaker_evidence("skipped")
             # A probe that found nothing still says so — with its own short
             # template and the SAME subject as a full run, so each pipeline's
             # day stays one Gmail thread — when email_plan() wants it: outside
@@ -2086,6 +2131,7 @@ def run_and_report():
             log.exception("Failed to log probe result.")
 
     record_dispatch_outcome(status, detail="; ".join(errors) if errors else "")
+    record_breaker_evidence(status, detail="; ".join(errors) if errors else "")
 
     end_time = datetime.now(timezone.utc)
     report = {

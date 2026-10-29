@@ -19,6 +19,7 @@ Takes the same Job/Job Operation/Workcenter data already extracted for Work Orde
 
 ## Flags and open questions
 
+- **Quantity filled in (2026-10-29, audit B5).** The quantity read the operation's quantity, which is blank in prod. It now reads the job's quantity first.
 - **"Open" is an inferred definition, not a confirmed match to NetSuite's actual criteria.** Nobody had a screenshot of the real saved search's filter logic, so "open" here means "not flagged Completed, Cancelled, or Hold" on the job's status — a reasonable proxy, but it's not verified to line up with whatever NetSuite's search literally checked.
 - **The workcenter filter is a text-pattern match (`Printing%`), not a clean category lookup.** Confirmed live and working, but a cleaner `Workcenter_Group = 'Printing'` field has since been identified in the Plex workcenter catalog as the better long-term way to do this match — not urgent to change since the current version works, but worth switching to eventually.
 - **No real production data has moved through this report yet** — everything above is confirmed against the Plex schema and a live workcenter, not against a finished/aged batch of real Printing jobs.

@@ -106,7 +106,12 @@ rep1 AS (
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No,
     SAFE_CAST(Commission AS FLOAT64)    AS Commission
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
+  -- Ranked, not Sort_Order = 1: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 1
 ),
 
 -- Secondary sales rep (Sort_Order = 2).
@@ -115,7 +120,12 @@ rep2 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 2
+  -- Ranked, not Sort_Order = 2: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 2
 ),
 
 -- SALES ORDER LINE PRICE — the primary price source (added 2026-09-04).

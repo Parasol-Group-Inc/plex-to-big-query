@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Fixes from the post-release audit (prod data since 10-19)
+
+Two audits of what prod ran and produced since the 10-19 release found 23 issues (hub "Audit" tab). This entry fixes the ones code can fix. Numbers below are from PlexProd on 29 Oct.
+
+### Fixed
+- **B2, sales rep:** the rep came from `Sales_v_Order_Salesperson` with `Sort_Order = 1` / `= 2`, which Plex often leaves blank or numbers otherwise. The nine rep views now take the first and second rep by `Sort_Order` (`QUALIFY ROW_NUMBER()`). `sales_orders`, `sales_orders_open`, `sales_orders_aging`, `sales_orders_pending_approval`, `sales_orders_rush_open` and `sales_revenue_by_rep` also resolve the order's Inside Salesperson, then the customer's Assigned To, then Order Salesperson, with a new `sales_rep_source` column. `sales_orders`: rep on 853 of 924 rows (was none).
+- **B4, `sales_orders.order_total`:** the sum of the order's line totals instead of `Master_Price`, which is 0 on every prod order. 874 of 924 rows now have a total.
+- **B5, work orders:** `qty` reads `Part_v_Job.Quantity` before the operation's (blank in prod) in `work_orders`, `labeling_open_work_orders` and `printing_open_work_orders`. `work_orders.run_time_planned` falls back to job quantity / operation rate when the fixed run time is 0. `mfg_job_schedule` and `bottling_job_schedule` are unchanged: there the operation quantity means completed output.
+- **B1, inventory value counted once per cost model:** `Part_v_Cost_Model` is extracted (Inventory Snapshot pipeline, prod and test: 3 -> 4 extractions). `inventory_valuation_summary` gains `cost_model_name` and `is_primary_cost_model`; `inventory_valuation_total` values the primary model only: $11.87M over 1,940 parts.
+- **B8, `uncosted_on_hand_part_count`:** counts on-hand parts with no positive cost (anti-join), not only parts with no cost row. Was always 0; now 1,048.
+- **A1, dispatcher:** a recovery Cloud Run refused (`dispatch-failed`) no longer counts as done. `start_job` retries a 5xx 3 times with backoff.
+- **A2, dispatcher:** a run killed by its timeout that was the last of its batch hands the digest role to its follow-up, so the batch digest still goes out.
+- **A5, Label Design during an outage:** `main.py` writes a dispatcher-less run's connect failures to `etl_dispatch_log` as `reason = 'external'` (and a good run that ends a failure streak), so the breaker opens in the morning gap too. `plex-etl-label-design` `max_retries` 1 -> 0.
+- **A3, Cloud Build:** the deploy-all step no longer stops at the first failed `gcloud run jobs update`; it updates every job, then checks each job's image and fails if any differ.
+
+### Added
+- **B11:** `line_no` on `sales_orders` (dense rank of `PO_Line_Key` within the order; Plex's `Line_No` is one value on every line) and on `purchasing_open_orders` (`Line_Item_No`).
+- **A6, A7, dispatcher recovery:** one recovery run at a time until one succeeds, then `RECOVERY_PER_TICK`; `RECOVERY_PRIORITY` (default sales-orders, work-orders) first.
+- **A4:** `scripts/check_sql_uploads.py`: every `sql_file` in `reports/*.yaml` and `reports/test/*.yaml` must have its `google_storage_bucket_object`. Run by the pre-commit hook (override `ALLOW_MISSING_SQL_UPLOAD`) and by `scripts/deploy.sh`.
+- Tests: `tests/test_breaker_evidence.py`; `tests/test_dispatcher.py` covers A1, A2, A6, A7 and the start retry.
+
+### Changed
+- Docs: the 14 affected `docs/reports/*.md`; `docs/OPERATIONS.md` (the `external` reason, hand runs with `RUN_MODE=adhoc` (A9), start retries, timeout digest, recovery order and throttle, Label Design feeding the breaker).
+
+### Not changed
+- A8 (partial run counts as Plex up): a partial run did connect, and the breaker is about connect refusals. B9 (history rows blank): already in the doc. B14 (column types differ): the SAFE_CAST rule covers it. B3, B6, B7, B10, B13 need people or Plex, not code.
+
 ## 2026-10-29 (dev) - Claude Code can deploy and run jobs via a `claude-operator` account
 
 ### Added

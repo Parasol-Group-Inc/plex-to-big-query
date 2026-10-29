@@ -133,6 +133,17 @@ extractions:
     date_col: ""
     probe: [Updated_Date, Invoice_Link]
 
+  # AR invoice distribution — one row per GL line per invoice (12200 AR,
+  # 40200 revenue, ...), with Account_No, Debit/Credit, Shipper_Line_Key.
+  # Raw only, not joined into any view (several rows per invoice would
+  # multiply revenue). Added 2026-10-29 at Jennilyn's request, for GL
+  # account questions about shipping revenue.
+  - plex_view: Accounting_v_AR_Invoice_Dist
+    bq_table: raw_Accounting_v_AR_Invoice_Dist
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Line_Item_No]
+
   # Bridges a Shipper_Line back to the Release_Key already used above —
   # the join path back to the Sales order chain (customer, part group,
   # blanket order type).

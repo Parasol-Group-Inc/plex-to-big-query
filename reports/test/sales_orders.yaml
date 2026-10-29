@@ -90,6 +90,12 @@ extractions:
     date_col: ""
     probe: [Add_Date]
 
+  - plex_view: Accounting_v_AR_Invoice
+    bq_table: raw_Accounting_v_AR_Invoice
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Invoice_Link]
+
   - plex_view: Sales_v_Shipper_Line_Release
     bq_table: raw_Sales_v_Shipper_Line_Release
     filter: ""

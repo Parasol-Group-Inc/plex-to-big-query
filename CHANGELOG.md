@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - Shipping Revenue: order, PO and invoice numbers
+
+Jennilyn asked for the invoice number and the Plex order number on the shipping revenue report.
+
+### Added
+- `Accounting_v_AR_Invoice` extracted into `raw_Accounting_v_AR_Invoice` (Sales Orders pipeline, prod and test configs: 27 -> 28 extractions). It is the only place Plex keeps the invoice number; `Sales_v_Shipper_AR_Invoice` has just the `Invoice_Link` key.
+- `shipping_revenue_report`: `order_no` (`Sales_v_PO.Order_No`), `po_no` (`Sales_v_PO.PO_No`) and `invoice_no` (`Accounting_v_AR_Invoice.Invoice_No`), after `shipper_no`. The order chain joins on `Shipper_Line.Release_Key`, which matched `Sales_v_Shipper_Line_Release` on every line in test and prod. Checked on PlexProd (invoice table stubbed): 123 rows and $840,402.92, same as the live view; every line has one order (73 orders).
+- Docs: `docs/reports/shipping_revenue_report.md`; Plex SQL Developer copy updated to match.
+
 ## 2026-10-28 (dev) - Approaching MSL: at reorder point needs a reorder point (or negative stock)
 
 ### Changed

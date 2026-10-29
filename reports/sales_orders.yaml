@@ -124,6 +124,15 @@ extractions:
     date_col: ""
     probe: [Add_Date]
 
+  # AR invoice header — the only place Plex keeps the invoice NUMBER
+  # (INV0000004). Sales_v_Shipper_AR_Invoice only carries Invoice_Link, the
+  # key. Added 2026-10-29 for shipping_revenue_report's invoice_no (Jennilyn).
+  - plex_view: Accounting_v_AR_Invoice
+    bq_table: raw_Accounting_v_AR_Invoice
+    filter: ""
+    date_col: ""
+    probe: [Updated_Date, Invoice_Link]
+
   # Bridges a Shipper_Line back to the Release_Key already used above —
   # the join path back to the Sales order chain (customer, part group,
   # blanket order type).

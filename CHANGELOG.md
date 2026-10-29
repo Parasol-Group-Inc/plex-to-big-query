@@ -14,6 +14,22 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-28 (dev) - Approaching MSL: at reorder point needs a reorder point (or negative stock)
+
+### Changed
+- `approaching_msl_report.at_reorder_point` is `quantity_available <= reorder_point` only when the part has a reorder point; with none, it is true only when `quantity_available` is negative. Before, `0 <= 0` flagged 23 parts with no reorder point and nothing available or due. Kept `<=` (the usual reorder rule; the sheet's `<` differs on 4 parts). Tested on PlexProd: 854 of 1,435 at reorder point (was 877).
+
+## 2026-10-28 (dev) - Approaching MSL: demand_qty column; reorder point from Plex only
+
+Jennilyn's answers (2026-10-28): the reorder point is Plex's only; at reorder point stays after open-order demand; no capsules-only default (the dashboard splits by part type); average daily usage stays NetSuite's until Plex has the history. Her "Vox Inventory Demand" dashboard showed `open_job_qty` (jobs making the part, i.e. incoming supply) as "Demand", so On Hand − Demand never matched Qty Avail.
+
+### Added
+- `approaching_msl_report.demand_qty` (last column): the demand `quantity_available` subtracts, sold plus BOM-exploded demand of the stocked key. `on_hand_qty - demand_qty = quantity_available` on all 1,435 rows (checked against PlexProd before deploy).
+
+### Changed
+- `reorder_point` is `plex_reorder_point` (Part.Minimum_Inventory_Quantity). The `reorder_source` rule is no longer read; `ns_reorder_point` stays as a reference column. Tested on PlexProd: 62 parts had a NetSuite reorder point, 15 flip `at_reorder_point` (9 off, 6 on), so 877 of 1,435 parts are at reorder point instead of 880.
+- Docs: `docs/reports/approaching_msl_report.md`, `reports-list/supply-chain.md`, OPEN_ITEMS D21.
+
 ## 2026-10-28 (dev) - Approaching MSL: part type, group and source columns (replaces Jennilyn's v2 view)
 
 Jennilyn built `approaching_msl_report_v2` in PlexProd on 2026-10-27: the 10-27 view plus three filter columns. It predates the 10-28 fixes, and now counts stock on wrapper keys twice (e.g. 12277-01VOXNU-1 shows 3,996 available against 3,701 on hand) and leaves out the 440 zero-stock parts. The columns move into the main report so v2 can be retired.

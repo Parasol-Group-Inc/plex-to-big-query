@@ -9,13 +9,18 @@
 -- (the most urgent case) used to be missing (419 parts on 2026-10-28).
 --
 -- COLUMNS, in the sheet's order:
---   reorder_point        Part_v_Part.Minimum_Inventory_Quantity
+--   reorder_point        Part_v_Part.Minimum_Inventory_Quantity, Plex only (Jennilyn,
+--                        2026-10-28); 0 when Plex has none. ns_reorder_point stays
+--                        as a reference column.
 --   on_hand_qty          Part_v_Container (via inventory_available_to_sell_report)
 --   quantity_available   on hand MINUS sold demand MINUS BOM-exploded demand (the
 --                        sheet's "Current QTY Available"). It goes NEGATIVE on purpose:
 --                        finished goods on open orders will consume more of the part than
 --                        is in stock. Same number as inventory_out_of_stock_report.
---   at_reorder_point     quantity_available <= reorder_point
+--   at_reorder_point     quantity_available <= reorder_point when the part has one (at or
+--                        below, the usual reorder rule; the sheet used <, which differs on 4
+--                        parts); with no reorder point, only when available is negative
+--                        (2026-10-28: 0 <= 0 flagged 23 parts with nothing set and nothing due).
 --   avg_daily_usage      DERIVED, see usage CTE. Plex stores no average.
 --   days_on_hand         on_hand_qty / avg_daily_usage
 --   days_to_reorder      (quantity_available - reorder_point) / avg_daily_usage; negative
@@ -23,6 +28,11 @@
 --   on_order_qty         open purchase order releases for the part (see on_order CTE)
 --   open_job_qty         quantity on open jobs making the part
 --   in_mfg_or_ordered    on_order_qty > 0 OR open_job_qty > 0
+--   demand_qty           the demand quantity_available subtracts: sold demand plus
+--                        BOM-exploded demand from open orders and jobs of PARENT items
+--                        (stocked key only, see WRAPPER KEYS). on_hand_qty - demand_qty =
+--                        quantity_available. NOT open_job_qty, which is jobs making the
+--                        part itself (added 2026-10-28).
 --   Every quantity is in the unit of the part's stocked key (unit column; blank in Plex
 --   for most raw materials, which are kg).
 --   part_type / part_group_key / part_group / part_source_key   filter attributes of the
@@ -54,8 +64,7 @@
 --   "MSL rules" tab holds the thresholds below (msl_rules). Rules and defaults:
 --     usage_min_days  30    Plex usage is trusted once it rests on this many days; until
 --                           then NetSuite's figure is used if there is one.
---     reorder_source  ns    'ns' or 'plex': whose reorder point wins when both exist.
---                           A NetSuite 0 counts as "none".
+--     reorder_source        NO LONGER READ (2026-10-28): the reorder point is Plex's.
 --     disagree_pct    25    flag when trusted Plex usage and NetSuite usage differ by more.
 --     stale_days      45    flag NetSuite figures older than this.
 --   usage_source says where avg_daily_usage came from; data_flag lists every reason a row
@@ -185,7 +194,6 @@ rules AS (
 cfg AS (
   SELECT
     COALESCE(MAX(IF(rule = 'usage_min_days', SAFE_CAST(value AS FLOAT64), NULL)), 30) AS usage_min_days,
-    COALESCE(MAX(IF(rule = 'reorder_source', LOWER(TRIM(value)), NULL)), 'ns')        AS reorder_source,
     COALESCE(MAX(IF(rule = 'disagree_pct',   SAFE_CAST(value AS FLOAT64), NULL)), 25) AS disagree_pct,
     COALESCE(MAX(IF(rule = 'stale_days',     SAFE_CAST(value AS FLOAT64), NULL)), 45) AS stale_days
   FROM rules
@@ -225,6 +233,7 @@ inv AS (
     SUM(COALESCE(a.on_hand_qty, 0) * COALESCE(w.factor, 1))                 AS on_hand_qty,
     SUM(COALESCE(a.on_hand_qty, 0) * COALESCE(w.factor, 1)
         - IF(w.wrapper_key IS NULL, COALESCE(a.total_demand_qty, 0), 0))   AS quantity_available,
+    SUM(IF(w.wrapper_key IS NULL, COALESCE(a.total_demand_qty, 0), 0))    AS demand_qty,
     SUM(u.qty_used * COALESCE(w.factor, 1))                                 AS qty_used,
     SUM(COALESCE(oj.open_job_qty, 0) * COALESCE(w.factor, 1))               AS open_job_qty,
     SUM(COALESCE(oo.on_order_qty, 0) * COALESCE(w.factor, 1))               AS on_order_qty,
@@ -254,6 +263,7 @@ base AS (
     NULLIF(ns.ns_reorder_point, 0) AS ns_reorder_point,
     i.on_hand_qty,
     i.quantity_available,
+    i.demand_qty,
     i.qty_used / NULLIF(DATE_DIFF(s.last_d, s.first_d, DAY) + 1, 0) AS plex_usage,
     ns.ns_avg_daily_usage        AS ns_usage,
     ns.as_of_date                AS ns_as_of,
@@ -261,7 +271,7 @@ base AS (
     i.on_order_qty,
     i.open_job_qty,
     i.partial_releases,
-    c.usage_min_days, c.reorder_source, c.disagree_pct, c.stale_days
+    c.usage_min_days, c.disagree_pct, c.stale_days
   FROM inv i
   CROSS JOIN span s
   CROSS JOIN cfg c
@@ -276,9 +286,7 @@ chosen AS (
   SELECT
     *,
     (usage_days >= usage_min_days AND plex_usage > 0) AS plex_trusted,
-    IF(reorder_source = 'plex',
-       COALESCE(NULLIF(plex_reorder_point, 0), ns_reorder_point),
-       COALESCE(ns_reorder_point, plex_reorder_point)) AS reorder_point
+    plex_reorder_point AS reorder_point
   FROM base
 ),
 
@@ -300,7 +308,8 @@ SELECT
   reorder_point,
   on_hand_qty,
   quantity_available,
-  (quantity_available <= reorder_point)      AS at_reorder_point,
+  (quantity_available < 0
+   OR (reorder_point > 0 AND quantity_available <= reorder_point)) AS at_reorder_point,
   avg_daily_usage,
   usage_days,
   SAFE_DIVIDE(on_hand_qty, avg_daily_usage)  AS days_on_hand,
@@ -336,6 +345,7 @@ SELECT
   part_type,
   part_group_key,
   part_group,
-  part_source_key
+  part_source_key,
+  demand_qty
 FROM final
 WHERE reorder_point > 0 OR avg_daily_usage > 0

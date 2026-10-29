@@ -44,8 +44,8 @@ created and the run exits non-zero; the next run tries again. If it could only
 arrive blank (Design & QA refused a new label), items are created, the run
 still exits non-zero.
 
-LATE LABEL FIELDS. QA often fills a label part's attributes in Plex after the
-order is on Monday. Every run also writes Label Part #, Label Size, Printing
+LATE LABEL FIELDS. A label part's attributes often reach Plex after the order
+is on Monday. Every run also writes Label Part #, Label Size, Printing
 Material and Allergen into the EMPTY cells of items it created that are still
 in the view, once per (item, field), never over a value already there. Logged
 as `outcome = 'filled'`. See fill.py.

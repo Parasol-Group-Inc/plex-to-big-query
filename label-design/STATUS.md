@@ -15,12 +15,17 @@
 
 Kelli Gooch answered the team questions (2026-10-28, to Emilio, Ashley and
 Jennilyn):
-- **Label attributes:** yes, they must be filled so printing knows how to
-  proceed once a label is approved. QA owns entering them in Plex. Because QA
-  often does this after the order is on Monday, the push now fills Label
+- **Label attributes:** yes, they must be filled. **Sales enters them when
+  the SO is made**, so the designer Kelli assigns knows what the label needs.
+  Because they often reach Plex after the order is on Monday (41 of 43 queue
+  label parts had none on 10-28), the push now fills Label
   Part #, Label Size, Printing Material and Allergen into an item's EMPTY
   cells (`label_design_service/fill.py`, not deployed yet; L18).
-- **KAYA contact:** should be Jen's, "maybe Jennete Boone" (L11, email owed).
+- **KAYA contact:** Jennifer Jensen, `Jennifer.jensen@kayanaturals.com`.
+  Plex still needs the change (we only read Plex). On SO 435's Monday item
+  the API was refused (Email is a restricted column on Design & QA, like
+  Reason Code), so it is changed by hand. Its Label Part # was written through
+  the API the same day (L11).
 - **Design Status:** stays blank; it follows the label on the design board.
   L3 closed.
 - **Duplicate Sales Rep column:** deleted through the API the same day

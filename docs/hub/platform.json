@@ -989,7 +989,7 @@
     },
     {
       "id": "L18",
-      "title": "Late label fields fill into pushed items' empty cells (code 2026-10-28, not deployed); QA owns filling attributes in Plex",
+      "title": "Late label fields fill into pushed items' empty cells (code 2026-10-28, not deployed); Sales enters attributes when the SO is made",
       "owner": "Emilio",
       "next": "Cloud Build, then check outcome = 'filled' rows in label_design_push_log; hand QA the missing-attribute list."
     },
@@ -1001,9 +1001,9 @@
     },
     {
       "id": "L11",
-      "title": "Ashley's board points: optional people Sales Rep automation; line vs company contact; KAYA contact should be Jennete Boone's",
+      "title": "Ashley's board points: optional people Sales Rep automation; line vs company contact; KAYA contact is Jennifer.jensen@kayanaturals.com",
       "owner": "Ashley",
-      "next": "Get Jennete's email from Kelli; update KAYA's contact in Plex."
+      "next": "Update KAYA's contact in Plex; fix SO 435's Email on Design & QA by hand (restricted column)."
     },
     {
       "id": "L13",

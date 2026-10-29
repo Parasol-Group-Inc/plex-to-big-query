@@ -1,8 +1,9 @@
 """Fill the label fields a pushed item was created without (2026-10-28).
 
-The push creates each item once and never rewrites it. But QA often fills a
-label part's attributes in Plex AFTER the order is already on Monday, and
-printing needs them once the label is approved (Kelli Gooch, 2026-10-28). So
+The push creates each item once and never rewrites it. Sales should enter a
+label part's attributes when the SO is made, so the designer knows what the
+label needs (Kelli Gooch, 2026-10-28), but they often reach Plex AFTER the
+order is already on Monday. So
 every push run also looks at the items it created that are still in the view:
 
   - a label field the view has a value for, that this step has not settled

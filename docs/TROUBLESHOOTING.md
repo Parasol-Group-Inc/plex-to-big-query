@@ -6,7 +6,7 @@ Quick-reference commands for every common error. Copy-paste ready — substitute
 
 > **Deploying a fix:** anything Terraform manages (`terraform.tfvars`, `main.tf`, `reports/` YAML/SQL) goes out with `./scripts/deploy.sh` from the primary folder on a clean, pushed `main` — never a bare `terraform apply`. Terraform's own deploy guard refuses plan/apply anywhere else. See `CONTRIBUTING.md` § "Branches, folders and locks".
 
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **30** jobs (14 pipelines × prod/test, plus the two Label Design push jobs). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **31** jobs (15 pipelines × prod/test, plus the Label Design push job). Every recipe below substitutes cleanly for any other job name; swap `plex-etl-sales-orders` for e.g. `plex-etl-quality-nonconformance-test`.
 
 ---
 
@@ -498,7 +498,7 @@ Secrets (token, API key, password) can be rotated with a single `gcloud secrets 
 
 ## Nuke and redeploy to a new project
 
-Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (30 jobs, 30 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
+Full procedure in [docs/TEARDOWN.md](TEARDOWN.md). Summary — this creates the **entire stack** (31 jobs, 30 schedulers, about 200 resources), not one job. Every `terraform` command below passes the deploy guard, so run them from the primary folder on a clean, pushed `main`; the `main.tf` edits TEARDOWN asks for are commits to `main` first, not local edits.
 
 ```bash
 # 1. Destroy all GCP resources (from terraform/, after TEARDOWN.md steps 1-4)

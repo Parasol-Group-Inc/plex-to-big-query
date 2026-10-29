@@ -82,14 +82,9 @@ list would miss exactly the new orders it exists to surface.
 - **Pipeline:** `reports/label_design.yaml` → `label_design_report`
 - **SQL:** `reports/sql/label_design_view.sql`
 - **Downstream (from 2026-09-24):** `label_design_service/push.py`, a Cloud Run
-  job that runs 30 minutes after the ETL and creates one Monday item per new
-  order **line**, straight from this view. No sheet in between. There are two
-  jobs: the **test** job `plex-etl-label-design-push-test` (PlexTest → the "Plex
-  Import" board), which runs today, and the **prod** job
-  `plex-etl-label-design-push` with scheduler `plex-label-design-push-sync`,
-  built 2026-10-08 but **paused** — it stays dormant until the 19 Oct cutover,
-  when the prod scheduler is un-paused and the test one is paused/repointed
-  (PlexProd → the same board; the view picks `vox.on.plex.com` for PlexProd).
+  job (`plex-etl-label-design-push`) that creates one Monday item per new order
+  **line**, straight from this view. No sheet in between. Since 27 Oct it pushes
+  to "Plex Import Test" (see below); the separate test push job was removed.
 - **Retired:** `deploy/archive/label_design_sync/`, the Apps Script that used to decide
   which rows were new, write them to a sheet, and push them to Monday.
 
@@ -128,11 +123,17 @@ Plex Import on 2026-09-29.
 
 **Four more since 2026-10-02, all about the label itself:** **Label Part #**
 (the Plex label part number, e.g. `73001-00KAYAN-0`), **Label Size**,
-**Printing Material** and **Allergen**. These are the attributes QA fills in
-on the label part in Plex; until this change the report looked for them on the
+**Printing Material** and **Allergen**. These are the attributes Sales fills in
+on the label part in Plex when the SO is made; until this change the report looked for them on the
 product and found nothing, so they never reached the board. The item name is
 unchanged — it is still the customer part number, and the label part number
 has its own column rather than replacing it.
+
+**When the order is for the label itself (since 2026-10-28).** Some orders
+carry the label part directly (`73066-10KAYAN-0` on SO 435) instead of a
+finished good. That line's own part number is now its Label Part #, and its
+label attributes come from it. Before, these lines reached Monday with Label
+Part # blank. Bottle Material stays blank on them: a label has no bottle.
 
 | First digit | Reason Code |
 |---|---|
@@ -154,21 +155,27 @@ with five lines gives five items, even when two lines carry the same part). A li
 on the board is never pushed again. Every push is also recorded in the
 `label_design_push_log` table.
 
-**Moving an item to Design & QA no longer loses its details** (since 22 Oct).
-When Ashley moves an item from "Plex Import" to "Design & QA", Monday reuses
-the column matching chosen the first time anyone moved items between those
-boards, and that matching drops some fields. Bottle Material arrived blank on
-every move, even though both boards have the same labels. A separate job checks
-every 15 minutes (5 AM - 6:45 PM, weekdays). Within about 15 minutes of an
-item arriving on Design & QA, it puts back any field the push sent that came
-across blank. It does this **once per item**. It never changes a field that
-already has a value, and if the team clears a field later it stays cleared.
+**New orders land on "Plex Import Test" since 27 Oct** (the old "Plex Import"
+board is retired). When an item is moved from one board to another, Monday
+carries each status field (Priority, Bottle Material, Reason Code, the reps)
+across by the label's **colour**, not its name. The old board's colours did
+not match Design & QA's, so Bottle Material arrived blank, "Medium" priority
+arrived as "Normal" and some reason codes arrived as a different code. "Plex
+Import Test" uses Design & QA's colours, and a test of every label confirmed
+the move now keeps them. The job checks this every time it adds orders, and
+adds any new label (a new rep, a new material) to both boards in the same
+colour. **If you add a label by hand to one of the two boards, give it the same
+colour on the other.** If the job ever cannot keep a value safe, or adds a label
+to Design & QA, it sends an email (**Label Design push**) saying what happened
+and what to do, at most once a day per problem. From 22 to 27 Oct a separate job put
+blank fields back after each move; it is switched off. Orders already pushed to
+the old board are never pushed again to the new one.
 
 ## Flags and open questions
 
 - **Part-level columns**, pulled from Plex's generic Part Attribute system.
   Since 2026-10-02 they are keyed on the **label** part, not the product —
-  QA fills these in against the label (`73001-00KAYAN-0`), which reaches the
+  Sales fills these in against the label (`73001-00KAYAN-0`), which reaches the
   order line through the bill of materials, exactly like the bottle. Before
   that date they were looked up on the finished good and **every one read
   blank**, which is why the team's attributes never reached Monday.
@@ -299,6 +306,20 @@ already has a value, and if the team clears a field later it stays cleared.
   `Label Size`, `Printing Material` and `Allergen` are written to columns of
   those exact titles. The other `part_*` columns are in the report but feed no
   Monday column — there is nothing in them yet.
+- **Label-only order lines (2026-10-28):** a line whose part is itself a label
+  (`LABEL | …`, not a Service part) is its own label part.
+- **Label fields filled in late reach the board (2026-10-28, Kelli Gooch):**
+  Sales should enter a label part's attributes when the SO is made, so the
+  designer knows what the label needs, but they often reach Plex after the
+  order is on Monday. Every push run
+  now writes `Label Part #`, `Label Size`, `Printing Material` and `Allergen`
+  into an item's EMPTY cells, on whichever board it sits, once per field.
+  Anything already in a cell is left alone, and a cell the team clears is not
+  refilled. Each write is an `outcome = 'filled'` row in
+  `label_design_push_log`.
+- **No on-demand button (2026-10-28):** the planned trigger web app was
+  dropped and deleted from the repo, because the 15-minute probe already gets
+  an approval to the board in about 2 hours.
 
 ## More detail
 

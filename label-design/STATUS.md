@@ -11,7 +11,172 @@
 
 ---
 
-## UPDATE — 2026-10-22 (latest): repair job for board moves
+## UPDATE — 2026-10-28 (evening, latest): Kelli's answers; late label fields fill in
+
+**Wrap-up: the project moves to monitoring.** Nothing is being built. What is
+left is to deploy, then watch:
+
+1. **Deploy** (Emilio): Cloud Build for the push image (the fill step is in
+   `push.py`), then `./scripts/deploy.sh` for the latency view (it skips
+   `filled` rows).
+2. **KAYA in Plex** (Emilio): set the customer contact to Jennifer Jensen,
+   `Jennifer.jensen@kayanaturals.com`, and replace the 800-100-1000
+   placeholder phone. SO 435's Monday Email is changed by hand (restricted
+   column).
+3. **Sales** fills the label parts missing attributes (list sent with Kelli's
+   thread; 41 parts on 10-28). Each one reaches the board through the fill
+   step, no action from us.
+
+**What to watch, once a day for the first week:**
+
+```sql
+-- Every outcome of the last day. Expect created / filled; repaired from the
+-- repair job. failed or partial needs a look at `detail`.
+SELECT outcome, COUNT(*) n, MAX(pushed_at) last
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE pushed_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+GROUP BY 1;
+
+-- What the fill step wrote. The first real run settles the ~43 fields that
+-- were already set (NULL values in column_values), so expect a burst once.
+SELECT pushed_at, order_number, monday_item_id, column_values
+FROM `voxdatalake.PlexProd.label_design_push_log`
+WHERE outcome = 'filled' ORDER BY pushed_at DESC LIMIT 50;
+```
+
+First real run should fill SO 388's three items (Label Part #) and SO 355
+(Label Size, Printing Material, Allergen). An `alert` row is informational (a
+status label missing on Design & QA); it does not stop the push.
+**Close L18** once filled rows appear and the items show the values on Monday.
+
+Kelli Gooch answered the team questions (2026-10-28, to Emilio, Ashley and
+Jennilyn):
+- **Label attributes:** yes, they must be filled. **Sales enters them when
+  the SO is made**, so the designer Kelli assigns knows what the label needs.
+  Because they often reach Plex after the order is on Monday (41 of 43 queue
+  label parts had none on 10-28), the push now fills Label
+  Part #, Label Size, Printing Material and Allergen into an item's EMPTY
+  cells (`label_design_service/fill.py`, not deployed yet; L18).
+- **KAYA contact:** Jennifer Jensen, `Jennifer.jensen@kayanaturals.com`.
+  Plex still needs the change (we only read Plex). On SO 435's Monday item
+  the API was refused (Email is a restricted column on Design & QA, like
+  Reason Code), so it is changed by hand. Its Label Part # was written through
+  the API the same day (L11).
+- **Design Status:** stays blank; it follows the label on the design board.
+  L3 closed.
+- **Duplicate Sales Rep column:** deleted through the API the same day
+  (`color_mm7zxq8m`, empty on all 192 items). L16 closed.
+
+---
+
+## UPDATE — 2026-10-28: audit, label-only order lines, trigger app sunset
+
+**Audit of the 10-28 push** (run `fa38bc56f12f`, 13:07 MT): 5 items created on
+Plex Import Test (SO 449, SO 435, SO 415, SO 341 ×2), 22/22 columns. The only
+alert row was informational (`Inside Sales Rep: add 'Emily Gray' to Design &
+QA`); the label is now aligned on both boards. Approval to board took 1.7–1.85 h.
+All 42 PlexProd queue rows are on Monday; every active pushed item still holds
+what was sent. The team archived SO 372 ×2 and deleted SO 345/346. SO 358's two
+Reason Codes are fixed, so the 43-value move review is complete. The WO column
+is gone from Design & QA. Probe since 10-21: 27 applied, 185 skipped, 1 failed,
+0 inconclusive, with the 4-part snapshot, so the approval fingerprint works.
+
+**Label-only order lines (DEPLOYED and verified 2026-10-28:** SO 435 now reads
+`73066-10KAYAN-0`; the 14:49 MT probe logged `applied` with only `(config + SQL)`
+changed, which closes L10 too).** SO 435 (`73066-10KAYAN-0`)
+and SO 388 ordered the label part itself, so Label Part # arrived blank. The
+view's `labels` CTE now also treats a line whose part is a label (name starts
+`LABEL`, not a Service part) as its own label. Checked as a query: PlexProd 42
+rows, 42 keys, 0 blank Label Part #; PlexTest 37/37/0. Bottle Material stays
+blank on these lines. Existing items are not rewritten (OPEN_ITEMS L17).
+
+**Trigger app sunset.** `deploy/label_design_trigger/` was never deployed and
+is removed: with the push chained onto the ETL and the 15-min probe, an
+approval reaches the board in about 2 h. L2, L6, L1, L5, L12 and L14 closed.
+
+**Attributes (for Jennilyn, L7).** 351 label parts have Label Size, Printing
+Material and Trademark filled, but only 2 of the 38 label parts in the live
+queue have any attribute: new label parts are created without them.
+
+---
+
+## UPDATE — 2026-10-27: push moves to "Plex Import Test"; repair retired
+
+**DEPLOYED 2026-10-27** (image `38860dd`, `deploy/2026-10-27T2010Z`); old "Plex Import" archived. Team review list of the 43 changed values: https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5
+
+**Verified 2026-10-28.** The first real push after the deploy (order 494, Ascent
+Nutrition, 2 lines, run `600a7d1b7a52` at 17:11 MT on 10-27) logged `22/22 mapped
+columns found`, `35 already on the board, 2 new`, `0 with problems`, and no
+`Label colours:` line. The team moved both items to Design & QA, and every
+pushed value arrived: Priority `Medium` (not `Normal`), Bottle Material `HDPE`,
+Reason Code, Sales Rep, Memo, links, LCR, Label Part #. The 18:05 sweep and the
+10-28 09:07 push found nothing new.
+
+**Move damage, 2026-10-28: 41 of 43 fixed.** The team fixed 39 on the board
+(all 33 Priority, order 408's 6 Reason Codes); the 2 blank Printing Materials on
+SO 358 were set through the API. Left: SO 358's 2 Reason Codes, which the API
+key cannot edit (restricted column, 403). Review page updated to match.
+
+**Problem emails.** The push emails what went wrong
+(and labels it added to Design & QA), once a day per problem; until now a
+failed push showed only in Cloud Run logs. CHANGELOG 2026-10-27.
+
+**Smart push.** `label_design_service/labels.py` aligns
+status label colours with Design & QA before each push creates items, adds a
+label Design & QA lacks to both boards with one colour, and creates items with
+`create_labels_if_missing` off. See CHANGELOG 2026-10-27. **Also removed:** the
+test push job and scheduler. **Monday clean-up done:** the duplicate test board
+and the `Bottle Material (Plex)` test columns are deleted; Design & QA has the
+two missing labels. Old "Plex Import" (18432111755) is archived, 0 items; the
+last order pushed there before the deploy, 454 (19:06 UTC), was moved with
+Priority shown as Normal and Bottle Material blank.
+
+Asked by Emilio after Ashley reported that moving items from "Plex Import Test"
+(18437236736) to Design & QA keeps Priority, Bottle Material and the rest.
+
+- **Root cause (proven 2026-10-27): a board move matches status labels by
+  COLOUR.** Not by name, not by label id. The destination gets its label with
+  the source label's colour; with no such colour, the column's default. The
+  Plex Import boards' labels were made by `scripts/replicate_board_columns.py`,
+  which copies names and lets Monday pick colours, so they did not match
+  Design & QA's.
+- **Evidence.** 10 `ZZTEST-MV-*` items covering every pushed label were moved
+  from Plex Import Test to a structure-only duplicate of Design & QA
+  (18437349725, identical columns, ids and labels). Run 1: 12 of 48 status
+  values lost or changed (PET and HDPE blank, 4 Reason Codes and 3 Inside
+  Sales Reps swapped for the same-coloured label, Julianni Pacheco became N/A);
+  every text, date, email and link value arrived. The 27 mismatched labels on
+  Plex Import Test were then recoloured to Design & QA's colours and the two
+  missing labels added on the duplicate. Run 2, same items: 1 of 48, the
+  predicted `RUSH ⚠️️` (not on Design & QA, never sent by Plex).
+- **Damage already on Design & QA** (31 pushed items there): Priority `Medium`
+  arrived as `Normal` on all 31; Reason Code swapped on 8 (order 408 ×6,
+  order 358 ×2); Printing Material blank on 2. Bottle Material is right only
+  because the repair job refilled it. The repair could fill blanks but never
+  see a wrong label. List for the team: OPEN_ITEMS L16.
+- **Push:** `MONDAY_BOARD_ID` = 18437236736 on both push jobs (prod live, test
+  still paused). Same group "New from Plex". Dry run against PlexProd: 22/22
+  columns mapped, 34 rows in the view, 0 new.
+- **Dedupe is now board-agnostic.** `pending_count` and `audited_lcrs` used to
+  read only the target board's audit rows. Against the new board they would have
+  reported all 34 rows in the view as new (all were pushed to the old board),
+  and 34 is under the 60-item alarm, so they would have been re-created.
+  Both now read every board's `created`/`partial` rows.
+- **Repair retired:** `plex-etl-label-design-repair`, `plex-label-design-repair-sync`
+  and `label_design_service/repair.py` removed. Its 35 `repaired` rows stay in
+  the push log; `label_design_push_latency` still ignores them.
+- **The new board, compared with the old one:** same columns by title and
+  type, same groups, same label names; colours now Design & QA's.
+- **Design & QA labels added** (Emilio ran `recolour.py`): Printing Material
+  `White BOPP - Matte Lamination` (`#9d50dd`) and Sales Rep (`color_mm076254`)
+  `Julianni Pacheco` (`#faa1f1`), the colours tested on the duplicate board.
+- **New labels:** handled by the push itself from now on (`labels.py`).
+- **A text column `Bottle Material (Plex)`** carried 9/9 in the test but was not
+  needed once colours matched; deleted from both boards.
+
+---
+
+## UPDATE — 2026-10-22: repair job for board moves (RETIRED 2026-10-27)
 
 Ashley reported that Bottle Material does not carry over when she moves an
 item from "Plex Import" (18432111755) to "Design & QA" (18395121955).
@@ -553,11 +718,15 @@ See CHANGELOG 2026-10-01.
   - **The prod push targets "Plex Import".** Before 19 Oct, the test push
     moves to a sandbox board (e.g. Emilio's own).
   - **Part attributes won't go to Monday.** They stay on the part in Plex.
-  - **The on-demand trigger app** (L2) is Emilio's to deploy.
+  - **The on-demand trigger app** (L2) is Emilio's to deploy. *(Sunset
+    2026-10-28, never deployed.)*
 
 ---
 
 ## UPDATE — 2026-09-25 (later): run the sync on demand from a web app
+
+> **Sunset 2026-10-28.** Never deployed; the folder was removed once the
+> push was chained onto the ETL and syncs reached the board in about 2 h.
 
 `deploy/label_design_trigger/` is a one-button Apps Script page that starts
 `plex-etl-label-design-test` and shows recent runs. It runs as the deployer,

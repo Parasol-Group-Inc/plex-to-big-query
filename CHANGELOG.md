@@ -14,6 +14,168 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-29 (dev) - AR invoice distribution extracted
+
+### Added
+- `raw_Accounting_v_AR_Invoice_Dist` in the Sales Orders pipeline (prod and test configs, 29 extractions each): one row per GL line per AR invoice (`Account_No` 12200 AR / 40200 revenue, `Debit`, `Credit`, `Shipper_Line_Key`, `Part_Key`). Jennilyn asked for both Accounting tables behind `shipping_revenue_report`'s invoice number; `Accounting_v_AR_Invoice` already landed with `invoice_no`. Raw table only, no view reads it yet. Confirmed in Plex SQL Developer before adding.
+
+## 2026-10-29 (dev) - Cloud Build's image check read an empty field
+
+### Fixed
+- `deploy/cloudbuild.yaml` deploy-all: the image check added this morning (audit A3) read `template.template.containers[0].image`, which `gcloud run jobs describe` always returns empty. Build f55f527b (SHORT_SHA=800785e) updated all 31 jobs to `etl:800785e`, then reported every job as "image:unknown" and failed before the smoke test. It now reads `spec.template.spec.template.spec.containers[0].image`, checked against `plex-etl-label-design`. Found by the Label Design session.
+- `docs/reports/inventory_valuation_summary_report.md`: Plex's Cost Models screen confirms Go-Live (primary) is material only and Standard Cost 2026 includes labor/overhead.
+
+## 2026-10-29 (dev) - Fixes from the post-release audit (prod data since 10-19)
+
+**Deployed 2026-10-29:** image `etl:800785e` on all 31 jobs (build f55f527b), Terraform (tag `deploy/2026-10-29T1914Z`), `etl-dispatcher` revision 00008. Adhoc prod runs at 20:38 UTC succeeded (inventory_snapshot, sales_orders, work_orders, purchasing_open_orders) and all 15 changed views were recreated with rows. `raw_Part_v_Cost_Model` has 6 models, primary 4402; inventory value on the primary model is $11,867,250.
+
+Two audits of what prod ran and produced since the 10-19 release found 23 issues (hub "Audit" tab). This entry fixes the ones code can fix. Numbers below are from PlexProd on 29 Oct.
+
+### Fixed
+- **B2, sales rep:** the rep came from `Sales_v_Order_Salesperson` with `Sort_Order = 1` / `= 2`, which Plex often leaves blank or numbers otherwise. The nine rep views now take the first and second rep by `Sort_Order` (`QUALIFY ROW_NUMBER()`). `sales_orders`, `sales_orders_open`, `sales_orders_aging`, `sales_orders_pending_approval`, `sales_orders_rush_open` and `sales_revenue_by_rep` also resolve the order's Inside Salesperson, then the customer's Assigned To, then Order Salesperson, with a new `sales_rep_source` column. `sales_orders`: rep on 853 of 924 rows (was none).
+- **B4, `sales_orders.order_total`:** the sum of the order's line totals instead of `Master_Price`, which is 0 on every prod order. 874 of 924 rows now have a total.
+- **B5, work orders:** `qty` reads `Part_v_Job.Quantity` before the operation's (blank in prod) in `work_orders`, `labeling_open_work_orders` and `printing_open_work_orders`. `work_orders.run_time_planned` falls back to job quantity / operation rate when the fixed run time is 0. `mfg_job_schedule` and `bottling_job_schedule` are unchanged: there the operation quantity means completed output.
+- **B1, inventory value counted once per cost model:** `Part_v_Cost_Model` is extracted (Inventory Snapshot pipeline, prod and test: 3 -> 4 extractions). `inventory_valuation_summary` gains `cost_model_name` and `is_primary_cost_model`; `inventory_valuation_total` values the primary model only: $11.87M over 1,940 parts.
+- **B8, `uncosted_on_hand_part_count`:** counts on-hand parts with no positive cost (anti-join), not only parts with no cost row. Was always 0; now 1,048.
+- **A1, dispatcher:** a recovery Cloud Run refused (`dispatch-failed`) no longer counts as done. `start_job` retries a 5xx 3 times with backoff.
+- **A2, dispatcher:** a run killed by its timeout that was the last of its batch hands the digest role to its follow-up, so the batch digest still goes out.
+- **A5, Label Design during an outage:** `main.py` writes a dispatcher-less run's connect failures to `etl_dispatch_log` as `reason = 'external'` (and a good run that ends a failure streak), so the breaker opens in the morning gap too. `plex-etl-label-design` `max_retries` 1 -> 0.
+- **A3, Cloud Build:** the deploy-all step no longer stops at the first failed `gcloud run jobs update`; it updates every job, then checks each job's image and fails if any differ.
+
+### Added
+- **B11:** `line_no` on `sales_orders` (dense rank of `PO_Line_Key` within the order; Plex's `Line_No` is one value on every line) and on `purchasing_open_orders` (`Line_Item_No`).
+- **A6, A7, dispatcher recovery:** one recovery run at a time until one succeeds, then `RECOVERY_PER_TICK`; `RECOVERY_PRIORITY` (default sales-orders, work-orders) first.
+- **A4:** `scripts/check_sql_uploads.py`: every `sql_file` in `reports/*.yaml` and `reports/test/*.yaml` must have its `google_storage_bucket_object`. Run by the pre-commit hook (override `ALLOW_MISSING_SQL_UPLOAD`) and by `scripts/deploy.sh`.
+- Tests: `tests/test_breaker_evidence.py`; `tests/test_dispatcher.py` covers A1, A2, A6, A7 and the start retry.
+
+### Changed
+- Docs: the 14 affected `docs/reports/*.md`; `docs/OPERATIONS.md` (the `external` reason, hand runs with `RUN_MODE=adhoc` (A9), start retries, timeout digest, recovery order and throttle, Label Design feeding the breaker).
+
+### Not changed
+- A8 (partial run counts as Plex up): a partial run did connect, and the breaker is about connect refusals. B9 (history rows blank): already in the doc. B14 (column types differ): the SAFE_CAST rule covers it. B3, B6, B7, B10, B13 need people or Plex, not code.
+
+## 2026-10-29 (dev) - Claude Code can deploy and run jobs via a `claude-operator` account
+
+### Added
+- `claude-operator@voxdatalake.iam.gserviceaccount.com` (created by hand, not Terraform). Roles: editor, projectIamAdmin, iam.roleAdmin, secretAccessor. It has no key; only `claude-readonly` may impersonate it, so Claude stays read-only unless a command names the operator. Cloud Resource Manager API enabled on `voxdatalake`, which Terraform needs when it runs as a service account.
+- `scripts/deploy_as_claude.sh`: runs `scripts/deploy.sh` with a one-hour operator token (`GOOGLE_OAUTH_ACCESS_TOKEN`). The guard, review and typed confirmation are unchanged. First plan as the operator: No changes.
+- `scripts/claude/auto-merge-pr.sh`: copy of the Claude Code hook that merges a PR right after `gh pr create`. Parasol PRs merge as `emiliodparasol` with a per-command token. The old version switched to `emiliodom`, which can't merge here, and never ran on Windows because `jq` is missing.
+
+### Changed
+- `docs/CLAUDE_CODE_IAM.md` rewritten around the two accounts, with a per-laptop checklist (gcloud, Claude settings, checks, Terraform, GitHub) for setting up the Mac. `CLAUDE.md`, `docs/AI_WORKFLOW_HANDOVER.md` §4 and §5, and OPEN_ITEMS D17/D23 match it.
+
+## 2026-10-29 (dev) - Shipping Revenue: order, PO and invoice numbers
+
+Jennilyn asked for the invoice number and the Plex order number on the shipping revenue report.
+
+### Added
+- `Accounting_v_AR_Invoice` extracted into `raw_Accounting_v_AR_Invoice` (Sales Orders pipeline, prod and test configs: 27 -> 28 extractions). It is the only place Plex keeps the invoice number; `Sales_v_Shipper_AR_Invoice` has just the `Invoice_Link` key.
+- `shipping_revenue_report`: `order_no` (`Sales_v_PO.Order_No`), `po_no` (`Sales_v_PO.PO_No`) and `invoice_no` (`Accounting_v_AR_Invoice.Invoice_No`), after `shipper_no`. The order chain joins on `Shipper_Line.Release_Key`, which matched `Sales_v_Shipper_Line_Release` on every line in test and prod. Checked on PlexProd (invoice table stubbed): 123 rows and $840,402.92, same as the live view; every line has one order (73 orders).
+- Docs: `docs/reports/shipping_revenue_report.md`; Plex SQL Developer copy updated to match.
+
+## 2026-10-28 (dev) - Approaching MSL: at reorder point needs a reorder point (or negative stock)
+
+### Changed
+- `approaching_msl_report.at_reorder_point` is `quantity_available <= reorder_point` only when the part has a reorder point; with none, it is true only when `quantity_available` is negative. Before, `0 <= 0` flagged 23 parts with no reorder point and nothing available or due. Kept `<=` (the usual reorder rule; the sheet's `<` differs on 4 parts). Tested on PlexProd: 854 of 1,435 at reorder point (was 877).
+
+## 2026-10-28 (dev) - Approaching MSL: demand_qty column; reorder point from Plex only
+
+Jennilyn's answers (2026-10-28): the reorder point is Plex's only; at reorder point stays after open-order demand; no capsules-only default (the dashboard splits by part type); average daily usage stays NetSuite's until Plex has the history. Her "Vox Inventory Demand" dashboard showed `open_job_qty` (jobs making the part, i.e. incoming supply) as "Demand", so On Hand − Demand never matched Qty Avail.
+
+### Added
+- `approaching_msl_report.demand_qty` (last column): the demand `quantity_available` subtracts, sold plus BOM-exploded demand of the stocked key. `on_hand_qty - demand_qty = quantity_available` on all 1,435 rows (checked against PlexProd before deploy).
+
+### Changed
+- `reorder_point` is `plex_reorder_point` (Part.Minimum_Inventory_Quantity). The `reorder_source` rule is no longer read; `ns_reorder_point` stays as a reference column. Tested on PlexProd: 62 parts had a NetSuite reorder point, 15 flip `at_reorder_point` (9 off, 6 on), so 877 of 1,435 parts are at reorder point instead of 880.
+- Docs: `docs/reports/approaching_msl_report.md`, `reports-list/supply-chain.md`, OPEN_ITEMS D21.
+
+## 2026-10-28 (dev) - Approaching MSL: part type, group and source columns (replaces Jennilyn's v2 view)
+
+Jennilyn built `approaching_msl_report_v2` in PlexProd on 2026-10-27: the 10-27 view plus three filter columns. It predates the 10-28 fixes, and now counts stock on wrapper keys twice (e.g. 12277-01VOXNU-1 shows 3,996 available against 3,701 on hand) and leaves out the 440 zero-stock parts. The columns move into the main report so v2 can be retired.
+
+### Added
+- `approaching_msl_report`: `part_type`, `part_group_key`, `part_group` (name, e.g. Capsule, Label, Raw Ingredient) and `part_source_key`, taken from the part's stocked key. Wrapper keys are all Part_Type `WIP`, so this is the same rule as v2's "non-WIP key wins". Appended at the end; no existing column moves. Checked against PlexProd: still 1,435 rows and 880 at reorder point; the three v2 columns match v2 on all 995 parts the two share.
+- Plex SQL Developer copy updated to match.
+
+## 2026-10-28 (dev) - Inventory and purchasing reports: wrapper keys, received releases, one row per part (code review)
+
+A review of every report that sums part quantities, after the Approaching MSL fix, found the same wrapper-key problem in two more views, plus two purchasing gaps. Checked against PlexProd before merging.
+
+### Fixed
+- `inventory_available_to_sell_report`: BOM (component) demand is now counted on the stocked key only. Flat_BOM lists both a wrapper key and its stocked key, and the stocked key's line already carries the wrapper's demand, so 387 wrapper rows showed as short and any sum by part number doubled. Stock held on wrapper keys (18 parts) is converted into the stocked key's availability: 12665-01VOXNU-1 goes from -113 to +401, 12277-01VOXNU-1 from -3,310 to -769. Rows: 3,192 to 2,824 (wrapper rows that only carried the duplicate demand). New columns `wrapper_on_hand_qty`, `is_unit_wrapper`; `on_hand_qty` is unchanged, so `approaching_msl_report` is unaffected. `inventory_out_of_stock_report` inherits the fix (still 18 rows today).
+- `purchasing_open_orders_report`: releases already marked Received on an open PO are left out (9 releases, 35,602 units). New column `release_status`; a Partial release still counts in full, because Plex's Release view has no received quantity. Every join now SAFE_CASTs both sides.
+- `mfg_job_schedule_inventory_availability_report`: really one row per part number. On order was joined by part number to one row per Part_Key, so every key repeated the full PO quantity. Wrapper keys are converted, and parts on order with no stock are listed (27 were missing). On order is read from the raw Purchasing tables by Part_Key, with the same open rule, so the view no longer depends on another pipeline's view. 2,024 to 2,032 rows.
+- Plex SQL Developer copies of all three updated to match.
+
+## 2026-10-28 (label-design) - Label fields filled in Plex after the push reach the board
+
+**Not deployed yet** (push image: Cloud Build, then `./scripts/deploy.sh` for the latency view SQL).
+
+### Added
+- **`label_design_service/fill.py`: late label fields fill into pushed items.** Sales should enter a label part's attributes when the SO is made, so the designer knows what the label needs (Kelli Gooch), but they often reach Plex after the order is on Monday. Every push run now writes `Label Part #`, `Label Size`, `Printing Material` and `Allergen` into the EMPTY cells of items it created that are still in the view, on whichever board they sit, once per (item, field), never over a value already there. Each write, or a field found already set, is an `outcome = 'filled'` row in `label_design_push_log`. Status labels go through `labels.align()` first. Prod dry run: SO 435 and SO 388's three items get their Label Part #; SO 355 gets Label Size, Printing Material and Allergen. Tests: `tests/test_label_fill.py`.
+
+### Changed
+- `push.py`: the "nothing new" gate still runs the fill step when there are fields to fill; creation problems no longer skip it.
+- `label_design_push_latency_view.sql` leaves out `filled` rows (not pushes).
+
+## 2026-10-28 (label-design) - Label-only order lines get their own Label Part #; trigger app removed
+
+**Not deployed yet** (SQL-only: `./scripts/deploy.sh` after merge, no Cloud Build).
+
+### Changed
+- **`label_design_view.sql`: a line that orders the label itself is its own label.** SO 435 (`73066-10KAYAN-0`) and SO 388 ordered label parts, not finished goods, so Label Part # and the label attributes were blank. The `labels` CTE now unions each label part (name starts `LABEL`, Part_Type not `Service`) as its own label at BOM level 0. Checked as a query: PlexProd 42 rows, 42 unique keys, 0 blank Label Part #; PlexTest 37/37/0. Bottle Material stays blank on these lines. The push never rewrites items, so the 4 already on Monday keep a blank Label Part #.
+
+### Removed
+- **`deploy/label_design_trigger/`**, the on-demand Apps Script app. It was never deployed; the push runs after every ETL and the 15-min probe brings an approval to the board in about 2 h. References removed from README, CONTRIBUTING, the cheat sheet, `label-design/README.md` and the Data Hub.
+
+## 2026-10-28 (dev) - Approaching MSL: demand counted once, wrapper units converted, zero-stock parts listed
+
+### Fixed
+- `approaching_msl_view.sql` summed every Part_Key of a part number. The 2026-10-26 roll-up assumed "stock on one key, demand on the other"; that is wrong. The second key is a **wrapper** whose own BOM is one line pointing at the stocked key, with a conversion factor (1, 0.001 for a gram key, 0.000001 for a milligram key; 615 wrappers in PlexProd). Flat_BOM explodes demand through the wrapper, so the stocked key already holds the wrapper's demand converted (checked on all 383 stocked keys), and the sum counted it twice, in mixed units for gram keys. 352 parts had availability understated and 39 showed at their reorder point wrongly. Demand now comes from the stocked key only; stock, minimum, usage, jobs and orders on a wrapper are converted by its factor.
+- Plex usage for gram wrappers was in grams against stock in kilos (riboflavin 11,045 a day vs NetSuite 2.6). Production recorded into a wrapper (1,607 rows) is now skipped and the wrapper's own consumption counted, converted, so each kilo counts once. Plex/NetSuite usage agreement: median ratio 2.1 to 1.1, parts off by 10x or more 38 to 16. This had to land before Plex usage takes over at `usage_min_days` (about 2026-11-16).
+- The view was driven from `inventory_available_to_sell_report`, which lists only parts with stock or open demand, so a part with a reorder point and nothing in stock or on order was missing. It is now driven from `Part_v_Part`: 1,435 parts (was 997), the 438 added are all at their reorder point (217 Product Labels, 131 Stock Labeled Bottles, mostly bottles otherwise; scope question for Jennilyn, D21).
+- `on_order_qty` counted a PO release already marked `Received` while its PO stayed open (9 releases on 7 parts). It now reads the raw `Purchasing_v_*` tables and skips those; a `Partial` release still counts in full (Plex holds no received quantity per release) and is flagged in `data_flag`.
+
+### Added
+- `approaching_msl_report` columns `unit` (the stocked key's) and `product_type`, at the end.
+- `reports/plex_sql/approaching_msl_view.sql` follows the same roll-up, adds on order, and counts only active containers in on-hand statuses.
+
+PlexProd dry run against the live view: the 615 single-key parts are unchanged except one on-order figure (the received release).
+
+## 2026-10-27 (dev) - BigQuery loads get a deadline; slow 6 PM batch no longer cuts jobs off
+
+### Fixed
+- `write_to_bigquery()` called `load_table_from_dataframe()` and `job.result()` with no timeout (the client default is None), so one stuck upload held a job until Cloud Run killed it. In the 6 PM Mountain batch of 2026-10-27 a 461-row load that normally takes 3 s took 8m43s, and `plex-etl-sales-orders` hit its 1200 s limit on the scheduled run and the follow-up, with Plex answering normally. The BigQuery audit log shows each load job inserted only at the end of the wait, so the time went on the upload, not the load. Each upload request now has a (30 s connect, 120 s read) deadline (`BQ_UPLOAD_TIMEOUT_SECONDS`) and the load job a 300 s wait (`BQ_LOAD_JOB_TIMEOUT_SECONDS`); a miss goes to the existing one retry. Test: `tests/test_bq_write_deadline.py`.
+
+### Changed
+- Prod task timeouts raised for the jobs the 6 PM batch was cutting off: `plex-etl-sales-orders` 1200 to 1800 s, `purchasing-open-orders` 600 to 1200 s, `part-on-hand-inventory` 600 to 1200 s, `part-routing` 900 to 1200 s, `part-lot` 1800 to 2400 s. The 00:00 UTC run of sales-orders took 416, 715, 741, 926, 1117 and 1241 s on successive nights against about 250 s in every other slot: some nights Plex reads are slow (`Part_v_Flat_BOM` 390 s against 8 s on 10-27), other nights BigQuery uploads are. Test jobs unchanged. The dispatcher's `LOST_AFTER_MINUTES` (120) still exceeds every limit.
+
+### Deploy
+- Code change: needs an image build (Cloud Build) as well as `./scripts/deploy.sh` for the timeouts.
+
+## 2026-10-27 (label-design) - Push moves to "Plex Import Test", keeps label colours aligned; repair and test push retired
+
+**Deployed 2026-10-27:** image `38860dd` (Cloud Build), then `deploy/2026-10-27T2010Z` (4 changed, 4 destroyed). The prod push now runs against board 18437236736 with `MOVE_TO_BOARD_ID` and the email settings; the old "Plex Import" board (18432111755) is archived. The 43 values a move had changed are listed for the team to review at https://claude.ai/artifact/DfQdKpWZLJ8wFyxZPUy1W5.
+
+### Added
+- **`label_design_service/labels.py`: the push aligns status label colours before it creates anything.** For every status label a run writes, the push board's label gets the colour the same label has on Design & QA (`MOVE_TO_BOARD_ID`, new env var, default `18395121955`); a deactivated one is reactivated. A label Design & QA lacks is added to both boards with one colour neither uses. If Design & QA refuses (restricted column, e.g. Priority), the push board's label gets a colour Design & QA does not use, so a move leaves the field blank rather than showing another label; the run continues and exits non-zero. Monday is re-read afterwards to check. **Anything that could make a move show a different label (push board write refused, read failed, check failed, no free colour) stops the run before any item is created**; the next run retries. Items are now created with `create_labels_if_missing: false`, so Monday never invents a label with a random colour. Uses Monday API 2025-10 for these calls only (`Monday(..., version=)`). Tests: `tests/test_label_colours.py`, 16 cases (no Monday or BigQuery needed). Reviewed by a second agent; its findings (blocking on push-board failures, duplicate names, deactivated labels, no free colour, network errors) are fixed and tested.
+- **The push emails its problems** (`email_utils.send_push_alert`, template `templates/label_push_alert.html`, subject `[Plex ETL] - Sales: Label Design push — <date>`, same recipients as the ETL). Before, a failed push showed only in Cloud Run logs. Sent when a label check stops the run (nothing created), Design & QA refuses a new label (field will arrive blank), items fail or end partial, the 60-row alarm trips, or the push crashes; and, as information, when it adds a label to Design & QA. The body says what happened, what to do per problem, the labels changed and the affected items with links. At most once a day per problem: each emailed problem is an `outcome = 'alert'` row in `label_design_push_log`; a problem already emailed today (Mountain) is not emailed again, and nothing is recorded when email is off. The prod push job gets the ETL's `SENDGRID_ENABLED`, `REPORT_FROM_EMAIL`, `REPORT_TO_EMAILS`, `SECRET_SENDGRID_KEY`. Tests: `tests/test_push_alert.py` (needs the image's libraries).
+- `label_design_push_latency_view.sql` now leaves out `alert` rows as well as `repaired` ones.
+- **Data Hub: a Label Design tab** (`scripts/hub/template.html`, text in `platform.json` → `label_design`, diagram `mermaid.label_design_flow`): how the queue works end to end, the colour rule and its evidence, every job/table/board/secret, the push's steps and emails, a runbook, traps and the L open items (L16 added to the hub's copy). Its **colour catalog** (`docs/hub/label_design_colours.json`, written by the new read-only `scripts/hub/label_colours.py`; `--check` exits 1 when a label Plex sends would move wrong) lists all 87 labels of the 6 pushed status columns on both boards: 82 same colour, 4 only on Design & QA, 1 only on Plex Import Test (`RUSH ⚠️️`, never sent). Tooling and docs; nothing deployed by it. Checked read-only against the live boards for all 32 status values ever pushed: nothing to change.
+
+### Changed
+- **Both Label Design push jobs now create items on "Plex Import Test" (`18437236736`)**; `MONDAY_BOARD_ID` in `terraform/main.tf` (prod live, test still paused). "Plex Import" (`18432111755`) is sunset. **A Monday board move carries a status value across by the label's colour, not its name** (proven 2026-10-27 with 10 test items moved into a structure-only duplicate of Design & QA: 12 of 48 status values lost or swapped; after recolouring Plex Import Test's 27 mismatched labels to Design & QA's colours, 1 of 48, a label Plex never sends). The old board's colours never matched: Bottle Material arrived blank, Priority `Medium` as `Normal` (all 31 moved items) and 8 Reason Codes as another code. Same group ("New from Plex"), same columns by title and type; a dry run against PlexProd mapped 22/22 columns and found 34 rows in the view, 0 new.
+- **`push.py` dedupes against the push log for every board**, not just `MONDAY_BOARD_ID` (`pending_count`, `audited_lcrs`). Pointed at the new board, the old code would have re-created all 34 rows in the view (all already pushed to the old board), and 34 is under the 60-item alarm.
+
+### Removed
+- **`plex-etl-label-design-push-test` and `plex-label-design-push-sync-test`** (paused since the 2026-10-19 cutover; they pointed at the team's live board). Test a push with `DRY_RUN=1` instead. Removed from `_ALL_JOBS` too.
+- **`plex-etl-label-design-repair`, `plex-label-design-repair-sync` and `label_design_service/repair.py`** (added 2026-10-22), and the job from `_ALL_JOBS` in `deploy/cloudbuild.yaml`. Its 35 `repaired` rows stay in `label_design_push_log`; `label_design_push_latency` still ignores them. The docs now state 15 pipelines, 31 Cloud Run jobs and 30 Cloud Scheduler jobs, matching Terraform (they had said 14 pipelines since part-lot was added). Hub rebuilt.
+- **Monday (done by hand/API 2026-10-27, not code):** Plex Import Test's 27 mismatched status labels recoloured to Design & QA's; Design & QA gained `White BOPP - Matte Lamination` (Printing Material) and `Julianni Pacheco` (Sales Rep); the test board "Duplicate of Design & QA Test" and the test text columns `Bottle Material (Plex)` were deleted.
+
+### Deploy order (matters)
+1. **Cloud Build first** (image with the new `push.py`). With the old board still configured it changes nothing.
+2. **Then `./scripts/deploy.sh`** (board and `MOVE_TO_BOARD_ID` env vars; destroys the repair job, the test push and their schedulers). Between the two, the new image runs against the old board with the default `MOVE_TO_BOARD_ID`: it keeps pushing there and aligns the old board's colours (a read-only plan shows PET, HDPE, all Priorities, 2 Inside Sales Reps, Reason Codes and Julianni Pacheco would be recoloured), so items moved from it in that window keep their values. In the other order, the live image (`etl:27bc4ea`, board-filtered dedupe) would re-push the 34 rows to the new board on the next ETL run that extracts.
+
 ## 2026-10-27 (dev) - Label Design honours the Plex outage breaker
 
 ### Fixed

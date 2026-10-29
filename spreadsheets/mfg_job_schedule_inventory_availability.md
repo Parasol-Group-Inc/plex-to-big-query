@@ -4,7 +4,8 @@
   "Tabs in this spreadsheet" tracker)
 - **Status:** 🚧 Partially built 2026-08-26 — the 3 columns with a
   confirmed Plex source (Description, Quantity On Hand, On Order) are
-  deployed as `mfg_job_schedule_inventory_availability_report`. Real data
+  deployed as `mfg_job_schedule_inventory_availability_report` (one row
+  per part number, wrapper records converted, since 2026-10-28). Real data
   analyzed (~90 SKU rows). A completely different grain from every other
   tab (one row per SKU, not per job) — this is the reorder-point/inventory
   dashboard that the "Available Inventory"/"Days Left" columns on the

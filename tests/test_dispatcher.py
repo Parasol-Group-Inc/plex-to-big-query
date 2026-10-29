@@ -292,25 +292,79 @@ def test_recovery_reruns_each_held_job_once_full_beats_probe():
     plan = d.recovery_plan(held, now, set(), per_tick=2)
     assert plan["batch_id"] == "recovery-h4" and plan["batch_kind"] == "recovery"
     assert plan["expected"] == ["plex-etl-part-lot", "plex-etl-sales-orders", "plex-etl-work-orders"]
+    # Priority order, and only one run until a recovery run has reached Plex.
     assert plan["runs"] == [
-        {"job_name": "plex-etl-part-lot", "mode": "probe", "followup_of": "h4", "role": "first"},
-        {"job_name": "plex-etl-sales-orders", "mode": "full", "followup_of": "h3", "role": "middle"}]
-    # Next tick: those two started, so work-orders closes the batch.
-    started = [run_row(f"r{i}", r["job_name"], 50, outcome=None, reason="recovery", mode=r["mode"])
-               for i, r in enumerate(plan["runs"])]
-    nxt = d.recovery_plan(held + started, now, set(), per_tick=2)
+        {"job_name": "plex-etl-sales-orders", "mode": "full", "followup_of": "h3", "role": "first"}]
+    first = run_row("r0", "plex-etl-sales-orders", 50, outcome=None, reason="recovery", mode="full")
+    assert d.recovery_plan(held + [first], now, set(), per_tick=2)["runs"] == [], "wait for the first"
+    # It reached Plex: the rest go per_tick at a time.
+    first.update(outcome="success", finished_at=mt(2026, 10, 21, 23, 53))
+    nxt = d.recovery_plan(held + [first], now, set(), per_tick=2)
     assert nxt["batch_id"] == "recovery-h4"
-    assert nxt["runs"] == [{"job_name": "plex-etl-work-orders", "mode": "probe", "followup_of": "h2",
-                            "role": "last"}]
+    assert nxt["runs"] == [
+        {"job_name": "plex-etl-work-orders", "mode": "probe", "followup_of": "h2", "role": "middle"},
+        {"job_name": "plex-etl-part-lot", "mode": "probe", "followup_of": "h4", "role": "last"}]
     # A recovery run is the job's one try even if it fails: no loop.
-    for r in started:
-        r.update(outcome="failed", finished_at=mt(2026, 10, 21, 23, 55))
-    done = run_row("r9", "plex-etl-work-orders", 52, outcome="success", detail=None, reason="recovery")
-    assert d.recovery_plan(held + started + [done], now, set()) is None
+    started = [first] + [run_row(f"r{i}", r["job_name"], 51, outcome="failed", reason="recovery",
+                                 finished_at=mt(2026, 10, 21, 23, 55)) for i, r in enumerate(nxt["runs"], 1)]
+    assert d.recovery_plan(held + started, now, set()) is None
     # Busy jobs wait; held slots older than the horizon are forgotten.
-    assert [r["job_name"] for r in d.recovery_plan(held, now, {"plex-etl-part-lot"})["runs"]] == [
-        "plex-etl-sales-orders", "plex-etl-work-orders"]
+    assert [r["job_name"] for r in d.recovery_plan(held, now, {"plex-etl-sales-orders"})["runs"]] == [
+        "plex-etl-work-orders"]
     assert d.recovery_plan(held, mt(2026, 10, 23, 1, 0), set()) is None
+
+
+def test_a_recovery_run_cloud_run_refused_is_still_owed():
+    held = [run_row("h1", "plex-etl-part-routing", 20, outcome="held-outage", detail=None)]
+    refused = run_row("r1", "plex-etl-part-routing", 50, outcome="dispatch-failed", reason="recovery",
+                      detail="jobs.run plex-etl-part-routing -> HTTP 503")
+    plan = d.recovery_plan(held + [refused], mt(2026, 10, 22, 0, 30), set())
+    assert [r["job_name"] for r in plan["runs"]] == ["plex-etl-part-routing"]
+
+
+def test_a_killed_last_run_hands_the_digest_to_its_followup():
+    last = {"role": "last", "batch_id": "probe-1800-2026-10-27", "batch_kind": "probe-1800"}
+    killed = {"detail": "execution failed or was cancelled before the job wrote its outcome"}
+    assert d.followup_role(killed, last) == "last"
+    assert d.followup_role({"detail": "no outcome and no finished execution after 120 min"}, last) == "last"
+    assert d.followup_role({"detail": "ODBC connection failed: 2404"}, last) == "followup"
+    assert d.followup_role(killed, dict(last, role="middle")) == "followup"
+    assert d.followup_role(killed, None) == "followup"
+
+
+class _Resp:
+    def __init__(self, code):
+        self.status_code, self.text = code, "x"
+
+    def json(self):
+        return {"metadata": {"name": "projects/p/jobs/j/executions/e1"}}
+
+
+class _Session:
+    def __init__(self, codes):
+        self.codes, self.calls = list(codes), 0
+
+    def post(self, *a, **k):
+        self.calls += 1
+        return _Resp(self.codes.pop(0))
+
+
+def test_start_job_retries_a_5xx_but_not_a_4xx():
+    s = _Session([503, 200])
+    assert d.start_job(s, "plex-etl-x", "probe", "id1", pause=0) == "projects/p/jobs/j/executions/e1"
+    assert s.calls == 2
+    s = _Session([503, 503, 503])
+    try:
+        d.start_job(s, "plex-etl-x", "probe", "id1", pause=0)
+        raise AssertionError("three 503s must fail")
+    except RuntimeError as exc:
+        assert "HTTP 503" in str(exc) and s.calls == 3
+    s = _Session([403])
+    try:
+        d.start_job(s, "plex-etl-x", "probe", "id1", pause=0)
+        raise AssertionError("a 403 must fail")
+    except RuntimeError:
+        assert s.calls == 1
 
 
 def test_a_later_run_covers_a_held_or_failed_slot():
@@ -326,7 +380,7 @@ def test_a_later_run_covers_a_held_or_failed_slot():
     failed = run_row("f1", "plex-etl-sales-orders", 0)
     assert d.followups_due([failed], mt(2026, 10, 21, 23, 30)) == [failed]
     assert d.followups_due([failed, probe], mt(2026, 10, 21, 23, 30)) == []
-    for reason in ("canary", "recovery"):
+    for reason in ("canary", "recovery", "external"):
         assert d.followups_due([dict(failed, reason=reason)], mt(2026, 10, 21, 23, 30)) == []
 
 

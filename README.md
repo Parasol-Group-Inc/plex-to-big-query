@@ -8,7 +8,7 @@ Cloud Storage, deployed from this repo by Terraform.
 
 **GCP project:** `voxdatalake` · **Datasets:** `PlexProd` (prod) / `PlexTest` (test)
 
-**14 pipelines, 31 Cloud Run jobs (prod + test, plus the two Label Design push jobs and the repair job), about 68 BigQuery views.**
+**15 pipelines, 31 Cloud Run jobs (prod + test, plus the Label Design push job), about 68 BigQuery views.**
 The pipelines are Sales Orders, Sales Quotes, Sales Returns, Work Orders,
 Purchasing Open Orders, Purchasing Pending Requisitions, Part Obsolescence,
 Inventory Activity, Inventory Snapshot, Part On-Hand Inventory, Quality
@@ -24,7 +24,7 @@ view has a business-facing doc:
 |---|---|---|---|---|---|
 | **Vox Scorecard** | Plex views behind every tile of the Vox MTD scorecard; manual-data app for goals and safety | `dev-scorecard` | `ptbq-scorecard` | `scorecard.code-workspace` | [Migration Board](https://claude.ai/code/artifact/89e5211a-10c8-4a59-bf3d-c92f188c47a9) |
 | **Scorecard Sandbox** | `voxdatalake.ScorecardSandbox`: a full simulated year under every tile, for designing Looker Studio | `dev-sandbox` | `ptbq-sandbox` | `sandbox-scorecard.code-workspace` | [findings](docs/SCORECARD_SANDBOX_FINDINGS.md) |
-| **Label Design** | Plex → BigQuery → Monday.com artwork queue (new orders checked every 15 min, 5 AM - 5:45 PM weekdays, and pushed as soon as they are found), plus an on-demand sync app | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` | [label-design/STATUS.md](label-design/STATUS.md) |
+| **Label Design** | Plex → BigQuery → Monday.com artwork queue (new orders checked every 15 min, 5 AM - 5:45 PM weekdays, and pushed as soon as they are found) | `dev-label-design` | `ptbq-label-design` | `label-design.code-workspace` | [label-design/STATUS.md](label-design/STATUS.md) |
 | *Shared tooling* | `main.py`, Terraform structure, hooks, deploy scripts | `dev` | `ptbq-dev` | `dev-shared.code-workspace` | [CHANGELOG.md](CHANGELOG.md) |
 | ***Deploy*** | merges and deploys only, no edits | `main` | `plex-to-big-query` | `main-deploy.code-workspace` | `git tag -l 'deploy/*'` |
 
@@ -124,6 +124,7 @@ graph LR
 | Look up gcloud / docker / terraform detail | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Fix an error | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Know what Claude Code can and can't touch in GCP (`claude-readonly`) | [docs/CLAUDE_CODE_IAM.md](docs/CLAUDE_CODE_IAM.md) |
+| Hand over or take over: backups, people-tied credentials, the Claude Code setup | [docs/AI_WORKFLOW_HANDOVER.md](docs/AI_WORKFLOW_HANDOVER.md) |
 | See when each job runs and emails | [docs/EMAIL_SCHEDULE.md](docs/EMAIL_SCHEDULE.md) |
 | Know what a report means for the business | [docs/reports/REPORT_CATALOG.md](docs/reports/REPORT_CATALOG.md) |
 | Find any report, raw table or pipeline, with its SQL and Plex SQL | [Plex Data Hub](https://claude.ai/artifact/UYTn9LfVwgZe9MLgBAVeAt) (built from `docs/hub/`, see its README) |
@@ -147,7 +148,7 @@ graph LR
 | `.githooks/`, `scripts/deploy.sh`, `scripts/tf_guard.py`, `scripts/plan_review.py` | The locks, and the only way to deploy | shared |
 | `deploy/manual_data_app/`, `scripts/board/`, `score-card-reference/` | Manual-data web app, Migration Board generator, Vox source material | Scorecard |
 | `scripts/scorecard_sandbox/`, `docs/SCORECARD_SANDBOX_FINDINGS.md` | Sandbox build and what it found | Sandbox |
-| `label-design/`, `label_design_service/`, `deploy/archive/label_design_sync/`, `deploy/label_design_trigger/` | Label Design status, push service, retired sheet sync, on-demand app | Label Design |
+| `label-design/`, `label_design_service/`, `deploy/archive/label_design_sync/` | Label Design status, push service, retired sheet sync | Label Design |
 | `docs/` | Guides; `docs/reports/` holds the business docs; `docs/archive/` holds finished history | shared |
 | `reports-list/`, `spreadsheets/` | Company report inventory and the Google Sheets being mapped, with status per row | shared |
 | `catalog/`, `mapping/` | Plex ODBC schema catalogs; NetSuite ↔ Plex mapping | shared |

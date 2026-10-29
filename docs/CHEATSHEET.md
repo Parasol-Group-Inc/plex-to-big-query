@@ -20,15 +20,15 @@ This pipeline **copies Plex ERP data into BigQuery** so the data team can query 
 - **BigQuery** is the data warehouse — think Google Sheets but for millions of rows and real SQL
 - **Cloud Storage (GCS)** holds the report YAML/SQL the jobs read at run time. Terraform writes those objects from `reports/` on `main` (via `./scripts/deploy.sh`), so a YAML/SQL change needs **no image rebuild — but it does need a deploy**
 
-**14 pipelines** (`reports/*.yaml`) → **31 Cloud Run jobs** (prod + test each, plus the two Label Design push jobs and the Label Design repair job) →
-**31 Cloud Scheduler jobs** (the 5-minute ETL dispatcher, the test jobs' nightly schedulers with a `-retry` twin on 12 of them, and Label Design's) → **68 BigQuery views**. Prod
+**15 pipelines** (`reports/*.yaml`) → **31 Cloud Run jobs** (prod + test each, plus the Label Design push job) →
+**30 Cloud Scheduler jobs** (the 5-minute ETL dispatcher, the test jobs' nightly schedulers with a `-retry` twin on 12 of them, and Label Design's) → **68 BigQuery views**. Prod
 jobs have no scheduler of their own: the dispatcher runs them from
 `PlexOps.etl_schedule` (1 / 6 / 11 PM probe + 4 AM full). The test nightly
 cascade runs **7:10 PM → 10:50 PM Mountain** (`America/Denver`), 20 minutes
 apart; Label Design probes **every 15 minutes, 5:00 AM - 5:45 PM Mountain**
 and a run that finds new orders starts the Monday push itself (6:05 PM
-sweep; test hourly at :05, test push paused). Every 15 minutes the repair
-job refills columns a move from Plex Import to Design & QA left blank. Full schedule and run history:
+sweep; test hourly at :05, no test push). The push lands items on "Plex
+Import Test" (since 2026-10-27). Full schedule and run history:
 [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). Any job can also be run by hand.
 
 ---
@@ -291,7 +291,7 @@ graph TB
 ```
 
 *Shown: the Sales Orders pipeline as a worked example — the same shape repeats
-for all 14 pipelines.*
+for all 15 pipelines.*
 
 ---
 
@@ -329,7 +329,7 @@ graph LR
 
 - **YAML is per-environment** (`reports/` vs `test/` in GCS, from `reports/*.yaml` vs `reports/test/*.yaml` in git — two hand-kept files, change both). **SQL is shared** (`sql/`).
 - **Failure retry:** prod has no `-retry` scheduler; the dispatcher runs one follow-up probe 15 minutes after a failed run. 12 **test** jobs have a `-test-retry` scheduler at **9:45 PM Mountain** that re-runs the job only if today's scheduled run genuinely FAILED (not PARTIAL), checked against `job_run_log`. See [OPERATIONS.md → Failure Retry](OPERATIONS.md#failure-retry-945-pm-mountain).
-- **Naming:** jobs `plex-etl-<pipeline>[-test]`; test schedulers `plex-<pipeline>-sync-test[-retry]` (prod has none, except Label Design's `plex-label-design-sync`, `plex-label-design-push-sync` and `plex-label-design-repair-sync`). Names are immutable — a rename is a destroy/recreate (CLAUDE.md → *Job naming*).
+- **Naming:** jobs `plex-etl-<pipeline>[-test]`; test schedulers `plex-<pipeline>-sync-test[-retry]` (prod has none, except Label Design's `plex-label-design-sync` and `plex-label-design-push-sync`). Names are immutable — a rename is a destroy/recreate (CLAUDE.md → *Job naming*).
 
 ## Active Reports
 
@@ -435,7 +435,6 @@ plex-to-big-query/
     setup.sh               # DEPRECATED bootstrap script, kept for reference (use terraform/)
     manual_data_app/       # [Scorecard] goals + safety-incident web app (Apps Script)
     archive/               # retired, kept for the record - label_design_sync/ (Apps Script)
-    label_design_trigger/  # [Label Design] run-the-sync-on-demand web app (on dev-label-design)
   label-design/              # [Label Design] STATUS.md (read first), Monday board docs
   label_design_service/      # [Label Design] push service (reason-code parser + tests)
   docs/                      # guides: this file, OPERATIONS, TROUBLESHOOTING, EMAIL_SCHEDULE,

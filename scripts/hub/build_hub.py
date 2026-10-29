@@ -15,7 +15,8 @@ Reads only what's in the repo, so re-run it after any report change:
   reports/plex_sql/*.sql                Plex SQL Developer equivalents
   docs/reports/*.md                     business-facing report docs
   catalog/full_schema_catalog.csv       column names/types of every Plex view
-  docs/hub/platform.json                jobs, schedules, probe, infra, history
+  docs/hub/platform.json                jobs, schedules, probe, infra, history, the Label Design tab
+  docs/hub/label_design_colours.json    Label Design colour catalog (scripts/hub/label_colours.py)
   scripts/board/board_data.py           scorecard tiles, decisions, forms, glossary (the Migration Board's content)
   docs/hub/field_manual.json            scorecard teardowns, traps, risks, Plex glossary (Field Manual snapshot)
   docs/hub/data_snapshot.json           (optional, gitignored) row counts, sample rows, run logs, figure values (scripts/hub/snapshot_data.py)
@@ -282,6 +283,9 @@ def main():
         "other_inputs": sorted(other_inputs.values(), key=lambda o: o["name"]),
         "platform": platform,
         "scorecard": scorecard,
+        # the Label Design tab: platform.json's hand-written part plus the colour
+        # catalog written by scripts/hub/label_colours.py
+        "label_colours": json.loads(read(ROOT / "docs" / "hub" / "label_design_colours.json") or "{}"),
         "snapshot": {},
     }
     # live data, refreshed only by scripts/hub/snapshot_data.py; never in the committed page
@@ -289,7 +293,7 @@ def main():
 
     template = read(ROOT / "scripts" / "hub" / "template.html")
     mermaid = platform.get("mermaid", {})
-    for key in ("architecture", "env_paths", "probe_flow", "dispatch_sequence", "deploy_flow"):
+    for key in ("architecture", "env_paths", "probe_flow", "dispatch_sequence", "deploy_flow", "label_design_flow"):
         src = mermaid.get(key, "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         template = template.replace(f"<!--MERMAID:{key}-->", src)
     page = lambda d: template.replace("/*__HUB_DATA__*/", json.dumps(d, ensure_ascii=False).replace("</", "<\\/"))
@@ -297,7 +301,8 @@ def main():
     html = page(data)
     OUT.write_text(html, encoding="utf-8", newline="\n")
     if snapshot:
-        live = add_qbo_tab(page({**data, "snapshot": snapshot}))
+        import audit_tab  # findings in docs/hub/audit.json (gitignored); no file, no tab
+        live = audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot})))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

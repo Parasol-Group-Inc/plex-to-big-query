@@ -78,6 +78,13 @@
 --   operation each container sits at (WIP between operations would read
 --   slightly high — for the blend, $1.25 vs $1.354).
 --
+-- COST MODELS (added 2026-10-29, audit B1): Plex prod carries five cost models
+-- (1892 Standard Cost 2026 with labor/OH, 4402 Go-Live Inventory Cost 2026,
+-- 4403 a frozen copy of it, 4406, 4407 With BOM Costs), and this view keeps a row
+-- per model. Adding them up values the same stock up to four times ($68M on
+-- 10-29). Each row now says its model and whether Plex marks it Primary_Model
+-- (Part_v_Cost_Model); the total reads the primary model only.
+--
 -- Downstream: inventory_valuation_total_report (same config) sums
 -- inventory_value. total_cost keeps its name but is now the part's per-unit
 -- standard cost (what the column was always described as), not a sum across
@@ -183,6 +190,15 @@ part_cost AS (
   WINDOW w AS (PARTITION BY snapshot_key, cost_model_key, part_key)
 ),
 
+cost_model AS (
+  SELECT
+    SAFE_CAST(m.Cost_Model_Key AS INT64)                AS cost_model_key,
+    m.Cost_Model                                        AS cost_model_name,
+    COALESCE(SAFE_CAST(CAST(m.Primary_Model AS STRING) AS BOOL),
+             SAFE_CAST(m.Primary_Model AS INT64) = 1, FALSE) AS is_primary
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Cost_Model` m
+),
+
 latest_snapshot AS (
   SELECT MAX(snapshot_key) AS snapshot_key
   FROM snap
@@ -193,6 +209,8 @@ SELECT
   pc.snapshot_key                                       AS snapshot_key,
   pc.snapshot_date                                      AS snapshot_date,
   pc.cost_model_key                                     AS cost_model_key,
+  cm.cost_model_name                                    AS cost_model_name,
+  COALESCE(cm.is_primary, FALSE)                        AS is_primary_cost_model,
 
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
@@ -219,6 +237,9 @@ SELECT
 FROM part_cost pc
 
 CROSS JOIN latest_snapshot ls
+
+LEFT JOIN cost_model cm
+  ON cm.cost_model_key = SAFE_CAST(pc.cost_model_key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pc.part_key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)

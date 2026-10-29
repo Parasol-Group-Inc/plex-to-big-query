@@ -38,9 +38,11 @@ WITH push AS (
     dedupe_key,
     SAFE_CAST(REGEXP_EXTRACT(dedupe_key, r'\|L(\d+)$') AS INT64) AS po_line_key
   FROM `{gcp_project}.{dataset}.label_design_push_log` AS pl
-  -- Repair rows (label_design_service/repair.py, 2026-10-22) refill an item
-  -- already counted here; they are not pushes.
-  WHERE pl.outcome != 'repaired'
+  -- Not pushes: 'repaired' rows (the retired repair job, 2026-10-22 to 10-27)
+  -- refilled an item already counted here; 'alert' rows (2026-10-27) record
+  -- an email the push sent; 'filled' rows (2026-10-28) record a label field
+  -- written into an item after it was created.
+  WHERE pl.outcome NOT IN ('repaired', 'alert', 'filled')
 ),
 
 release_added AS (

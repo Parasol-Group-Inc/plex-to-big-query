@@ -41,7 +41,12 @@ rep1 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 1
+  -- Ranked, not Sort_Order = 1: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 1
 ),
 
 rep2 AS (
@@ -49,7 +54,12 @@ rep2 AS (
     SAFE_CAST(PO_Key AS INT64)          AS PO_Key,
     SAFE_CAST(Plexus_User_No AS INT64)  AS Plexus_User_No
   FROM `{gcp_project}.{dataset}.raw_Sales_v_Order_Salesperson`
-  WHERE SAFE_CAST(Sort_Order AS INT64) = 2
+  -- Ranked, not Sort_Order = 2: every Order_Salesperson row in prod has
+  -- Sort_Order 0, so the = 1 / = 2 filters matched nothing (audit B2, 2026-10-29).
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(PO_Key AS INT64)
+    ORDER BY SAFE_CAST(Sort_Order AS INT64), SAFE_CAST(Plexus_User_No AS INT64)) = 2
 ),
 
 -- line_price (added 2026-10-19): the price agreed on the ORDER LINE (Sales_v_Price),
@@ -117,7 +127,19 @@ SELECT
   po.Customer_No,
   cust.Name                                             AS customer_name,
 
-  CONCAT(u1.First_Name, ' ', u1.Last_Name)              AS sales_rep_1,
+  -- Order rep, then customer rep, then Order_Salesperson: the same resolution
+  -- as sales_mtd_by_status_change_view.sql. Until 2026-10-29 this read only
+  -- Order_Salesperson with Sort_Order = 1 and was NULL on every row (audit B2).
+  COALESCE(
+    CONCAT(ui.First_Name, ' ', ui.Last_Name),
+    CONCAT(ua.First_Name, ' ', ua.Last_Name),
+    CONCAT(u1.First_Name, ' ', u1.Last_Name)
+  )                                                     AS sales_rep_1,
+  CASE
+    WHEN ui.Plexus_User_No IS NOT NULL THEN 'order'
+    WHEN ua.Plexus_User_No IS NOT NULL THEN 'customer'
+    WHEN u1.Plexus_User_No IS NOT NULL THEN 'order_salesperson'
+  END                                                   AS sales_rep_source,
   CONCAT(u2.First_Name, ' ', u2.Last_Name)              AS sales_rep_2,
 
   p.Part_No                                             AS part_number,
@@ -147,6 +169,13 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO_Status` sts
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
   ON po.Customer_No = cust.Customer_No
+
+-- Rep on the order (Inside Salesperson) and on the customer (account owner);
+-- see sales_rep_1 above. Added 2026-10-29 (audit B2).
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ui
+  ON SAFE_CAST(po.Inside_Sales AS INT64) = SAFE_CAST(ui.Plexus_User_No AS INT64)
+LEFT JOIN `{gcp_project}.{dataset}.raw_Plexus_Control_v_Plexus_User` ua
+  ON SAFE_CAST(cust.Assigned_To AS INT64) = SAFE_CAST(ua.Plexus_User_No AS INT64)
 
 LEFT JOIN rep1 ON po.PO_Key = rep1.PO_Key
 LEFT JOIN rep2 ON po.PO_Key = rep2.PO_Key

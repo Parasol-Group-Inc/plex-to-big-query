@@ -275,18 +275,44 @@ bottles AS (
 --
 -- A part with no label component gets NULLs. That is not a regression --
 -- every attribute column was NULL for every row before this existed.
+--
+-- ── A line that orders the LABEL itself is its own label (2026-10-28) ──────
+-- Some orders carry the label part directly, not a finished good: SO 435
+-- (73066-10KAYAN-0) and SO 388 (73123-00KAYAN-1, 73131-NPKAYAN-0/-1). A label
+-- part's only BOM component is "SUPPLY | Blank Label Paper", so the BOM hop
+-- found nothing and Label Part # and the label attributes reached Monday
+-- blank. Such a part now counts as its own label at BOM level 0, ahead of any
+-- component. The four Service parts named "Label Edit/Review/Design/Print"
+-- also start with LABEL; they are not labels, hence the Part_Type filter.
+-- Bottle Material stays blank for these lines: a label has no bottle.
 labels AS (
   SELECT
-    SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
-    ARRAY_AGG(STRUCT(SAFE_CAST(c.Part_Key AS INT64) AS part_key,
-                     c.Part_No AS part_no,
-                     c.Name    AS name)
-              ORDER BY SAFE_CAST(fb.BOM_Level AS INT64), c.Part_No LIMIT 1)[OFFSET(0)] AS l
-  FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
-  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
-    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
-  WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'LABEL')
-  GROUP BY 1
+    Part_Key,
+    ARRAY_AGG(STRUCT(label_key AS part_key, part_no, name)
+              ORDER BY bom_level, part_no LIMIT 1)[OFFSET(0)] AS l
+  FROM (
+    SELECT
+      SAFE_CAST(fb.Part_Key AS INT64) AS Part_Key,
+      SAFE_CAST(c.Part_Key AS INT64)  AS label_key,
+      c.Part_No                       AS part_no,
+      c.Name                          AS name,
+      SAFE_CAST(fb.BOM_Level AS INT64) AS bom_level
+    FROM `{gcp_project}.{dataset}.raw_Part_v_Flat_BOM` AS fb
+    JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS c
+      ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(fb.Component_Part_Key AS INT64)
+    WHERE STARTS_WITH(UPPER(TRIM(c.Name)), 'LABEL')
+    UNION ALL
+    SELECT
+      SAFE_CAST(p.Part_Key AS INT64) AS Part_Key,
+      SAFE_CAST(p.Part_Key AS INT64) AS label_key,
+      p.Part_No                      AS part_no,
+      p.Name                         AS name,
+      0                              AS bom_level
+    FROM `{gcp_project}.{dataset}.raw_Part_v_Part` AS p
+    WHERE STARTS_WITH(UPPER(TRIM(p.Name)), 'LABEL')
+      AND IFNULL(p.Part_Type, '') <> 'Service'
+  )
+  GROUP BY Part_Key
 ),
 
 -- ── Dates ──────────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ Each row carries the order's **Order number** (`order_no`, added 2026-10-26, sho
 
 ## Flags and open questions
 
+- **Sales rep now resolves from the order, then the customer, then Order Salesperson (2026-10-29, audit B2).** The rep comes from the order's Inside Salesperson, then the customer's Assigned To, then Plex's Order Salesperson table, the same rule as the other sales views. The rep-table lookup no longer requires a Sort Order of exactly 1 or 2, which Plex often leaves blank or numbers differently; it takes the first and second rep on each order by Sort Order. A new `sales_rep_source` column says which of the three the rep came from (`order`, `customer`, `order_salesperson`). Most reps in prod come from Order Salesperson; a blank rep means Plex has none anywhere.
 - **Prices come from the order line first (fixed 2026-10-19).** Order values use the price agreed on each order line (Plex's Sales Price), falling back to the customer price list only when a line has none. Before, they read the price list alone, and that list is **empty in Plex prod** (and never matched current parts in test), so every order value here was blank. On 19 Oct, 583 of 606 prod order lines had a line price. Row counts did not change; only the price columns filled in.
 None known for this report itself — the "Pending Sales Approval" status and its meaning are confirmed live, not guessed.
 

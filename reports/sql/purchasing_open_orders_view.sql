@@ -48,6 +48,8 @@ SELECT
   sup.Name                                              AS supplier_name,
 
   -- ── Line item / part ───────────────────────────────────────────────────────
+  -- Line_Item_No tells apart lines that repeat a part on one PO (audit B11, 2026-10-29).
+  SAFE_CAST(li.Line_Item_No AS INT64)                   AS line_no,
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
 
@@ -57,35 +59,44 @@ SELECT
     DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS INT64), 0), 1000))),
     NULLIF(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS DATE), DATE '1970-01-01'),
     NULLIF(DATE(SAFE_CAST(CAST(rel.Due_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
-  )                                                     AS due_date
+  )                                                     AS due_date,
+
+  -- Appended 2026-10-28. Firmed / Partial (Received releases are excluded
+  -- below). A Partial release still shows its full quantity: Plex's
+  -- Release view carries no received quantity.
+  rel.Release_Status                                    AS release_status
 
 FROM `{gcp_project}.{dataset}.raw_Purchasing_v_PO` po
 
 -- Order type lookup
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_PO_Type` typ
-  ON po.PO_Type_Key = typ.PO_Type_Key
+  ON SAFE_CAST(po.PO_Type_Key AS INT64) = SAFE_CAST(typ.PO_Type_Key AS INT64)
 
 -- Status lookup — filtered to open below via Cancelled_Status/Received flags
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_PO_Status` sts
-  ON po.PO_Status_Key = sts.PO_Status_Key
+  ON SAFE_CAST(po.PO_Status_Key AS INT64) = SAFE_CAST(sts.PO_Status_Key AS INT64)
 
 -- Supplier name
 LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Supplier` sup
-  ON po.Supplier_No = sup.Supplier_No
+  ON SAFE_CAST(po.Supplier_No AS INT64) = SAFE_CAST(sup.Supplier_No AS INT64)
 
 -- Line items — confirmed join key: Purchasing_v_Line_Item.PO_Key
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Line_Item` li
-  ON po.PO_Key = li.PO_Key
+  ON SAFE_CAST(po.PO_Key AS INT64) = SAFE_CAST(li.PO_Key AS INT64)
 
 -- Quantity/due date per line — confirmed join key: Line_Item_Key
 LEFT JOIN `{gcp_project}.{dataset}.raw_Purchasing_v_Release` rel
-  ON li.Line_Item_Key = rel.Line_Item_Key
+  ON SAFE_CAST(li.Line_Item_Key AS INT64) = SAFE_CAST(rel.Line_Item_Key AS INT64)
 
 -- Part_v_Part is shared with the sales_orders pipeline — not re-extracted here.
 -- Confirmed: Line_Item.Part_Key is populated; Release.Part_Key is not — join via Line_Item.
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
-  ON SAFE_CAST(li.Part_Key AS INT64) = p.Part_Key
+  ON SAFE_CAST(li.Part_Key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
 -- "Open" = not cancelled/denied and not yet received, per confirmed status flags.
+-- Since 2026-10-28 also per release: an open PO can hold releases already
+-- marked Received (9 releases, 35,602 units on 2026-10-28), which are not
+-- on order any more.
 WHERE COALESCE(SAFE_CAST(sts.Cancelled_Status AS INT64), 0) = 0
   AND COALESCE(SAFE_CAST(sts.Received AS INT64), 0) = 0
+  AND IFNULL(CAST(rel.Release_Status AS STRING), '') != 'Received'

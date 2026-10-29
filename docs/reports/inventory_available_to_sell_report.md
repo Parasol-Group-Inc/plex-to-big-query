@@ -1,6 +1,6 @@
 # Inventory | Available to Sell (On-Hand less Demand)
 
-> **Status:** ✅ Built and verified 2026-09-09; demand rules confirmed by Jennilyn the same day · **Category:** Supply Chain · **Runs:** rides the Sales Orders pipeline
+> **Status:** ✅ Built and verified 2026-09-09; demand rules confirmed by Jennilyn the same day. Wrapper-key fix 2026-10-28 (see flags) · **Category:** Supply Chain · **Runs:** rides the Sales Orders pipeline
 
 ## What this tells you
 
@@ -34,6 +34,8 @@ Two availability columns are published — with and without BOM-exploded compone
 - **SQL:** `reports/sql/inventory_available_to_sell_view.sql`
 
 ## Flags and open questions
+
+- **Fixed 2026-10-28: parts with more than one Plex record.** Plex keeps up to four records per part number: the stocked one and "wrappers" that let a recipe use the part in another unit (grams instead of kilos). The BOM explosion listed demand on both, though the stocked record already carries the wrapper's share, so 387 wrapper rows showed as short and any total by part number doubled. Demand from the BOM is now counted on the stocked record only. Stock sitting on a wrapper (18 parts) is converted and counted in the stocked record's availability, shown in `wrapper_on_hand_qty`; `is_unit_wrapper` marks the wrapper rows. Example: 12665-01VOXNU-1 went from -113 available to +401.
 
 - **✅ The "do unapproved orders count as demand" question is answered — and Jennilyn fixed it in Plex, not here.** *"I did change it in Plex because I saw that it was showing demand for deposit review and pending sales approval. We don't count those as demand until they're pending fulfillment."* (2026-09-09.) Because this report gates on Plex's own `Include_In_MRP` flag rather than a hand-written status list, **it needed no code change** — order demand dropped from **508,807 units to 5,000** on its own once her change reached the extract. `Include_In_MRP = 1` now means exactly Pending Fulfillment + Hold.
 - **The `_firm_` columns were removed, not kept for the record.** They were defined as "Include_In_MRP and not on hold", which after her change would wrongly exclude the **Hold** status she explicitly wants counted (*"hold as well... it was sold but it hasn't shipped yet"*). A stale second reading is worse than none. `order_demand_from_held_orders_qty` keeps the Hold portion visible without pretending it's excluded.

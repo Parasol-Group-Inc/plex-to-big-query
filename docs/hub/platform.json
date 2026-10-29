@@ -16,7 +16,6 @@
     "deploy/etl_dispatcher/enable_prod_schedule.sql",
     "deploy/plex_api_function/main.py",
     "deploy/plex_api_function/push.py",
-    "deploy/label_design_trigger/README.md",
     "deploy/manual_data_app/",
     "main.py",
     "label_design_service/push.py",
@@ -315,33 +314,9 @@
       "job": "plex-etl-label-design-push",
       "pipeline": "label_design_push",
       "env": "prod",
-      "config": "none; runs python -m label_design_service.push, board 18432111755 group 'New from Plex', BQ_DATASET PlexProd",
+      "config": "none; runs python -m label_design_service.push, board 18437236736 (Plex Import Test, since 2026-10-27) group 'New from Plex', MOVE_TO_BOARD_ID 18395121955 (aligns status label colours to it before creating items), emails problems once a day each (email_utils.send_push_alert), BQ_DATASET PlexProd",
       "trigger": "started by plex-etl-label-design after every run that extracts (POST_RUN_JOB, since 2026-10-22); scheduler plex-label-design-push-sync is a 6:05 PM sweep",
       "schedule": "on demand + 5 18 * * 1-5 Mountain sweep; max_retries 0"
-    },
-    {
-      "job": "plex-etl-label-design-push-test",
-      "pipeline": "label_design_push",
-      "env": "test",
-      "config": "none; same push module, BQ_DATASET PlexTest",
-      "trigger": "scheduler plex-label-design-push-sync-test (PAUSED since the 2026-10-19 cutover)",
-      "schedule": "35 5-17 * * 1-5 Mountain when un-paused; max_retries 0"
-    },
-    {
-      "job": "plex-etl-label-design-repair",
-      "pipeline": "label_design_repair",
-      "env": "prod",
-      "config": "none; runs python -m label_design_service.repair, pushed items on 18432111755 -> blanks on Design & QA 18395121955, BQ_DATASET PlexProd",
-      "trigger": "scheduler plex-label-design-repair-sync (since 2026-10-22)",
-      "schedule": "*/15 5-18 * * 1-5 Mountain; once per item, logs outcome repaired in label_design_push_log; no email; max_retries 0"
-    }
-  ],
-  "prod_schedule": [
-    {
-      "time": "1:00 PM",
-      "timezone": "America/Denver",
-      "mode": "probe",
-      "notes": "14 prod jobs, one every 4 minutes (13:00 to 13:52; part_lot joined 2026-10-21), rows in PlexOps.etl_schedule; a quiet probe skips the run."
     },
     {
       "time": "6:00 PM",
@@ -481,20 +456,6 @@
       "mode": "explicit probe, may skip"
     },
     {
-      "scheduler": "plex-label-design-push-sync-test",
-      "cron": "35 5-17 * * 1-5 (paused = true)",
-      "timezone": "var.scheduler_time_zone (Mountain per terraform/main.tf comments and EMAIL_SCHEDULE.md; live tfvars is not in git)",
-      "target_job": "plex-etl-label-design-push-test",
-      "mode": "push, no probe"
-    },
-    {
-      "scheduler": "plex-label-design-repair-sync",
-      "cron": "*/15 5-18 * * 1-5",
-      "timezone": "var.scheduler_time_zone (Mountain)",
-      "target_job": "plex-etl-label-design-repair",
-      "mode": "repair: refill blanks a Monday board move dropped, never creates items"
-    },
-    {
       "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing, part_lot and label_design)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
@@ -530,13 +491,6 @@
       "trigger": "Web form; hourly pushAll() trigger",
       "purpose": "Typed-by-humans goals (scorecard_goals_app) and safety incidents. pushAll() seeds newer scorecard_goals rows, then WRITE_TRUNCATEs the two PlexProd tables from the sheet.",
       "deployed_by": "Pasted by hand into Apps Script then Deploy > New version. The repo copy can be ahead of the deployed script (OPEN_ITEMS S12, S2)."
-    },
-    {
-      "name": "Label Design on-demand trigger",
-      "kind": "Apps Script web app",
-      "trigger": "One-button page, allowlist, 10 minute cooldown, refuses while a run is in progress",
-      "purpose": "Starts the Label Design Cloud Run job (test job until promoted) through the Cloud Run Jobs API. Runs the ETL only, not the push (L6).",
-      "deployed_by": "Apps Script project per deploy/label_design_trigger/README.md. Not set up yet (OPEN_ITEMS L2)."
     }
   ],
   "ops_tables": [
@@ -632,13 +586,19 @@
     ]
   },
   "mermaid": {
-    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>every 15 min, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push<br/>started by each changed run + 6:05 PM sweep\"]\n    Monday[\"Monday board Plex Import\"]\n    QA[\"Monday board Design & QA<br/>items moved by hand\"]\n    Repair[\"plex-etl-label-design-repair<br/>every 15 min, refills blanks once\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  LDJob -->|\"POST_RUN_JOB\"| Push\n  Prod --> Push --> Monday\n  Monday -->|\"moved by the team\"| QA\n  Repair -->|\"fills pushed values\"| QA\n  Prod -->|\"push log\"| Repair\n  Apps -->|\"goals and safety incidents\"| Prod",
+    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>every 15 min, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push<br/>started by each changed run + 6:05 PM sweep\"]\n    Monday[\"Monday board Plex Import Test\"]\n    QA[\"Monday board Design & QA<br/>items moved by hand\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  LDJob -->|\"POST_RUN_JOB\"| Push\n  Prod --> Push --> Monday\n  Monday -->|\"moved by the team\"| QA\n  Apps -->|\"goals and safety incidents\"| Prod",
     "probe_flow": "flowchart TD\n  Start[\"Job starts<br/>RUN_MODE probe, full, scheduled or retry\"]\n  Load[\"Load YAML from GCS<br/>open Plex ODBC connection\"]\n  Kind{\"probe_kind<br/>auto, explicit or none\"}\n  Full[\"Full extraction<br/>WRITE_TRUNCATE every raw table\"]\n  Ref[\"Read last applied fingerprint<br/>from probe_log\"]\n  Run[\"run_probe<br/>COUNT and MAX or SUM per table<br/>plus YAML and SQL hash\"]\n  Inc[\"Inconclusive<br/>log inconclusive row, fail open\"]\n  Same{\"May skip and<br/>fingerprint unchanged\"}\n  Skip[\"Log skipped<br/>short Probe ran email<br/>outcome skipped\"]\n  Views[\"Create or replace bq_views<br/>retry a failed view once\"]\n  Ok{\"Clean run\"}\n  Applied[\"probe_log applied<br/>fingerprint is new reference\"]\n  Failed[\"probe_log failed<br/>reference unchanged\"]\n  Disp[\"record_dispatch_outcome<br/>full email\"]\n  Follow[\"Dispatcher follow-up probe<br/>15 min later, once\"]\n  Start --> Load --> Kind\n  Kind -->|\"none\"| Full\n  Kind -->|\"auto or explicit\"| Ref\n  Ref -->|\"unreadable\"| Inc\n  Ref --> Run\n  Run -->|\"error\"| Inc\n  Run --> Same\n  Inc --> Full\n  Same -->|\"yes\"| Skip\n  Same -->|\"no, or full run\"| Full\n  Full --> Views --> Ok\n  Ok -->|\"yes\"| Applied --> Disp\n  Ok -->|\"no\"| Failed --> Disp\n  Disp -->|\"failed, partial or lost\"| Follow",
     "dispatch_sequence": "sequenceDiagram\n  participant CS as Cloud Scheduler\n  participant D as etl-dispatcher\n  participant BQ as PlexOps in BigQuery\n  participant CR as Cloud Run job\n  participant PX as Plex ODBC\n  CS->>D: HTTP tick every 5 minutes\n  D->>BQ: read etl_schedule and open etl_dispatch_log rows\n  D->>CR: reconcile open runs from execution status\n  D->>BQ: record failed, succeeded-unrecorded or lost\n  D->>BQ: insert dispatch row for each due slot first\n  D->>CR: run job with RUN_MODE, DISPATCH_ID, DISPATCH_LOG_TABLE\n  CR->>PX: probe aggregates\n  alt fingerprint unchanged and mode is probe\n    CR->>BQ: probe_log skipped, outcome skipped\n  else changed or full mode\n    CR->>PX: full extraction\n    CR->>BQ: write raw tables and views, probe_log applied\n    CR->>BQ: outcome success, partial or failed\n  end\n  D->>BQ: next tick finds failed, partial or lost run\n  D->>CR: one follow-up probe 15 minutes after it finished",
     "deploy_flow": "flowchart LR\n  Dev[\"dev branch worktree<br/>ptbq-dev and project folders\"]\n  Hook[\"pre-commit and pre-push hooks\"]\n  PR[\"Pull request into main\"]\n  Main[\"primary folder<br/>clean main equals origin main\"]\n  Deploy[\"scripts/deploy.sh\"]\n  Guard[\"tf_guard.py<br/>runs inside every plan\"]\n  Review[\"plan_review.py<br/>type the change count\"]\n  TF[\"terraform apply<br/>of the reviewed plan\"]\n  GCS[\"GCS configs and SQL<br/>jobs and schedulers\"]\n  Tag[\"git tag deploy timestamp\"]\n  CB[\"gcloud builds submit<br/>deploy/cloudbuild.yaml\"]\n  Img[\"image to Artifact Registry<br/>deploy-all then smoke test on test job\"]\n  GF[\"gcloud functions deploy<br/>dispatcher and plex api\"]\n  Dev --> Hook --> PR --> Main\n  Main --> Deploy --> Guard --> Review --> TF --> GCS\n  TF --> Tag\n  Main -->|\"code changes\"| CB --> Img\n  Main -->|\"function changes\"| GF",
-    "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X"
+    "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X",
+    "label_design_flow": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC, about 50 min behind\"] -->|\"probe every 15 min<br/>weekdays 5:00 AM-5:45 PM MT\"| ETL[\"plex-etl-label-design\"]\n  ETL -->|\"raw tables + view\"| View[\"PlexProd.label_design_report<br/>one row per order line\"]\n  ETL -->|\"a run that extracted<br/>starts the push\"| Push[\"plex-etl-label-design-push\"]\n  Sweep[\"plex-label-design-push-sync<br/>6:05 PM sweep\"] --> Push\n  View --> Push\n  Push -->|\"first: align status label colours\"| QA\n  Push -->|\"then: create one item per new line<br/>LCR dedupe\"| PIT[\"Monday: Plex Import Test\"]\n  Push -->|\"every attempt\"| Log[\"label_design_push_log\"]\n  Push -->|\"problems, once a day each\"| Mail[\"Email: Label Design push\"]\n  PIT -->|\"team moves items by hand<br/>status values follow label COLOUR\"| QA[\"Monday: Design & QA\"]"
   },
   "changelog_recent": [
+    {
+      "date": "2026-10-27",
+      "title": "Push moves to Plex Import Test; repair job retired (label-design)",
+      "summary": "plex-etl-label-design-push (and the paused test push) now create items on Plex Import Test (18437236736); Plex Import (18432111755) is sunset. A Monday board move carries status values across by label colour, not name; the old board's colours never matched Design & QA's (Bottle Material blank, Medium shown as Normal, 8 Reason Codes swapped). The new board's labels use Design & QA's colours; a 10-item test went from 12/48 status values wrong to 1/48. Dedupe reads the push log for every board, so nothing pushed to the old board is pushed again. The push now aligns label colours with Design & QA before creating items (labels.py) and creates items with create_labels_if_missing off. plex-etl-label-design-repair, the test push and their schedulers are removed."
+    },
     {
       "date": "2026-10-22",
       "title": "Repair job refills columns a board move drops (label-design)",
@@ -1016,40 +976,10 @@
       "next": "Fix the tile read and lastIncident_()."
     },
     {
-      "id": "L1",
-      "title": "Reference board of 13 items",
-      "owner": "Emilio / Ashley",
-      "next": "Team deletes the WO column."
-    },
-    {
-      "id": "L2",
-      "title": "On-demand trigger app not set up",
-      "owner": "Emilio",
-      "next": "Follow its README."
-    },
-    {
-      "id": "L3",
-      "title": "Prod push live since 2026-10-19; 38 backlog items created at 9:22 MT",
-      "owner": "Emilio",
-      "next": "Open a pushed item's Plex link; settle the starting Design Status and a sandbox board for the paused test push."
-    },
-    {
-      "id": "L5",
-      "title": "Confirm the 09-30 deploy end to end",
-      "owner": "Emilio",
-      "next": "Check push logs."
-    },
-    {
-      "id": "L6",
-      "title": "Chain the push onto the ETL",
-      "owner": "Emilio",
-      "next": "Pick option A, B or C."
-    },
-    {
       "id": "L7",
-      "title": "Three attribute questions",
+      "title": "Attribute questions for Jennilyn: missing Bottle Material/PDP/Prop 65, dead Size, unfilled Hazardous/Material Classification",
       "owner": "Emilio",
-      "next": "Ask Jennilyn."
+      "next": "Ask on the next call. Nothing is blocked."
     },
     {
       "id": "L8",
@@ -1058,40 +988,28 @@
       "next": "Decision."
     },
     {
+      "id": "L18",
+      "title": "Late label fields fill into pushed items' empty cells (code 2026-10-28, not deployed); Sales enters attributes when the SO is made",
+      "owner": "Emilio",
+      "next": "Cloud Build, then check outcome = 'filled' rows in label_design_push_log; Sales fills the missing attributes."
+    },
+    {
       "id": "L9",
       "title": "Reconfirm part attributes go to Monday",
       "owner": "Emilio",
       "next": "Confirm with Jennilyn."
     },
     {
-      "id": "L10",
-      "title": "Prove the SQL-only deploy fix",
-      "owner": "Claude",
-      "next": "Next SQL-only deploy must log applied."
-    },
-    {
       "id": "L11",
-      "title": "Ashley's board points",
-      "owner": "Ashley",
-      "next": "On the board."
-    },
-    {
-      "id": "L12",
-      "title": "Verify the sales roles split",
-      "owner": "Emilio",
-      "next": "Check the next real order."
+      "title": "Ashley's board points: optional people Sales Rep automation; line vs company contact; KAYA contact is Jennifer.jensen@kayanaturals.com",
+      "owner": "Emilio / Ashley",
+      "next": "Emilio updates KAYA's contact in Plex (email + placeholder phone); fix SO 435's Email on Design & QA by hand (restricted column)."
     },
     {
       "id": "L13",
       "title": "Plex REST API: extractor live in test, push ARCHIVED 2026-10-20",
       "owner": "Emilio",
       "next": "Nothing until the API path should replace ODBC; fix ARCHIVED.md first."
-    },
-    {
-      "id": "L14",
-      "title": "Label Design probe watches order approval (deployed 2026-10-20)",
-      "owner": "Emilio",
-      "next": "Next approval reaches the board in about 2 h; probe_log shows 4 parts, no inconclusive rows."
     }
   ],
   "gotchas": [
@@ -1225,5 +1143,166 @@
       "prod": "SQL on PlexOps.etl_schedule, no deploy",
       "test": "Terraform (scheduler cron), via ./scripts/deploy.sh"
     }
-  ]
+  ],
+  "label_design": {
+    "overview": "Label Design keeps the design team's Monday queue filled from Plex. When a sales order line that needs label artwork reaches Pending Fulfillment, it appears on the Monday board Plex Import Test, about an hour after approval, with the customer, part, order, priority, reps, bottle and label details filled in. The team moves each item to Design & QA and works it there.",
+    "push_steps": [
+      "Gate: count view rows whose LCR the push log has never recorded. 0 = stop, no Monday call.",
+      "Read Plex Import Test's columns by title and type (22 mapped).",
+      "Dedupe: skip a line whose LCR (first 12 hex of SHA-256 of order|line) is on the board or in the push log for ANY board.",
+      "Alarm: more than 60 new lines at once = keys broke; nothing pushed, email.",
+      "Align label colours with Design & QA for every status label this run writes (labels.py). A risk of a WRONG label stops the run before anything is created; a refused label on Design & QA only means the field will arrive blank.",
+      "Create items with create_labels_if_missing off; one bad value retries column by column so only that value is lost.",
+      "Write every attempt to label_design_push_log (created, partial, failed).",
+      "Email problems and labels added to Design & QA, once a day per problem (outcome = alert rows)."
+    ],
+    "components": [
+      {
+        "name": "plex-etl-label-design",
+        "kind": "Cloud Run job (prod)",
+        "what": "Probes Plex; when an order, line, release or approval changed, extracts and rebuilds label_design_report, then starts the push (POST_RUN_JOB). Emails only when partial or failed (EMAIL_MODE=on_error). Held by the Plex outage breaker.",
+        "where": "scheduler plex-label-design-sync, every 15 min 5:00 AM-5:45 PM MT, Mon-Fri"
+      },
+      {
+        "name": "plex-etl-label-design-test",
+        "kind": "Cloud Run job (test)",
+        "what": "Same ETL against PlexTest. No push.",
+        "where": "scheduler plex-label-design-sync-test, hourly at :05"
+      },
+      {
+        "name": "label_design_report",
+        "kind": "BigQuery view",
+        "what": "One row per order line with a Label Design release on a Pending Fulfillment order dated on or after 2026-10-18: customer, part, label part and attributes, reps, priority, bottle material, Plex links, dedupe_key.",
+        "where": "reports/sql/label_design_view.sql"
+      },
+      {
+        "name": "plex-etl-label-design-push",
+        "kind": "Cloud Run job (prod)",
+        "what": "label_design_service/push.py: dedupe, label colour alignment, item creation, push log, problem emails.",
+        "where": "MONDAY_BOARD_ID 18437236736, MOVE_TO_BOARD_ID 18395121955, group New from Plex, MAX_NEW_ITEMS 60"
+      },
+      {
+        "name": "plex-label-design-push-sync",
+        "kind": "Cloud Scheduler",
+        "what": "Safety-net sweep after the last ETL run, so two pushes never overlap.",
+        "where": "6:05 PM MT, Mon-Fri"
+      },
+      {
+        "name": "label_design_push_log",
+        "kind": "BigQuery table (PlexProd)",
+        "what": "Every push attempt with the exact values sent (column_values). outcome: created, partial, failed, alert (an email), repaired (history, 22-27 Oct).",
+        "where": "created by the push; snapshotted weekly to voxdatalake.Backups"
+      },
+      {
+        "name": "label_design_push_latency",
+        "kind": "BigQuery view",
+        "what": "Per pushed item: Plex entry, last order edit (about approval) and board time.",
+        "where": "reports/sql/label_design_push_latency_view.sql"
+      },
+      {
+        "name": "Plex Import Test (18437236736)",
+        "kind": "Monday board",
+        "what": "Where the push creates items, in group New from Plex. Its status label colours mirror Design & QA's.",
+        "where": "workspace blank landing page"
+      },
+      {
+        "name": "Design & QA (18395121955)",
+        "kind": "Monday board",
+        "what": "The team's working board. Its status label colours are the reference the push aligns to.",
+        "where": "workspace Label Design & Quality"
+      },
+      {
+        "name": "monday-api-key",
+        "kind": "Secret",
+        "what": "Monday token used by the push (a company account's token). Reads both boards, writes items and status labels.",
+        "where": "Secret Manager, voxdatalake"
+      },
+      {
+        "name": "scripts/hub/label_colours.py",
+        "kind": "Script",
+        "what": "Builds the colour catalog on this tab; --check exits 1 if a label Plex sends would move wrong.",
+        "where": "run by hand, read-only"
+      }
+    ],
+    "retired": [
+      "Plex Import (18432111755): the push board until 2026-10-27, archived that day. Its colours never matched Design & QA's.",
+      "plex-etl-label-design-repair (2026-10-22 to 10-27): refilled blank fields after a move; it could not see wrong labels.",
+      "plex-etl-label-design-push-test: paused since the 19 Oct cutover; test a push with DRY_RUN=1 instead.",
+      "The Google Sheet + Apps Script flow (deploy/archive/label_design_sync/) and the Plex REST API push (deploy/plex_api_function/ARCHIVED.md)."
+    ],
+    "colour_rule": {
+      "summary": "A Monday board move carries a status value across by the label's COLOUR, not its name or id. The destination shows its label with that colour; if it has none, the column's default (blank for Bottle Material, Normal for Priority).",
+      "evidence": "Proven 2026-10-27: 10 test items covering every pushed label were moved from Plex Import Test to a structure-only copy of Design & QA. Before recolouring, 12 of 48 status values arrived lost or as another label (PET and HDPE blank, 4 Reason Codes and 3 Inside Sales Reps swapped, Julianni Pacheco as N/A). After giving Plex Import Test Design & QA's colours, 1 of 48: RUSH ⚠️️, a label Plex never sends.",
+      "damage": "Before the fix, every item moved from the old board showed Priority Normal instead of Medium, and 8 showed another Reason Code; Bottle Material arrived blank and was refilled by the repair job. 45 values were listed for the team on 2026-10-27 (OPEN_ITEMS L16).",
+      "keep_it": "The push aligns colours itself before each run that creates items. A label added by hand to one board needs the same colour on the other."
+    },
+    "emails": [
+      {
+        "when": "A label would show wrong after a move",
+        "headline": "Nothing created: a label would show wrong on Design & QA",
+        "items": "No; the next run retries"
+      },
+      {
+        "when": "Design & QA refused a new label (e.g. restricted Priority)",
+        "headline": "Created, but some fields will arrive blank on Design & QA",
+        "items": "Yes"
+      },
+      {
+        "when": "Items failed or were created without some values",
+        "headline": "Some items were not created",
+        "items": "Partly"
+      },
+      {
+        "when": "More than 60 new lines at once",
+        "headline": "Nothing pushed: too many new lines at once",
+        "items": "No"
+      },
+      {
+        "when": "The push crashed",
+        "headline": "The push stopped before finishing",
+        "items": "Up to the crash"
+      },
+      {
+        "when": "The push added a label to Design & QA",
+        "headline": "New labels added to Design & QA",
+        "items": "Yes (information)"
+      }
+    ],
+    "email_note": "Subject [Plex ETL] - Sales: Label Design push, to the ETL's recipients. At most once a day per problem. A clean push sends nothing; the ETL's own email covers a run that could not start the push.",
+    "runbook": [
+      {
+        "q": "What did the push do today?",
+        "a": "Read the push log (alert rows are emails sent).",
+        "sql": "SELECT pushed_at, outcome, order_number, customer_part_no, monday_item_id, detail\nFROM `voxdatalake.PlexProd.label_design_push_log`\nWHERE DATE(pushed_at, 'America/Denver') = CURRENT_DATE('America/Denver')\nORDER BY pushed_at DESC;"
+      },
+      {
+        "q": "An item on Design & QA shows a blank or different status",
+        "a": "Compare it with what was sent (column_values in the push log), then look the label up in the colour catalog below. A colour that differs between the boards is the cause; the next push that writes to that column fixes the colour, or fix it by hand on Plex Import Test.",
+        "sql": "SELECT pushed_at, column_values FROM `voxdatalake.PlexProd.label_design_push_log`\nWHERE monday_item_id = '<item id>' AND outcome IN ('created', 'partial');"
+      },
+      {
+        "q": "Someone added a label by hand",
+        "a": "Give it the same colour on both boards, or leave it: the push adds a label Plex sends to both boards itself."
+      },
+      {
+        "q": "Refresh this catalog",
+        "a": "python scripts/hub/label_colours.py (add --check to fail on drift), then python scripts/hub/build_hub.py."
+      },
+      {
+        "q": "Test the push without writing anything",
+        "a": "BQ_DATASET=PlexProd MONDAY_BOARD_ID=18437236736 DRY_RUN=1 python -m label_design_service.push (needs MONDAY_API_KEY). Shows what it would create and any label colour change."
+      },
+      {
+        "q": "A new order is not on the board",
+        "a": "Check, in order: the order is Pending Fulfillment with a Label Design release and dated on or after 2026-10-18 (label_design_report); the ODBC copy lags Plex by about 50 min; the probe ran (probe_log); the push log for the order; a Label Design push email."
+      }
+    ],
+    "traps": [
+      "Design & QA has two status columns titled Sales Rep. The first (color_mm076254) holds the rep and is the one the push and a move use; color_mm7zxq8m is always empty.",
+      "Priority on Design & QA is restricted: the API key cannot add labels there. A new Priority from Plex would arrive blank on a move and the push emails it.",
+      "Monday's items(ids) still returns deleted and archived items; check state.",
+      "LCR is the dedupe mark written into each item. Clearing it by hand does not cause a re-push: the push log also counts.",
+      "Plex dates are naive Mountain time; the prod ODBC copy runs about 50 minutes behind Plex."
+    ]
+  }
 }

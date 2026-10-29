@@ -74,7 +74,7 @@ this table is a map, not a schedule.
 
 ### The report views (what analysts should query)
 
-68 views across the 14 pipelines, all in `voxdatalake.PlexProd` (and
+68 views across the 15 pipelines, all in `voxdatalake.PlexProd` (and
 `voxdatalake.PlexTest` for the test copies). Every one has a plain-English,
 business-facing page in **[docs/reports/](reports/)** — what it tells you,
 who asked for it, and what each column means.

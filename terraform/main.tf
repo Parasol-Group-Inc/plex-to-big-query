@@ -407,7 +407,9 @@ resource "google_cloud_run_v2_job" "etl" {
       max_retries = 0
       # 1200s, not 600s (2026-10-23): a slow Plex or a BigQuery load queue
       # killed both sales-orders runs on 2026-10-22 at 6 PM at the 600s limit.
-      timeout = "1200s"
+      # 1800s (2026-10-27): the 6 PM run has grown every night since (926s,
+      # 1117s, then 1241s and cut off). Normal runs take about 250s.
+      timeout = "1800s"
     }
   }
 
@@ -1144,7 +1146,9 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -2987,7 +2991,9 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
       # Stage B of the probe rollout (2026-10-19): no Cloud Run task retry —
       # the dispatcher sends one follow-up probe 15 min after a failure instead.
       max_retries = 0
-      timeout     = "600s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -4992,7 +4998,9 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           value = var.company_name
         }
       }
-      max_retries = 1
+      # 0 since 2026-10-29 (audit A5): a retry of a failed connect hit Plex twice
+      # per run during an outage. The next 15-minute run is the retry.
+      max_retries = 0
       timeout     = "600s"
     }
   }
@@ -5210,6 +5218,15 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
 # copy of Design & QA. There is deliberately no prod job yet — Plex prod has
 # no Label Design releases until the 19 Oct cutover, and which board prod
 # pushes to (Design & QA itself, or this one) hasn't been decided.
+#
+# BOARD SINCE 2026-10-27: "Plex Import Test" (18437236736), for test and prod.
+# "Plex Import" is sunset. A board move carries a status value across by the
+# label's COLOUR, not its name (tested 2026-10-27), and its labels' colours did
+# not match Design & QA's: Bottle Material arrived blank, Medium as Normal, some
+# Reason Codes as other codes. The new board's status labels were recoloured to
+# Design & QA's. A label added to one board must get the same colour on the
+# other. push.py dedupes against the push log for EVERY board, so nothing
+# already pushed to "Plex Import" is pushed again.
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Value added by hand, never in state:
@@ -5221,76 +5238,10 @@ resource "google_secret_manager_secret" "monday_api_key" {
   }
 }
 
-resource "google_cloud_run_v2_job" "label_design_push_test" {
-  name     = "plex-etl-label-design-push-test"
-  location = var.gcp_region
-
-  template {
-    template {
-      service_account = google_service_account.etl.email
-      containers {
-        image = local.etl_image
-        args  = ["python", "-m", "label_design_service.push"]
-        env {
-          name  = "GCP_PROJECT"
-          value = var.gcp_project
-        }
-        env {
-          name  = "BQ_DATASET"
-          value = var.bq_dataset_test
-        }
-        env {
-          name  = "MONDAY_BOARD_ID"
-          value = "18432111755"
-        }
-        env {
-          name  = "MONDAY_GROUP_TITLE"
-          value = "New from Plex"
-        }
-        env {
-          name  = "SECRET_MONDAY_API_KEY"
-          value = google_secret_manager_secret.monday_api_key.secret_id
-        }
-      }
-      # No retry: a half-finished run is safe to repeat (dedupe), but an
-      # immediate automatic repeat of a run that tripped the new-row alarm is
-      # exactly what the alarm is there to stop.
-      max_retries = 0
-      timeout     = "900s"
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].template[0].containers[0].image,
-      client,
-      client_version,
-    ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "label_design_push_test" {
-  name        = "plex-label-design-push-sync-test"
-  description = "Pushes new Label Design rows (PlexTest) to the Plex Import Monday board — PAUSED since the 2026-10-19 cutover"
-  schedule    = "35 5-17 * * 1-5" # 30 min after plex-label-design-sync-test (:05), Mon-Fri; last push 5:35 PM
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  # PAUSED at cutover (2026-10-19). Test and prod both target "Plex Import",
-  # the team's live board, so test orders must not land there. Run the job by
-  # hand when needed, or repoint MONDAY_BOARD_ID to a sandbox board first.
-  paused = true
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_push_test.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
+# The TEST push (plex-etl-label-design-push-test + plex-label-design-push-sync-test,
+# paused since the 2026-10-19 cutover) was removed 2026-10-27: it pointed at the
+# team's live board, so it could never run, and the push now also edits Design &
+# QA's status labels. Test a push with DRY_RUN=1 against PlexTest instead.
 
 # ── Label Design push — PRODUCTION (built dormant, 2026-10-08) ────────────────
 # Stood up ahead of cutover so the whole prod path exists and gets images from
@@ -5301,8 +5252,9 @@ resource "google_cloud_scheduler_job" "label_design_push_test" {
 # paused there is no test/prod duplication; at cutover, pause the TEST push
 # scheduler and un-pause this one, and prod takes over the same board.
 #
-# Mirrors label_design_push_test exactly except the dataset (prod) — same
-# image, same group, max_retries = 0 for the same reason.
+# Mirrored label_design_push_test (removed 2026-10-27) except the dataset;
+# max_retries = 0: an automatic repeat of a run that tripped the new-row alarm
+# is exactly what the alarm is there to stop.
 resource "google_cloud_run_v2_job" "label_design_push" {
   name     = "plex-etl-label-design-push"
   location = var.gcp_region
@@ -5323,15 +5275,39 @@ resource "google_cloud_run_v2_job" "label_design_push" {
         }
         env {
           name  = "MONDAY_BOARD_ID"
-          value = "18432111755"
+          value = "18437236736"
         }
         env {
           name  = "MONDAY_GROUP_TITLE"
           value = "New from Plex"
         }
+        # Design & QA: the board the team moves items to. Its status label
+        # colours are the reference (labels.py); the push adds a label it lacks.
+        env {
+          name  = "MOVE_TO_BOARD_ID"
+          value = "18395121955"
+        }
         env {
           name  = "SECRET_MONDAY_API_KEY"
           value = google_secret_manager_secret.monday_api_key.secret_id
+        }
+        # Problem emails (push.py "EMAIL", 2026-10-27): same settings and
+        # recipients as the ETL jobs; at most one email a day per problem.
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
         }
       }
       max_retries = 0
@@ -5350,7 +5326,7 @@ resource "google_cloud_run_v2_job" "label_design_push" {
 
 resource "google_cloud_scheduler_job" "label_design_push" {
   name        = "plex-label-design-push-sync"
-  description = "End-of-day sweep: pushes any Label Design rows (PlexProd) still missing from the Plex Import Monday board"
+  description = "End-of-day sweep: pushes any Label Design rows (PlexProd) still missing from the Plex Import Test Monday board"
   # ONE SWEEP A DAY since 2026-10-22 (hourly at :35 before). Each ETL run that
   # extracts now starts this job itself (POST_RUN_JOB), so the sweep only
   # catches a push that failed. 6:05 PM is after the last 5:45 PM run and its
@@ -5375,81 +5351,12 @@ resource "google_cloud_scheduler_job" "label_design_push" {
   }
 }
 
-# ── Label Design repair — PRODUCTION (added 2026-10-22) ──────────────────────
-# Ashley moves items from "Plex Import" to "Design & QA" (18395121955). Monday
-# matches columns only on the first move between two boards and reuses that
-# answer, so a column it left unmatched arrives blank on every move (Bottle
-# Material). `python -m label_design_service.repair` finds each pushed item
-# (label_design_push_log) once it is on Design & QA and fills every pushed
-# column that is blank there, ONCE per item (an `outcome = 'repaired'` row).
-#
-# Its own job and schedule, not part of the push: it never creates items, so
-# it cannot race the push into a duplicate, and it runs whether or not there
-# were new orders. A run with nothing new to check is one BigQuery query and
-# one Monday lookup.
-resource "google_cloud_run_v2_job" "label_design_repair" {
-  name     = "plex-etl-label-design-repair"
-  location = var.gcp_region
-
-  template {
-    template {
-      service_account = google_service_account.etl.email
-      containers {
-        image = local.etl_image
-        args  = ["python", "-m", "label_design_service.repair"]
-        env {
-          name  = "GCP_PROJECT"
-          value = var.gcp_project
-        }
-        env {
-          name  = "BQ_DATASET"
-          value = var.bq_dataset
-        }
-        env {
-          name  = "MONDAY_BOARD_ID"
-          value = "18432111755"
-        }
-        env {
-          name  = "REPAIR_BOARD_ID"
-          value = "18395121955"
-        }
-        env {
-          name  = "SECRET_MONDAY_API_KEY"
-          value = google_secret_manager_secret.monday_api_key.secret_id
-        }
-      }
-      # The next run 15 min later is the retry.
-      max_retries = 0
-      timeout     = "600s"
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].template[0].containers[0].image,
-      client,
-      client_version,
-    ]
-  }
-}
-
-resource "google_cloud_scheduler_job" "label_design_repair" {
-  name        = "plex-label-design-repair-sync"
-  description = "Refills columns a Plex Import -> Design & QA move left blank (once per item)"
-  schedule    = "*/15 5-18 * * 1-5" # every 15 min, 5:00 AM - 6:45 PM Mountain, Mon-Fri
-  time_zone   = var.scheduler_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.label_design_repair.name}:run"
-    body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
+# ── Label Design repair — RETIRED 2026-10-27 ─────────────────────────────────
+# plex-etl-label-design-repair and plex-label-design-repair-sync (2026-10-22)
+# refilled the pushed columns a "Plex Import" -> Design & QA move left blank.
+# Removed when the push moved to "Plex Import Test", whose label colours match
+# Design & QA's (a move matches status labels by colour; see the push header). Code: git history of
+# label_design_service/repair.py; CHANGELOG 2026-10-27.
 
 # ===========================================================================
 # PLEX REST API -> BIGQUERY LANDING — Cloud Function (Gen 2)
@@ -5654,7 +5561,9 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
       max_retries = 0
-      timeout     = "900s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "1200s"
     }
   }
 
@@ -5965,7 +5874,9 @@ resource "google_cloud_run_v2_job" "etl_part_lot" {
       # No Cloud Run task retry and no -retry scheduler (probe rollout decision,
       # 2026-10-19): an immediate re-run usually repeats the same error.
       max_retries = 0
-      timeout     = "1800s"
+      # Raised 2026-10-27: the 6 PM Mountain batch runs slow most nights (slow Plex
+      # reads or BigQuery uploads) and was cutting this job off. See CHANGELOG.
+      timeout = "2400s"
     }
   }
 

@@ -28,6 +28,11 @@ extractions:
     date_col: Change_Date
     probe: [Change_Date]
 
+  - plex_view: Part_v_Cost_Model
+    bq_table: raw_Part_v_Cost_Model
+    filter: ""
+    date_col: ""
+
 bq_view:
   - name: inventory_snapshot_report
     display_name: "Current Inventory Snapshot"

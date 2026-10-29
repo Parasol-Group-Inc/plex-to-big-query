@@ -4,7 +4,7 @@ Last reviewed: 2026-09-25
 
 > Quick lookup for every command used in this project. All multi-line commands use `\` (backslash) for line continuation — works in Git Bash and bash. In PowerShell, replace `\` with a backtick `` ` ``.
 >
-> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **30** jobs (14 pipelines × prod/test, plus the Label Design push jobs `plex-etl-label-design-push` (live) and `plex-etl-label-design-push-test` (paused): `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; test schedulers `plex-<pipeline>-sync-test[-retry]`; prod runs come from the ETL dispatcher via `PlexOps.etl_schedule`, except Label Design). Substitute any other job name in the commands below the same way.
+> **Project:** `voxdatalake` | **Region:** `us-central1` | **Example job:** `plex-etl-sales-orders` — one of **31** jobs (15 pipelines × prod/test, plus the Label Design push job `plex-etl-label-design-push`: `plex-etl-<pipeline>` and `plex-etl-<pipeline>-test`; test schedulers `plex-<pipeline>-sync-test[-retry]`; prod runs come from the ETL dispatcher via `PlexOps.etl_schedule`, except Label Design). Substitute any other job name in the commands below the same way.
 >
 > **Deploys:** anything Terraform manages ships with `./scripts/deploy.sh` from the primary folder (`C:\F\Parasol\plex-to-big-query`) on a clean, pushed `main`; images ship with `./scripts/deploy_preflight.sh` + `gcloud builds submit` (§9). See `CONTRIBUTING.md`.
 

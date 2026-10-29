@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import threading
+import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from time import monotonic, sleep
 from typing import List, Optional
@@ -148,6 +149,16 @@ GCP_REGION   = os.environ.get("GCP_REGION", "us-central1")
 CONNECT_DEADLINE_SECONDS = int(os.environ.get("CONNECT_DEADLINE_SECONDS", "60"))
 CONNECT_ATTEMPTS         = int(os.environ.get("CONNECT_ATTEMPTS", "3"))
 CONNECT_BACKOFF_SECONDS  = int(os.environ.get("CONNECT_BACKOFF_SECONDS", "20"))
+
+# BigQuery load deadlines (2026-10-27). The client's default timeout is None:
+# a stuck upload waits forever. In the 6 PM Mountain batch of 2026-10-27 a
+# 461-row load that normally takes 3 s took 8m43s and the next one never
+# returned, so sales-orders hit its task timeout twice with Plex answering
+# fine. UPLOAD is per HTTP request (the client retries connection errors
+# itself; a read timeout reaches the one retry in write_to_bigquery). JOB caps
+# the wait for the load job, which normally finishes in about 2 s.
+BQ_UPLOAD_TIMEOUT_SECONDS = int(os.environ.get("BQ_UPLOAD_TIMEOUT_SECONDS", "120"))
+BQ_LOAD_JOB_TIMEOUT_SECONDS = int(os.environ.get("BQ_LOAD_JOB_TIMEOUT_SECONDS", "300"))
 
 # ── Legacy single-view config (used when REPORT_CONFIG_GCS_PATH is empty) ────
 PLEX_VIEW     = os.environ.get("PLEX_VIEW",     "Part_v_Part")
@@ -678,6 +689,13 @@ def outage_open_since(bq: bigquery.Client) -> Optional[str]:
     newest 2 or more finished runs in the last day that say anything about
     Plex all failed to connect. A failed read returns None: one more connect
     attempt is better than a run held on a guess."""
+    row = _breaker_streak(bq)
+    return row.since if row and row.failures >= 2 else None
+
+
+def _breaker_streak(bq: bigquery.Client):
+    """The connect failures since the last run that reached Plex, as a row
+    (failures, since), or None when the log cannot be read."""
     query = f"""
         WITH evidence AS (
           SELECT finished_at, outcome IN UNNEST(@healthy) AS up
@@ -696,11 +714,46 @@ def outage_open_since(bq: bigquery.Client) -> Optional[str]:
                                      ["success", "partial", "skipped", "succeeded-unrecorded"]),
     ])
     try:
-        row = list(bq.query(query, job_config=job_config).result())[0]
+        return list(bq.query(query, job_config=job_config).result())[0]
     except Exception:
         log.exception("Outage breaker check failed; connecting anyway.")
         return None
-    return row.since if row.failures >= 2 else None
+
+
+def record_breaker_evidence(status: str, detail: str = ""):
+    """Add this run's connect result to the dispatcher's breaker log, for a run
+    the dispatcher did not start (audit A5, 2026-10-29).
+
+    The breaker used to hear only from dispatcher runs, and none run between
+    4 AM and 1 PM MT, so during a morning outage Label Design failed every 15
+    minutes and the breaker never opened. Now a connect failure is written as
+    an `external` row, which the dispatcher counts like any other failed
+    connect but never follows up. A run that reached Plex is written only when
+    the log shows failures since the last good run, so it closes a streak
+    without adding a row every 15 minutes."""
+    if not OUTAGE_BREAKER_TABLE or DISPATCH_ID or OUTPUT_MODE != "bigquery":
+        return
+    down = status == "failed" and (detail or "").startswith("ODBC connection failed")
+    if not down and status not in ("success", "partial", "skipped"):
+        return
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        if not down:
+            streak = _breaker_streak(bq)
+            if not streak or not streak.failures:
+                return
+        bq.query(f"""
+            INSERT INTO `{GCP_PROJECT}.{OUTAGE_BREAKER_TABLE}`
+              (dispatch_id, job_name, mode, reason, dispatched_at, outcome, finished_at, detail)
+            VALUES (@id, @job, 'probe', 'external', CURRENT_TIMESTAMP(), @status, CURRENT_TIMESTAMP(), @detail)
+        """, job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("id", "STRING", "ext-" + uuid.uuid4().hex[:12]),
+            bigquery.ScalarQueryParameter("job", "STRING", os.environ.get("CLOUD_RUN_JOB", "")),
+            bigquery.ScalarQueryParameter("status", "STRING", status),
+            bigquery.ScalarQueryParameter("detail", "STRING", (detail or "")[:1000] or None),
+        ])).result()
+    except Exception:
+        log.exception("Failed to record breaker evidence.")
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -1364,11 +1417,14 @@ def write_to_bigquery(bq: bigquery.Client, df: pd.DataFrame, bq_table: str = Non
     # to expand table ... matched no files" (its staged upload went missing).
     # It hit raw_Sales_v_PO_Line when Label Design and Sales Orders loaded it
     # in the same minute. WRITE_TRUNCATE makes a second try safe; a real
-    # schema error just fails twice.
+    # schema error just fails twice. A load that blows its deadline also
+    # retries; if the first job lands later anyway, both carry the same rows.
     for attempt in (1, 2):
         try:
-            job = bq.load_table_from_dataframe(df, table_ref, job_config=job_config)
-            job.result()
+            job = bq.load_table_from_dataframe(
+                df, table_ref, job_config=job_config,
+                timeout=(30, BQ_UPLOAD_TIMEOUT_SECONDS))
+            job.result(timeout=BQ_LOAD_JOB_TIMEOUT_SECONDS)
             if job.errors:
                 raise RuntimeError(f"BigQuery load job failed: {job.errors}")
             break
@@ -1981,6 +2037,8 @@ def run_and_report():
                 except Exception:
                     log.exception("Failed to log skipped run status.")
             record_dispatch_outcome("skipped")
+            if not result.get("skip_detail"):   # held by the breaker: says nothing about Plex
+                record_breaker_evidence("skipped")
             # A probe that found nothing still says so — with its own short
             # template and the SAME subject as a full run, so each pipeline's
             # day stays one Gmail thread — when email_plan() wants it: outside
@@ -2073,6 +2131,7 @@ def run_and_report():
             log.exception("Failed to log probe result.")
 
     record_dispatch_outcome(status, detail="; ".join(errors) if errors else "")
+    record_breaker_evidence(status, detail="; ".join(errors) if errors else "")
 
     end_time = datetime.now(timezone.utc)
     report = {

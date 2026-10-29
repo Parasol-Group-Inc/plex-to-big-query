@@ -78,7 +78,7 @@ FOLLOWUP_DELAY_MINUTES = int(os.environ.get("FOLLOWUP_DELAY_MINUTES", "15"))
 # for a day); the next scheduled time covers it.
 FOLLOWUP_HORIZON_HOURS = int(os.environ.get("FOLLOWUP_HORIZON_HOURS", "6"))
 # A dispatched run with no outcome and no finished execution after this long is
-# treated as lost (failed). Longer than any job's timeout (max 1800 s).
+# treated as lost (failed). Longer than any job's timeout (max 2400 s).
 LOST_AFTER_MINUTES = int(os.environ.get("LOST_AFTER_MINUTES", "120"))
 # After an execution completes, how long the job's own outcome row may lag
 # before the execution's status is used instead.
@@ -111,13 +111,26 @@ CANARY_JOBS = os.environ.get(
     "plex-etl-sales-quotes plex-etl-quality-supplier-returns plex-etl-part-obsolescence").split()
 RECOVERY_HORIZON_HOURS = int(os.environ.get("RECOVERY_HORIZON_HOURS", "24"))
 RECOVERY_PER_TICK = int(os.environ.get("RECOVERY_PER_TICK", "4"))
+# Recovery runs go in this order, then alphabetically (audit A7, 2026-10-29): on
+# 10-26 sales-orders and work-orders, the reports people read first, recovered
+# last because the order was alphabetical.
+RECOVERY_PRIORITY = os.environ.get(
+    "RECOVERY_PRIORITY", "plex-etl-sales-orders plex-etl-work-orders").split()
+# jobs.run attempts on an HTTP 5xx (audit A1, 2026-10-29: a 503 on 10-28 cost a
+# recovery run five hours). A 4xx is not retried: it will not change.
+START_ATTEMPTS = int(os.environ.get("START_ATTEMPTS", "3"))
 HEALTHY_OUTCOMES = ("success", "partial", "skipped", "succeeded-unrecorded")
 # Outcomes of a dispatch row that never started a run.
 NOT_STARTED = ("held-outage", "skipped-busy", "dispatch-failed")
 # Runs that never earn a follow-up: a follow-up, and the breaker's own runs
 # (a failed canary is the next canary's job; a failed recovery waits for the
-# next scheduled time like any follow-up would).
-NO_FOLLOWUP_REASONS = ("follow-up", "canary", "recovery")
+# next scheduled time like any follow-up would). `external` rows are connect
+# evidence written by a job the dispatcher does not start (Label Design, audit
+# A5, 2026-10-29: main.py record_breaker_evidence); its own scheduler re-runs it.
+NO_FOLLOWUP_REASONS = ("follow-up", "canary", "recovery", "external")
+# What reconcile() writes when the job never wrote its own outcome: the run was
+# killed (e.g. by its task timeout) and so never sent its email or digest.
+UNRECORDED_DETAILS = ("execution failed or was cancelled", "no outcome and no finished execution")
 
 
 # ── Pure planning ─────────────────────────────────────────────────────────────
@@ -281,15 +294,23 @@ def recovery_plan(log_rows, now_utc, busy_jobs, horizon_hours=RECOVERY_HORIZON_H
     keeps its name across the ticks it takes (per_tick runs each); roles
     first/middle/last count the recovery runs already started for it.
     Returns {batch_id, batch_kind, expected, runs: [{job_name, mode,
-    followup_of, role}]}, or None when nothing is owed."""
+    followup_of, role}]}, or None when nothing is owed.
+
+    One canary that connects is thin proof (audit A6, 2026-10-29: on 10-25 one
+    did, five recovery runs started in the same tick, and all five failed). So
+    until a recovery run of this batch has reached Plex, one starts at a time,
+    and the next waits for it to finish. Jobs go in RECOVERY_PRIORITY order."""
     horizon = dt.timedelta(hours=horizon_hours)
     held = [r for r in log_rows if r.get("outcome") == "held-outage"
             and r.get("dispatched_at") and now_utc - r["dispatched_at"] <= horizon]
     if not held:
         return None
     newest = max(held, key=lambda r: r["dispatched_at"])
-    started = sorted({r["job_name"] for r in log_rows if r.get("reason") == "recovery"
-                      and r.get("dispatched_at") and r["dispatched_at"] > newest["dispatched_at"]})
+    recoveries = [r for r in log_rows if r.get("reason") == "recovery"
+                  and r.get("dispatched_at") and r["dispatched_at"] > newest["dispatched_at"]]
+    # A run Cloud Run refused never started, so the job still owes its run
+    # (audit A1, 2026-10-29).
+    started = sorted({r["job_name"] for r in recoveries if r.get("outcome") != "dispatch-failed"})
     owed = {}
     for r in sorted(held, key=lambda r: r["dispatched_at"]):
         # A job's recovery run is its one try, whatever its outcome: a failed
@@ -302,8 +323,12 @@ def recovery_plan(log_rows, now_utc, busy_jobs, horizon_hours=RECOVERY_HORIZON_H
         entry["followup_of"] = r["dispatch_id"]   # the newest owed slot
     if not owed:
         return None
-    names = sorted(owed)
+    names = sorted(owed, key=_recovery_order)
     total = len(started) + len(names)
+    if not any(r.get("outcome") in HEALTHY_OUTCOMES for r in recoveries):
+        if any(r.get("outcome") is None for r in recoveries):
+            per_tick = 0   # the first one is still finding out whether Plex is back
+        per_tick = min(per_tick, 1)
     runs = []
     for job in names:
         if job in busy_jobs:
@@ -316,6 +341,23 @@ def recovery_plan(log_rows, now_utc, busy_jobs, horizon_hours=RECOVERY_HORIZON_H
         runs.append({**owed[job], "role": role})
     return {"batch_id": f"recovery-{newest['dispatch_id']}", "batch_kind": "recovery",
             "expected": sorted(set(started) | set(names)), "runs": runs}
+
+
+def _recovery_order(job):
+    """Sort key: RECOVERY_PRIORITY jobs first, in that order, then by name."""
+    return (RECOVERY_PRIORITY.index(job) if job in RECOVERY_PRIORITY else len(RECOVERY_PRIORITY), job)
+
+
+def followup_role(row, batch):
+    """The EMAIL_ROLE of a failed run's follow-up. It mails as itself
+    ('followup'), except when the failed run was the last of its batch and was
+    killed before it could send the batch digest: then the follow-up is the
+    batch's last run and sends the digest (audit A2, 2026-10-29: 8 of 36 batches
+    from 10-19 to 10-29 got no digest)."""
+    killed = str(row.get("detail") or "").startswith(UNRECORDED_DETAILS)
+    if killed and batch and batch.get("role") in ("last", "only"):
+        return batch["role"]
+    return "followup"
 
 
 def reconcile(row, execution, now_utc, lost_after=LOST_AFTER_MINUTES,
@@ -429,10 +471,18 @@ def _session():
     return AuthorizedSession(creds)
 
 
-def start_job(session, job_name, mode, dispatch_id, batch=None):
+def start_job(session, job_name, mode, dispatch_id, batch=None, attempts=START_ATTEMPTS, pause=5):
+    import time
     url = (f"https://run.googleapis.com/v2/projects/{GCP_PROJECT}/locations/{REGION}"
            f"/jobs/{job_name}:run")
-    resp = session.post(url, json=run_body(mode, dispatch_id, batch), timeout=60)
+    for attempt in range(1, attempts + 1):
+        # A 5xx means Cloud Run did not create the execution, so asking again
+        # cannot start the job twice. A timeout is not retried: the run may exist.
+        resp = session.post(url, json=run_body(mode, dispatch_id, batch), timeout=60)
+        if resp.status_code < 500 or attempt == attempts:
+            break
+        log.warning("jobs.run %s -> HTTP %s, attempt %d of %d", job_name, resp.status_code, attempt, attempts)
+        time.sleep(pause * attempt)
     if resp.status_code >= 300:
         raise RuntimeError(f"jobs.run {job_name} -> HTTP {resp.status_code}: {resp.text[:400]}")
     meta = (resp.json() or {}).get("metadata") or {}
@@ -545,7 +595,9 @@ def tick(now_utc=None, dry_run=False):
         started_now.add(run["job_name"])
 
     # 4. One follow-up probe per failed run. It logs under the failed run's
-    # batch for the audit, but mails as itself: the digest has gone by then.
+    # batch for the audit, but mails as itself: the digest has gone by then,
+    # unless the failed run was the batch's last and was killed before sending
+    # it (followup_role).
     for row in followups_due(recent, now):
         if row["job_name"] in started_now:
             continue   # a recovery run just started covers it
@@ -554,7 +606,7 @@ def tick(now_utc=None, dry_run=False):
                  if row.get("scheduled_for") else None)
         _dispatch(bq, session, row["job_name"], "probe", "follow-up", None,
                   row["dispatch_id"], action, summary, dry_run,
-                  {**batch, "role": "followup"} if batch else None)
+                  {**batch, "role": followup_role(row, batch)} if batch else None)
         if action == "dispatch":
             busy.add(row["job_name"])
 

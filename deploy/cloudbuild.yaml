@@ -114,7 +114,7 @@ steps:
           gcloud run jobs update "$$job" --image="$$IMAGE" --region="${_GCP_REGION}" || failed="$$failed $$job"
         done
         for job in ${_ALL_JOBS}; do
-          now=$$(gcloud run jobs describe "$$job" --region="${_GCP_REGION}"             --format='value(template.template.containers[0].image)' 2>/dev/null)
+          now=$$(gcloud run jobs describe "$$job" --region="${_GCP_REGION}"             --format='value(spec.template.spec.template.spec.containers[0].image)' 2>/dev/null)
           [ "$$now" = "$$IMAGE" ] || failed="$$failed $$job(image:$${now:-unknown})"
         done
         if [ -n "$$failed" ]; then

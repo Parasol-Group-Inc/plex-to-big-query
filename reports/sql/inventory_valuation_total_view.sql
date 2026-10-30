@@ -27,9 +27,16 @@
 -- ⚠ PRIMARY COST MODEL ONLY (2026-10-29, audit B1). The summary has a row per
 -- cost model, and Plex prod has five; summing them all gave $68.41M on 10-29,
 -- the same stock valued up to four times. The total now reads the model Plex
--- marks Primary_Model (4402 "Go-Live Inventory Cost 2026" on 10-29: material
--- only, no labor/overhead, $11.87M). If no model is flagged primary, the total
--- is empty rather than a multiple.
+-- marks Primary_Model (4402 "Go-Live Inventory Cost 2026": material only, no
+-- labor/overhead). If no model is flagged primary, the total is empty rather
+-- than a multiple. Jennilyn confirmed 2026-10-30 that Plex's Inventory
+-- Valuation screen uses the same Go-Live costing and is the correct figure.
+--
+-- ⚠ STOCK COUNTED (2026-10-30). The summary values every active container
+-- except Receiving, as Plex's Inventory Valuation screen does ($15,180,711.53
+-- on the 10-29 load, Plex's figure to the cent). It used to use the
+-- available-stock rule of part_on_hand_inventory_report and read $11.90M.
+-- uncosted_on_hand_part_count counts the same containers (see uncosted).
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per snapshot_date (the last snapshot taken that day).
@@ -45,21 +52,30 @@ summary AS (
   QUALIFY snapshot_key = MAX(snapshot_key) OVER (PARTITION BY snapshot_date)
 ),
 
--- Parts physically on hand today with no positive cost in the primary model.
--- Their value is missing from the total, not zero — surfaced so the gap is
--- visible. (Until 2026-10-29 this only counted parts with no cost row at all,
--- so a part costed at 0 never showed and the count read 0; audit B8.)
+-- Parts in stock today with no positive cost in the primary model. Their value
+-- is missing from the total, not zero — surfaced so the gap is visible. (Until
+-- 2026-10-29 this only counted parts with no cost row at all, so a part costed
+-- at 0 never showed and the count read 0; audit B8.) The container filter must
+-- match the summary's on_hand CTE, or this counts different stock than the
+-- total values; until 2026-10-30 it read part_on_hand_inventory_report.
 uncosted AS (
   SELECT COUNT(*) AS uncosted_on_hand_part_count
-  FROM `{gcp_project}.{dataset}.part_on_hand_inventory_report` oh
+  FROM (
+    SELECT SAFE_CAST(c.Part_Key AS INT64) AS part_key,
+           SUM(SAFE_CAST(c.Quantity AS FLOAT64)) AS on_hand_qty
+    FROM `{gcp_project}.{dataset}.raw_Part_v_Container` c
+    WHERE SAFE_CAST(c.Active AS INT64) = 1
+      AND UPPER(TRIM(CAST(c.Container_Status AS STRING))) != 'RECEIVING'
+    GROUP BY part_key
+  ) oh
   LEFT JOIN (
     SELECT DISTINCT SAFE_CAST(s.part_key AS INT64) AS part_key
     FROM summary s
     WHERE s.is_current_snapshot AND s.part_key IS NOT NULL
       AND s.unit_cost > 0
   ) costed
-    ON costed.part_key = SAFE_CAST(oh.part_key AS INT64)
-  WHERE SAFE_CAST(oh.on_hand_qty AS FLOAT64) > 0
+    ON costed.part_key = oh.part_key
+  WHERE oh.on_hand_qty > 0
     AND costed.part_key IS NULL
 )
 
@@ -71,8 +87,11 @@ SELECT
 
   -- Added 2026-09-24
   LOGICAL_OR(s.is_current_snapshot)                       AS is_current_snapshot,
+  -- Parts in stock with a positive cost (2026-10-30: it also counted parts
+  -- costed at $0, which uncosted_on_hand_part_count counts too). The two now
+  -- add up to every part in stock.
   IF(LOGICAL_OR(s.is_current_snapshot),
-     COUNT(DISTINCT IF(s.on_hand_qty > 0, s.part_key, NULL)), NULL)
+     COUNT(DISTINCT IF(s.on_hand_qty > 0 AND s.unit_cost > 0, s.part_key, NULL)), NULL)
                                                           AS valued_part_count,
   IF(LOGICAL_OR(s.is_current_snapshot),
      ANY_VALUE(u.uncosted_on_hand_part_count), NULL)      AS uncosted_on_hand_part_count

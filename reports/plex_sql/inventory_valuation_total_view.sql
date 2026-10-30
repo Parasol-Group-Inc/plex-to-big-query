@@ -1,9 +1,9 @@
 -- inventory_valuation_total_report — Plex SQL Developer equivalent
 -- plex_equivalent_of: reports/sql/inventory_valuation_total_view.sql
 -- confidence: medium
--- plex_views: Part_v_Snapshot, Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Snapshot_Cost_Sub_Type_Breakdown, Part_v_Part, Part_v_Container
--- notes: inventory_valuation_summary_report and part_on_hand_inventory_report inlined as CTEs; only the current snapshot has a value (earlier dates are NULL).
--- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
+-- plex_views: Part_v_Snapshot, Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Snapshot_Cost_Sub_Type_Breakdown, Part_v_Part, Part_v_Container, Part_v_Cost_Model
+-- notes: inventory_valuation_summary_report inlined as CTEs; primary cost model only; stock = active containers except Receiving (Plex's Inventory Valuation screen); only the current snapshot has a value (earlier dates are NULL).
+-- Translated 2026-10-20 from the BigQuery view; brought up to date 2026-10-30 (cost model, stock scope, counts). Not yet run in Plex SQL Developer.
 
 -- GRAIN: one row per snapshot_date (the last snapshot taken that day).
 -- RULE: unit cost = SUM of cost sub-types per operation; part cost = highest operation cost among
@@ -102,25 +102,36 @@ latest_snapshot AS (
   WHERE s.snapshot_date = (SELECT MAX(s2.snapshot_date) FROM snap AS s2)
 ),
 
--- inlined part_on_hand_inventory_report (quantity only): Vox on-hand status rule
+-- one row per cost model; the total reads the one Plex marks Primary_Model (bit, so <> 0)
+cost_model AS (
+  SELECT
+    m.Cost_Model_Key                AS cost_model_key,
+    m.Cost_Model                    AS cost_model_name,
+    CASE WHEN m.Primary_Model <> 0 THEN 1 ELSE 0 END AS is_primary
+  FROM Part_v_Cost_Model AS m
+),
+
+-- stock on the books as Plex's Inventory Valuation screen counts it (2026-10-30):
+-- every active container except Receiving, not the Vox availability rule
 on_hand AS (
   SELECT c.Part_Key AS part_key, SUM(c.Quantity) AS on_hand_qty
   FROM Part_v_Container AS c
   WHERE c.Active = 1
-    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+    AND UPPER(LTRIM(RTRIM(c.Container_Status))) <> 'RECEIVING'
   GROUP BY c.Part_Key
-)
-,
+),
 
--- inlined inventory_valuation_summary_report
+-- inlined inventory_valuation_summary_report, primary cost model only
 summary_all AS (
   SELECT
     pc.snapshot_key, pc.snapshot_date, pc.part_key, p.Part_No AS part_number,
+    cm.cost_model_name, pc.op_unit_cost AS unit_cost,
     CASE WHEN pc.snapshot_key = ls.snapshot_key THEN 1 ELSE 0 END AS is_current_snapshot,
     CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) END AS on_hand_qty,
     CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value
   FROM part_cost AS pc
   CROSS JOIN latest_snapshot AS ls
+  JOIN cost_model AS cm ON cm.cost_model_key = pc.cost_model_key AND cm.is_primary = 1
   LEFT JOIN Part_v_Part AS p ON pc.part_key = p.Part_Key
   LEFT JOIN on_hand AS oh ON oh.part_key = pc.part_key
 ),
@@ -133,23 +144,24 @@ summary AS (
     AND sa.snapshot_key = (SELECT MAX(sb.snapshot_key) FROM summary_all AS sb WHERE sb.snapshot_date = sa.snapshot_date)
 ),
 
--- parts physically on hand today that no cost row covers (value missing, not zero)
+-- parts in stock today with no positive cost in the primary model (value missing, not zero)
 uncosted AS (
   SELECT COUNT(*) AS uncosted_on_hand_part_count
   FROM on_hand AS oh
   WHERE oh.on_hand_qty > 0
     AND oh.part_key NOT IN (
           SELECT s.part_key FROM summary AS s
-          WHERE s.is_current_snapshot = 1 AND s.part_key IS NOT NULL)
+          WHERE s.is_current_snapshot = 1 AND s.part_key IS NOT NULL AND s.unit_cost > 0)
 )
 
 SELECT
   s.snapshot_date,
+  MAX(s.cost_model_name)                                  AS cost_model_name,
   SUM(s.inventory_value)                                  AS total_inventory_value,
   COUNT(DISTINCT s.part_number)                           AS part_count,
   MAX(s.is_current_snapshot)                              AS is_current_snapshot,
   CASE WHEN MAX(s.is_current_snapshot) = 1
-       THEN COUNT(DISTINCT CASE WHEN s.on_hand_qty > 0 THEN s.part_key END) END AS valued_part_count,
+       THEN COUNT(DISTINCT CASE WHEN s.on_hand_qty > 0 AND s.unit_cost > 0 THEN s.part_key END) END AS valued_part_count,
   CASE WHEN MAX(s.is_current_snapshot) = 1
        THEN MAX(u.uncosted_on_hand_part_count) END        AS uncosted_on_hand_part_count
 FROM summary AS s

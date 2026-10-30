@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Inventory valuation part counts match the total's stock
+
+### Fixed
+- `inventory_valuation_total_report.uncosted_on_hand_part_count` still read `part_on_hand_inventory_report` (available stock only) after the total moved to every active container except Receiving, so it counted different stock than the total. It now counts the same containers. `valued_part_count` also counted parts costed at $0, which the uncosted count includes too; it now needs a positive cost. Against PlexProd 10-29: 2,222 parts in stock = 1,143 valued + 1,079 uncosted (were 2,102 and 1,056, overlapping). The total is unchanged, $15,180,711.53. The view header's stale $11.87M is replaced. D25 (a) and (e).
+
+### Changed
+- The Plex SQL Developer copies in `reports/plex_sql/` caught up with the BigQuery views: the summary gains `cost_model_name` and `is_primary_cost_model` (`Part_v_Cost_Model`); the total reads the primary model only, the new stock scope and the new counts. Still not run in Plex SQL Developer (D13).
+
 ## 2026-10-30 (dev) - Inventory value matches Plex's Inventory Valuation screen
 
 ### Fixed

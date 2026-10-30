@@ -1,9 +1,9 @@
 -- inventory_valuation_summary_report — Plex SQL Developer equivalent
 -- plex_equivalent_of: reports/sql/inventory_valuation_summary_view.sql
 -- confidence: medium
--- plex_views: Part_v_Snapshot, Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Snapshot_Cost_Sub_Type_Breakdown, Part_v_Part, Part_v_Container
+-- plex_views: Part_v_Snapshot, Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Snapshot_Cost_Sub_Type_Breakdown, Part_v_Part, Part_v_Container, Part_v_Cost_Model
 -- notes: on-hand = active containers except Receiving (2026-10-30; was the Vox availability rule); QUALIFY with WINDOW translated literally (rank 1 by cost must also sit on the part's latest change date, else the part drops out, as in BigQuery). Unverified in T-SQL.
--- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
+-- Translated 2026-10-20 from the BigQuery view; cost model columns added 2026-10-30. Not yet run in Plex SQL Developer.
 
 -- GRAIN: one row per (snapshot, cost model, part).
 -- RULE: unit cost = SUM of cost sub-types per operation; part cost = highest operation cost among
@@ -102,6 +102,15 @@ latest_snapshot AS (
   WHERE s.snapshot_date = (SELECT MAX(s2.snapshot_date) FROM snap AS s2)
 ),
 
+-- one row per cost model; the total reads the one Plex marks Primary_Model (bit, so <> 0)
+cost_model AS (
+  SELECT
+    m.Cost_Model_Key                AS cost_model_key,
+    m.Cost_Model                    AS cost_model_name,
+    CASE WHEN m.Primary_Model <> 0 THEN 1 ELSE 0 END AS is_primary
+  FROM Part_v_Cost_Model AS m
+),
+
 -- stock on the books as Plex's Inventory Valuation screen counts it (2026-10-30):
 -- every active container except Receiving, not the Vox availability rule
 on_hand AS (
@@ -116,6 +125,8 @@ SELECT
   pc.snapshot_key                                       AS snapshot_key,
   pc.snapshot_date                                      AS snapshot_date,
   pc.cost_model_key                                     AS cost_model_key,
+  cm.cost_model_name                                    AS cost_model_name,
+  COALESCE(cm.is_primary, 0)                            AS is_primary_cost_model,
   p.Part_No                                             AS part_number,
   p.Name                                                AS part_name,
   pc.op_unit_cost                                       AS total_cost,
@@ -132,6 +143,8 @@ SELECT
   CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value
 FROM part_cost AS pc
 CROSS JOIN latest_snapshot AS ls
+LEFT JOIN cost_model AS cm
+  ON cm.cost_model_key = pc.cost_model_key
 LEFT JOIN Part_v_Part AS p
   ON pc.part_key = p.Part_Key
 LEFT JOIN on_hand AS oh

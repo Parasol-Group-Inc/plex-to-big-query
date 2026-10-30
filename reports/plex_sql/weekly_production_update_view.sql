@@ -2,7 +2,7 @@
 -- plex_equivalent_of: reports/sql/weekly_production_update_view.sql
 -- confidence: medium
 -- plex_views: Part_v_Production, Part_v_Job_Op, Part_v_Workcenter
--- notes: "Today" is the Plex SQL server's date (BigQuery used America/Denver); week starts Monday via DATEDIFF from 1900-01-01 (a Monday), independent of DATEFIRST.
+-- notes: 2026-10-30: 9-part Bottling drop only before 2026-11-01; the mtd_bottling_9part_* visibility columns are not ported. "Today" is the Plex SQL server's date (BigQuery used America/Denver); week starts Monday via DATEDIFF from 1900-01-01 (a Monday), independent of DATEFIRST.
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 --
 -- GRAIN: one row per department (Encap, Bottling, Labeling, Printing): week-to-date and month-to-date good quantity.
@@ -48,8 +48,10 @@ by_department AS (
   WHERE wc.Workcenter_Group IN ('Encapsulating', 'Bottling', 'Labeling', 'Printing')
   -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
   -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+  -- Cutover (Jennilyn, 2026-10-30): the drop applies only before 2026-11-01; 9-parts count from November.
     AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%'
-           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%')
+           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%'
+           AND pd.production_date < '2026-11-01')
 ),
 
 -- Fixed department list so every department shows even with no production.

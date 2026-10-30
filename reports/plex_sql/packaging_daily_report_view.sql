@@ -2,7 +2,7 @@
 -- plex_equivalent_of: reports/sql/packaging_daily_report_view.sql
 -- confidence: high
 -- plex_views: Part_v_Production, Part_v_Job_Op, Part_v_Workcenter, Part_v_Job, Part_v_Part, Personnel_v_Employee
--- notes: BigQuery STRING_AGG(DISTINCT ...) rewritten as DISTINCT subqueries + STRING_AGG ... WITHIN GROUP; otherwise mechanical.
+-- notes: 2026-10-30: 9-part Bottling drop only before 2026-11-01; the bottling_9part_* visibility columns are not ported. BigQuery STRING_AGG(DISTINCT ...) rewritten as DISTINCT subqueries + STRING_AGG ... WITHIN GROUP; otherwise mechanical.
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 --
 -- GRAIN: one row per production date x workcenter (Bottling group only).
@@ -51,8 +51,10 @@ detail AS (
   WHERE wc.Workcenter_Group = 'Bottling'
   -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
   -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+  -- Cutover (Jennilyn, 2026-10-30): the drop applies only before 2026-11-01; 9-parts count from November.
     AND (LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9%'
-         OR LTRIM(ISNULL(pp.Part_No, '')) LIKE '9[0-9][0-9][0-9][0-9]-BK%')
+         OR LTRIM(ISNULL(pp.Part_No, '')) LIKE '9[0-9][0-9][0-9][0-9]-BK%'
+         OR pd.production_date >= '2026-11-01')
 ),
 
 -- DISTINCT string lists (SQL Server has no STRING_AGG(DISTINCT ...)).

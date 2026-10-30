@@ -3,7 +3,7 @@
 - **Type:** Google Sheet
 - **Category:** Weekly/Monthly Production Attainment
 - **Departments:** Production, Planning (Users: Mark, Nick, Chris — per `reports-list/production.md`)
-- **Status:** 🔍 Mapped — real content received 2026-08-26 (2 tabs: "Capacity" and "Goals"). Partially buildable; several open questions below before the rest can be built. · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count).
+- **Status:** 🔍 Mapped — real content received 2026-08-26 (2 tabs: "Capacity" and "Goals"). Partially buildable; several open questions below before the rest can be built. · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count). · **2026-10-30:** from 1 Nov Bottling 9-parts count (Jennilyn removed their 5-part BOMs); earlier dates keep the drop; `*_9part_with_5_bom_qty` shows possible double credit
 
 ## What it is
 

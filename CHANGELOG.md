@@ -14,10 +14,22 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Bottling 9-parts count from 1 Nov, with a double-credit flag
+
+### Changed
+- Jennilyn, 2026-10-30: "we want to track bottling/packaging totals for parts that start with 9 starting now." She removed the 5-part BOM from those 9-parts so the output is made once; about 14 in-use 9-parts still carry one, and finishing them is hers. Her suggestion: keep dropping 9s for October, count them from November. `packaging_daily_report`, `production_monthly_by_workcenter_group_report` and `weekly_production_update_report` now drop Bottling records on 9-parts (bulk cases exempt, as before) only when dated before 2026-11-01. `production_vs_goal_report` inherits it from the monthly view.
+
+### Added
+- Visibility, not a filter: `bottling_9part_qty` and `bottling_9part_with_5_bom_qty` on the daily and monthly views, `mtd_bottling_9part_qty` and `mtd_bottling_9part_with_5_bom_qty` on the weekly one. The second is 9-part Bottling output whose part still has an active 5-part BOM line (`raw_Part_v_BOM`): possible double credit, which should read 0 once her BOM changes are complete.
+- Checked on PlexProd before deploy: all three views return exactly the deployed rows and quantities (no November data yet). A simulation with the cutover at 1 Oct added 303,354 to October Bottling (480,543 → 783,897), all flagged, because the BOM extract (15:58 UTC 10-30) still showed 6,370 of 6,589 9-parts with a 5-part line. Plex SQL copies carry the cutover; the visibility columns are not ported. Docs: the four report docs, `reports-list/production.md`, `spreadsheets/weekly_production_update.md`, `spreadsheets/packaging_daily_report.md`.
+
 ## 2026-10-30 (dev) - Daily history of gross vs netted demand
 
 ### Added
 - `PlexProd.msl_demand_daily`, filled by a new scheduled query `msl_demand_daily` (Terraform `google_bigquery_data_transfer_config`, every day 13:00 UTC, after the 4 AM MT full prod run, as the ETL service account). One row per stocked part per day from `inventory_available_to_sell_report`: stock, order demand, gross and netted component demand, `covered_by_stock_qty` (gross − netted), availability, and MSL's reorder point and flag where the part is in MSL. Jennilyn asked to track both numbers; the views only show today. The query creates the table if missing and replaces today's rows, so a re-run is safe. Checked read-only on PlexProd: 2,849 rows, one per part, 1,010 in MSL; capsule 33312-00NUT46-0 reads 12,050,000 / 2,182,496 / 9,867,504. Added to `terraform/backup_snapshots.sql` (BigQuery-only data). Docs: `docs/BOM_DEMAND_NETTING.md` "Tracking it over time", `docs/OPERATIONS.md` Backups, `approaching_msl_report.md`, CLAUDE.md.
+
+### Deployed
+- Same day: PR #106, `deploy/2026-10-30T1637Z` (created the transfer config, updated the backup query). A manual run of the scheduled query as the ETL account SUCCEEDED and wrote the first day: 2026-10-30, 2,849 rows, one per part, 1,010 in MSL; capsule 33312-00NUT46-0 12,050,000 / 2,182,496 / 9,867,504. Next run: 13:00 UTC daily.
 
 ## 2026-10-30 (dev) - Plex SQL copies: netting ported, lot detail added; fast follows tracked
 

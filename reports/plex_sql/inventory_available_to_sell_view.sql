@@ -1,12 +1,12 @@
 -- inventory_available_to_sell_report — Plex SQL Developer equivalent
 -- plex_equivalent_of: reports/sql/inventory_available_to_sell_view.sql
--- STALE 2026-10-30: the BigQuery view nets component demand level by level; this copy still explodes the flat BOM, so its component demand equals gross_component_demand_qty, not component_demand_qty. Port the netting before trusting it.
--- confidence: low
+-- confidence: medium
 -- plex_views: Sales_v_Release, Sales_v_PO_Line, Sales_v_PO, Sales_v_PO_Status, Part_v_Flat_BOM, Part_v_BOM, Part_v_Container, Part_v_Part, Part_v_Part_Product_Type
--- notes: 2026-10-28: component demand on stocked keys only, wrapper-key stock converted into the stocked key's availability. Upstream part_on_hand_inventory_report inlined as CTE; STRING_AGG(DISTINCT) rewritten via a DISTINCT subquery; Container.Active = 1 assumes a bit column (unverified in Plex).
+-- notes: 2026-10-30: component demand NETTED level by level (docs/BOM_DEMAND_NETTING.md): recursive CTE for low-level codes, seven unrolled stages, CROSS APPLY (VALUES) for the BigQuery UNNEST; the flat explosion stays as gross_component_demand_qty. The recursive CTE and CROSS APPLY are unverified in Plex SQL Developer (if it rejects recursion, compute llc from Part_v_Flat_BOM: MAX(BOM_Level) per Component_Part_Key). 2026-10-28: component demand on stocked keys only, wrapper-key stock converted into the stocked key's availability. Upstream part_on_hand_inventory_report inlined as CTE; STRING_AGG(DISTINCT) rewritten via a DISTINCT subquery; Container.Active = 1 assumes a bit column (unverified in Plex).
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 
--- Per part: on hand vs open order demand vs BOM-exploded component demand.
+-- Per part: on hand vs open order demand vs BOM component demand, netted level by level
+-- (a parent passes down only what its own stock does not cover; gross kept separately).
 -- Demand = unshipped release qty on orders whose status counts in MRP; Hold = held orders.
 -- On hand = active containers with status OK / HOLD / INSPECTION REQUIRED / HOLD FOR DESIGN ORDER.
 WITH
@@ -90,6 +90,242 @@ wrapper_stock AS (
   JOIN wrap AS w1 ON w1.wrapper_key = oh2.part_key
   GROUP BY w1.root_key
 ),
+bom_edge AS (
+  -- single-level BOM: quantity of the component per ONE unit of its direct parent
+  SELECT b2.Part_Key AS parent_key, b2.Component_Part_Key AS component_key, SUM(b2.Quantity) AS qty
+  FROM Part_v_BOM AS b2
+  WHERE ISNULL(b2.Active, 1) <> 0
+    AND b2.Quantity > 0
+  GROUP BY b2.Part_Key, b2.Component_Part_Key
+),
+bom_walk AS (
+  -- every path down the BOM (recursive); stops at depth 20, deepest at Vox is 6
+  SELECT be.parent_key AS part_key, 0 AS depth FROM bom_edge AS be
+  UNION ALL
+  SELECT be2.component_key, bw.depth + 1
+  FROM bom_walk AS bw
+  JOIN bom_edge AS be2 ON be2.parent_key = bw.part_key
+  WHERE bw.depth < 20
+),
+bom_llc AS (
+  -- low-level code: a part's DEEPEST depth, so every parent is netted before it
+  SELECT bw2.part_key, MAX(bw2.depth) AS llc FROM bom_walk AS bw2 GROUP BY bw2.part_key
+),
+bom_node AS (
+  -- wrapper keys net nothing: their demand passes to the stocked key x factor
+  SELECT
+    nk.part_key,
+    ISNULL(lc.llc, 0)               AS llc,
+    ISNULL(od3.demand_qty, 0)       AS own_demand_qty,
+    CASE WHEN wk3.wrapper_key IS NOT NULL THEN 0
+         ELSE ISNULL(oh3.on_hand_qty, 0) + ISNULL(ws3.on_hand_qty, 0) END AS netting_stock_qty
+  FROM (
+    SELECT bl.part_key FROM bom_llc AS bl
+    UNION
+    SELECT od2.part_key FROM order_demand AS od2
+  ) AS nk
+  LEFT JOIN bom_llc AS lc        ON lc.part_key = nk.part_key
+  LEFT JOIN order_demand AS od3  ON od3.part_key = nk.part_key
+  LEFT JOIN on_hand AS oh3       ON oh3.part_key = nk.part_key
+  LEFT JOIN wrapper_stock AS ws3 ON ws3.part_key = nk.part_key
+  LEFT JOIN (SELECT DISTINCT w3.wrapper_key FROM wrap AS w3) AS wk3 ON wk3.wrapper_key = nk.part_key
+),
+net_0 AS (
+  SELECT bn.part_key, bn.llc, bn.own_demand_qty AS gross_qty,
+         CASE WHEN bn.own_demand_qty - bn.netting_stock_qty > 0
+              THEN bn.own_demand_qty - bn.netting_stock_qty ELSE 0 END AS shortfall_qty
+  FROM bom_node AS bn
+  WHERE bn.llc = 0
+),
+net_1 AS (
+  -- parts with llc <= 1; reads net_0 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 1 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 1 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_0 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 1
+),
+net_2 AS (
+  -- parts with llc <= 2; reads net_1 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 2 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 2 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_1 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 2
+),
+net_3 AS (
+  -- parts with llc <= 3; reads net_2 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 3 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 3 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_2 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 3
+),
+net_4 AS (
+  -- parts with llc <= 4; reads net_3 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 4 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 4 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_3 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 4
+),
+net_5 AS (
+  -- parts with llc <= 5; reads net_4 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 5 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 5 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_4 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 5
+),
+net_6 AS (
+  -- parts with llc <= 6; reads net_5 once: each netted row becomes itself plus one
+  -- contribution per BOM line, then is grouped by part
+  SELECT
+    n.part_key,
+    n.llc,
+    CASE WHEN n.llc < 6 THEN a.self_gross_qty
+         ELSE n.own_demand_qty + ISNULL(a.incoming_qty, 0) END AS gross_qty,
+    CASE WHEN n.llc < 6 THEN a.self_shortfall_qty
+         WHEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty > 0
+         THEN n.own_demand_qty + ISNULL(a.incoming_qty, 0) - n.netting_stock_qty
+         ELSE 0 END AS shortfall_qty
+  FROM bom_node AS n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(CASE WHEN x.is_self = 1 THEN x.gross_qty END)     AS self_gross_qty,
+      MAX(CASE WHEN x.is_self = 1 THEN x.shortfall_qty END) AS self_shortfall_qty,
+      SUM(CASE WHEN x.is_self = 1 THEN 0 ELSE x.qty END)    AS incoming_qty
+    FROM net_5 AS s
+    LEFT JOIN bom_edge AS e ON e.parent_key = s.part_key
+    CROSS APPLY (VALUES
+      (s.part_key, 1, s.gross_qty, s.shortfall_qty, CAST(0 AS float)),
+      (e.component_key, 0, NULL, NULL, s.shortfall_qty * e.qty)
+    ) AS x (part_key, is_self, gross_qty, shortfall_qty, qty)
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) AS a ON a.part_key = n.part_key
+  WHERE n.llc <= 6
+),
+netted_demand AS (
+  -- what reached the part from its parents; 0 on wrapper keys (the stocked key carries it)
+  SELECT
+    n6.part_key,
+    CASE WHEN wk4.wrapper_key IS NOT NULL THEN 0 ELSE n6.gross_qty - bn6.own_demand_qty END AS demand_qty
+  FROM net_6 AS n6
+  JOIN bom_node AS bn6 ON bn6.part_key = n6.part_key
+  LEFT JOIN (SELECT DISTINCT w4.wrapper_key FROM wrap AS w4) AS wk4 ON wk4.wrapper_key = n6.part_key
+),
 part_keys AS (
   SELECT oh1.part_key FROM on_hand AS oh1
   UNION
@@ -114,23 +350,28 @@ SELECT
   ISNULL(od.demand_qty, 0)                                AS order_demand_qty,
   ISNULL(od.demand_held_qty, 0)                           AS order_demand_from_held_orders_qty,
   ISNULL(od.open_order_count, 0)                          AS open_order_count,
-  ISNULL(cd.demand_qty, 0)                                AS component_demand_qty,
+  ISNULL(nd.demand_qty, ISNULL(cd.demand_qty, 0))         AS component_demand_qty,
   ISNULL(cd.demand_held_qty, 0)                           AS component_demand_from_held_orders_qty,
   ISNULL(cd.parent_part_count, 0)                         AS bom_parent_part_count,
-  ISNULL(od.demand_qty, 0) + ISNULL(cd.demand_qty, 0)     AS total_demand_qty,
+  ISNULL(od.demand_qty, 0) + ISNULL(nd.demand_qty, ISNULL(cd.demand_qty, 0)) AS total_demand_qty,
   ISNULL(oh.on_hand_qty, 0) + ISNULL(ws.on_hand_qty, 0)
     - ISNULL(od.demand_qty, 0)                            AS available_vs_orders,
   ISNULL(oh.on_hand_qty, 0) + ISNULL(ws.on_hand_qty, 0)
-    - (ISNULL(od.demand_qty, 0) + ISNULL(cd.demand_qty, 0)) AS available_vs_total_demand,
+    - (ISNULL(od.demand_qty, 0) + ISNULL(nd.demand_qty, ISNULL(cd.demand_qty, 0))) AS available_vs_total_demand,
   CASE WHEN oh.part_key IS NULL THEN 1 ELSE 0 END         AS no_inventory_on_hand,
   CASE WHEN od.part_key IS NULL AND cd.part_key IS NULL THEN 1 ELSE 0 END AS no_open_demand,
   CASE WHEN cd.part_key IS NOT NULL THEN 1 ELSE 0 END     AS demand_includes_bom_explosion,
   ISNULL(ws.on_hand_qty, 0)                               AS wrapper_on_hand_qty,
-  CASE WHEN wk.wrapper_key IS NOT NULL THEN 1 ELSE 0 END  AS is_unit_wrapper
+  CASE WHEN wk.wrapper_key IS NOT NULL THEN 1 ELSE 0 END  AS is_unit_wrapper,
+  ISNULL(cd.demand_qty, 0)                                AS gross_component_demand_qty,
+  lc2.llc                                                 AS bom_low_level_code,
+  CASE WHEN lc2.llc > 6 THEN 1 ELSE 0 END                 AS bom_depth_beyond_netting
 FROM part_keys AS k
 LEFT JOIN on_hand AS oh          ON k.part_key = oh.part_key
 LEFT JOIN order_demand AS od     ON k.part_key = od.part_key
 LEFT JOIN component_demand AS cd ON k.part_key = cd.part_key
+LEFT JOIN netted_demand AS nd    ON k.part_key = nd.part_key
+LEFT JOIN bom_llc AS lc2         ON k.part_key = lc2.part_key
 LEFT JOIN wrapper_stock AS ws    ON k.part_key = ws.part_key
 LEFT JOIN (SELECT DISTINCT w2.wrapper_key FROM wrap AS w2) AS wk ON k.part_key = wk.wrapper_key
 JOIN Part_v_Part AS p ON k.part_key = p.Part_Key

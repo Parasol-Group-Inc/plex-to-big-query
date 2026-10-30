@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Plex SQL copies: netting ported, lot detail added; fast follows tracked
+
+### Changed
+- `reports/plex_sql/inventory_available_to_sell_view.sql` carries the level-by-level netting in T-SQL (recursive CTE for low-level codes, seven stages, `CROSS APPLY (VALUES)` for BigQuery's `UNNEST`), with `gross_component_demand_qty`, `bom_low_level_code` and `bom_depth_beyond_netting`. `inventory_out_of_stock_view.sql` is rebuilt from it, which also brings the 10-28 wrapper fix it had missed. Both back to medium confidence; untested in Plex SQL Developer (D13). `approaching_msl_view.sql`'s "stale" flag was wrong (that copy never computed demand) and is removed; its notes point at the available-to-sell copy.
+
+### Added
+- `reports/plex_sql/inventory_lot_detail_view.sql`: Plex SQL copy of the lot detail view, with the valuation summary inlined for unit cost. The hub listed it as missing.
+- OPEN_ITEMS D26: netting and lot detail fast follows (open jobs, due dates, two questions for Jennilyn, depth check).
+
 ## 2026-10-30 (dev) - BOM demand netted level by level (Approaching MSL double count)
 
 ### Fixed

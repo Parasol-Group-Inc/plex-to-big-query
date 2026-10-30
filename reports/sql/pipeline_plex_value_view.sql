@@ -187,11 +187,18 @@ LEFT JOIN line_price lp
 LEFT JOIN base_price bp
   ON SAFE_CAST(pol.Customer_Part_Key AS INT64) = bp.Customer_Part_Key
 
--- Quote-status orders OR Pending Sales Approval, and never anything already
+-- Quote-status orders OR not yet approved, and never anything already
 -- cancelled (a cancelled quote is not pipeline).
+-- Not yet approved = Pending Sales Approval (2585) plus both Deposit Review
+-- statuses, 2587 (Initiate Payment Request) and 2656 (Bypass Payment
+-- Request), added 2026-10-30 at Jennilyn's request: "orders in Deposit Review
+-- haven't been approved yet, so they belong in the Pending Approval pipeline
+-- number." She had edited the live view directly; this keeps it. They fall in
+-- the 'Pending Sales Approval' stage above (it is the CASE's ELSE). PlexProd
+-- 10-30: Deposit Review adds 104 lines, $351,057.
 WHERE (
         COALESCE(SAFE_CAST(sts.Is_Quote AS INT64), 0) = 1
-        OR SAFE_CAST(po.PO_Status_Key AS INT64) = 2585
+        OR SAFE_CAST(po.PO_Status_Key AS INT64) IN (2585, 2587, 2656)
       )
   AND COALESCE(SAFE_CAST(sts.Cancelled_Status AS INT64), 0) = 0
 

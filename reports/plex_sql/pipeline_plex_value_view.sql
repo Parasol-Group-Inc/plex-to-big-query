@@ -5,7 +5,7 @@
 -- notes: Mechanical translation; CONCAT replaced by + so a missing name stays NULL; booleans become 1/0; no extraction filters apply.
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 
--- Open pipeline value: quotes, plus orders in status 2585 (Pending Sales Approval); cancelled statuses excluded.
+-- Open pipeline value: quotes, plus orders not yet approved: 2585 Pending Sales Approval, 2587 and 2656 Deposit Review (2026-10-30); cancelled statuses excluded.
 -- Rep precedence: inside sales on the order, then customer's assigned user, then first order salesperson.
 WITH
 line_price AS (
@@ -71,7 +71,7 @@ LEFT JOIN Plexus_Control_v_Plexus_User AS ua ON cust.Assigned_To = ua.Plexus_Use
 LEFT JOIN Part_v_Part AS p ON pol.Part_Key = p.Part_Key
 LEFT JOIN line_price AS lp ON pol.PO_Line_Key = lp.PO_Line_Key
 LEFT JOIN base_price AS bp ON pol.Customer_Part_Key = bp.Customer_Part_Key
-WHERE (ISNULL(sts.Is_Quote, 0) = 1 OR po.PO_Status_Key = 2585)
+WHERE (ISNULL(sts.Is_Quote, 0) = 1 OR po.PO_Status_Key IN (2585, 2587, 2656))
   AND ISNULL(sts.Cancelled_Status, 0) = 0
 ORDER BY CASE WHEN ISNULL(sts.Is_Quote, 0) = 1 THEN 'Quote' ELSE 'Pending Sales Approval' END,
          NULLIF(CAST(po.PO_Date AS date), '1970-01-01') DESC

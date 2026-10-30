@@ -14,7 +14,7 @@ Total Pipeline = Monday.com opportunities/forecast **+** this report. **Do not p
 
 ## How it's built (high level)
 
-Reads `Sales_v_PO` filtered to orders whose status is flagged as a quote (`Sales_v_PO_Status.Is_Quote`) or is Pending Sales Approval (key 2585), excluding anything cancelled, and prices each line off the customer price list.
+Reads `Sales_v_PO` filtered to orders whose status is flagged as a quote (`Sales_v_PO_Status.Is_Quote`) or is not yet approved: Pending Sales Approval (key 2585) or either Deposit Review status (2587, 2656, since 2026-10-30), excluding anything cancelled, and prices each line off the customer price list.
 
 **Worth knowing why this is not built on Plex's Quote module.** Jennilyn said *"the sales **orders** that have the status quote"* — that's an order status, not `Sales_v_Quote`, which is a separate object with its own New/Estimating/Quoted/Won/Lost workflow. Reading her words literally keeps this inside already-extracted tables and adds zero ETL. Going the other way would have meant extracting Plex's automotive-flavoured quote-pricing tables (with their Escalation Year / IRR / NPV / EBITDA / Die Cavity Count fields) that a supplement manufacturer almost certainly doesn't populate.
 
@@ -28,6 +28,7 @@ Each row carries the order's **Order number** (`order_no`, added 2026-10-26, sho
 - **First and second rep no longer need a Sort Order of exactly 1 or 2 (2026-10-29, audit B2).** Plex often leaves Sort Order blank or numbers it differently, so the rep was blank on most orders. The view now takes the first and second rep on each order by Sort Order.
 - **Fixed 2026-09-24 — `sales_rep` was always blank.** It read `Sales_v_Order_Salesperson`, which Vox barely uses; it now resolves the order's Inside Salesperson, then the customer's Assigned To, then that table — as in [`sales_mtd_by_status_change_report`](sales_mtd_by_status_change_report.md).
 - **⚠ The Monday.com question is unresolved and it's a real one.** Jennilyn's plan keeps Monday permanently for the Opportunities and Forecast stages. This project's working assumption has been that Plex replaces Monday outright. The Monday sync that feeds `voxdatalake.VoxScorecardsLive` is not managed by this repo's Terraform at all. Needs a decision, not a query.
+- **Deposit Review counts as pending approval (Jennilyn, 2026-10-30).** "Orders in Deposit Review haven't been approved yet, so they belong in the Pending Approval pipeline number." Both Deposit Review statuses (2587 Initiate Payment Request, 2656 Bypass Payment Request) are in, under the `Pending Sales Approval` stage. PlexProd 10-30: +104 lines, +$351,057; Plex-side pipeline $1,310,506. She had edited the live view directly; the repo now carries it, so pipeline runs no longer overwrite it.
 - **⚠ Overlaps with WIP.** Pending Sales Approval orders counted here are *also* counted by [`sales_order_value_by_status_report`](sales_order_value_by_status_report.md) under its broad WIP reading — see that report's `also_counts_in_pipeline` flag. The same dollars can land in both tiles. Surfaced in both places rather than quietly netted out, because which tile should own them is a business call.
 - **Prices exclude tax and freight.**
 

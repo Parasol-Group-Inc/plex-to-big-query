@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Inventory by lot with Best By
+
+### Added
+- `inventory_lot_detail_report` (new view on the `inventory_snapshot` pipeline, prod and test configs, Terraform SQL object): active stock by part, lot and container status, with quantity, Go-Live value, the lot's Best By date and `days_to_best_by`, and flags `is_expired_status`, `is_available`, `in_valuation_total`. Asked for by Jennilyn: drill into Lot Hold / Expired / Quarantine, and list lots reaching Best By within X days. Best By is the `Part_v_Lot_Shelf_Life` date whose type `Part_v_Shelf_Life_Type` flags `Best_By = 1` (key 327; 329 Use By, 333 Sell By, 364 Retest). PlexProd 10-29: 5,030 rows, all distinct (part, lot, status); valuation-scope value $15,180,711.53 and available $11,900,013.15, both equal to `inventory_valuation_total_report`; Expired $1,035,247.19; 125 rows reach Best By within 90 days; 25 are past Best By but not marked Expired. PlexTest: 5,066 rows. Fills the Quality "Expired or Expiring Materials" and "Experation Status" rows. Doc: `docs/reports/inventory_lot_detail_report.md`.
+
 ## 2026-10-30 (dev) - Available (usable) inventory value alongside the total
 
 ### Added

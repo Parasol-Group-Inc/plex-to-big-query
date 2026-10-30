@@ -25,7 +25,7 @@ that don't exist yet. That's a ready-made roadmap, not a discovery task.
 | Risk Assessment Open Closed Product | Excel Log | ❌ Out of scope | Local file |
 | RMA / Returns open closed product | Data Ninja by Location | ❌ Out of scope | Different BI tool |
 | Rework Open Closed $$ Product | Google Docs | 🔍 Candidate — Google Sheet | No content provided yet |
-| Expired or Expiring Materials | Google Docs | 🔍 Candidate — Google Sheet, existing overlap | Overlaps with `Part_v_Lot_Shelf_Life`/`Part_v_Container.Shelf_Date`, both already flagged (unconfirmed) in `spreadsheets/mfg_job_schedule.md` |
+| Expired or Expiring Materials | Google Docs | 🛠 In repo 2026-10-30, deploy pending (`inventory_lot_detail_report`) | Stock by part, lot and status with the lot's Best By date (`Part_v_Lot_Shelf_Life`, type flagged `Best_By` in `Part_v_Shelf_Life_Type`) and `days_to_best_by`; Expired is Plex's container status. `Part_v_Container.Shelf_Date` is not an expiry date (set on 4,250 of 62,714 active containers, all dated the last 10 days). See `docs/reports/inventory_lot_detail_report.md` |
 | SPC Check Sheets | "New W Plex" | 🎯 Candidate | Statistical process control — `Quality_v_Checksheet` (already extracted for `mfg_job_schedule_report`) is a plausible existing lead |
 | Monthly Environmental | Google Docs | 🔍 Candidate — Google Sheet | Cleaning test results — no obvious Plex lead |
 | Receiving Materials Report | Google Docs | 🔍 Candidate — Google Sheet, existing overlap | Overlaps with `Purchasing_v_Receipt` (tree-confirmed only, never live-verified — see `catalog/plex_purchasing_views_catalog.md`) |
@@ -41,7 +41,7 @@ that don't exist yet. That's a ready-made roadmap, not a discovery task.
 | Cycle Time Blending Encap | "New W Plex" | 🎯 Candidate | Directly overlaps with the Blending/Encap workcenter-timing work already started in `mfg_job_schedule_report` (`Job_Op.Start_Date`/`Complete_Date`) |
 | Certification Reports by Ingredient | "New W Plex" | 🎯 Candidate | R&D + Regulatory — no obvious Plex lead identified yet |
 | Label Design / Label QA / Pending Customer Approval / Completion Approved Label | Monday.com | ❌ Out of scope | Different platform entirely (4 rows, same board) |
-| Experation Status | Google Docs | 🔍 Candidate — Google Sheet, existing overlap | Same expiration-tracking overlap as above (<90 days variant) |
+| Experation Status | Google Docs | 🛠 In repo 2026-10-30, deploy pending (`inventory_lot_detail_report`) | The <90 days variant: filter `days_to_best_by` between 0 and 90 |
 | Product Returns | Excel Logs | ❌ Out of scope | Local file/network share |
 | R&D | Google Docs | 🔍 Candidate — Google Sheet | Sample/test log — no obvious Plex lead yet |
 

@@ -4718,6 +4718,13 @@ resource "google_storage_bucket_object" "inventory_valuation_total_view_sql" {
   content_type = "text/plain"
 }
 
+resource "google_storage_bucket_object" "inventory_lot_detail_view_sql" {
+  name         = "sql/inventory_lot_detail_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/inventory_lot_detail_view.sql"
+  content_type = "text/plain"
+}
+
 resource "google_storage_bucket_object" "inventory_avg_daily_usage_view_sql" {
   name         = "sql/inventory_avg_daily_usage_view.sql"
   bucket       = google_storage_bucket.report_configs.name

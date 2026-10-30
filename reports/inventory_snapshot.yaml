@@ -92,3 +92,9 @@ bq_view:
   - name: inventory_valuation_total_report
     display_name: "Vox Scorecard | Inventory Value Total"
     sql_file: gs://voxdatalake-report-configs/sql/inventory_valuation_total_view.sql
+  # Added 2026-10-30 — stock by part, lot and status with the lot's Best By
+  # date (Jennilyn). Reads inventory_valuation_summary_report's unit cost, so it
+  # must stay listed after it.
+  - name: inventory_lot_detail_report
+    display_name: "Vox | Inventory by Lot with Best By"
+    sql_file: gs://voxdatalake-report-configs/sql/inventory_lot_detail_view.sql

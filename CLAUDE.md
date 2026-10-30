@@ -159,6 +159,30 @@ type inference on a *populated* column doesn't match your assumption (e.g.
 a nullable int column landing as `FLOAT64` via pandas, which already
 happened once for `Product_Type_Key` in this repo).
 
+## A hand edit to a live view lasts only until the next run
+
+Every pipeline run that extracts recreates its views from the SQL in GCS,
+which `./scripts/deploy.sh` syncs from `main`. A view changed by hand in the
+BigQuery console is therefore reverted by the next such run, not just by the
+next deploy. Jennilyn edits views directly: `approaching_msl_report_v2` (10-27),
+`bottling_job_open_with_orders_report` (10-26), and `pipeline_plex_value_report`
+(10-30, Deposit Review statuses). To keep such an edit: diff the live
+definition (`INFORMATION_SCHEMA.VIEWS.view_definition`) against
+`reports/sql/`, put the change in the repo, check the repo SQL returns exactly
+what the live view returns, then merge and deploy before the next prod slot
+(1 PM / 6 PM / 11 PM MT probe, 4 AM full). Recipe: `docs/OPERATIONS.md`,
+"A view was edited by hand in BigQuery".
+
+## Bottling 9-parts count from 2026-11-01
+
+Until 10-30, Bottling records on 9-parts were dropped as double credit for
+their 5-part job (bulk cases exempt). Jennilyn removed the 5-part BOMs and
+asked to count them "starting now"; the drop now applies only before
+2026-11-01, in `packaging_daily_report`, `production_monthly_by_workcenter_group_report`
+and `weekly_production_update_report` (and so `production_vs_goal_report`).
+`*_9part_with_5_bom_qty` columns show possible double credit and should be 0
+once her BOMs are finished (OPEN_ITEMS D27). Don't move the date without her.
+
 ## bq_view creation order and the retry-once safety net
 
 A `bq_view` entry can be a thin alias over a sibling view in the same

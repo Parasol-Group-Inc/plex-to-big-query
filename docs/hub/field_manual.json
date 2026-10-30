@@ -389,6 +389,16 @@
    "title": "Gross vs netted demand",
    "body": "A component has two demands. <b>Gross</b> multiplies every open order down the whole BOM. <b>Netted</b> subtracts the stock already held at each level above first, so only the shortfall reaches the component. Capsule 33312-00NUT46-0 (30 Oct): gross 12.05M, netted 2,182,496.",
    "note": "Availability, MSL reorder point and out of stock use netted. <code>gross_component_demand_qty</code> and MSL <code>gross_demand_qty</code> keep the total on purpose. See docs/BOM_DEMAND_NETTING.md."
+  },
+  {
+   "title": "Deposit Review is still pending approval",
+   "body": "Plex has two Deposit Review statuses, 2587 (Initiate Payment Request) and 2656 (Bypass Payment Request), after Pending Sales Approval (2585). The pipeline tile counts all three as not yet approved: $351,057 of Deposit Review on 30 Oct.",
+   "note": "Jennilyn, 30 Oct: \"orders in Deposit Review haven't been approved yet, so they belong in the Pending Approval pipeline number.\""
+  },
+  {
+   "title": "A hand edit to a view doesn't stick",
+   "body": "Changing a view in the BigQuery console works until the next pipeline run, which rebuilds every view from the repo. Send the change to Emilio to land in the repo.",
+   "note": "Happened 30 Oct with pipeline_plex_value_report; caught and kept the same day."
   }
  ],
  "risks": [

@@ -35,7 +35,7 @@
 --                        part itself (added 2026-10-28).
 --                        NETTED since 2026-10-30: a parent passes down only what its own
 --                        stock does not cover, level by level (inventory_available_to_sell_
---                        view.sql, "Netted component demand"). Jennilyn's blend 33312-00NUT46-0
+--                        view.sql, "Netted component demand"). Jennilyn's capsule 33312-00NUT46-0
 --                        read 12.05M (50,000 bottles x 241) against 2,182,496 netted.
 --   gross_demand_qty     the same demand WITHOUT netting: every open order exploded through
 --                        the whole BOM. Kept beside demand_qty because Jennilyn wants both

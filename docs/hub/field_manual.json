@@ -154,12 +154,13 @@
     "Part_v_Container",
     "Part_v_Part",
     "Sales_v_Release",
-    "Part_v_Flat_BOM"
+    "Part_v_Flat_BOM",
+    "Part_v_BOM"
    ],
    "views": [
     "inventory_out_of_stock_report"
    ],
-   "why": "Three conditions: the part number starts with <b>33</b>, it <b>has</b> a minimum inventory quantity, and availability is negative. The 33 scan is name-based on purpose — a part-type dropdown was rejected because switching would break the rule. Demand includes what parent finished goods will consume via the bill of materials; without that <b>no 33 part appears at all</b>, because they have neither containers nor direct sales orders.",
+   "why": "Three conditions: the part number starts with <b>33</b>, it <b>has</b> a minimum inventory quantity, and availability is negative. The 33 scan is name-based on purpose — a part-type dropdown was rejected because switching would break the rule. Demand includes what parent finished goods will consume via the bill of materials; without that <b>no 33 part appears at all</b>, because they have neither containers nor direct sales orders. Since 30 Oct that BOM demand is <b>netted</b>: finished stock on the shelf no longer creates demand for the parts inside it.",
    "watch": "<b>Proven 11 Sep with four real shortages</b>, then back to 0 an hour later when those orders moved to Quote status. Both readings are correct — a quote is not demand. The field is <code>Minimum_Inventory_Quantity</code>; a part with 0 is treated as “no threshold set” and excluded."
   },
   {
@@ -170,12 +171,13 @@
     "Part_v_Container",
     "Sales_v_Release",
     "Sales_v_PO_Status",
-    "Part_v_Flat_BOM"
+    "Part_v_Flat_BOM",
+    "Part_v_BOM"
    ],
    "views": [
     "inventory_available_to_sell_report"
    ],
-   "why": "On hand minus demand, for every part at once — the BigQuery equivalent of Plex's own Sales Order Line Inventory Check screen. Which statuses count as demand is <b>Plex's answer, not ours</b>: it reads the <code>Include_In_MRP</code> flag. That design paid for itself within a day — when Jennilyn changed the flag in Plex, order demand fell from 508,807 units to 5,000 with no code change.",
+   "why": "On hand minus demand, for every part at once — the BigQuery equivalent of Plex's own Sales Order Line Inventory Check screen. Which statuses count as demand is <b>Plex's answer, not ours</b>: it reads the <code>Include_In_MRP</code> flag. That design paid for itself within a day — when Jennilyn changed the flag in Plex, order demand fell from 508,807 units to 5,000 with no code change. <b>Component demand is netted (30 Oct):</b> each level passes down only what its own stock does not cover, one BOM level at a time. Jennilyn's capsule 33312-00NUT46-0 needs 9,056 × 241 = 2,182,496, not the 12.05M a flat explosion gave. The flat figure stays as <code>gross_component_demand_qty</code> because she wants both. See <code>docs/BOM_DEMAND_NETTING.md</code>.",
    "watch": "Job requirements are still missing — demand covers sales orders and BOM explosion, not what open jobs will consume."
   },
   {
@@ -382,6 +384,11 @@
    "title": "Test is not Production",
    "body": "<code>PlexTest</code> resets periodically and the team enters practice data in it. <code>PlexProd</code> is empty until go-live.",
    "note": "A figure read from test is true for that hour, not for the business."
+  },
+  {
+   "title": "Gross vs netted demand",
+   "body": "A component has two demands. <b>Gross</b> multiplies every open order down the whole BOM. <b>Netted</b> subtracts the stock already held at each level above first, so only the shortfall reaches the component. Capsule 33312-00NUT46-0 (30 Oct): gross 12.05M, netted 2,182,496.",
+   "note": "Availability, MSL reorder point and out of stock use netted. <code>gross_component_demand_qty</code> and MSL <code>gross_demand_qty</code> keep the total on purpose. See docs/BOM_DEMAND_NETTING.md."
   }
  ],
  "risks": [

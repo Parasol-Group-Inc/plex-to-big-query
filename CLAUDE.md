@@ -225,6 +225,29 @@ error, so it reads as 0% forever. The views expose `goal_without_sales` /
 `sales_vs_goal_report` the company-wide goal is **its own row with actual 0**,
 so don't sum `goal_value` across rows.
 
+## Component demand is NETTED down the BOM (since 2026-10-30)
+
+`inventory_available_to_sell_report` computes component demand by MRP netting:
+each part passes down only its shortfall (demand − its own available stock),
+one BOM level at a time, in low-level-code order over the single-level
+`Part_v_BOM`. Approaching MSL and Out of Stock read it. Full write-up, worked
+example and check queries: `docs/BOM_DEMAND_NETTING.md`.
+- **Both numbers are published on purpose.** `component_demand_qty` /
+  MSL `demand_qty` are netted; `gross_component_demand_qty` / MSL
+  `gross_demand_qty` are the old flat explosion. Jennilyn asked to keep both.
+  Don't "simplify" one away.
+- **The flat BOM (`Part_v_Flat_BOM`) now only feeds the gross column.**
+  Multiplying orders down it ignores intermediate stock: that was the MSL
+  double count (capsule 33312-00NUT46-0 read 12.05M instead of 2,182,496).
+- **Netting is unrolled to 6 levels** (`net_0` … `net_6`), the deepest BOM in
+  PlexProd. If `bom_depth_beyond_netting` is ever TRUE, add a `net_7` stage.
+- **BigQuery does not store CTE results.** A CTE referenced twice runs
+  twice; stacked stages that each read the previous one twice went
+  exponential (past two minutes). Each stage must read the previous one
+  once. Keep that in mind for any staged/iterative SQL here.
+- The `reports/plex_sql/` copies of these three views are still gross
+  (flagged in their headers, OPEN_ITEMS D13).
+
 ## Scorecard sandbox (`voxdatalake.ScorecardSandbox`)
 
 A full simulated year under every scorecard tile, for designing Looker Studio

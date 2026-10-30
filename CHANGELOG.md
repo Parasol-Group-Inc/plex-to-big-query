@@ -27,6 +27,9 @@ don't need an entry.
 ### Changed
 - `pipeline_plex_value_report` includes both Deposit Review statuses (2587 Initiate Payment Request, 2656 Bypass Payment Request) beside Pending Sales Approval (2585). Jennilyn: "orders in Deposit Review haven't been approved yet, so they belong in the Pending Approval pipeline number. Without them, the scorecard misses about $350K." She had changed the live PlexProd view by hand (20:08 UTC); every pipeline run recreates views from the repo's SQL, so the next extracting run would have reverted it. The repo version returns exactly her live view (218 rows, 0 differences, $1,310,506). Deposit Review adds 104 lines, $351,057, under the `Pending Sales Approval` stage. Plex SQL copy updated. Doc: `docs/reports/pipeline_plex_value_report.md`.
 
+### Deployed
+- PR #111, `deploy/2026-10-30T2026Z`. Prod adhoc `plex-etl-sales-orders` (29 extractions) recreated the view from the repo; its live definition reads `IN (2585, 2587, 2656)` and it returns the same 218 rows (Deposit Review $351,057 under Pending Sales Approval). Her hand edit is now permanent.
+
 ### Documented
 - New: a hand edit to a live view lasts only until the next extracting run, not the next deploy. Recipe in `docs/OPERATIONS.md` "A view was edited by hand in BigQuery"; sections in CLAUDE.md (also one on the 9-part cutover); hub traps in `docs/hub/platform.json` and `docs/hub/field_manual.json` (plus "Deposit Review is still pending approval"); hub index rebuilt.
 

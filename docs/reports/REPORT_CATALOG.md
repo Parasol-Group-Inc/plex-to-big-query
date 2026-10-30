@@ -111,7 +111,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Bottling \| Open Jobs with Sales Orders | Production | 🛠 In repo 2026-10-26, deploy pending | [bottling_job_open_with_orders_report.md](bottling_job_open_with_orders_report.md) |
 | Inventory \| Approaching MSL | Supply Chain | ✅ Live in PlexProd 2026-10-27; unit and coverage fix 2026-10-28 | [approaching_msl_report.md](approaching_msl_report.md) |
 | Vox Scorecard \| Inventory Value Total | Inventory | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely empty upstream) | [inventory_valuation_total_report.md](inventory_valuation_total_report.md) |
-| Vox \| Inventory by Lot with Best By | Inventory | 🛠 In repo 2026-10-30, deploy pending — reconciles to the valuation total on PlexProd | [inventory_lot_detail_report.md](inventory_lot_detail_report.md) |
+| Vox \| Inventory by Lot with Best By | Inventory | ✅ Live in PlexProd 2026-10-30 — reconciles to the valuation total | [inventory_lot_detail_report.md](inventory_lot_detail_report.md) |
 | Vox Scorecard \| Avg Daily Usage | Supply Chain | 🔬 Deployed 2026-09-01, 0 rows, formula unverified against real data | [inventory_avg_daily_usage_report.md](inventory_avg_daily_usage_report.md) |
 | Vox Scorecard \| Top Quantity Ranking | Supply Chain | ✅ Deployed and verified 2026-09-01 — 0 rows (genuinely empty upstream) | [inventory_top_quantity_report.md](inventory_top_quantity_report.md) |
 | Vox Scorecard \| Cycle Count Accuracy | Supply Chain | ✅ Deployed 2026-09-11; date fix 2026-09-22; per-location accuracy fix deployed 2026-09-25 | [part_cycle_count_report.md](part_cycle_count_report.md) |

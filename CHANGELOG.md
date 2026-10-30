@@ -28,6 +28,9 @@ don't need an entry.
 - Visibility, not a filter: `bottling_9part_qty` and `bottling_9part_with_5_bom_qty` on the daily and monthly views, `mtd_bottling_9part_qty` and `mtd_bottling_9part_with_5_bom_qty` on the weekly one. The second is 9-part Bottling output whose part still has an active 5-part BOM line (`raw_Part_v_BOM`): possible double credit, which should read 0 once her BOM changes are complete.
 - Checked on PlexProd before deploy: all three views return exactly the deployed rows and quantities (no November data yet). A simulation with the cutover at 1 Oct added 303,354 to October Bottling (480,543 → 783,897), all flagged, because the BOM extract (15:58 UTC 10-30) still showed 6,370 of 6,589 9-parts with a 5-part line. Plex SQL copies carry the cutover; the visibility columns are not ported. Docs: the four report docs, `reports-list/production.md`, `spreadsheets/weekly_production_update.md`, `spreadsheets/packaging_daily_report.md`.
 
+### Deployed
+- PR #107, `deploy/2026-10-30T1714Z`. Prod adhoc `plex-etl-sales-orders` (29 extractions, fresh BOM) then `plex-etl-work-orders` (15 extractions) recreated the four production views. On the same fresh data the live views equal the old rule exactly (monthly 6/6, packaging daily 56/56, weekly 4/4 rows, 0 differences); October Bottling 493,856, flag columns 0. **Her BOM change is not visible yet:** after the 17:17 UTC BOM load, 6,168 of 6,387 active 9-parts still have an active 5-part BOM line, e.g. 93035-09VOXNU-0 → 53035-09VOXNU-0 on its only operation. D27.
+
 ## 2026-10-30 (dev) - Daily history of gross vs netted demand
 
 ### Added

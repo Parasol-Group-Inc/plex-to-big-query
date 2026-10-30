@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Daily history of gross vs netted demand
+
+### Added
+- `PlexProd.msl_demand_daily`, filled by a new scheduled query `msl_demand_daily` (Terraform `google_bigquery_data_transfer_config`, every day 13:00 UTC, after the 4 AM MT full prod run, as the ETL service account). One row per stocked part per day from `inventory_available_to_sell_report`: stock, order demand, gross and netted component demand, `covered_by_stock_qty` (gross − netted), availability, and MSL's reorder point and flag where the part is in MSL. Jennilyn asked to track both numbers; the views only show today. The query creates the table if missing and replaces today's rows, so a re-run is safe. Checked read-only on PlexProd: 2,849 rows, one per part, 1,010 in MSL; capsule 33312-00NUT46-0 reads 12,050,000 / 2,182,496 / 9,867,504. Added to `terraform/backup_snapshots.sql` (BigQuery-only data). Docs: `docs/BOM_DEMAND_NETTING.md` "Tracking it over time", `docs/OPERATIONS.md` Backups, `approaching_msl_report.md`, CLAUDE.md.
+
 ## 2026-10-30 (dev) - Plex SQL copies: netting ported, lot detail added; fast follows tracked
 
 ### Changed

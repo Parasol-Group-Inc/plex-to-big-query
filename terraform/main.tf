@@ -6172,3 +6172,18 @@ resource "google_bigquery_data_transfer_config" "backup_snapshots_weekly" {
     query = file("${path.module}/backup_snapshots.sql")
   }
 }
+
+# Daily history of gross vs netted component demand (docs/BOM_DEMAND_NETTING.md), so
+# Jennilyn can trend both. 13:00 UTC = after the 4 AM MT full prod run. The query
+# creates PlexProd.msl_demand_daily if missing and replaces today's rows, so a re-run
+# is safe. Same service account as the backup query.
+resource "google_bigquery_data_transfer_config" "msl_demand_daily" {
+  display_name         = "msl_demand_daily"
+  location             = "US"
+  data_source_id       = "scheduled_query"
+  schedule             = "every day 13:00"
+  service_account_name = google_service_account.etl.email
+  params = {
+    query = file("${path.module}/msl_demand_daily.sql")
+  }
+}

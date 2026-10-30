@@ -245,8 +245,11 @@ example and check queries: `docs/BOM_DEMAND_NETTING.md`.
   twice; stacked stages that each read the previous one twice went
   exponential (past two minutes). Each stage must read the previous one
   once. Keep that in mind for any staged/iterative SQL here.
-- The `reports/plex_sql/` copies of these three views are still gross
-  (flagged in their headers, OPEN_ITEMS D13).
+- **`PlexProd.msl_demand_daily`** is the daily history of both numbers (scheduled
+  query `msl_demand_daily` in Terraform, SQL `terraform/msl_demand_daily.sql`). It
+  is BigQuery-only data, in the backup list; the ETL never writes it.
+- The `reports/plex_sql/` copies of available-to-sell and out-of-stock carry
+  the netting in T-SQL since 2026-10-30, untested in Plex (OPEN_ITEMS D13).
 
 ## Scorecard sandbox (`voxdatalake.ScorecardSandbox`)
 

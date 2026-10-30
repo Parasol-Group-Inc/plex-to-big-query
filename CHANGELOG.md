@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev-label-design) - Label Design → Monday signed off
+
+### Changed
+- Jennilyn accepted the integration: "the label -> monday.com integration is g2g at this point." `label-design/STATUS.md` records the sign-off; L8 and L13 stay open as follow-ups.
+
 ## 2026-10-30 (dev) - Bottling 9-parts count from 1 Nov, with a double-credit flag
 
 ### Changed

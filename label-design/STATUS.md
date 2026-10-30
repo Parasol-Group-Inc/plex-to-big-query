@@ -11,7 +11,17 @@
 
 ---
 
-## UPDATE — 2026-10-29 (latest): deployed, verified, open items closed
+## UPDATE — 2026-10-30 (latest): signed off by Jennilyn
+
+Jennilyn, 2026-10-30: "the label -> monday.com integration is g2g at this point."
+The Plex → Monday push is accepted as done. What remains is follow-up, not
+blocking: L8 (item name: customer part number vs label code, Ashley's call) and
+L13 (the archived Plex REST API push), both in `docs/OPEN_ITEMS.md`. Keep watching
+`PlexProd.label_design_push_log` and the problem emails as normal operations.
+
+---
+
+## UPDATE — 2026-10-29: deployed, verified, open items closed
 
 - **Deployed 2026-10-29.** Image `etl:800785e` on every job, Terraform
   `deploy/2026-10-29T1914Z`. The fill step works in prod: SO 388's three

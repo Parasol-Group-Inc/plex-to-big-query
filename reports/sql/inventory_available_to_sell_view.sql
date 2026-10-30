@@ -268,7 +268,7 @@ wrapper_stock AS (
 -- straight down through every level, ignoring stock held at the levels in
 -- between. A finished good with 40,944 in stock against a 50,000 order still
 -- sent all 50,000 down to its bright bottle and 50,000 x 241 = 12.05M down to
--- its blend (93312 -> 53312 -> 33312-00NUT46-0, PlexProd 10-30). That is the
+-- its capsule (93312 -> 53312 -> 33312-00NUT46-0, PlexProd 10-30). That is the
 -- double count Jennilyn reported in Approaching MSL.
 --
 -- The rule now (hers: go down one BOM level at a time and only bring over
@@ -278,7 +278,7 @@ wrapper_stock AS (
 --   shortfall(part) = GREATEST(gross - stock, 0)
 -- processed in low-level-code order, so every parent is netted before any of
 -- its components. Her example then reads 50,000 - 40,944 = 9,056 bottles,
--- 9,056 bright bottles, 9,056 x 241 = 2,182,496 of blend.
+-- 9,056 bright bottles, 9,056 x 241 = 2,182,496 capsules.
 --
 --   bom_edge  single-level Part_v_BOM (parent, component, quantity per parent)
 --   bom_walk  every path down the BOM; a part's low-level code (llc) is its

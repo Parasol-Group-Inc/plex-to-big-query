@@ -22,6 +22,11 @@ don't need an entry.
 ### Removed
 - OPEN_ITEMS L13 closed as archived (Emilio, 2026-10-30). The Plex REST API push (`deploy/plex_api_function/push.py`, `plex_api_label_design_report`) was merged in PR #42 but never deployed, and stays parked: a review found it would duplicate items on the team's live board and push orders that are not Pending Fulfillment. `deploy/plex_api_function/ARCHIVED.md` lists every fix needed before any deploy; point a revived push at a sandbox board, never the team's boards. The test extractor `plex-api-extract-test` is unchanged and still lands PlexTest `plex_api_*` tables; PlexProd has none. Revisit if the API replaces ODBC (Jennilyn's near-real-time labeling report, parked until November, needs the API). L8 stays open.
 
+## 2026-10-30 (dev) - Pipeline counts Deposit Review as pending approval
+
+### Changed
+- `pipeline_plex_value_report` includes both Deposit Review statuses (2587 Initiate Payment Request, 2656 Bypass Payment Request) beside Pending Sales Approval (2585). Jennilyn: "orders in Deposit Review haven't been approved yet, so they belong in the Pending Approval pipeline number. Without them, the scorecard misses about $350K." She had changed the live PlexProd view by hand (20:08 UTC); every pipeline run recreates views from the repo's SQL, so the next extracting run would have reverted it. The repo version returns exactly her live view (218 rows, 0 differences, $1,310,506). Deposit Review adds 104 lines, $351,057, under the `Pending Sales Approval` stage. Plex SQL copy updated. Doc: `docs/reports/pipeline_plex_value_report.md`.
+
 ## 2026-10-30 (dev) - Bottling 9-parts count from 1 Nov, with a double-credit flag
 
 ### Changed

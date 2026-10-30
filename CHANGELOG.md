@@ -22,6 +22,9 @@ don't need an entry.
 ### Changed
 - The Plex SQL Developer copies in `reports/plex_sql/` caught up with the BigQuery views: the summary gains `cost_model_name` and `is_primary_cost_model` (`Part_v_Cost_Model`); the total reads the primary model only, the new stock scope and the new counts. Still not run in Plex SQL Developer (D13).
 
+### Deployed
+- Same day: PR #100, `deploy/2026-10-30T1450Z`. A prod adhoc `plex-etl-inventory-snapshot` run recreated the three views; `inventory_valuation_total_report` reads $15,180,711.53, 1,143 valued and 1,079 uncosted parts.
+
 ## 2026-10-30 (dev) - Inventory value matches Plex's Inventory Valuation screen
 
 ### Fixed

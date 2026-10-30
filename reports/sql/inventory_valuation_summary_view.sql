@@ -87,6 +87,11 @@
 --   container that day, so excluding it is matched on one data point, not
 --   confirmed. part_on_hand_inventory_report keeps the availability rule; it
 --   answers a different question.
+--   available_on_hand_qty / available_inventory_value (added 2026-10-30) are
+--   that question: the same parts valued on available stock only, read from
+--   part_on_hand_inventory_report so the status rule stays in one place. It has
+--   one row per part, so the join adds columns, never rows. Columns only; the
+--   grain and every existing column are unchanged.
 --
 -- COST MODELS (added 2026-10-29, audit B1): Plex prod carries five cost models
 -- (1892 Standard Cost 2026 with labor/OH, 4402 Go-Live Inventory Cost 2026,
@@ -254,7 +259,14 @@ SELECT
   IF(pc.snapshot_key = ls.snapshot_key, COALESCE(oh.on_hand_qty, 0), NULL)
                                                         AS on_hand_qty,
   IF(pc.snapshot_key = ls.snapshot_key, COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost, NULL)
-                                                        AS inventory_value
+                                                        AS inventory_value,
+
+  -- Added 2026-10-30: available stock only (see CONTAINER SCOPE).
+  IF(pc.snapshot_key = ls.snapshot_key, COALESCE(SAFE_CAST(av.on_hand_qty AS FLOAT64), 0), NULL)
+                                                        AS available_on_hand_qty,
+  IF(pc.snapshot_key = ls.snapshot_key,
+     COALESCE(SAFE_CAST(av.on_hand_qty AS FLOAT64), 0) * pc.op_unit_cost, NULL)
+                                                        AS available_inventory_value
 
 FROM part_cost pc
 
@@ -268,3 +280,6 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
 
 LEFT JOIN on_hand oh
   ON oh.part_key = SAFE_CAST(pc.part_key AS INT64)
+
+LEFT JOIN `{gcp_project}.{dataset}.part_on_hand_inventory_report` av
+  ON SAFE_CAST(av.part_key AS INT64) = SAFE_CAST(pc.part_key AS INT64)

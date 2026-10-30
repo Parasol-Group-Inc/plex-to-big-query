@@ -14,6 +14,11 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Available (usable) inventory value alongside the total
+
+### Added
+- `inventory_valuation_total_report.available_inventory_value`: the part of the total in available stock (OK / Hold / Inspection Required / Hold for Design Order, `part_on_hand_inventory_report`'s rule, read from that view so the rule stays in one place). The summary gains `available_on_hand_qty` and `available_inventory_value` per part. Columns only: same grain (PlexProd 10-29: 2,015,264 rows, all distinct keys), `total_inventory_value` and the part counts unchanged. 10-29 prod: $11,900,013.15 available of $15,180,711.53. Plex SQL copies updated. D25 (d).
+
 ## 2026-10-30 (dev) - Inventory valuation part counts match the total's stock
 
 ### Fixed

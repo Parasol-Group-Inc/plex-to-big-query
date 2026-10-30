@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Bottling 9-parts count from 1 Nov, with a double-credit flag
+
+### Changed
+- Jennilyn, 2026-10-30: "we want to track bottling/packaging totals for parts that start with 9 starting now." She removed the 5-part BOM from those 9-parts so the output is made once; about 14 in-use 9-parts still carry one, and finishing them is hers. Her suggestion: keep dropping 9s for October, count them from November. `packaging_daily_report`, `production_monthly_by_workcenter_group_report` and `weekly_production_update_report` now drop Bottling records on 9-parts (bulk cases exempt, as before) only when dated before 2026-11-01. `production_vs_goal_report` inherits it from the monthly view.
+
+### Added
+- Visibility, not a filter: `bottling_9part_qty` and `bottling_9part_with_5_bom_qty` on the daily and monthly views, `mtd_bottling_9part_qty` and `mtd_bottling_9part_with_5_bom_qty` on the weekly one. The second is 9-part Bottling output whose part still has an active 5-part BOM line (`raw_Part_v_BOM`): possible double credit, which should read 0 once her BOM changes are complete.
+- Checked on PlexProd before deploy: all three views return exactly the deployed rows and quantities (no November data yet). A simulation with the cutover at 1 Oct added 303,354 to October Bottling (480,543 → 783,897), all flagged, because the BOM extract (15:58 UTC 10-30) still showed 6,370 of 6,589 9-parts with a 5-part line. Plex SQL copies carry the cutover; the visibility columns are not ported. Docs: the four report docs, `reports-list/production.md`, `spreadsheets/weekly_production_update.md`, `spreadsheets/packaging_daily_report.md`.
+
 ## 2026-10-30 (dev) - Daily history of gross vs netted demand
 
 ### Added

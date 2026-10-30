@@ -4,7 +4,7 @@
 - **Type:** Google Sheet
 - **Category:** Daily Numbers Report
 - **Departments:** Production, Planning
-- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), promoted to prod GCS config 2026-08-22, 0 rows, decided Bottling mapping — `packaging_daily_report` (`reports/work_orders.yaml`) · **2026-09-24:** scrap was always 0 (`Rejected = -1` test; real Plex writes 1) — fixed to `!= 0` · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count)
+- **Status:** ✅ Deployed to test 2026-08-21 (Actual half only), promoted to prod GCS config 2026-08-22, 0 rows, decided Bottling mapping — `packaging_daily_report` (`reports/work_orders.yaml`) · **2026-09-24:** scrap was always 0 (`Rejected = -1` test; real Plex writes 1) — fixed to `!= 0` · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count) · **2026-10-30:** from 1 Nov Bottling 9-parts count (Jennilyn removed their 5-part BOMs); earlier dates keep the drop; `*_9part_with_5_bom_qty` shows possible double credit
 - **Plex reference:** [Production Yield](plex_production_yield_reference.md) (Inventory Tracking, ActionKey 7346) — **weak fit, see verdict below**
 
 ## What it is

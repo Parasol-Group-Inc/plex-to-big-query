@@ -51,6 +51,15 @@
 -- not the job's, so a record with no job is still judged.
 -- BULK CASES STAY COUNTED (Jennilyn, 2026-10-22): 9xxxx-BK parts ("BULK
 -- CASE", e.g. 93336-BKVOXNU-1) have no 5-part job, so they are exempt.
+-- CUTOVER 2026-11-01 (Jennilyn, 2026-10-30): "we want to track
+-- bottling/packaging totals for parts that start with 9 starting now." She
+-- removed the 5-part BOM from those 9-parts so the output is no longer made
+-- twice. The drop above applies only to records dated before 2026-11-01, so
+-- October and earlier keep their numbers; from November 9-parts count. About
+-- 14 in-use 9-parts still have a 5-part BOM; finishing that change is hers.
+-- VISIBILITY, not a filter: bottling_9part_with_5_bom_qty is the 9-part
+-- Bottling output whose part still has an active 5-part BOM line, i.e.
+-- possible double credit. If it is not 0 from November, a BOM is unfinished.
 --
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml, same raw
 -- tables the 4 daily reports already use.
@@ -74,6 +83,16 @@ WITH prod AS (
       NULLIF(DATE(SAFE_CAST(CAST(p.Record_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
     ) AS production_date
   FROM `{gcp_project}.{dataset}.raw_Part_v_Production` p
+),
+
+nine_with_five_bom AS (
+  -- 9-parts that still have an active BOM line to a 5-part (see CUTOVER).
+  SELECT DISTINCT SAFE_CAST(b.Part_Key AS INT64) AS part_key
+  FROM `{gcp_project}.{dataset}.raw_Part_v_BOM` b
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` c
+    ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(b.Component_Part_Key AS INT64)
+  WHERE STARTS_WITH(TRIM(c.Part_No), '5')
+    AND COALESCE(SAFE_CAST(b.Active AS INT64), 1) != 0
 )
 
 SELECT
@@ -97,7 +116,18 @@ SELECT
     SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0,
            SAFE_CAST(prod.Quantity AS FLOAT64), 0)),
     NULLIF(SUM(SAFE_CAST(prod.Quantity AS FLOAT64)), 0)
-  )                                                     AS scrap_rate
+  )                                                     AS scrap_rate,
+
+  -- Added 2026-10-30 (CUTOVER above): good Bottling output on 9-parts (bulk
+  -- cases excluded), and the part of it on 9-parts that still have a 5-part
+  -- BOM line. Both 0 before November and outside Bottling.
+  SUM(IF(wc.Workcenter_Group = 'Bottling' AND (STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9') AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
+         AND COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
+         SAFE_CAST(prod.Quantity AS FLOAT64), 0))       AS bottling_9part_qty,
+  SUM(IF(wc.Workcenter_Group = 'Bottling' AND (STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9') AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
+         AND f5.part_key IS NOT NULL
+         AND COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
+         SAFE_CAST(prod.Quantity AS FLOAT64), 0))       AS bottling_9part_with_5_bom_qty
 
 FROM prod
 
@@ -107,11 +137,15 @@ JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
   ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
 
+LEFT JOIN nine_with_five_bom f5
+  ON f5.part_key = SAFE_CAST(prod.Part_Key AS INT64)
+
 WHERE prod.production_date IS NOT NULL
   AND wc.Workcenter_Group IS NOT NULL
   AND NOT (wc.Workcenter_Group = 'Bottling'
            AND STARTS_WITH(COALESCE(TRIM(part.Part_No), ''), '9')
-           AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK'))
+           AND NOT REGEXP_CONTAINS(COALESCE(TRIM(part.Part_No), ''), r'^9[0-9]{4}-BK')
+           AND prod.production_date < DATE '2026-11-01')
 
 GROUP BY production_month, workcenter_group
 ORDER BY production_month DESC, workcenter_group

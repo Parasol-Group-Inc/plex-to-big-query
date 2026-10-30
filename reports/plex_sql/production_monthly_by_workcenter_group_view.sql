@@ -2,7 +2,7 @@
 -- plex_equivalent_of: reports/sql/production_monthly_by_workcenter_group_view.sql
 -- confidence: high
 -- plex_views: Part_v_Production, Part_v_Workcenter
--- notes: Mechanical translation; DATE_TRUNC(MONTH) becomes DATEFROMPARTS(YEAR, MONTH, 1).
+-- notes: 2026-10-30: 9-part Bottling drop only before 2026-11-01; the BigQuery view's bottling_9part_* visibility columns are not ported. Mechanical translation; DATE_TRUNC(MONTH) becomes DATEFROMPARTS(YEAR, MONTH, 1).
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 --
 -- GRAIN: one row per month x workcenter group. Rejected <> 0 counts as scrap.
@@ -36,7 +36,9 @@ WHERE pd.production_date IS NOT NULL
   AND wc.Workcenter_Group IS NOT NULL
 -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
   -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
+  -- Cutover (Jennilyn, 2026-10-30): the drop applies only before 2026-11-01; 9-parts count from November.
   AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%'
-           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%')
+           AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%'
+           AND pd.production_date < '2026-11-01')
 GROUP BY DATEFROMPARTS(YEAR(pd.production_date), MONTH(pd.production_date), 1), wc.Workcenter_Group
 ORDER BY production_month DESC, workcenter_group;

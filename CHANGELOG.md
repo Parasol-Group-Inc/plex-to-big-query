@@ -19,6 +19,9 @@ don't need an entry.
 ### Added
 - `inventory_valuation_total_report.available_inventory_value`: the part of the total in available stock (OK / Hold / Inspection Required / Hold for Design Order, `part_on_hand_inventory_report`'s rule, read from that view so the rule stays in one place). The summary gains `available_on_hand_qty` and `available_inventory_value` per part. Columns only: same grain (PlexProd 10-29: 2,015,264 rows, all distinct keys), `total_inventory_value` and the part counts unchanged. 10-29 prod: $11,900,013.15 available of $15,180,711.53. Plex SQL copies updated. D25 (d).
 
+### Deployed
+- Same day: PR #101, `deploy/2026-10-30T1508Z`. A prod adhoc `plex-etl-inventory-snapshot` run recreated the three views; `inventory_valuation_total_report` reads $15,180,711.53 total, $11,900,013.15 available, 1,143 valued and 1,079 uncosted parts.
+
 ## 2026-10-30 (dev) - Inventory valuation part counts match the total's stock
 
 ### Fixed

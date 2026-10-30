@@ -19,6 +19,9 @@ don't need an entry.
 ### Fixed
 - `inventory_valuation_total_report` read **$11,900,013** in PlexProd against Plex's Inventory Valuation screen at **$15,180,711.53**, both on Go-Live costing (Jennilyn: Plex's figure is correct). The cost per part was right. The quantity was not: `inventory_valuation_summary_view.sql` took it from `part_on_hand_inventory_report`, which counts only available stock (OK / Hold / Inspection Required / Hold for Design Order). That left out Lot Hold ($1.12M), Expired ($1.04M), Quarantine ($0.70M), Allocated ($0.41M) and Released/Rework/Defective (about $19K). The summary view now sums `raw_Part_v_Container` itself, every active container except Receiving. Run against the 10-29 prod load, the Go-Live total is $15,180,711.53, Plex's figure to the cent. The Receiving exclusion rests on one $699 container. `part_on_hand_inventory_report` is unchanged. The Plex SQL copy (`reports/plex_sql/`) has the same filter change. Fast follows: D25. Docs: `docs/reports/inventory_valuation_total_report.md`, `docs/reports/inventory_valuation_summary_report.md`.
 
+### Deployed
+- Same day: PR #99, `deploy/2026-10-30T1420Z` (the plan also rewrote `backup_snapshots_weekly`'s query with LF line endings; same text). A prod adhoc `plex-etl-inventory-snapshot` run loaded 4 extractions and recreated the three views; `inventory_valuation_total_report` reads $15,180,711.53 for 2026-10-29.
+
 ## 2026-10-29 (dev) - Data Hub History tab reads CHANGELOG.md and OPEN_ITEMS.md
 
 ### Fixed

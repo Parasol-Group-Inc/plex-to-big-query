@@ -2,7 +2,7 @@
 -- plex_equivalent_of: reports/sql/inventory_valuation_summary_view.sql
 -- confidence: medium
 -- plex_views: Part_v_Snapshot, Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Snapshot_Cost_Sub_Type_Breakdown, Part_v_Part, Part_v_Container
--- notes: part_on_hand_inventory_report inlined (quantity only); QUALIFY with WINDOW translated literally (rank 1 by cost must also sit on the part's latest change date, else the part drops out, as in BigQuery). Unverified in T-SQL.
+-- notes: on-hand = active containers except Receiving (2026-10-30; was the Vox availability rule); QUALIFY with WINDOW translated literally (rank 1 by cost must also sit on the part's latest change date, else the part drops out, as in BigQuery). Unverified in T-SQL.
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.
 
 -- GRAIN: one row per (snapshot, cost model, part).
@@ -102,12 +102,13 @@ latest_snapshot AS (
   WHERE s.snapshot_date = (SELECT MAX(s2.snapshot_date) FROM snap AS s2)
 ),
 
--- inlined part_on_hand_inventory_report (quantity only): Vox on-hand status rule
+-- stock on the books as Plex's Inventory Valuation screen counts it (2026-10-30):
+-- every active container except Receiving, not the Vox availability rule
 on_hand AS (
   SELECT c.Part_Key AS part_key, SUM(c.Quantity) AS on_hand_qty
   FROM Part_v_Container AS c
   WHERE c.Active = 1
-    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+    AND UPPER(LTRIM(RTRIM(c.Container_Status))) <> 'RECEIVING'
   GROUP BY c.Part_Key
 )
 

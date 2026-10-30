@@ -6,7 +6,7 @@
 -- validate_bq_view). Reads the SAME raw tables that report extracts
 -- (Part_v_Snapshot, Part_v_Snapshot_Cost_Sub_Type_Breakdown,
 -- Part_v_Cost_Sub_Type_Breakdown_History, Part_v_Part) plus the on-hand
--- quantity from part_on_hand_inventory_report (see ON-HAND below). See
+-- quantity from raw_Part_v_Container (see ON-HAND and CONTAINER SCOPE). See
 -- docs/NETSUITE_REPORT_BUILD_PLAN.md (#73) for the original confirmation log.
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime (or by
@@ -64,9 +64,7 @@
 --   ON-HAND (quantity): Part_v_Snapshot carries NO quantity — its columns are
 --   keys, dates, Cost_Model_Key and delta bookkeeping only. It is a COST
 --   snapshot, not a stock snapshot. The only on-hand this repo has is TODAY's,
---   from Part_v_Container via part_on_hand_inventory_report (Vox's status
---   rule — OK / Hold / Inspection Required / Hold for Design Order — lives
---   there, deliberately not copied a fourth time). So:
+--   from Part_v_Container. So:
 --     inventory_value = on_hand_qty × unit_cost  on the CURRENT (latest)
 --                       snapshot only;
 --     NULL on every earlier snapshot, because the quantity on hand at that
@@ -77,6 +75,18 @@
 --   Containers are valued at the part's final-operation cost, not at the
 --   operation each container sits at (WIP between operations would read
 --   slightly high — for the blend, $1.25 vs $1.354).
+--
+-- ⚠ CONTAINER SCOPE CHANGED 2026-10-30. Until then the quantity came from
+--   part_on_hand_inventory_report, i.e. Vox's AVAILABLE rule (Active and OK /
+--   Hold / Inspection Required / Hold for Design Order). That left out Lot
+--   Hold, Expired, Quarantine, Allocated, Released, Rework and Defective stock,
+--   which Plex's Inventory Valuation screen (Costing/InventoryValuation) does
+--   value: the total read $11,900,013 on 10-29 against Plex's $15,180,711.53.
+--   Valuation now counts every ACTIVE container except Receiving, which
+--   reproduced Plex to the cent on the 10-29 load. Receiving was one $699
+--   container that day, so excluding it is matched on one data point, not
+--   confirmed. part_on_hand_inventory_report keeps the availability rule; it
+--   answers a different question.
 --
 -- COST MODELS (added 2026-10-29, audit B1): Plex prod carries five cost models
 -- (1892 Standard Cost 2026 with labor/OH, 4402 Go-Live Inventory Cost 2026,
@@ -203,6 +213,18 @@ latest_snapshot AS (
   SELECT MAX(snapshot_key) AS snapshot_key
   FROM snap
   WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM snap)
+),
+
+-- Stock on the books, as Plex's Inventory Valuation screen counts it: every
+-- active container whatever its status, except Receiving (see CONTAINER SCOPE).
+on_hand AS (
+  SELECT
+    SAFE_CAST(c.Part_Key AS INT64)                      AS part_key,
+    SUM(SAFE_CAST(c.Quantity AS FLOAT64))               AS on_hand_qty
+  FROM `{gcp_project}.{dataset}.raw_Part_v_Container` c
+  WHERE SAFE_CAST(c.Active AS INT64) = 1
+    AND UPPER(TRIM(CAST(c.Container_Status AS STRING))) != 'RECEIVING'
+  GROUP BY part_key
 )
 
 SELECT
@@ -244,5 +266,5 @@ LEFT JOIN cost_model cm
 LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
   ON SAFE_CAST(pc.part_key AS INT64) = SAFE_CAST(p.Part_Key AS INT64)
 
-LEFT JOIN `{gcp_project}.{dataset}.part_on_hand_inventory_report` oh
-  ON SAFE_CAST(oh.part_key AS INT64) = SAFE_CAST(pc.part_key AS INT64)
+LEFT JOIN on_hand oh
+  ON oh.part_key = SAFE_CAST(pc.part_key AS INT64)

@@ -120,6 +120,14 @@ on_hand AS (
     AND UPPER(LTRIM(RTRIM(c.Container_Status))) <> 'RECEIVING'
   GROUP BY c.Part_Key
 ),
+-- available stock only (2026-10-30): part_on_hand_inventory_report's Vox rule, inlined
+available AS (
+  SELECT c.Part_Key AS part_key, SUM(c.Quantity) AS on_hand_qty
+  FROM Part_v_Container AS c
+  WHERE c.Active = 1
+    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+  GROUP BY c.Part_Key
+),
 
 -- inlined inventory_valuation_summary_report, primary cost model only
 summary_all AS (
@@ -128,12 +136,14 @@ summary_all AS (
     cm.cost_model_name, pc.op_unit_cost AS unit_cost,
     CASE WHEN pc.snapshot_key = ls.snapshot_key THEN 1 ELSE 0 END AS is_current_snapshot,
     CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) END AS on_hand_qty,
-    CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value
+    CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value,
+    CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(av.on_hand_qty, 0) * pc.op_unit_cost END AS available_inventory_value
   FROM part_cost AS pc
   CROSS JOIN latest_snapshot AS ls
   JOIN cost_model AS cm ON cm.cost_model_key = pc.cost_model_key AND cm.is_primary = 1
   LEFT JOIN Part_v_Part AS p ON pc.part_key = p.Part_Key
   LEFT JOIN on_hand AS oh ON oh.part_key = pc.part_key
+  LEFT JOIN available AS av ON av.part_key = pc.part_key
 ),
 
 -- Plex can take more than one snapshot a day; keep only the last so values are not doubled
@@ -158,6 +168,7 @@ SELECT
   s.snapshot_date,
   MAX(s.cost_model_name)                                  AS cost_model_name,
   SUM(s.inventory_value)                                  AS total_inventory_value,
+  SUM(s.available_inventory_value)                        AS available_inventory_value,
   COUNT(DISTINCT s.part_number)                           AS part_count,
   MAX(s.is_current_snapshot)                              AS is_current_snapshot,
   CASE WHEN MAX(s.is_current_snapshot) = 1

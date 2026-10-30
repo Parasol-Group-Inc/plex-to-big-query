@@ -83,6 +83,10 @@ SELECT
   s.snapshot_date,
   ANY_VALUE(s.cost_model_name)                            AS cost_model_name,
   SUM(s.inventory_value)                                  AS total_inventory_value,
+  -- Added 2026-10-30: the part of the total in available stock (OK / Hold /
+  -- Inspection Required / Hold for Design Order, part_on_hand_inventory_report's
+  -- rule). The rest is Lot Hold, Expired, Quarantine, Allocated and the like.
+  SUM(s.available_inventory_value)                        AS available_inventory_value,
   COUNT(DISTINCT s.part_number)                           AS part_count,
 
   -- Added 2026-09-24

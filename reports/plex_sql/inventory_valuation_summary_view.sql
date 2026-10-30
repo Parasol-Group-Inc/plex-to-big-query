@@ -119,6 +119,14 @@ on_hand AS (
   WHERE c.Active = 1
     AND UPPER(LTRIM(RTRIM(c.Container_Status))) <> 'RECEIVING'
   GROUP BY c.Part_Key
+),
+-- available stock only (2026-10-30): part_on_hand_inventory_report's Vox rule, inlined
+available AS (
+  SELECT c.Part_Key AS part_key, SUM(c.Quantity) AS on_hand_qty
+  FROM Part_v_Container AS c
+  WHERE c.Active = 1
+    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+  GROUP BY c.Part_Key
 )
 
 SELECT
@@ -140,7 +148,9 @@ SELECT
   CASE WHEN pc.snapshot_key = ls.snapshot_key THEN 1 ELSE 0 END AS is_current_snapshot,
   -- on-hand is today's, so only attached to the current snapshot
   CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) END AS on_hand_qty,
-  CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value
+  CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(oh.on_hand_qty, 0) * pc.op_unit_cost END AS inventory_value,
+  CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(av.on_hand_qty, 0) END AS available_on_hand_qty,
+  CASE WHEN pc.snapshot_key = ls.snapshot_key THEN COALESCE(av.on_hand_qty, 0) * pc.op_unit_cost END AS available_inventory_value
 FROM part_cost AS pc
 CROSS JOIN latest_snapshot AS ls
 LEFT JOIN cost_model AS cm
@@ -148,4 +158,6 @@ LEFT JOIN cost_model AS cm
 LEFT JOIN Part_v_Part AS p
   ON pc.part_key = p.Part_Key
 LEFT JOIN on_hand AS oh
-  ON oh.part_key = pc.part_key;
+  ON oh.part_key = pc.part_key
+LEFT JOIN available AS av
+  ON av.part_key = pc.part_key;

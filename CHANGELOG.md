@@ -14,10 +14,18 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-10-30 (dev) - Inventory by lot with Best By
+
+### Added
+- `inventory_lot_detail_report` (new view on the `inventory_snapshot` pipeline, prod and test configs, Terraform SQL object): active stock by part, lot and container status, with quantity, Go-Live value, the lot's Best By date and `days_to_best_by`, and flags `is_expired_status`, `is_available`, `in_valuation_total`. Asked for by Jennilyn: drill into Lot Hold / Expired / Quarantine, and list lots reaching Best By within X days. Best By is the `Part_v_Lot_Shelf_Life` date whose type `Part_v_Shelf_Life_Type` flags `Best_By = 1` (key 327; 329 Use By, 333 Sell By, 364 Retest). PlexProd 10-29: 5,030 rows, all distinct (part, lot, status); valuation-scope value $15,180,711.53 and available $11,900,013.15, both equal to `inventory_valuation_total_report`; Expired $1,035,247.19; 125 rows reach Best By within 90 days; 25 are past Best By but not marked Expired. PlexTest: 5,066 rows. Fills the Quality "Expired or Expiring Materials" and "Experation Status" rows. Doc: `docs/reports/inventory_lot_detail_report.md`.
+
 ## 2026-10-30 (dev) - Available (usable) inventory value alongside the total
 
 ### Added
 - `inventory_valuation_total_report.available_inventory_value`: the part of the total in available stock (OK / Hold / Inspection Required / Hold for Design Order, `part_on_hand_inventory_report`'s rule, read from that view so the rule stays in one place). The summary gains `available_on_hand_qty` and `available_inventory_value` per part. Columns only: same grain (PlexProd 10-29: 2,015,264 rows, all distinct keys), `total_inventory_value` and the part counts unchanged. 10-29 prod: $11,900,013.15 available of $15,180,711.53. Plex SQL copies updated. D25 (d).
+
+### Deployed
+- Same day: PR #101, `deploy/2026-10-30T1508Z`. A prod adhoc `plex-etl-inventory-snapshot` run recreated the three views; `inventory_valuation_total_report` reads $15,180,711.53 total, $11,900,013.15 available, 1,143 valued and 1,079 uncosted parts.
 
 ## 2026-10-30 (dev) - Inventory valuation part counts match the total's stock
 

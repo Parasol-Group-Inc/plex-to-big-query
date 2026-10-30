@@ -1,6 +1,7 @@
 -- inventory_out_of_stock_report — Plex SQL Developer equivalent
 -- plex_equivalent_of: reports/sql/inventory_out_of_stock_view.sql
--- confidence: medium
+-- STALE 2026-10-30: the BigQuery view nets component demand level by level; this copy still explodes the flat BOM, so its component demand equals gross_component_demand_qty, not component_demand_qty. Port the netting before trusting it.
+-- confidence: low
 -- plex_views: Sales_v_Release, Sales_v_PO_Line, Sales_v_PO, Sales_v_PO_Status, Part_v_Flat_BOM, Part_v_Container, Part_v_Part, Part_v_Part_Product_Type
 -- notes: Upstream inventory_available_to_sell_report (and part_on_hand_inventory_report) inlined as CTEs; same Container.Active caveat.
 -- Translated 2026-10-20 from the BigQuery view. Not yet run in Plex SQL Developer.

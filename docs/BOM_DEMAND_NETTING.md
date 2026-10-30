@@ -178,6 +178,25 @@ SELECT
 FROM `voxdatalake.PlexProd.inventory_available_to_sell_report`
 ```
 
+## Tracking it over time
+
+The views only show today. `PlexProd.msl_demand_daily` keeps one row per part per day
+(America/Denver date), filled by the `msl_demand_daily` scheduled query every day at
+13:00 UTC, after the 4 AM MT full run. SQL: `terraform/msl_demand_daily.sql`. Columns:
+`stock_qty`, `order_demand_qty`, `gross_component_demand_qty`,
+`netted_component_demand_qty`, `covered_by_stock_qty` (gross − netted: demand already
+covered by stock higher up), `available_qty`, plus `reorder_point` / `at_reorder_point`
+from Approaching MSL when the part is in it. About 2,850 rows a day. First row:
+2026-10-30.
+
+```sql
+SELECT snapshot_date, gross_component_demand_qty, netted_component_demand_qty,
+       covered_by_stock_qty, stock_qty
+FROM `voxdatalake.PlexProd.msl_demand_daily`
+WHERE part_no = '33312-00NUT46-0'
+ORDER BY snapshot_date
+```
+
 ## What it still does not do
 
 - **Open jobs.** Demand is sales orders only, as before. A job already making a bottle is

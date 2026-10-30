@@ -58,6 +58,25 @@ safely **before** it goes through that flow.
 > silently rolled a live fix back (the fix only ever existed in GCS). Copying
 > into `test/` for a quick look is the only exception — see below.
 
+### A view was edited by hand in BigQuery
+
+Someone (usually Jennilyn) changes a live view in the BigQuery console. That
+edit is undone by the **next pipeline run that extracts**, not only by the next
+deploy, because each run recreates its views from the SQL in GCS. To keep it:
+
+1. Read the live definition and diff it against the repo:
+   ```bash
+   bq query --use_legacy_sql=false --format=csv \
+     "SELECT view_definition FROM \`voxdatalake.PlexProd.INFORMATION_SCHEMA.VIEWS\` WHERE table_name='<view>'"
+   ```
+2. Make the same change in `reports/sql/<view>_view.sql` (keep the
+   `{gcp_project}` / `{dataset}` placeholders), with a dated comment quoting why.
+3. Check the repo SQL returns exactly what the live view returns: substitute the
+   placeholders, then `EXCEPT DISTINCT` on `TO_JSON_STRING(row)` both ways. 0 rows
+   different is the bar (2026-10-30 `pipeline_plex_value_report`: 218/218, 0).
+4. Plex SQL copy, report doc, CHANGELOG; merge; `./scripts/deploy.sh` before the
+   next prod slot; run the job; query the view.
+
 ### Change a filter on a Plex view
 
 Edit the extraction in **both** YAMLs — find it and set the `filter` field:

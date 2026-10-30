@@ -1022,6 +1022,14 @@
       "detail": "Prod and test YAML are separate; change both. Editing only prod made a test run log 22 extractions instead of 24 and exit 0 (2026-09-09). Check grep -c 'plex_view:'. In GCS the test files are under test/, in git under reports/test/."
     },
     {
+      "title": "A hand edit to a live view lasts only until the next run",
+      "detail": "Every extracting run recreates its views from the SQL in GCS, so a view changed in the BigQuery console reverts at the next run, not just the next deploy. Jennilyn edits views directly (pipeline_plex_value_report Deposit Review, 2026-10-30). Put the change in reports/sql, prove the repo SQL returns exactly the live rows, deploy before the next prod slot. docs/OPERATIONS.md, \"A view was edited by hand\"."
+    },
+    {
+      "title": "Bottling 9-parts count from 2026-11-01",
+      "detail": "The 9-part drop (double credit for the 5-part job) applies only before 2026-11-01. *_9part_with_5_bom_qty shows possible double credit; it should be 0 once Jennilyn finishes removing 5-part BOMs (D27)."
+    },
+    {
       "title": "Exit 0 does not mean the view was created",
       "detail": "A job can finish PARTIAL with exit 0. Query the view. Keep SAFE_CAST on both sides of every join."
     },

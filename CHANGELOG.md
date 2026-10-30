@@ -19,6 +19,9 @@ don't need an entry.
 ### Changed
 - Jennilyn accepted the integration: "the label -> monday.com integration is g2g at this point." `label-design/STATUS.md` records the sign-off; L8 and L13 stay open as follow-ups.
 
+### Removed
+- OPEN_ITEMS L13 closed as archived (Emilio, 2026-10-30). The Plex REST API push (`deploy/plex_api_function/push.py`, `plex_api_label_design_report`) was merged in PR #42 but never deployed, and stays parked: a review found it would duplicate items on the team's live board and push orders that are not Pending Fulfillment. `deploy/plex_api_function/ARCHIVED.md` lists every fix needed before any deploy; point a revived push at a sandbox board, never the team's boards. The test extractor `plex-api-extract-test` is unchanged and still lands PlexTest `plex_api_*` tables; PlexProd has none. Revisit if the API replaces ODBC (Jennilyn's near-real-time labeling report, parked until November, needs the API). L8 stays open.
+
 ## 2026-10-30 (dev) - Bottling 9-parts count from 1 Nov, with a double-credit flag
 
 ### Changed

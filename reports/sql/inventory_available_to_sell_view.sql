@@ -138,7 +138,7 @@
 -- GRAIN: one row per part that has either on-hand inventory or open demand
 -- (or is the stocked key of a wrapper holding stock).
 
-WITH
+WITH RECURSIVE
 
 wrap AS (
   SELECT
@@ -263,6 +263,267 @@ wrapper_stock AS (
   GROUP BY w.root_key
 ),
 
+-- ── Netted component demand (2026-10-30) ─────────────────────────────────
+-- component_demand above multiplies each sales order by Plex's FLAT BOM, i.e.
+-- straight down through every level, ignoring stock held at the levels in
+-- between. A finished good with 40,944 in stock against a 50,000 order still
+-- sent all 50,000 down to its bright bottle and 50,000 x 241 = 12.05M down to
+-- its blend (93312 -> 53312 -> 33312-00NUT46-0, PlexProd 10-30). That is the
+-- double count Jennilyn reported in Approaching MSL.
+--
+-- The rule now (hers: go down one BOM level at a time and only bring over
+-- demand for what is not stocked) is standard MRP netting:
+--   gross(part)     = its own order demand + SUM over its single-level BOM
+--                     parents of shortfall(parent) x BOM quantity
+--   shortfall(part) = GREATEST(gross - stock, 0)
+-- processed in low-level-code order, so every parent is netted before any of
+-- its components. Her example then reads 50,000 - 40,944 = 9,056 bottles,
+-- 9,056 bright bottles, 9,056 x 241 = 2,182,496 of blend.
+--
+--   bom_edge  single-level Part_v_BOM (parent, component, quantity per parent)
+--   bom_walk  every path down the BOM; a part's low-level code (llc) is its
+--             DEEPEST depth, 0 for a part that is nobody's component. Max 6 in
+--             PlexProd on 10-30; no cycles (the walk stops at depth 20).
+--   net_k     parts with llc <= k, netted. Unrolled to 6, the deepest level
+--             today: BigQuery's recursive CTE cannot both carry earlier levels
+--             and aggregate them. Each stage reads the previous one ONCE: it
+--             unnests every netted row into itself plus one contribution per
+--             BOM line, then groups by part. BigQuery does not materialize
+--             CTEs, so a stage that read net_(k-1) twice doubled the work per
+--             level (2^6 re-runs; the first draft ran past two minutes). A part deeper than 6 is not netted; it keeps
+--             the flat (gross) figure and bom_depth_beyond_netting flags it.
+--             Add a net_7 stage if that ever shows TRUE.
+--
+-- Stock used for netting is the available on-hand below (part_on_hand_inventory_
+-- report, Vox's status rule) plus stock on wrapper keys, converted. A wrapper
+-- key nets nothing itself: its BOM line to the stocked key passes its whole
+-- demand down x factor, and the stocked key nets it against the pooled stock.
+-- component_demand_from_held_orders_qty stays gross (flat): Hold is a slice of
+-- order demand and has no meaningful netted share.
+bom_edge AS (
+  SELECT
+    SAFE_CAST(b.Part_Key AS INT64)            AS parent_key,
+    SAFE_CAST(b.Component_Part_Key AS INT64)  AS component_key,
+    SUM(SAFE_CAST(b.Quantity AS FLOAT64))     AS qty
+  FROM `{gcp_project}.{dataset}.raw_Part_v_BOM` b
+  WHERE COALESCE(SAFE_CAST(b.Active AS INT64), 1) != 0
+    AND SAFE_CAST(b.Quantity AS FLOAT64) > 0
+  GROUP BY parent_key, component_key
+),
+
+bom_walk AS (
+  SELECT parent_key AS part_key, 0 AS depth FROM bom_edge
+  UNION ALL
+  SELECT e.component_key, w.depth + 1
+  FROM bom_walk w
+  JOIN bom_edge e ON e.parent_key = w.part_key
+  WHERE w.depth < 20
+),
+
+bom_llc AS (
+  SELECT part_key, MAX(depth) AS llc FROM bom_walk GROUP BY part_key
+),
+
+bom_node AS (
+  SELECT
+    k.part_key,
+    COALESCE(lc.llc, 0)                                       AS llc,
+    COALESCE(od.demand_qty, 0)                                AS own_demand_qty,
+    IF(wk.wrapper_key IS NOT NULL, 0,
+       COALESCE(oh.on_hand_qty, 0) + COALESCE(ws.on_hand_qty, 0)) AS netting_stock_qty
+  FROM (
+    SELECT part_key FROM bom_llc
+    UNION DISTINCT
+    SELECT part_key FROM order_demand
+  ) k
+  LEFT JOIN bom_llc lc ON lc.part_key = k.part_key
+  LEFT JOIN order_demand od  ON od.part_key = k.part_key
+  LEFT JOIN on_hand oh       ON oh.part_key = k.part_key
+  LEFT JOIN wrapper_stock ws ON ws.part_key = k.part_key
+  LEFT JOIN (SELECT DISTINCT wrapper_key FROM wrap) wk ON wk.wrapper_key = k.part_key
+),
+
+net_0 AS (
+  SELECT part_key, llc, own_demand_qty AS gross_qty,
+         GREATEST(own_demand_qty - netting_stock_qty, 0) AS shortfall_qty
+  FROM bom_node
+  WHERE llc = 0
+),
+
+net_1 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 1, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 1, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_0 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 1
+),
+
+net_2 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 2, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 2, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_1 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 2
+),
+
+net_3 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 3, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 3, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_2 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 3
+),
+
+net_4 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 4, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 4, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_3 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 4
+),
+
+net_5 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 5, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 5, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_4 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 5
+),
+
+net_6 AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(n.llc < 6, a.self_gross_qty, n.own_demand_qty + COALESCE(a.incoming_qty, 0)) AS gross_qty,
+    IF(n.llc < 6, a.self_shortfall_qty,
+       GREATEST(n.own_demand_qty + COALESCE(a.incoming_qty, 0) - n.netting_stock_qty, 0)) AS shortfall_qty
+  FROM bom_node n
+  LEFT JOIN (
+    SELECT
+      x.part_key,
+      MAX(IF(x.is_self, x.gross_qty, NULL))     AS self_gross_qty,
+      MAX(IF(x.is_self, x.shortfall_qty, NULL)) AS self_shortfall_qty,
+      SUM(IF(x.is_self, 0, x.qty))              AS incoming_qty
+    FROM net_5 s
+    LEFT JOIN bom_edge e ON e.parent_key = s.part_key
+    CROSS JOIN UNNEST([
+      STRUCT(s.part_key AS part_key, TRUE AS is_self, s.gross_qty AS gross_qty,
+             s.shortfall_qty AS shortfall_qty, 0.0 AS qty),
+      STRUCT(e.component_key, FALSE, NULL, NULL, s.shortfall_qty * e.qty)
+    ]) x
+    WHERE x.part_key IS NOT NULL
+    GROUP BY x.part_key
+  ) a ON a.part_key = n.part_key
+  WHERE n.llc <= 6
+),
+
+-- Netted component demand = what reached the part from its parents. Zero on
+-- wrapper keys: their demand is carried by the stocked key (WRAPPER KEYS).
+netted_demand AS (
+  SELECT
+    n.part_key,
+    n.llc,
+    IF(wk.wrapper_key IS NOT NULL, 0, n.gross_qty - b.own_demand_qty) AS demand_qty
+  FROM net_6 n
+  JOIN bom_node b ON b.part_key = n.part_key
+  LEFT JOIN (SELECT DISTINCT wrapper_key FROM wrap) wk ON wk.wrapper_key = n.part_key
+),
+
 -- Every part that appears on either side, so the FULL OUTER JOIN below has
 -- a single spine to hang both halves off and no part can be dropped.
 part_keys AS (
@@ -297,11 +558,14 @@ SELECT
   COALESCE(od.demand_qty, 0)                              AS order_demand_qty,
   COALESCE(od.demand_held_qty, 0)                         AS order_demand_from_held_orders_qty,
   COALESCE(od.open_order_count, 0)                        AS open_order_count,
-  COALESCE(cd.demand_qty, 0)                              AS component_demand_qty,
+  -- Netted since 2026-10-30 (see Netted component demand); the old flat
+  -- figure is gross_component_demand_qty at the end.
+  COALESCE(nd.demand_qty, cd.demand_qty, 0)                AS component_demand_qty,
   COALESCE(cd.demand_held_qty, 0)                         AS component_demand_from_held_orders_qty,
   COALESCE(cd.parent_part_count, 0)                       AS bom_parent_part_count,
 
-  COALESCE(od.demand_qty, 0) + COALESCE(cd.demand_qty, 0) AS total_demand_qty,
+  COALESCE(od.demand_qty, 0) + COALESCE(nd.demand_qty, cd.demand_qty, 0)
+                                                          AS total_demand_qty,
 
   -- ── Availability. Down from four columns to two (2026-09-09): the two
   -- `_firm_` variants are gone now that Plex's own Include_In_MRP flag
@@ -322,7 +586,7 @@ SELECT
   COALESCE(oh.on_hand_qty, 0) + COALESCE(ws.on_hand_qty, 0)
     - COALESCE(od.demand_qty, 0)                          AS available_vs_orders,
   COALESCE(oh.on_hand_qty, 0) + COALESCE(ws.on_hand_qty, 0)
-    - (COALESCE(od.demand_qty, 0) + COALESCE(cd.demand_qty, 0))
+    - (COALESCE(od.demand_qty, 0) + COALESCE(nd.demand_qty, cd.demand_qty, 0))
                                                           AS available_vs_total_demand,
 
   -- ── Flags, so a reader can see WHY a number looks the way it does
@@ -336,13 +600,20 @@ SELECT
 
   -- Appended 2026-10-28 (see WRAPPER KEYS above).
   COALESCE(ws.on_hand_qty, 0)                             AS wrapper_on_hand_qty,
-  (wk.wrapper_key IS NOT NULL)                            AS is_unit_wrapper
+  (wk.wrapper_key IS NOT NULL)                            AS is_unit_wrapper,
+
+  -- Appended 2026-10-30 (see Netted component demand above).
+  COALESCE(cd.demand_qty, 0)                              AS gross_component_demand_qty,
+  lc.llc                                                  AS bom_low_level_code,
+  COALESCE(lc.llc > 6, FALSE)                             AS bom_depth_beyond_netting
 
 FROM part_keys k
 
 LEFT JOIN on_hand oh          ON k.part_key = oh.part_key
 LEFT JOIN order_demand od     ON k.part_key = od.part_key
 LEFT JOIN component_demand cd ON k.part_key = cd.part_key
+LEFT JOIN netted_demand nd    ON k.part_key = nd.part_key
+LEFT JOIN bom_llc lc           ON k.part_key = lc.part_key
 LEFT JOIN wrapper_stock ws    ON k.part_key = ws.part_key
 LEFT JOIN (SELECT DISTINCT wrapper_key FROM wrap) wk
                               ON k.part_key = wk.wrapper_key

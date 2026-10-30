@@ -1,5 +1,6 @@
 -- approaching_msl_report — Plex SQL Developer equivalent (Plex-side figures only)
 -- plex_equivalent_of: reports/sql/approaching_msl_view.sql
+-- STALE 2026-10-30: the BigQuery view nets component demand level by level; this copy still explodes the flat BOM, so its component demand equals gross_component_demand_qty, not component_demand_qty. Port the netting before trusting it.
 -- confidence: low
 -- plex_views: Part_v_Part, Part_v_Container, Part_v_Production, Part_v_BOM, Part_v_Job, Part_v_Job_Status, Purchasing_v_PO, Purchasing_v_PO_Status, Purchasing_v_Line_Item, Purchasing_v_Release
 -- notes: Covers reorder point, on hand, Plex usage (90 days), open jobs and on order, one row per part number with wrapper keys converted (2026-10-28). NOT in Plex: NetSuite usage and reorder point (manual-data app tables msl_item_inputs / msl_rules) and quantity_available (demand from inventory_available_to_sell_report). Not yet run in Plex SQL Developer.

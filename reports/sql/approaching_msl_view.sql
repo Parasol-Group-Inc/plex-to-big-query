@@ -33,6 +33,13 @@
 --                        (stocked key only, see WRAPPER KEYS). on_hand_qty - demand_qty =
 --                        quantity_available. NOT open_job_qty, which is jobs making the
 --                        part itself (added 2026-10-28).
+--                        NETTED since 2026-10-30: a parent passes down only what its own
+--                        stock does not cover, level by level (inventory_available_to_sell_
+--                        view.sql, "Netted component demand"). Jennilyn's blend 33312-00NUT46-0
+--                        read 12.05M (50,000 bottles x 241) against 2,182,496 netted.
+--   gross_demand_qty     the same demand WITHOUT netting: every open order exploded through
+--                        the whole BOM. Kept beside demand_qty because Jennilyn wants both
+--                        (total demand on a component, and that reduced by stock above it).
 --   Every quantity is in the unit of the part's stocked key (unit column; blank in Plex
 --   for most raw materials, which are kg).
 --   part_type / part_group_key / part_group / part_source_key   filter attributes of the
@@ -234,6 +241,8 @@ inv AS (
     SUM(COALESCE(a.on_hand_qty, 0) * COALESCE(w.factor, 1)
         - IF(w.wrapper_key IS NULL, COALESCE(a.total_demand_qty, 0), 0))   AS quantity_available,
     SUM(IF(w.wrapper_key IS NULL, COALESCE(a.total_demand_qty, 0), 0))    AS demand_qty,
+    SUM(IF(w.wrapper_key IS NULL, COALESCE(a.order_demand_qty, 0)
+           + COALESCE(a.gross_component_demand_qty, 0), 0))               AS gross_demand_qty,
     SUM(u.qty_used * COALESCE(w.factor, 1))                                 AS qty_used,
     SUM(COALESCE(oj.open_job_qty, 0) * COALESCE(w.factor, 1))               AS open_job_qty,
     SUM(COALESCE(oo.on_order_qty, 0) * COALESCE(w.factor, 1))               AS on_order_qty,
@@ -264,6 +273,7 @@ base AS (
     i.on_hand_qty,
     i.quantity_available,
     i.demand_qty,
+    i.gross_demand_qty,
     i.qty_used / NULLIF(DATE_DIFF(s.last_d, s.first_d, DAY) + 1, 0) AS plex_usage,
     ns.ns_avg_daily_usage        AS ns_usage,
     ns.as_of_date                AS ns_as_of,
@@ -346,6 +356,8 @@ SELECT
   part_group_key,
   part_group,
   part_source_key,
-  demand_qty
+  demand_qty,
+  -- Appended 2026-10-30: demand before netting (see demand_qty above).
+  gross_demand_qty
 FROM final
 WHERE reorder_point > 0 OR avg_daily_usage > 0

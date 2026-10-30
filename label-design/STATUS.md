@@ -15,8 +15,10 @@
 
 Jennilyn, 2026-10-30: "the label -> monday.com integration is g2g at this point."
 The Plex → Monday push is accepted as done. What remains is follow-up, not
-blocking: L8 (item name: customer part number vs label code, Ashley's call) and
-L13 (the archived Plex REST API push), both in `docs/OPEN_ITEMS.md`. Keep watching
+blocking: L8 (item name: customer part number vs label code, Ashley's call), in
+`docs/OPEN_ITEMS.md`. L13 (the Plex REST API push) was closed the same day as
+archived: `deploy/plex_api_function/ARCHIVED.md` is the record and the restart
+checklist. Keep watching
 `PlexProd.label_design_push_log` and the problem emails as normal operations.
 
 ---

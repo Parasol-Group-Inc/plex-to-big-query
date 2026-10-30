@@ -1,6 +1,6 @@
 # Vox | Inventory by Lot with Best By
 
-> **Status:** 🛠 In repo 2026-10-30, deploy pending · **Category:** Inventory · **Runs:** rides the Inventory Snapshot pipeline (prod 1 PM / 6 PM / 11 PM probe + 4 AM full, test nightly)
+> **Status:** ✅ Live in PlexProd 2026-10-30 (PlexTest from its nightly run) · **Category:** Inventory · **Runs:** rides the Inventory Snapshot pipeline (prod 1 PM / 6 PM / 11 PM probe + 4 AM full, test nightly)
 
 ## What this tells you
 

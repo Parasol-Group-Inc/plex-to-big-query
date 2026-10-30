@@ -189,9 +189,14 @@ FROM `voxdatalake.PlexProd.inventory_available_to_sell_report`
 - **Which parent gets the stock.** When a part has several parents, its stock nets the
   summed demand, not each parent's share. That is standard MRP, and it is why only totals
   per part are published.
-- **Plex SQL copies.** `reports/plex_sql/` versions of available-to-sell, out-of-stock and
-  approaching MSL still use the flat explosion (gross). They say so in their headers and
-  are marked low confidence (OPEN_ITEMS D13).
+- **Plex SQL copies are ported but untested.** `reports/plex_sql/` available-to-sell and
+  out-of-stock carry the same netting in T-SQL (recursive CTE for low-level codes, the
+  seven stages with `CROSS APPLY (VALUES …)` in place of `UNNEST`). Neither has been run
+  in Plex SQL Developer (OPEN_ITEMS D13). If it rejects the recursive CTE, take the
+  low-level code from `Part_v_Flat_BOM` instead: `MAX(BOM_Level)` per
+  `Component_Part_Key`. The approaching MSL copy never computed demand; it points at the
+  available-to-sell copy.
+- **Open jobs and due dates** are tracked as OPEN_ITEMS D26.
 
 ## History
 
@@ -199,4 +204,4 @@ FROM `voxdatalake.PlexProd.inventory_available_to_sell_report`
   netted were the same.
 - 2026-10-28: wrapper keys fixed (demand on stocked keys only, wrapper stock converted).
 - 2026-10-30: netting, after Jennilyn found the MSL double count. CHANGELOG 2026-10-30,
-  PR #103.
+  PR #103, deployed `deploy/2026-10-30T1555Z`. Plex SQL copies ported the same day.

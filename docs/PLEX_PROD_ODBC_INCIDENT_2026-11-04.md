@@ -200,3 +200,14 @@ more areas the same way:
 
 Save them as `manual-dumps/<date>/<view>.csv` (gitignored), back up the raw tables,
 run the script without `--swap`, read its comparison, then run it with `--swap`.
+
+## Update 2026-11-05 afternoon: SQL Development froze too; Plex screens used instead
+
+By the afternoon the SQL Development Environment returned the same frozen copy
+as ODBC (newest rows from 2026-11-04 ~18:56 MT), so CSV exports could no longer
+bring anything newer. Plex's own screens were still live. An hourly laptop task
+now reads three of them (Shipping Revenue by Part Group, Shipper History, and the
+Pending Fulfillment sales orders with their releases) into `PlexProd.live_*`, and
+Label Design reads the releases table while it is fresh, pushing new Label Design
+lines to Monday again. Details, safeguards and how to retire it:
+[PLEX_SCREEN_EXTRACTION.md](PLEX_SCREEN_EXTRACTION.md) (OPEN_ITEMS D30).

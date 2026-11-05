@@ -4,7 +4,7 @@
 > laptop loads three Plex screens into `PlexProd.live_*`. `label_design_report` reads
 > one of them while it is fresh, and the task starts the Monday push.
 > **Retire it when ODBC is back** (see [Retiring it](#retiring-it-when-odbc-returns)).
-> Open item: OPEN_ITEMS **D29**. Incident: [PLEX_PROD_ODBC_INCIDENT_2026-11-04.md](PLEX_PROD_ODBC_INCIDENT_2026-11-04.md).
+> Open item: OPEN_ITEMS **D30**. Incident: [PLEX_PROD_ODBC_INCIDENT_2026-11-04.md](PLEX_PROD_ODBC_INCIDENT_2026-11-04.md).
 
 ## Contents
 
@@ -309,7 +309,7 @@ The ETL is back when `PlexOps.etl_dispatch_log` shows prod runs succeeding and
 4. Later, optionally:
    - remove `live_switch`/`live_lines` from the view (keep `data_source = 'odbc'` or drop the column);
    - drop the `live_*` tables;
-   - close OPEN_ITEMS D29.
+   - close OPEN_ITEMS D30.
 
    Keeping the branch costs nothing and makes a future outage a matter of re-enabling the task.
 

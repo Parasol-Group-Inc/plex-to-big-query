@@ -640,6 +640,11 @@ over the batch's digest role, so the digest still goes out.
 When Plex stops answering ODBC, retrying every job is useless and mails a
 failure per job. The dispatcher stops instead.
 
+> **A long outage:** while ODBC was frozen from 2026-11-04, Label Design (and
+> live copies of Shipping Revenue and Shipper History) ran from Plex's own
+> screens through an hourly laptop task. See
+> [PLEX_SCREEN_EXTRACTION.md](PLEX_SCREEN_EXTRACTION.md) to rerun, check or retire it.
+
 1. **Opens:** the two newest finished runs that say anything about Plex both
    failed with `ODBC connection failed` (`OUTAGE_THRESHOLD`). A failure of
    another kind (bad SQL, a view) does not count either way.

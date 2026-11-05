@@ -315,6 +315,19 @@ To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.
 The function is deployed with `gcloud functions deploy` (command in
 `terraform/main.tf`), not Cloud Build.
 
+## Plex screen extraction while ODBC is down (since 2026-11-05)
+
+Plex's ODBC (and SQL Development) froze on 2026-11-04 ~18:56 MT; its screens
+did not. An hourly Windows task on Emilio's laptop, "Plex live screens", runs
+`scripts/plex_live_screens.py --load` **from the primary folder** (so a change
+reaches it only after merge **and** `git pull` there). It writes only
+`PlexProd.live_*`, never a `raw_*` table. `label_design_report` reads
+`live_order_releases` while it is under 3 h old (`data_source` = `live`) and
+falls back to ODBC by itself; the task also starts the Monday push, gated so it
+steps aside once the ETL runs again. One Plex web run at a time: an OS lock on
+`etl-manual/plex_web.lock`, exit 75 if held. Runbook, retirement and restore:
+`docs/PLEX_SCREEN_EXTRACTION.md`; OPEN_ITEMS D30.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers

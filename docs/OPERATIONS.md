@@ -444,6 +444,22 @@ Every emailed run carries one of these status badges:
 | **PARTIAL** | Yellow | One or more extractions failed (ODBC error, BQ write error); other extractions completed successfully — check the Errors and Notes sections, and the failed rows in the extraction table |
 | **FAILED** | Red | Job crashed before completing — ODBC connection refused, config load failed, BigQuery unreachable |
 | **NO CHANGES** | Grey | A probe run found nothing changed in Plex since the last clean run, so nothing was extracted and BigQuery is unchanged. Short template, same subject. |
+| **SUCCESS · NO NEW DATA** | Yellow | The run loaded cleanly, but Plex returned exactly the data earlier probes saw, while 2 or more runs failed to connect in the last 6 h. During an outage Plex can answer with a frozen copy (11-04/11-05), so this run does **not** show Plex is current. Since 2026-11-05. |
+
+**"No new data" (since 2026-11-05).** Whenever a run's probe sees the same Plex
+data as the probes before it (the config entry is ignored), the "why it ran" line
+says since when: *Plex's data in these tables is the same as at ...*. Slow tables
+(supplier returns: unchanged since 10-19) say this on ordinary days too; it is
+information, not a warning. Only while Plex is failing to connect (2+
+`ODBC connection failed` rows in `PlexOps.etl_dispatch_log` in the last
+`OUTAGE_NOTE_HOURS`, default 6) does the badge turn yellow. Then the
+`job_run_log.detail` of that clean run starts with `No new data:`, and the digest
+shows the row as NO NEW DATA and counts it in its headline. The run's status stays
+`success`, because the breaker and dispatcher read it and a working connect is
+healthy evidence for them. Test jobs never flag, because they have no dispatch log. Code:
+`no_new_data_info()` in `main.py`, `_data_age_note()` in `email_utils.py`;
+tests: `tests/test_no_new_data.py`. **Plex is really back** when a probe sees *new*
+data (a fingerprint change), not when a run connects.
 
 Since 2026-10-19:
 - **Times are Mountain,** and the subject's date is the Mountain date, so an

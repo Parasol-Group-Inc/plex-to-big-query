@@ -14,6 +14,23 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Run emails say when Plex returned no new data
+
+- **Added** a "no new data" check to every probed run (`main.no_new_data_info`).
+  During the ODBC outage some runs got through (Supplier Returns at 14:26 MT) and
+  emailed a plain SUCCESS, which read as "Plex is back" while Plex was serving the
+  copy frozen at 11-04 ~18:56 MT. Now, when the probe sees exactly the Plex data of
+  the probes before it, the email's "why it ran" line says since when. If 2+ runs
+  also failed to connect in the last 6 h, the badge reads **SUCCESS · NO NEW DATA**
+  (yellow) and says the run does not show Plex is current. The run's
+  `job_run_log.detail` starts with `No new data:`, and the digest marks the row NO NEW
+  DATA and counts it in its headline. Status stays `success` (breaker and dispatcher
+  untouched); any BigQuery trouble in the check is logged and skipped. Replayed on the
+  real 14:26 run: flagged (15 connect failures in the 6 h before; data unchanged
+  since 2026-10-19). New `tests/test_no_new_data.py`; suite 120 passed. Ships with
+  the next image build (Cloud Build), not `terraform apply`. Docs: `docs/OPERATIONS.md`
+  § Email Status Levels.
+
 ## 2026-11-05 (dev) - Label Design from live Plex screens; screen loader hardened
 
 - **Deployed** 2026-11-05 as tag `deploy/2026-11-05T2156Z` (main `14aa601`, 1 change:

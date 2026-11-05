@@ -643,6 +643,107 @@ def last_applied_probe(bq: bigquery.Client, report_name: str) -> tuple:
     return rows[0].fingerprint, snapshot
 
 
+# "No new data" (2026-11-05). During the 11-04 outage Plex's ODBC sometimes
+# answered, but with a copy frozen at 11-04 ~18:56 MT; those runs emailed a plain
+# SUCCESS that read as "Plex is back". A run whose probe saw exactly the data of
+# earlier probes now says since when, and while Plex has been failing to connect
+# it is flagged NO NEW DATA in the email and the digest. Never fatal. Status
+# stays `success`: the breaker and the dispatcher read it, and a connect that
+# worked IS healthy evidence for them.
+NO_NEW_DATA_PREFIX  = "No new data"
+OUTAGE_NOTE_HOURS   = int(os.environ.get("OUTAGE_NOTE_HOURS", "6"))
+OUTAGE_NOTE_MIN_FAILURES = 2   # the breaker's own threshold
+
+
+def _data_parts(snapshot: Optional[dict]) -> dict:
+    """A probe snapshot without its config entry: only what Plex returned."""
+    return {k: v for k, v in (snapshot or {}).items() if k != _CONFIG_SNAPSHOT_KEY}
+
+
+def data_unchanged_since(bq: bigquery.Client, report_name: str,
+                         snapshot: dict) -> Optional[datetime]:
+    """The earliest probe, in the unbroken run of newest probes, that saw the
+    same Plex data as this one. None when the newest earlier probe saw something
+    else (or none is on record). Probes with no snapshot (inconclusive ones) are
+    passed over; a 30-day window keeps the read small."""
+    current = _data_parts(snapshot)
+    if not current:
+        return None
+    query = f"""
+        SELECT probed_at, snapshot
+        FROM `{GCP_PROJECT}.{BQ_DATASET}.{PROBE_LOG_TABLE}`
+        WHERE report_name = @report_name AND snapshot IS NOT NULL
+          AND probed_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+        ORDER BY probed_at DESC
+        LIMIT 500
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("report_name", "STRING", report_name)])
+    since = None
+    for row in bq.query(query, job_config=job_config).result():
+        try:
+            seen = _data_parts(json.loads(row.snapshot))
+        except ValueError:
+            break
+        if seen != current:
+            break
+        since = row.probed_at
+    return since
+
+
+def recent_connect_failures(bq: bigquery.Client, hours: int = OUTAGE_NOTE_HOURS) -> int:
+    """How many runs failed to connect to Plex in the last `hours`, from the
+    dispatcher's log (the breaker's evidence). 0 when this run has no access to
+    that log: test jobs, and local runs."""
+    table = OUTAGE_BREAKER_TABLE or (DISPATCH_LOG_TABLE if "." in DISPATCH_LOG_TABLE else "")
+    if not table:
+        return 0
+    query = f"""
+        SELECT COUNT(*) AS n
+        FROM `{GCP_PROJECT}.{table}`
+        WHERE finished_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @hours HOUR)
+          AND outcome = 'failed'
+          AND STARTS_WITH(IFNULL(detail, ''), 'ODBC connection failed')
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("hours", "INT64", hours)])
+    return int(list(bq.query(query, job_config=job_config).result())[0].n)
+
+
+def no_new_data_info(bq: bigquery.Client, report_name: str, snapshot: dict) -> dict:
+    """Probe-info fields for a run whose Plex data matches earlier probes:
+    {"unchanged_since": iso UTC, "unchanged_since_local": text,
+     "connect_failures": n, "no_new_data": bool, "no_new_data_note": text}.
+    Empty when the data is new or anything goes wrong."""
+    try:
+        since = data_unchanged_since(bq, report_name, snapshot)
+        if since is None:
+            return {}
+        failures = recent_connect_failures(bq)
+    except Exception:
+        log.exception("No-new-data check failed; the run email will not mention it.")
+        return {}
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    local = since.astimezone(ZoneInfo(REPORT_TIME_ZONE))
+    when = local.strftime("%Y-%m-%d %H:%M ") + local.strftime("%Z")
+    flagged = failures >= OUTAGE_NOTE_MIN_FAILURES
+    # Careful wording: a table that rarely changes (supplier returns: unchanged
+    # since 10-19) matches earlier probes in any week. During an outage that
+    # means the run cannot show Plex is current, not that the copy is frozen.
+    note = (f"{NO_NEW_DATA_PREFIX}: Plex returned the same data as at {when}, with "
+            f"{failures} failed connect(s) in the last {OUTAGE_NOTE_HOURS} h; this run does not "
+            f"show Plex is current (it may be a frozen copy)") if flagged else ""
+    return {
+        "unchanged_since":       since.isoformat(),
+        "unchanged_since_local": when,
+        "connect_failures":      failures,
+        "connect_hours":         OUTAGE_NOTE_HOURS,
+        "no_new_data":           flagged,
+        "no_new_data_note":      note,
+    }
+
+
 def log_probe(bq: bigquery.Client, report_name: str, job_name: str,
               fingerprint: str, outcome: str, detail: str = "",
               snapshot: Optional[dict] = None):
@@ -1014,7 +1115,10 @@ def run_details(result: dict, errors: List[str], start_time: datetime,
         "tables_total":     len(extractions) if extractions else probe.get("sources_checked"),
         "tables_failed":    sum(1 for e in extractions if not e.get("ok", True)),
         "tables_changed":   ", ".join(str(c) for c in changed)[:1000] or None,
-        "detail":           "; ".join(errors)[:1000] if errors else None,
+        # A clean run has no errors; a "no new data" note takes the slot, and
+        # the digest shows such a row as NO NEW DATA (email_utils._digest_rows).
+        "detail":           ("; ".join(errors)[:1000] if errors
+                             else (probe.get("no_new_data_note") or None)),
         "execution_name":   result.get("execution_name") or os.environ.get("CLOUD_RUN_EXECUTION", ""),
         "build":            BUILD_SHA,
     }
@@ -1875,6 +1979,11 @@ def main():
                         "skipped":                True,
                         "skip_reason":            "probe",
                     }
+                if previous_snapshot is not None and not probe_info["changed"]:
+                    probe_info.update(no_new_data_info(bq, report_name, probe_snapshot))
+                    if probe_info.get("no_new_data"):
+                        log.warning(probe_info["no_new_data_note"] + ".")
+                        events.append(probe_info["no_new_data_note"])
                 if not may_skip:
                     log.info(f"RUN_MODE={RUN_MODE}: full run; probe recorded as the next reference "
                              f"({probe_fingerprint}).")

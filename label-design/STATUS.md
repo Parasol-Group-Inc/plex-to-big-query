@@ -13,6 +13,10 @@
 
 ## UPDATE — 2026-11-05 (latest): running from Plex's screens during the ODBC outage
 
+**Deployed and running (2026-11-05 ~22:30 UTC).** The view returns 72 live rows, and the
+first push from the screens created 10 Monday items on Plex Import (orders 399, 404,
+559, 561, 570, 587, 604, 615, 616), all filled. From here the hourly task keeps it going.
+
 Plex's ODBC feed froze on 2026-11-04 ~18:56 MT (OPEN_ITEMS D20), and the outage
 breaker has held the `label_design` job since, so no new orders reached Monday.
 Since 2026-11-05 an hourly task on Emilio's laptop reads the Pending Fulfillment

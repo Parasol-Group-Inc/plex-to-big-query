@@ -16,6 +16,17 @@ don't need an entry.
 
 ## 2026-11-05 (dev) - Label Design from live Plex screens; screen loader hardened
 
+- **Deployed** 2026-11-05 as tag `deploy/2026-11-05T2156Z` (main `14aa601`, 1 change:
+  `sql/label_design_view.sql`). The breaker holds `label_design`, so no run creates
+  views; `PlexProd.label_design_report` was created by hand from the deployed GCS SQL
+  (~22:15 UTC, as claude-operator; the old definition is backed up in
+  `etl-manual/view_backups/`). It returned 72 rows, all `data_source = live`. A releases
+  reload then started `plex-etl-label-design-push-mgwnl`, which created 10 Monday items
+  and filled 10 (orders 399, 404, 559, 561, 570, 587, 604, 615, 616). The 16:00 task run
+  before the view existed exited 1 with `Unrecognized name: data_source`; expected once.
+  `deploy.sh` then hung on its final `git push` of the tag (hidden credential prompt);
+  the apply was already done and the tag was pushed separately.
+
 - **Added** a third screen to `scripts/plex_live_screens.py`: `releases` ->
   `PlexProd.live_order_releases`, one row per release of every Pending Fulfillment
   order dated 2026-10-18 or later. It runs the Sales Orders (Order Entry) search one

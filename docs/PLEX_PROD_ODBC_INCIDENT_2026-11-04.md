@@ -71,6 +71,29 @@ Partials before the outage are all `08S01` mid-query: `Part_v_Part`
 | 11-04 | 31 | 0 | 0 | 0 |
 | 11-05 (so far) | 2 | 0 | 0 | 0 |
 
+## Update 2026-11-05 16:00 UTC (09:00 MST): still down
+
+Between 11-05 03:30 and 16:00 UTC, about 135 connect attempts were made. 98
+got no answer in 60 s and 37 connected (13 on the first attempt). Of the runs
+that connected, 20 hung on a read until they were killed, and the 08S01 resets
+continue. `Sales_v_PO` was read 6 times and never returned; one of those reads
+ran 1,562 s, from 04:55 to 05:21 MST.
+
+The only successes are small jobs. The sales-quotes canary succeeded at 04:40,
+05:25 and 07:45 MST, but each run took 370–437 s, against an average of 95 s
+from 10-25 to 11-01.
+
+| Since | Jobs |
+|---|---|
+| 11-04 04:00–04:55 MST (last full run) | sales-orders, work-orders, purchasing-open-orders, part-on-hand-inventory, part-routing, part-lot |
+| 11-02 | part-obsolescence, inventory-snapshot |
+| 11-04 09:04 MST | label-design (last push to Monday 09:05) |
+
+The 11-05 4 AM MST full batch failed or was held for every job. Second email
+sent to Plex Support with `output/plex_odbc_failures_2026-11-04_to_05_update.csv`
+(116 rows) and `output/plex_odbc_hung_reads_2026-11-02_to_05.csv` (63 hung
+reads across 15 views).
+
 ## What it is not
 
 - **Not BigQuery (D19).** The killed runs are stuck on the Plex read (the log's
@@ -155,3 +178,25 @@ GROUP BY 1, 2 ORDER BY 1, 2
 The outage is over when canaries succeed, `recovery` rows succeed, and the
 next 4 AM MT full batch has no `failed` rows. D20 closes after a week with no
 `held-outage` rows.
+
+## Update 2026-11-05 ~17:30 UTC (10:30 MST): manual refresh of revenue and shipping
+
+Ad-hoc reruns did not get through. sales-orders (16:17 UTC) connected on the
+third attempt, then `Sales_v_PO` hung 24.5 min until the 1800 s timeout.
+part-on-hand-inventory (16:48 UTC) connected on the third attempt, then hung
+until the 1200 s timeout.
+
+**Workaround:** Emilio exported the 9 raw views behind revenue and shipping from
+Plex SQL Developer, which still answers, and they were loaded with
+`scripts/load_plex_csv_dump.py` (CHANGELOG 2026-11-05). Backups of the replaced
+tables are in `voxdatalake.Backups` as `PlexProd__raw_<view>_20261105`. To refresh
+more areas the same way:
+
+| Area | Views to export (`SELECT * FROM <view>`) |
+|---|---|
+| Revenue, shipping (done 11-05) | Sales_v_PO, Sales_v_PO_Line, Sales_v_Release, Sales_v_Price, Sales_v_Shipper, Sales_v_Shipper_Line, Sales_v_Shipper_Line_Release, Sales_v_Shipper_AR_Invoice, Accounting_v_AR_Invoice |
+| Sales MTD (sale date) | Sales_v_PO_Change, Sales_v_Order_Salesperson |
+| Parts / on hand | Part_v_Part, Part_v_Container |
+
+Save them as `manual-dumps/<date>/<view>.csv` (gitignored), back up the raw tables,
+run the script without `--swap`, read its comparison, then run it with `--swap`.

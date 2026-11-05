@@ -229,6 +229,29 @@ def load_report_config(config_path: str) -> dict:
 # Rows per Plex call for an extraction that sets `page_key` (see query_plex_paged).
 DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25000"))
 
+# Guarded paged reads (2026-11-05, D28). From 2026-11-02 Plex prod answered
+# some reads never, on small views as often as big ones (Sales_v_PO, ~500 rows,
+# hung 18 times), and a hung read ran until Cloud Run killed the task with no
+# outcome written. Every query a paged extraction sends (the count, each page,
+# the single pull of a view that fits one page) now:
+#   - asks the driver to stop after PLEX_QUERY_TIMEOUT_SECONDS
+#     (SQL_ATTR_QUERY_TIMEOUT via pyodbc's conn.timeout), and is abandoned on a
+#     wall clock PLEX_QUERY_GRACE_SECONDS later whether the driver honours it
+#     or not. A healthy 25,000-row page takes 1-2 s (part-lot, 2026-10-30);
+#   - on a hang, a reset session (08xxx) or a driver timeout (HYTxx), reconnects
+#     and sends the SAME page again, up to PLEX_PAGE_ATTEMPTS times,
+#     PLEX_PAGE_BACKOFF_SECONDS apart (doubling). Rows already fetched are kept,
+#     so the pull resumes from the last key instead of starting over;
+#   - after PLEX_MAX_HUNG_QUERIES hangs in one run, sends nothing more on the
+#     guarded path: the remaining paged extractions fail at once, and the run
+#     ends partial with its outcome written instead of being killed.
+# Unpaged extractions (no page_key) are unchanged.
+PLEX_QUERY_TIMEOUT_SECONDS = int(os.environ.get("PLEX_QUERY_TIMEOUT_SECONDS", "120"))
+PLEX_QUERY_GRACE_SECONDS   = int(os.environ.get("PLEX_QUERY_GRACE_SECONDS", "30"))
+PLEX_PAGE_ATTEMPTS         = int(os.environ.get("PLEX_PAGE_ATTEMPTS", "3"))
+PLEX_PAGE_BACKOFF_SECONDS  = int(os.environ.get("PLEX_PAGE_BACKOFF_SECONDS", "10"))
+PLEX_MAX_HUNG_QUERIES      = int(os.environ.get("PLEX_MAX_HUNG_QUERIES", "4"))
+
 # Plex view / column names: letters, digits, underscores only.
 _PLEX_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -268,8 +291,8 @@ def validate_extraction(extraction: dict) -> str:
             return f"a paged extraction's filter must start with WHERE (it is combined with the page condition): {filt}"
         if re.search(r"(?i)\b(ORDER|GROUP)\s+BY\b", filt):
             return f"a paged extraction's filter may not contain ORDER BY / GROUP BY (paging adds its own): {filt}"
-        if date_col:
-            return f"'{view}' sets both page_key and date_col; paging orders by page_key, so drop date_col"
+        # date_col may stay (2026-11-05): a paged pull orders by page_key, so
+        # date_col then only sets the max_modified_at watermark in sync_metadata.
     return ""
 
 
@@ -1180,6 +1203,172 @@ def connection_lost(exc: Exception) -> bool:
     return str(state) == "08S01"
 
 
+class QueryTimeout(TimeoutError):
+    """A Plex read that did not answer within its deadline (see run_query)."""
+
+
+class PlexUnresponsive(RuntimeError):
+    """Too many reads hung in this run; the guarded path stops sending more."""
+
+
+def _sqlstate(exc: Exception) -> str:
+    return str(exc.args[0]) if isinstance(exc, pyodbc.Error) and exc.args else ""
+
+
+def query_hung(exc: Exception) -> bool:
+    """A read that never answered: our wall clock, or the driver's own query
+    timeout (SQLSTATE HYT00 / HYT01) if it honours SQL_ATTR_QUERY_TIMEOUT."""
+    return isinstance(exc, QueryTimeout) or _sqlstate(exc).startswith("HYT")
+
+
+def page_retryable(exc: Exception) -> bool:
+    """Whether a new session can help a failed page: a hang, or any
+    connection-class SQLSTATE (08xxx: reset by peer, session kill, link
+    failure). A bad query (42xxx) or a refused login fails the same way again."""
+    return query_hung(exc) or _sqlstate(exc).startswith("08")
+
+
+def _in_background(fn, name: str):
+    """Run fn on a daemon thread and do not wait: for calls into a session that
+    may itself hang (cancel, close)."""
+    def call():
+        try:
+            fn()
+        except Exception:
+            pass
+    threading.Thread(target=call, name=name, daemon=True).start()
+
+
+class PlexSession:
+    """The run's Plex connection, which a guarded read may replace.
+
+    `reconnect` is a function returning a new connection (main() passes
+    get_odbc_connection with the run's credentials); None means a failed read
+    is not retried. `hung` counts hung reads across the whole run."""
+
+    def __init__(self, conn, reconnect=None):
+        self.conn, self._reconnect, self.hung, self.retries = conn, reconnect, 0, 0
+
+    @property
+    def can_reconnect(self) -> bool:
+        return self._reconnect is not None
+
+    def discard(self):
+        """Drop the current connection, closing it in the background: it may
+        be stuck in a hung read, and nothing may use it again."""
+        old, self.conn = self.conn, None
+        if old is not None:
+            _in_background(old.close, "odbc-close")
+
+    def reconnect(self):
+        """Open a new connection in place of the current one. On failure the
+        session is left without a connection, and the next call reconnects
+        first."""
+        self.discard()
+        if self._reconnect is None:
+            raise ConnectionError("the Plex session was dropped and this caller cannot reconnect")
+        self.conn = self._reconnect()
+        return self.conn
+
+    def ensure(self):
+        return self.conn if self.conn is not None else self.reconnect()
+
+
+def run_query(conn, sql: str, timeout_seconds: int, grace_seconds: int):
+    """Execute sql on conn and fetch every row, bounded in time.
+
+    Returns (cursor.description, rows). The driver is asked to stop after
+    timeout_seconds (pyodbc applies conn.timeout as SQL_ATTR_QUERY_TIMEOUT to
+    each new cursor). Because the Plex driver ignored pyodbc's login timeout
+    (2026-10-21) it may ignore this one too, so the read runs on a daemon
+    thread (pyodbc releases the GIL inside the driver) and is abandoned
+    grace_seconds after that: the cursor is cancelled in the background and
+    QueryTimeout raised. The caller must then stop using conn. A timeout of 0
+    runs the query inline with no bound."""
+    def work(box):
+        previous = getattr(conn, "timeout", 0)
+        try:
+            conn.timeout = timeout_seconds
+        except Exception:
+            pass
+        cur = conn.cursor()
+        try:
+            conn.timeout = previous
+        except Exception:
+            pass
+        box["cursor"] = cur
+        try:
+            cur.execute(sql)
+            description = cur.description
+            return description, cur.fetchall()
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+
+    if timeout_seconds <= 0:
+        return work({})
+
+    box: dict = {}
+    done = threading.Event()
+
+    def attempt():
+        try:
+            box["value"] = work(box)
+        except BaseException as exc:
+            box["error"] = exc
+        finally:
+            done.set()
+
+    threading.Thread(target=attempt, name="plex-query", daemon=True).start()
+    if not done.wait(timeout_seconds + grace_seconds):
+        cur = box.get("cursor")
+        if cur is not None and hasattr(cur, "cancel"):
+            _in_background(cur.cancel, "odbc-cancel")
+        raise QueryTimeout(f"no answer from Plex within {timeout_seconds + grace_seconds}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
+def guarded_read(session: PlexSession, sql: str, label: str):
+    """run_query() with the per-page retry: a hang or a dropped session gets a
+    new connection and the same SQL again, up to PLEX_PAGE_ATTEMPTS times. The
+    caller keeps what it already fetched, so a retried page resumes the pull
+    rather than restarting it. Raises PlexUnresponsive without querying once
+    PLEX_MAX_HUNG_QUERIES reads have hung in this run."""
+    attempts = PLEX_PAGE_ATTEMPTS if session.can_reconnect else 1
+    for attempt in range(1, attempts + 1):
+        if session.hung >= PLEX_MAX_HUNG_QUERIES:
+            raise PlexUnresponsive(f"{session.hung} Plex reads hung this run; not sending {label}")
+        try:
+            return run_query(session.ensure(), sql, PLEX_QUERY_TIMEOUT_SECONDS, PLEX_QUERY_GRACE_SECONDS)
+        except Exception as exc:
+            if query_hung(exc):
+                session.hung += 1
+                if isinstance(exc, QueryTimeout):
+                    # The read may still be running on that session.
+                    session.discard()
+                if session.hung >= PLEX_MAX_HUNG_QUERIES:
+                    raise PlexUnresponsive(f"{session.hung} Plex reads hung this run, the last on "
+                                           f"{label} ({exc}); not sending more") from exc
+            if not page_retryable(exc) or attempt == attempts:
+                raise
+            wait = PLEX_PAGE_BACKOFF_SECONDS * 2 ** (attempt - 1)
+            log.warning(f"{label} failed on attempt {attempt} of {attempts} ({exc}); "
+                        f"reconnecting and sending it again in {wait}s.")
+            session.retries += 1
+            sleep(wait)
+            try:
+                session.reconnect()
+            except Exception as rexc:
+                # Reconnect failed after its own attempts: the page has had its
+                # chance. The next extraction reconnects first (ensure()).
+                raise ConnectionError(f"{label}: reconnect after '{exc}' failed: {rexc}") from rexc
+    raise AssertionError("unreachable")
+
+
 def connect_with_deadline(connect, deadline_seconds: int):
     """Run connect() (which returns a connection), but give up after
     deadline_seconds. pyodbc releases the GIL while the driver connects, so
@@ -1277,7 +1466,7 @@ def query_plex(
 
 
 def query_plex_paged(
-    conn: pyodbc.Connection,
+    conn,
     plex_view: str,
     plex_filter: str,
     page_key: str,
@@ -1302,45 +1491,58 @@ def query_plex_paged(
     difference (rows added or removed mid-pull) is reported in
     df.attrs["page_note"], and the caller then keeps the previous table and
     marks the run partial instead of writing a pull that may be torn.
+
+    `conn` is a PlexSession (main() passes the run's) or a bare connection.
+    Every query goes through guarded_read(): bounded in time and, with a
+    session that can reconnect, retried on a new connection from the same key,
+    so a hung or reset page costs that page's retries, not the run. If a page
+    still fails, the exception propagates and the caller keeps yesterday's
+    table (a half-pulled table is never written).
     """
+    # A bare connection (tests, older callers) gets a session that never
+    # reconnects, so each query is bounded in time but sent only once.
+    session = conn if isinstance(conn, PlexSession) else PlexSession(conn)
     where = re.sub(r"(?i)^\s*WHERE\s", "", plex_filter).strip() if plex_filter else ""
     base = f"({where}) AND " if where else ""
-    cursor = conn.cursor()
-    try:
-        cursor.execute(f"SELECT COUNT(*) FROM {plex_view}" + (f" WHERE {where}" if where else ""))
-        expected = int(cursor.fetchall()[0][0])
-    finally:
-        cursor.close()
+    _, counted = guarded_read(session, f"SELECT COUNT(*) FROM {plex_view}" + (f" WHERE {where}" if where else ""),
+                              f"[{plex_view}] count")
+    expected = int(counted[0][0])
+    columns, odbc_schema, rows, last, pages, k = None, None, [], None, 0, None
+
+    def fetch(sql, label):
+        nonlocal columns, odbc_schema, k
+        description, got = guarded_read(session, sql, f"[{plex_view}] {label}")
+        if columns is None:
+            columns = [c[0] for c in description]
+            odbc_schema = {c[0]: _bq_type_for_odbc(c[1]) for c in description}
+            # Plex is case-insensitive about the name in SQL, so the YAML's
+            # spelling may not match the column's: find it the same way.
+            matches = [i for i, c in enumerate(columns) if c.lower() == page_key.lower()]
+            if not matches:
+                raise RuntimeError(f"page_key {page_key} is not a column of {plex_view}")
+            k = matches[0]
+        return got
+
     if expected <= page_size:
+        # Same SQL as query_plex(), but bounded and retried like a page.
         log.info(f"[{plex_view}] {expected} rows fit in one page of {page_size} — single pull.")
-        df = query_plex(conn, plex_view=plex_view, plex_filter=plex_filter, plex_date_col="")
+        log.info(f"Querying Plex [{plex_view}]...")
+        rows = fetch(f"SELECT * FROM {plex_view}" + (f" {plex_filter.strip()}" if plex_filter else ""),
+                     "single pull")
+        df = pd.DataFrame.from_records(rows, columns=columns)
+        df.attrs["odbc_schema"] = odbc_schema
         df.attrs["pages"] = 1
+        log.info(f"Fetched {len(df)} rows from Plex [{plex_view}].")
         return df
 
     log.info(f"[{plex_view}] {expected} rows — paging by {page_key}, {page_size} per page.")
-    columns, odbc_schema, rows, last, pages, k = None, None, [], None, 0, None
-
-    def fetch(sql):
-        nonlocal columns, odbc_schema, k
-        cur = conn.cursor()
-        try:
-            cur.execute(sql)
-            if columns is None:
-                columns = [c[0] for c in cur.description]
-                odbc_schema = {c[0]: _bq_type_for_odbc(c[1]) for c in cur.description}
-                # Plex is case-insensitive about the name in SQL, so the YAML's
-                # spelling may not match the column's: find it the same way.
-                matches = [i for i, c in enumerate(columns) if c.lower() == page_key.lower()]
-                if not matches:
-                    raise RuntimeError(f"page_key {page_key} is not a column of {plex_view}")
-                k = matches[0]
-            return cur.fetchall()
-        finally:
-            cur.close()
 
     while True:
         cond = f"{page_key} > {last}" if last is not None else f"{page_key} IS NOT NULL"
-        page = fetch(f"SELECT TOP {page_size} * FROM {plex_view} WHERE {base}{cond} ORDER BY {page_key}")
+        # A page that fails is sent again from the same `last` (guarded_read):
+        # rows already in `rows` are kept, so the pull resumes, not restarts.
+        page = fetch(f"SELECT TOP {page_size} * FROM {plex_view} WHERE {base}{cond} ORDER BY {page_key}",
+                     f"page {pages + 1}")
         pages += 1
         # Checked on every page, not only full ones: `> {last}` is pasted into
         # SQL, so a non-integer key must stop the pull before it is used.
@@ -1351,15 +1553,13 @@ def query_plex_paged(
             rows.extend(page)
             break
         boundary = page[-1][k]
+        group = fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} = {boundary}", f"key {boundary}")
         rows.extend(r for r in page if r[k] != boundary)
-        rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} = {boundary}"))
+        rows.extend(group)
         last = boundary
         log.info(f"[{plex_view}] page {pages}: {len(rows)} rows so far (through {page_key} {boundary}).")
 
-    # Keyset paging cannot reach rows whose key is NULL; a single unpaged pull
-    # would have kept them, so fetch them explicitly rather than lose them the
-    # night a table grows past one page.
-    rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} IS NULL"))
+    rows.extend(fetch(f"SELECT * FROM {plex_view} WHERE {base}{page_key} IS NULL", "NULL keys"))
 
     df = pd.DataFrame.from_records(rows, columns=columns)
     df.attrs["odbc_schema"] = odbc_schema
@@ -1705,6 +1905,10 @@ def main():
                 except Exception:
                     log.exception("Failed to log inconclusive probe.")
 
+        # The run's connection, shared by every extraction. A paged read that
+        # hangs or loses its session replaces it (guarded_read); later tables
+        # then use the new one.
+        session = PlexSession(conn, lambda: get_odbc_connection(user, password, company_code, access_token))
         try:
             for extraction in extractions:
                 problem = validate_extraction(extraction)
@@ -1723,9 +1927,9 @@ def main():
 
                 log.info(f"--- Extracting {view} → {table} ---")
 
-                def pull(c, extraction=extraction, view=view, filt=filt, date_col=date_col):
+                def pull(extraction=extraction, view=view, filt=filt, date_col=date_col):
                     if extraction.get("page_key"):
-                        df = query_plex_paged(c, plex_view=view, plex_filter=filt,
+                        df = query_plex_paged(session, plex_view=view, plex_filter=filt,
                                               page_key=extraction["page_key"],
                                               page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
                         if df.attrs.get("page_note"):
@@ -1733,30 +1937,33 @@ def main():
                             # more before giving up on this table.
                             log.warning(f"{df.attrs['page_note']} — pulling {view} once more.")
                             events.append(f"Paged pull of {view} did not add up; pulled once more")
-                            df = query_plex_paged(c, plex_view=view, plex_filter=filt,
+                            df = query_plex_paged(session, plex_view=view, plex_filter=filt,
                                                   page_key=extraction["page_key"],
                                                   page_size=extraction.get("page_size", DEFAULT_PAGE_SIZE))
                         return df
-                    return query_plex(c, plex_view=view, plex_filter=filt, plex_date_col=date_col)
+                    return query_plex(session.ensure(), plex_view=view, plex_filter=filt, plex_date_col=date_col)
 
+                retries_before, hung_before = session.retries, session.hung
                 try:
                     try:
-                        df = pull(conn)
+                        df = pull()
                     except Exception as first:
-                        if not connection_lost(first):
+                        # A paged pull already reconnected and resumed page by
+                        # page (guarded_read); pulling it whole again would
+                        # restart it, so only an unpaged pull gets this retry.
+                        if not connection_lost(first) or extraction.get("page_key"):
                             raise
                         # Plex dropped the session (idle during a slow BigQuery
                         # write, usually). Reconnect once and pull this table
                         # again; later tables then use the new session.
                         log.warning(f"Plex dropped the session before {view} ({first}) — reconnecting once.")
                         events.append(f"Plex dropped the session before {view}; reconnected and retried")
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                        conn = get_odbc_connection(user, password, company_code, access_token)
-                        df = pull(conn)
+                        session.reconnect()
+                        df = pull()
                 except Exception as exc:
+                    if session.hung > hung_before:
+                        events.append(f"WARNING: {session.hung - hung_before} Plex read(s) on {view} hung "
+                                      f"(no answer in {PLEX_QUERY_TIMEOUT_SECONDS + PLEX_QUERY_GRACE_SECONDS}s)")
                     log.exception(f"Query failed for {view}: {exc}")
                     events.append(f"ERROR: {view} query failed: {exc}")
                     partial_errors.append(f"{view} query: {exc}")
@@ -1774,6 +1981,10 @@ def main():
                     if pd.notna(col_max):
                         max_modified = col_max.to_pydatetime()
 
+                if session.retries > retries_before:
+                    events.append(f"WARNING: {view}: {session.retries - retries_before} Plex read(s) failed "
+                                  f"and were sent again on a new session ({session.hung - hung_before} hung); "
+                                  f"the pull resumed and completed")
                 rows_fetched += len(df)
                 pages = df.attrs.get("pages", 1)
                 events.append(f"Fetched {len(df)} rows from {view}" + (f" in {pages} pages" if pages > 1 else ""))
@@ -1811,11 +2022,16 @@ def main():
                         events.append(f"ERROR: {table} CSV write failed: {exc}")
                         partial_errors.append(f"{table} csv: {exc}")
         finally:
-            try:
-                conn.close()
-                log.info("ODBC connection closed.")
-            except Exception:
-                log.warning("Failed to close ODBC connection cleanly.")
+            # A hung connection was already dropped (guarded_read); close the
+            # current one, if any, without letting a stuck close hold the run.
+            if session.conn is not None:
+                closer = threading.Thread(target=session.conn.close, name="odbc-close", daemon=True)
+                closer.start()
+                closer.join(30)
+                if closer.is_alive():
+                    log.warning("ODBC connection did not close within 30s; leaving it.")
+                else:
+                    log.info("ODBC connection closed.")
 
         if rows_fetched == 0 and not partial_errors:
             log.warning("All extractions returned 0 rows — verify Plex data availability.")

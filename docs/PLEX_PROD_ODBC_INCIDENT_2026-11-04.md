@@ -112,12 +112,19 @@ Partials before the outage are all `08S01` mid-query: `Part_v_Part`
 
 ## Local Docker check (2026-11-05)
 
-At 02:30 UTC, during the prod outage, local Docker (amd64 image, `.env`,
-**test** host) connected on attempt 1 in 4 s and fetched 622 rows. The same
-container against the **prod** host was not run: that is a production read,
-which Claude is not allowed to make, so a human has to run it. The command is in
-[HEALTH_CHECK_2026-11-04.md](HEALTH_CHECK_2026-11-04.md) § 5. If the prod host
-also fails from outside Google Cloud, the fault is Plex's.
+Same amd64 image, same `.env` credentials, run from Emilio's Mac on a home or
+office network, entirely outside Google Cloud:
+
+| Time (UTC) | Host | Connect | `SELECT ... FROM Part_v_Part` |
+|---|---|---|---|
+| 11-05 02:29:57 | `vox.test.odbc.plex.com` | attempt 1, **4 s** | 622 rows in **1.7 s** |
+| 11-05 02:36:59 | `vox.odbc.plex.com` | attempt 1, **60 s** (02:37:59, at the edge of our 60 s deadline) | **no rows in 46 min**: the read was still hanging at 03:23, when the container was stopped |
+| 11-05 03:22:06 | `vox.odbc.plex.com` | attempt 1: **no answer within 60 s**; retry interrupted by hand | not reached |
+
+**This settles where the fault is.** Prod behaves the same from outside Google
+Cloud: a connect that takes the full minute, then a read that never returns.
+It is not Cloud Run, our egress, the image or the credentials. The fault is
+Plex's production ODBC service.
 
 ## What to send Plex (add to the D20 case)
 
@@ -132,6 +139,9 @@ also fails from outside Google Cloud, the fault is Plex's.
     connect (11-04 22:24:47 → killed 22:42:18).
 - The same queries from the same place against `vox.test.odbc.plex.com` are
   fine.
+- **It reproduces outside Google Cloud.** From a laptop on 11-05 02:36 UTC,
+  the prod connect took 60 s and `SELECT` on `Part_v_Part` returned nothing
+  in 46 min; the next connect got no answer in 60 s. Test from the same laptop: 4 s connect, 622 rows in 1.7 s.
 
 ## Check it is over
 

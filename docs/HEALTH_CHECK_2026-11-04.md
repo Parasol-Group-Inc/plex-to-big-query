@@ -131,7 +131,7 @@ values (Data Hub v33, snapshot 2026-11-04 15:45 UTC).
 |---|---|
 | `pytest tests` inside the ETL image (amd64) | 98 passed |
 | Local Docker (`docker compose up`, `.env`, test host) | connected on attempt 1 in 4 s, 622 `Part_v_Part` rows, exit 0 |
-| Same container against the **prod** host from the Mac | not run: blocked for Claude as a production read. Command for a human below |
+| Same container against the **prod** host from the Mac (run by Emilio, 11-05 02:36 UTC) | connect took 60 s; `Part_v_Part` returned nothing in 46 min; a second connect got no answer in 60 s. **Plex prod fails outside Google Cloud too** |
 
 On Apple Silicon the image must be built as amd64
 (`export DOCKER_DEFAULT_PLATFORM=linux/amd64`, `docs/ONBOARDING.md`). An arm64

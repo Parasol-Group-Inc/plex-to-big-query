@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Label Design from live Plex screens; screen loader hardened
+
+- **Added** a third screen to `scripts/plex_live_screens.py`: `releases` ->
+  `PlexProd.live_order_releases`, one row per release of every Pending Fulfillment
+  order dated 2026-10-18 or later. It runs the Sales Orders (Order Entry) search one
+  month at a time, then reads each order's Rapid Entry line page, whose embedded grid
+  holds the release status key, priority key, due date, part, customer part and Job
+  Note (the Line Items page has no Job Note). Status names come from
+  `raw_Sales_v_Release_Status`; an unknown key fails the screen. First load
+  2026-11-05: 160 orders, 362 releases, 71 in Label Design, about 3 min. Checked against
+  Jennilyn's screenshot (587, 604 lines 2-3, 615, 616 in Label Design; 610 Open) and
+  against the frozen `label_design_report`: 65 lines in both, 64 with the same Job
+  Note (16668960 was edited 5 -> 4 after the freeze), 6 new since the freeze, 1 since
+  moved off Label Design. The Line Items page agreed with Rapid Entry on all 362.
+- **Changed** `plex_live_screens.py` safety: each screen loads or fails on its own (a
+  failed screen keeps its previous table, the run exits 1); requests retry 3 times and
+  log in again when Plex returns the login page; a table that would shrink under 90%
+  (revenue, history) or 50% (releases) is not replaced without `--force`; the first
+  load of each Denver day copies the table to `Backups.PlexProd__<table>_<yyyymmdd>`
+  (7 days); `--only` runs a subset. **Added** `run_lock()` in `plex_web_export.py`, a
+  lock file both scripts share (`etl-manual/plex_web.lock`, stale after 2 h, exit 75
+  when held), so the hourly task never starts a second browser.
+- Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`.
+
 ## 2026-11-05 (dev) - Live Plex screens: shipping revenue and shipper history
 
 - **Added** `scripts/plex_live_screens.py` (+ `plex_live_screens.cmd` for Windows Task

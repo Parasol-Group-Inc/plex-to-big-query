@@ -26,6 +26,7 @@ The ETL overwrites the raw tables on its next successful run, so nothing here
 needs undoing when ODBC returns.
 """
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import io
@@ -72,6 +73,36 @@ def creds():
     if not (u and pw):
         sys.exit("PLEX_PORTAL_USERNAME / PLEX_PORTAL_PASSWORD not set (environment or .env)")
     return u, pw
+
+
+LOCK = REPO / "etl-manual" / "plex_web.lock"
+LOCK_STALE = dt.timedelta(hours=2)
+
+
+@contextlib.contextmanager
+def run_lock():
+    """One Plex web run at a time, shared by plex_web_export.py and plex_live_screens.py.
+
+    Both log in as the same Plex user and the hourly task must not start a second
+    browser while the previous run is still going. A lock older than LOCK_STALE is
+    left over from a killed run and is taken over. Exits 75 (temp failure) if held.
+    """
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if LOCK.exists() and dt.datetime.now() - dt.datetime.fromtimestamp(LOCK.stat().st_mtime) > LOCK_STALE:
+            print(f"taking over a stale lock: {LOCK.read_text(encoding='utf-8', errors='replace').strip()}")
+            LOCK.unlink()
+        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        held = LOCK.read_text(encoding="utf-8", errors="replace").strip()
+        print(f"another Plex web run holds {LOCK.name} ({held}); not starting")
+        sys.exit(75)
+    os.write(fd, f"pid {os.getpid()} {sys.argv[0]} since {dt.datetime.now():%Y-%m-%d %H:%M:%S}".encode())
+    os.close(fd)
+    try:
+        yield
+    finally:
+        LOCK.unlink(missing_ok=True)
 
 
 def login(pg, user, password):
@@ -140,7 +171,8 @@ def main():
         shutil.rmtree(old, ignore_errors=True)
 
     user, password = creds()
-    exported = export(views, out, user, password)
+    with run_lock():
+        exported = export(views, out, user, password)
 
     c = bigquery.Client(project=PROJECT)
     failed = [v for v, e in exported.items() if e]

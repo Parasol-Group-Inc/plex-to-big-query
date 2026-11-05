@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 - D28 paged reads deployed
+
+- PR #113 shipped: Cloud Build `a50baee9` put `etl:d1901eb` on all 31 Cloud Run jobs
+  (run as `claude-operator`); `./scripts/deploy_as_claude.sh` applied the six
+  `sales_orders` / `part_on_hand_inventory` / `part_routing` YAMLs (prod + test), tag
+  `deploy/2026-11-05T1813Z`. GCS checked: 29 / 4 / 18 `page_key` lines in each, as in git.
+- The manually loaded raw tables (entries below) need nothing when Plex returns:
+  every `sales_orders` extraction is unfiltered and written with `WRITE_TRUNCATE`,
+  so the first clean run replaces them whole with live rows, and the YAML change
+  alone moves the probe fingerprint, so that first run is a full one.
+
 ## 2026-11-05 (dev) - Sales MTD, AR GL lines and shipper containers loaded from exports
 
 The first manual load (below) left Sales MTD flat, because the sale date comes from

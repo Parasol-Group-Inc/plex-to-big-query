@@ -1,5 +1,5 @@
 {
- "taken_at": "2026-10-28 16:25 UTC",
+ "taken_at": "2026-11-04 15:45 UTC",
  "push_board": {
   "id": "18437236736",
   "name": "Plex Import Test"
@@ -64,22 +64,6 @@
      }
     },
     {
-     "label": "Customer Initiated: Label Edit",
-     "state": "ok",
-     "lands_as": "Customer Initiated: Label Edit",
-     "sent": 0,
-     "push": {
-      "hex": "#9aadbd",
-      "id": 105,
-      "off": false
-     },
-     "dqa": {
-      "hex": "#9aadbd",
-      "id": 105,
-      "off": false
-     }
-    },
-    {
      "label": "Customer initiated: Label edit",
      "state": "ok",
      "lands_as": "Customer initiated: Label edit",
@@ -92,6 +76,22 @@
      "dqa": {
       "hex": "#fdab3d",
       "id": 7,
+      "off": false
+     }
+    },
+    {
+     "label": "Customer Initiated: Label Edit",
+     "state": "ok",
+     "lands_as": "Customer Initiated: Label Edit",
+     "sent": 2,
+     "push": {
+      "hex": "#9aadbd",
+      "id": 105,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#9aadbd",
+      "id": 105,
       "off": false
      }
     },
@@ -115,7 +115,7 @@
      "label": "Customer initiated: Label review",
      "state": "ok",
      "lands_as": "Customer initiated: Label review",
-     "sent": 0,
+     "sent": 6,
      "push": {
       "hex": "#9cd326",
       "id": 0,
@@ -284,22 +284,6 @@
      }
     },
     {
-     "label": "New label review (Customer design)",
-     "state": "ok",
-     "lands_as": "New label review (Customer design)",
-     "sent": 0,
-     "push": {
-      "hex": "#175a63",
-      "id": 2,
-      "off": false
-     },
-     "dqa": {
-      "hex": "#175a63",
-      "id": 2,
-      "off": false
-     }
-    },
-    {
      "label": "New label Review (Customer Design)",
      "state": "ok",
      "lands_as": "New label Review (Customer Design)",
@@ -312,6 +296,22 @@
      "dqa": {
       "hex": "#bb3354",
       "id": 8,
+      "off": false
+     }
+    },
+    {
+     "label": "New label review (Customer design)",
+     "state": "ok",
+     "lands_as": "New label review (Customer design)",
+     "sent": 6,
+     "push": {
+      "hex": "#175a63",
+      "id": 2,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#175a63",
+      "id": 2,
       "off": false
      }
     },
@@ -559,7 +559,7 @@
      "label": "Vox Initiated: Label Edit/Review",
      "state": "ok",
      "lands_as": "Vox Initiated: Label Edit/Review",
-     "sent": 2,
+     "sent": 24,
      "push": {
       "hex": "#74afcc",
       "id": 106,
@@ -630,7 +630,7 @@
      "label": "Ashley Quintana",
      "state": "ok",
      "lands_as": "Ashley Quintana",
-     "sent": 0,
+     "sent": 1,
      "push": {
       "hex": "#757575",
       "id": 17,
@@ -694,7 +694,7 @@
      "label": "Janet Pacheco",
      "state": "ok",
      "lands_as": "Janet Pacheco",
-     "sent": 0,
+     "sent": 13,
      "push": {
       "hex": "#007eb5",
       "id": 3,
@@ -754,7 +754,7 @@
      "label": "Kami Butcher",
      "state": "ok",
      "lands_as": "Kami Butcher",
-     "sent": 0,
+     "sent": 3,
      "push": {
       "hex": "#579bfc",
       "id": 7,
@@ -770,7 +770,7 @@
      "label": "Landen Epperson",
      "state": "ok",
      "lands_as": "Landen Epperson",
-     "sent": 0,
+     "sent": 5,
      "push": {
       "hex": "#66ccff",
       "id": 16,
@@ -798,7 +798,7 @@
      "label": "Ruben Espinosa",
      "state": "ok",
      "lands_as": "Ruben Espinosa",
-     "sent": 0,
+     "sent": 7,
      "push": {
       "hex": "#fdab3d",
       "id": 0,
@@ -862,7 +862,7 @@
      "label": "Tyler Hall",
      "state": "ok",
      "lands_as": "Tyler Hall",
-     "sent": 2,
+     "sent": 18,
      "push": {
       "hex": "#df2f4a",
       "id": 2,
@@ -949,7 +949,7 @@
      "label": "Camilo Montano",
      "state": "ok",
      "lands_as": "Camilo Montano",
-     "sent": 0,
+     "sent": 1,
      "push": {
       "hex": "#037f4c",
       "id": 7,
@@ -965,7 +965,7 @@
      "label": "Claudio Soto",
      "state": "ok",
      "lands_as": "Claudio Soto",
-     "sent": 0,
+     "sent": 1,
      "push": {
       "hex": "#c4c4c4",
       "id": 6,
@@ -990,6 +990,22 @@
      "dqa": {
       "hex": "#00c875",
       "id": 1,
+      "off": false
+     }
+    },
+    {
+     "label": "Emily Gray",
+     "state": "ok",
+     "lands_as": "Emily Gray",
+     "sent": 2,
+     "push": {
+      "hex": "#579bfc",
+      "id": 9,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#579bfc",
+      "id": 9,
       "off": false
      }
     },
@@ -1116,7 +1132,7 @@
      "label": "Medium",
      "state": "ok",
      "lands_as": "Medium",
-     "sent": 2,
+     "sent": 47,
      "push": {
       "hex": "#df2f4a",
       "id": 2,
@@ -1227,7 +1243,7 @@
      "label": "Glass",
      "state": "ok",
      "lands_as": "Glass",
-     "sent": 0,
+     "sent": 1,
      "push": {
       "hex": "#df2f4a",
       "id": 2,
@@ -1243,7 +1259,7 @@
      "label": "HDPE",
      "state": "ok",
      "lands_as": "HDPE",
-     "sent": 2,
+     "sent": 26,
      "push": {
       "hex": "#784bd1",
       "id": 1,
@@ -1307,7 +1323,7 @@
      "label": "PET",
      "state": "ok",
      "lands_as": "PET",
-     "sent": 0,
+     "sent": 4,
      "push": {
       "hex": "#ff7575",
       "id": 0,
@@ -1359,6 +1375,22 @@
      }
     },
     {
+     "label": "Metallic BOPP - Matte Lamination",
+     "state": "ok",
+     "lands_as": "Metallic BOPP - Matte Lamination",
+     "sent": 8,
+     "push": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     },
+     "dqa": {
+      "hex": "#037f4c",
+      "id": 6,
+      "off": false
+     }
+    },
+    {
      "label": "Outsourced",
      "state": "ok",
      "lands_as": "Outsourced",
@@ -1378,7 +1410,7 @@
      "label": "White BOPP",
      "state": "ok",
      "lands_as": "White BOPP",
-     "sent": 0,
+     "sent": 1,
      "push": {
       "hex": "#00c875",
       "id": 1,

@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-04 (dev) - Health check, Plex prod ODBC incident, hub refresh
+
+### Added
+- `docs/HEALTH_CHECK_2026-11-04.md`: read-only check of the prod/test ETL, the Label Design push (healthy: 41 items since 10-28, no duplicates or misses) and every scorecard figure on PlexProd. No double counting found; October is distorted by the go-live (2026-10-16 order load, production from 10-19), so November is the first clean month. Tests: 98/98 inside the ETL image; local Docker against the test host passes (amd64 image required on Apple Silicon).
+- `docs/PLEX_PROD_ODBC_INCIDENT_2026-11-04.md`: Plex prod ODBC degraded from 2026-11-02 12:32 UTC (connect no-answers, `08S01` resets, reads hanging until the Cloud Run timeout) and down from 11-04 19:19 UTC; the test host was unaffected. Timeline, evidence, what to send Plex, how to tell it is over.
+- OPEN_ITEMS: D20 updated with the recurrence; new D28 (no Plex query timeout, so hung reads are killed with no outcome), D29 (PlexTest `msl_rules` missing), S18 (October not comparable), L17 (push follow-ups); D27 note.
+
+### Changed
+- Data Hub rebuilt from a fresh snapshot (2026-11-04 15:45 UTC) and republished (v33); `docs/hub/index.html` and `docs/hub/label_design_colours.json` regenerated. No code, SQL or infrastructure change.
+
 ## 2026-10-30 (dev-label-design) - Label Design → Monday signed off
 
 ### Changed

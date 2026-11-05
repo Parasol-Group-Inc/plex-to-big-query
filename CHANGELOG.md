@@ -14,6 +14,44 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Live Plex screens: shipping revenue and shipper history
+
+- **Added** `scripts/plex_live_screens.py` (+ `plex_live_screens.cmd` for Windows Task
+  Scheduler). ODBC and the SQL Development Environment are frozen at 2026-11-04 ~18:56,
+  but Plex's own screens are live. It logs into Plex headless and calls each screen's
+  Search request, then replaces two BigQuery tables (go-live 2026-10-01 to today, one
+  month per request; the ETL never touches them):
+  - `PlexProd.live_shipping_revenue` from Shipping Revenue by Part Group, one row per
+    invoiced line. The screen returns a row per line per GL account with Revenue
+    repeated (October lines also post $0 to 41000-01-01), so rows are collapsed and the
+    account amounts kept in `gl_amounts`. A long date range is capped at 500 rows and
+    repeats lines, so a month at the cap fails the run.
+  - `PlexProd.live_shipper_history` from Shipper History, one row per shipped line.
+- First load: 250 lines each, through INV0000158 / SH00208. October $1,157,609.45 vs
+  `shipping_revenue_report` $1,158,178.69: the only difference is INV0000068
+  (93105-00KAYAN-0), which the report counts twice ($379.50 x 2) because Plex links it
+  to the invoice twice; Plex books it at net $189.75 (40200 $379.50, 41000 -$189.75).
+  November MTD $490,911.02 (report on the frozen data: $302,158.49).
+- Found: Bookings by Day is empty for Sep-Nov (Vox does not use Plex bookings), and
+  Customer Shipping's open shipper lines carry quantities but no prices.
+
+## 2026-11-05 (dev) - Plex web export: raw tables via the SQL Development Environment
+
+- **Added** `scripts/plex_web_export.py`: logs into Plex with headless Chromium
+  (Playwright, `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD` from `.env`) and posts
+  `SELECT x.* FROM <view> AS x` to the page's own "Download Results As CSV" request
+  for the 21 raw tables the revenue, shipping, sales-MTD and AR invoice reports read.
+  Each file must match a `COUNT(*)` run the same way. Without `--swap` it only stages
+  and compares; with `--swap` it backs each raw table up (7-day expiry), skips any
+  table the ETL wrote during the run or a file under 90% of current rows, and
+  replaces the rest. First run: 21/21 exported and matched, 3 min.
+- **Changed** `scripts/load_plex_csv_dump.py`: the per-file work is now
+  `load_file()`, shared by both scripts; the CLI behaves as before.
+- **Found:** that page reads the same stale copy as ODBC. On 2026-11-05 its newest
+  rows were from 2026-11-04 ~18:56 Plex time (last shipper SH00188), while the live
+  Shipping Revenue by Part Group screen already showed SH00189-SH00208. So the
+  script cannot get newer data than the ETL would until Plex's copy catches up.
+
 ## 2026-11-05 - D28 paged reads deployed
 
 - PR #113 shipped: Cloud Build `a50baee9` put `etl:d1901eb` on all 31 Cloud Run jobs

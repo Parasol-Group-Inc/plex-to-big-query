@@ -14,6 +14,32 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Sales MTD, AR GL lines and shipper containers loaded from exports
+
+The first manual load (below) left Sales MTD flat, because the sale date comes from
+`Sales_v_PO_Change`. Emilio exported three more views from Plex SQL Developer
+(`etl-manual/nov-5/`, now gitignored) and they were loaded ~17:54 UTC.
+
+### Changed
+- `scripts/load_plex_csv_dump.py`: `DATETIME` columns (e.g.
+  `Sales_v_Shipper_Container.Loaded_Date`) get the same wall-time + UTC-offset shift
+  as integer dates, stored as a naive datetime (checked on `6EE8GC-0001`: CSV
+  4:38:22 PM, table 10:38:22); keys can be several columns; keys added for
+  `Sales_v_Shipper_Container` and `Accounting_v_AR_Invoice_Dist`
+  (`Invoice_Link`, `Line_Item_No`).
+
+### Changed (data only, PlexProd)
+- Backed up `raw_Sales_v_PO_Change`, `raw_Sales_v_Shipper_Container` and
+  `raw_Accounting_v_AR_Invoice_Dist` to `Backups.PlexProd__raw_<view>_20261105b`
+  (90-day expiry, verified row for row), then replaced them: `Sales_v_PO_Change`
+  1,984 → 2,035, `Sales_v_Shipper_Container` 6,914 → 7,313,
+  `Accounting_v_AR_Invoice_Dist` 358 → 371. Every existing row matched exactly,
+  except that AR GL line dates lose their milliseconds.
+- Sales November to date (`sales_vs_goal_report`): $530,147 / 47 orders →
+  $759,519 / 58 orders; October unchanged. `ar_invoice_lines_report` 223 → 230 rows.
+  All 87 PlexProd views still query.
+- The next successful ETL run overwrites these tables with live Plex data.
+
 ## 2026-11-05 (dev) - LF pin for terraform/*.sql; etl-manual/ ignored
 
 - `.gitattributes`: `terraform/*.sql text eol=lf`. A Windows checkout wrote

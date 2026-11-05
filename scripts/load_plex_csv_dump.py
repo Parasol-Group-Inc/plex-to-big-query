@@ -47,6 +47,8 @@ KEYS = {
     "Sales_v_Shipper_Line": "Shipper_Line_Key", "Sales_v_Shipper_Line_Release": "Shipper_Line_Key",
     "Sales_v_Shipper_AR_Invoice": "Shipper_Line_Key", "Accounting_v_AR_Invoice": "Invoice_Link",
     "Part_v_Part": "Part_Key", "Part_v_Container": "Serial_No",
+    "Sales_v_Shipper_Container": "Shipper_Container_Key",
+    "Accounting_v_AR_Invoice_Dist": ("Invoice_Link", "Line_Item_No"),
 }
 
 
@@ -66,6 +68,8 @@ def convert(s, typ):
     if is_date(s):
         naive = dt.datetime.strptime(s, "%m/%d/%Y %I:%M:%S %p")
         stored = naive.replace(tzinfo=dt.timezone.utc) + naive.replace(tzinfo=DEN).utcoffset()
+        if typ == "DATETIME":  # e.g. Shipper_Container.Loaded_Date: same shift, kept as naive time
+            return stored.replace(tzinfo=None).isoformat()
         ns = int((stored - EPOCH).total_seconds()) * 1_000_000_000
         return ns if typ == "INTEGER" else float(ns)
     if typ == "INTEGER":
@@ -83,6 +87,8 @@ def same(a, b, typ):
         return False
     if typ == "FLOAT":
         return abs(a - b) < 1e-6
+    if typ == "DATETIME":  # the CSV drops milliseconds
+        return abs((dt.datetime.fromisoformat(a) - b).total_seconds()) < 1
     return False
 
 
@@ -123,11 +129,13 @@ def main():
         c.load_table_from_json(out, stage, job_config=bigquery.LoadJobConfig(
             schema=table.schema, write_disposition="WRITE_TRUNCATE")).result()
         key = KEYS.get(view)
+        cols_of_key = key if isinstance(key, tuple) else (key,)
+        kf = lambda r: "|".join(str(r[k]) for k in cols_of_key)
         diff, identical, changed = collections.Counter(), 0, 0
         if key:
-            old = {str(r[key]): dict(r.items()) for r in c.query(f"SELECT * FROM `{raw}`").result()}
+            old = {kf(r): dict(r.items()) for r in c.query(f"SELECT * FROM `{raw}`").result()}
             for o in out:
-                b = old.get(str(o[key]))
+                b = old.get(kf(o))
                 if not b:
                     continue
                 cols = [col for col, typ in schema.items() if not same(o[col], b[col], typ)]

@@ -105,9 +105,12 @@ Add a new entry to the `extractions[]` list, in both YAMLs:
 
 `probe:` is filled for you by `python scripts/generate_probe_columns.py --write`.
 Add `sum:` columns by hand, for rates, quantities and lead times only. Never use
-`sum:` on a key: Plex's 32-bit SUM overflows. Use `page_key` only for a large
-view (tens of thousands of rows or more). Paging and probing are explained in
-`docs/TECHNICAL_REFERENCE.md` § "Change probe".
+`sum:` on a key: Plex's 32-bit SUM overflows. `page_key` pulls a large view
+in pages, and (since 2026-11-05) also makes every read of that extraction
+bounded in time and retried on a new session, page by page. So `sales_orders`,
+`part_on_hand_inventory` and `part_routing` set it on every extraction, small
+ones included, using each view's integer key. Paging and probing are explained
+in `docs/TECHNICAL_REFERENCE.md` § "Change probe".
 
 Check the pair still matches before committing:
 

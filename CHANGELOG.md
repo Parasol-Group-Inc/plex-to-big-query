@@ -14,6 +14,68 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Revenue and shipping refreshed from Plex SQL Developer exports
+
+Plex prod ODBC is still down (incident doc). Ad-hoc reruns of sales-orders
+(16:17 UTC) and part-on-hand-inventory (16:48 UTC) each connected on the third
+attempt and then hung until Cloud Run killed them (`Sales_v_PO`, `Part_v_Container`).
+Revenue and shipping were the most-asked reports, so Emilio exported the 9 raw
+views they read from Plex SQL Developer, and they were loaded by hand.
+
+### Added
+- `scripts/load_plex_csv_dump.py`: loads `SELECT * FROM <view>` CSV exports into
+  `Backups.stage_raw_<view>_<tag>` with the raw table's exact schema, compares
+  every matched row with the current table, and with `--swap` replaces
+  `PlexProd.raw_<view>`. Measured format rules: `NULL` → NULL, `True`/`False` → 1/0,
+  dates are Plex local wall time and are stored as that time plus its UTC offset
+  (-6 h MDT, -7 h MST), in integer nanoseconds. 14,834 dates checked; the CSV drops
+  milliseconds (under 1 s).
+- `.gitignore`: `manual-dumps/` (the exports hold customer data).
+
+### Changed (data only, PlexProd, ~17:20 UTC)
+- Backed up 13 raw tables to `Backups.PlexProd__raw_<view>_20261105` (plain copies,
+  90-day expiry; the operator account cannot create snapshots there), every one
+  verified row for row.
+- Replaced 9 raw tables from the `manual-dumps/nov-5` exports: `Sales_v_PO` (570),
+  `Sales_v_PO_Line`, `Sales_v_Release`, `Sales_v_Price` (1,182 each), `Sales_v_Shipper`
+  (143), `Sales_v_Shipper_Line`, `Sales_v_Shipper_Line_Release` (233 each),
+  `Sales_v_Shipper_AR_Invoice` (231), `Accounting_v_AR_Invoice` (140). Every column
+  matched by name and count. Rows unchanged in Plex came out identical cell for cell,
+  except sub-second date precision. The differences were real Plex edits: 11 order and
+  13 release status changes, and 7 releases newly fully shipped.
+- All 87 PlexProd views still query. Revenue MTD $291,553 → $302,158 (4 Nov
+  shipments); Total in Shipping $8.79 → $149,877; WIP $5.81M → $6.03M; pipeline
+  $934K → $805K. **Sales MTD did not move:** the sale date comes from
+  `Sales_v_PO_Change`, which was not exported.
+- The next successful ETL run overwrites these tables with live Plex data; nothing to undo.
+
+## 2026-11-05 (dev) - Plex reads in bounded, retried pages (D28)
+
+Plex prod ODBC has been degraded since 2026-11-02 and down since 11-04 19:19 UTC
+(`docs/PLEX_PROD_ODBC_INCIDENT_2026-11-04.md`). Reads hung on views of every
+size (`Sales_v_PO`, ~500 rows, 18 times), so paging alone could not help: each
+page had to be bounded and survivable. Not deployed.
+
+### Changed
+- `main.py`: every read of an extraction with `page_key` (count, pages, boundary groups, NULL keys, and the single pull of a view that fits one page) goes through `guarded_read()`. A read is abandoned after 150 s (`PLEX_QUERY_TIMEOUT_SECONDS` 120 + `PLEX_QUERY_GRACE_SECONDS` 30) on a wall clock, its cursor cancelled and its connection dropped in the background. A hang, a driver timeout (`HYTxx`) or a connection error (`08xxx`) gets a new connection and the same page again, up to `PLEX_PAGE_ATTEMPTS` (3) sends, 10 s then 20 s apart, resuming from the last key. After `PLEX_MAX_HUNG_QUERIES` (4) hangs in a run, the remaining paged extractions fail at once (`PlexUnresponsive`), so the run ends partial with its outcome written instead of being killed. A table whose page still fails keeps yesterday's rows; the others carry on. Retries and hangs show as warnings in the run email. The run's connection lives in a `PlexSession`; unpaged extractions keep their old behaviour (unbounded, one reconnect on `08S01`).
+- `validate_extraction()` accepts `date_col` with `page_key`; `date_col` then only sets the `max_modified_at` watermark (kept for `Sales_v_PO_Change`).
+- `reports/sales_orders.yaml`, `reports/part_on_hand_inventory.yaml`, `reports/part_routing.yaml` and their `reports/test/` twins: every extraction sets `page_key` (its integer key from `catalog/full_schema_catalog.csv`) and a `page_size` (500 for lookups and sales tables; 1,000-5,000 mid-size; 10,000 `Part_v_Container`; 25,000 `Part_v_Flat_BOM`). Counts unchanged: 29 / 4 / 18 in both files.
+- Docs: `docs/TECHNICAL_REFERENCE.md` (new "Every paged read is bounded and retried"), `docs/OPERATIONS.md`, OPEN_ITEMS D28.
+
+### Verified
+- On the Plex **test** host from local Docker (2026-11-05): the OpenAccess driver ignores `SQL_ATTR_QUERY_TIMEOUT` (pyodbc `conn.timeout` of 1-2 s; a 40-52 s query ran to completion). The wall clock abandoned the same query at 5.0 s and a new connection read normally. The three test pipelines ran clean with paging (OUTPUT_MODE=local, CSV only): every count matched, no page notes.
+- Tests: `tests/test_paged_retry.py` (new: hang, reset and driver-timeout retries, resume not restart, bad query not retried, run-wide stop, failed reconnect, prod/test YAML parity). Whole suite in the ETL image: 112 passed.
+
+## 2026-11-04 (dev) - Health check, Plex prod ODBC incident, hub refresh
+
+### Added
+- `docs/HEALTH_CHECK_2026-11-04.md`: read-only check of the prod/test ETL, the Label Design push (healthy: 41 items since 10-28, no duplicates or misses) and every scorecard figure on PlexProd. No double counting found; October is distorted by the go-live (2026-10-16 order load, production from 10-19), so November is the first clean month. Tests: 98/98 inside the ETL image; local Docker against the test host passes (amd64 image required on Apple Silicon).
+- `docs/PLEX_PROD_ODBC_INCIDENT_2026-11-04.md`: Plex prod ODBC degraded from 2026-11-02 12:32 UTC (connect no-answers, `08S01` resets, reads hanging until the Cloud Run timeout) and down from 11-04 19:19 UTC; the test host was unaffected. Timeline, evidence, what to send Plex, how to tell it is over.
+- OPEN_ITEMS: D20 updated with the recurrence; new D28 (no Plex query timeout, so hung reads are killed with no outcome), D29 (PlexTest `msl_rules` missing), S18 (October not comparable), L17 (push follow-ups); D27 note.
+
+### Changed
+- Data Hub rebuilt from a fresh snapshot (2026-11-04 15:45 UTC) and republished (v33); `docs/hub/index.html` and `docs/hub/label_design_colours.json` regenerated. No code, SQL or infrastructure change.
+
 ## 2026-10-30 (dev-label-design) - Label Design → Monday signed off
 
 ### Changed

@@ -10,36 +10,48 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Updated_Date, Part_Key]
+    page_key: Part_Key
+    page_size: 5000
 
   - plex_view: Part_v_Part_Status
     bq_table: raw_Part_v_Part_Status
     filter: ""
     date_col: ""
     probe: [Part_Status_Key]
+    page_key: Part_Status_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Group
     bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
     probe: [Part_Group_Key]
+    page_key: Part_Group_Key
+    page_size: 500
 
   - plex_view: Common_v_Building
     bq_table: raw_Common_v_Building
     filter: ""
     date_col: ""
     probe: [Building_Key]
+    page_key: Building_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Operation
     bq_table: raw_Part_v_Part_Operation
     filter: ""
     date_col: ""
     probe: [Update_Date, Part_Operation_Key]
+    page_key: Part_Operation_Key
+    page_size: 5000
 
   - plex_view: Part_v_Operation
     bq_table: raw_Part_v_Operation
     filter: ""
     date_col: ""
     probe: [Operation_Key]
+    page_key: Operation_Key
+    page_size: 500
 
   - plex_view: Part_v_Approved_Workcenter
     bq_table: raw_Part_v_Approved_Workcenter
@@ -54,41 +66,55 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Workcenter_Key]
+    page_key: Workcenter_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Op_Type
     bq_table: raw_Part_v_Part_Op_Type
     filter: ""
     date_col: ""
     probe: [Part_Op_Type_Key]
+    page_key: Part_Op_Type_Key
+    page_size: 500
 
   - plex_view: Common_v_Location
     bq_table: raw_Common_v_Location
     filter: ""
     date_col: ""
     probe: [Update_Date, Location_Key]
+    page_key: Location_Key
+    page_size: 5000
 
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
     filter: ""
     date_col: ""
     probe: [Plexus_User_No]
+    page_key: Plexus_User_No
+    page_size: 500
 
   - plex_view: Part_v_Approved_Supplier
     bq_table: raw_Part_v_Approved_Supplier
     filter: ""
     date_col: ""
     probe: [Approved_Supplier_Key, sum:Lead_Time]
+    page_key: Approved_Supplier_Key
+    page_size: 1000
 
   - plex_view: Common_v_Supplier
     bq_table: raw_Common_v_Supplier
     filter: ""
     date_col: ""
     probe: [Supplier_No]
+    page_key: Supplier_No
+    page_size: 500
 
   - plex_view: Plexus_Control_v_Customer_Group_Member
     bq_table: raw_Plexus_Control_v_Customer_Group_Member
     filter: ""
     date_col: ""
+    page_key: Customer_Group_No
+    page_size: 500
 
   - plex_view: Part_v_Part_Operation_Approved_Container
     bq_table: raw_Part_v_Part_Operation_Approved_Container
@@ -103,6 +129,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Container_Type_Key]
+    page_key: Container_Type_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Shelf_Life
     bq_table: raw_Part_v_Part_Shelf_Life
@@ -117,6 +145,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Shelf_Life_Type_Key]
+    page_key: Shelf_Life_Type_Key
+    page_size: 500
 
 bq_view:
   - name: part_info_routing_report

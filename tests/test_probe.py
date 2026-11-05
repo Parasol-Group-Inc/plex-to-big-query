@@ -323,7 +323,8 @@ def test_paging_validation():
     assert "WHERE" in m.validate_extraction(dict(base, filter="ORDER BY x"))
     assert m.validate_extraction(dict(base, filter="where\n  Active = 1")) == "", "multi-line/lower-case WHERE is fine"
     assert "ORDER BY" in m.validate_extraction(dict(base, filter="WHERE a = 1 ORDER BY b"))
-    assert "date_col" in m.validate_extraction(dict(base, date_col="Update_Date"))
+    # Since 2026-11-05 date_col may stay on a paged extraction (watermark only).
+    assert m.validate_extraction(dict(base, date_col="Update_Date")) == ""
 
 
 def test_auto_probe_sum_columns():

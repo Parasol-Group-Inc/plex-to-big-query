@@ -16,47 +16,63 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Update_Date, PO_Key]
+    page_key: PO_Key
+    page_size: 500
 
   - plex_view: Sales_v_PO_Line
     bq_table: raw_Sales_v_PO_Line
     filter: ""
     date_col: ""
     probe: [Update_Date, PO_Line_Key]
+    page_key: PO_Line_Key
+    page_size: 500
 
   - plex_view: Sales_v_PO_Change
     bq_table: raw_Sales_v_PO_Change
     filter: ""
     date_col: Change_Date
     probe: [Change_Date]
+    page_key: Change_Key
+    page_size: 500
 
   - plex_view: Sales_v_PO_Status
     bq_table: raw_Sales_v_PO_Status
     filter: ""
     date_col: ""
     probe: [PO_Status_Key]
+    page_key: PO_Status_Key
+    page_size: 500
 
   - plex_view: Sales_v_PO_Type
     bq_table: raw_Sales_v_PO_Type
     filter: ""
     date_col: ""
     probe: [PO_Type_Key]
+    page_key: PO_Type_Key
+    page_size: 500
 
   - plex_view: Sales_v_Order_Salesperson
     bq_table: raw_Sales_v_Order_Salesperson
     filter: ""
     date_col: ""
+    page_key: PO_Key
+    page_size: 500
 
   - plex_view: Sales_v_Release
     bq_table: raw_Sales_v_Release
     filter: ""
     date_col: ""
     probe: [Update_Date, Release_Key]
+    page_key: Release_Key
+    page_size: 500
 
   # Added 2026-08-21 for sales_order_allocation_report — see reports/sales_orders.yaml
   - plex_view: Sales_v_Release_Job
     bq_table: raw_Sales_v_Release_Job
     filter: ""
     date_col: ""
+    page_key: Release_Key
+    page_size: 500
 
   # Added 2026-09-01, EXPLORATORY — see reports/sales_orders.yaml for the
   # full story (Shipping module, per the 2026-09-01 Emilio/Jennilyn meeting).
@@ -65,54 +81,72 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Updated_Date, Shipper_Key]
+    page_key: Shipper_Key
+    page_size: 500
 
   - plex_view: Sales_v_Shipper_Line
     bq_table: raw_Sales_v_Shipper_Line
     filter: ""
     date_col: ""
     probe: [Shipper_Line_Key, sum:Quantity, sum:Price]
+    page_key: Shipper_Line_Key
+    page_size: 500
 
   - plex_view: Sales_v_Shipper_Status
     bq_table: raw_Sales_v_Shipper_Status
     filter: ""
     date_col: ""
     probe: [Shipper_Status_Key]
+    page_key: Shipper_Status_Key
+    page_size: 500
 
   - plex_view: Sales_v_Shipper_Container
     bq_table: raw_Sales_v_Shipper_Container
     filter: ""
     date_col: ""
     probe: [Shipper_Container_Key, Loaded_Date]
+    page_key: Shipper_Container_Key
+    page_size: 2000
 
   - plex_view: Sales_v_Shipper_AR_Invoice
     bq_table: raw_Sales_v_Shipper_AR_Invoice
     filter: ""
     date_col: ""
     probe: [Add_Date]
+    page_key: Shipper_Line_Key
+    page_size: 500
 
   - plex_view: Accounting_v_AR_Invoice
     bq_table: raw_Accounting_v_AR_Invoice
     filter: ""
     date_col: ""
     probe: [Updated_Date, Invoice_Link]
+    page_key: Invoice_Link
+    page_size: 500
 
   - plex_view: Accounting_v_AR_Invoice_Dist
     bq_table: raw_Accounting_v_AR_Invoice_Dist
     filter: ""
     date_col: ""
     probe: [Updated_Date, Line_Item_No]
+    page_key: Invoice_Link
+    page_size: 500
 
   - plex_view: Sales_v_Shipper_Line_Release
     bq_table: raw_Sales_v_Shipper_Line_Release
     filter: ""
     date_col: ""
     probe: [Updated_Date]
+    page_key: Shipper_Line_Key
+    page_size: 500
 
   - plex_view: Sales_v_Release_Allocation
     bq_table: raw_Sales_v_Release_Allocation
     filter: ""
     date_col: ""
     probe: [Add_Date, Release_Allocation_Key, sum:Quantity_Allocated, sum:Quantity_Needed]
+    page_key: Release_Allocation_Key
+    page_size: 500
 
   # Added 2026-09-04 — the SALES ORDER LINE price, per the Sep-4 meeting.
   # Jennilyn: "No, it'll always have a price in there. So it needs to be the
@@ -126,47 +160,63 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Update_Date, Price_Key]
+    page_key: Price_Key
+    page_size: 500
 
   - plex_view: Common_v_Customer
     bq_table: raw_Common_v_Customer
     filter: ""
     date_col: ""
     probe: [Change_Date]
+    page_key: Customer_No
+    page_size: 1000
 
   - plex_view: Part_v_Customer_Part_Price
     bq_table: raw_Part_v_Customer_Part_Price
     filter: ""
     date_col: ""
     probe: [Customer_Part_Price_Key, Price_Updated_Date]
+    page_key: Customer_Part_Price_Key
+    page_size: 1000
 
   - plex_view: Part_v_Part
     bq_table: raw_Part_v_Part
     filter: ""
     date_col: ""
     probe: [Updated_Date, Part_Key]
+    page_key: Part_Key
+    page_size: 5000
 
   - plex_view: Part_v_Part_Product_Type
     bq_table: raw_Part_v_Part_Product_Type
     filter: ""
     date_col: ""
+    page_key: Product_Type_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Product_Group
     bq_table: raw_Part_v_Part_Product_Group
     filter: ""
     date_col: ""
     probe: [Part_Product_Group_Key]
+    page_key: Part_Product_Group_Key
+    page_size: 500
 
   - plex_view: Part_v_Part_Group
     bq_table: raw_Part_v_Part_Group
     filter: ""
     date_col: ""
     probe: [Part_Group_Key]
+    page_key: Part_Group_Key
+    page_size: 500
 
   - plex_view: Plexus_Control_v_Plexus_User
     bq_table: raw_Plexus_Control_v_Plexus_User
     filter: ""
     date_col: ""
     probe: [Update_Date]
+    page_key: Plexus_User_No
+    page_size: 500
 
   # Added 2026-09-22 — the Inside Sales roster behind sales_reps_report.
   # See reports/sales_orders.yaml for why the goals dropdown needed it.
@@ -175,11 +225,15 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Role_Key]
+    page_key: Role_Key
+    page_size: 500
 
   - plex_view: Plexus_Control_v_User_Role
     bq_table: raw_Plexus_Control_v_User_Role
     filter: ""
     date_col: ""
+    page_key: Plexus_User_No
+    page_size: 1000
 
   # Added 2026-09-09 — BOM, for BOM-exploded component demand. See
   # reports/sales_orders.yaml for why this is needed at all (Plex's own
@@ -189,12 +243,16 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Flat_BOM_Key]
+    page_key: Flat_BOM_Key
+    page_size: 25000
 
   - plex_view: Part_v_BOM
     bq_table: raw_Part_v_BOM
     filter: ""
     date_col: ""
     probe: [BOM_Key]
+    page_key: BOM_Key
+    page_size: 5000
 
 # See reports/sales_orders.yaml for why bq_view is a list — the same
 # deploy-ordering caveat (main.py's bq_view-list support must ship before

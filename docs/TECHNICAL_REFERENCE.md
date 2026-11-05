@@ -229,14 +229,61 @@ Some things to know:
   into the next page's SQL.
 - **A paged extraction's `filter` must start with `WHERE`** (any case or
   whitespace). It is combined with the page condition, so it may not carry
-  `ORDER BY` / `GROUP BY`. `date_col` is refused with `page_key`, because
-  paging orders by the key.
+  `ORDER BY` / `GROUP BY`. `date_col` may stay (since 2026-11-05; it used to
+  be refused): paging orders by the key, so `date_col` then only sets the
+  `max_modified_at` watermark.
 - **The pages are joined into one DataFrame before the single BigQuery
   write.** Paging bounds each Plex call, not memory.
 
 Used by `Part_v_Approved_Workcenter` in `part_routing`: 64,942 rows in 3
 pages, 12.4 s, every (operation, workcenter) row exactly once, as checked on
 Plex test on 2026-10-19.
+
+#### Every paged read is bounded and retried (since 2026-11-05, D28)
+
+From 2026-11-02 Plex prod left reads unanswered on views of every size
+(`Sales_v_PO`, about 500 rows, 18 times), and a hung read ran until Cloud Run
+killed the task with no outcome written. So every query a paged extraction
+sends (the count, each page, each boundary-key group, the NULL-key query, and
+the single pull of a view that fits one page) goes through `guarded_read()`:
+
+- **A wall-clock deadline.** `run_query()` runs the read on a daemon thread and
+  gives up after `PLEX_QUERY_TIMEOUT_SECONDS` + `PLEX_QUERY_GRACE_SECONDS`
+  (120 + 30 s). The cursor is cancelled in the background and the connection
+  dropped (closed in the background too: it may still be stuck). It also sets
+  pyodbc's `conn.timeout` (`SQL_ATTR_QUERY_TIMEOUT`) on that cursor, but **the
+  OpenAccess driver ignores it**: on the test host on 2026-11-05 a 40-52 s
+  query with a 1 or 2 s timeout ran to completion. The wall clock is what
+  works; the same test abandoned the query at 5.0 s and the next connection
+  read normally.
+- **Per-page retry with resume.** A hang, a driver timeout (`HYTxx`) or any
+  connection error (`08xxx`, e.g. `08S01 connection reset by peer`) gets a new
+  connection and the same SQL again, up to `PLEX_PAGE_ATTEMPTS` (3) sends,
+  `PLEX_PAGE_BACKOFF_SECONDS` (10, doubling) apart. Rows already fetched are
+  kept, so the walk resumes from the last key. Any other error (`42S02`, a bad
+  key) is not retried.
+- **A run-wide stop.** After `PLEX_MAX_HUNG_QUERIES` (4) hangs in one run,
+  guarded reads raise `PlexUnresponsive` without sending anything, so the
+  remaining paged extractions fail at once and the run ends `partial` with its
+  outcome written instead of being killed. Worst case is about 4 × 150 s plus
+  reconnects, inside the 1200-1800 s prod task timeouts (but close to the
+  600 s test ones).
+- **If a page still fails, only that table is lost.** The exception reaches
+  the extraction loop, the table keeps yesterday's rows (a half-pulled table
+  is never written), and the next extraction carries on (reconnecting first
+  if the session was dropped). The email lists hangs and retries as warnings.
+
+Unpaged extractions are unchanged: unbounded, with the one reconnect on
+`08S01` that the extraction loop in `main()` gives them (`connection_lost()`,
+`tests/test_connection_lost.py`). The paged ones skip that outer retry, since
+they already resumed page by page.
+
+Since 2026-11-05 every extraction in `sales_orders`, `part_on_hand_inventory`
+and `part_routing` (prod and test) sets a `page_key`, so all of their Plex
+reads take this path. Page sizes: 500 for lookups and sales tables, 1,000-5,000
+for mid-size views, 10,000 for `Part_v_Container`, 25,000 for
+`Part_v_Flat_BOM` and the existing large ones. A key need not be unique
+(`Sales_v_Order_Salesperson` pages by `PO_Key`).
 
 ### When a run may skip (`probe_may_skip`)
 

@@ -73,3 +73,6 @@ terraform/deploy.plan.json
 docs/hub/data_snapshot.json
 docs/hub/index_live.html
 docs/hub/audit.json
+
+# Plex SQL Developer CSV exports for scripts/load_plex_csv_dump.py: customer data, never commit
+manual-dumps/

@@ -38,6 +38,12 @@ description: "Vox | Audit - Part Info and Routing (+ Container Types, Shelf Life
 # no change date).
 probe_mode: auto
 
+# Paging (2026-11-05): every extraction sets page_key/page_size, so each Plex
+# read is a bounded, retried page (main.py guarded_read; OPEN_ITEMS D28). From
+# 2026-11-02 Plex prod hung reads of any size; a hung or reset page is now sent
+# again on a new session and the pull resumes from the last key. If a page
+# still fails, only this table keeps yesterday's rows. Keys are each view's
+# integer key (catalog/full_schema_catalog.csv); a non-unique key is fine.
 extractions:
   # Part master — number, revision, status, type, group, building, creator
   - plex_view: Part_v_Part
@@ -45,6 +51,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Updated_Date, Part_Key]
+    page_key: Part_Key
+    page_size: 5000
 
   # Status lookup — the 'Part Active' flag
   - plex_view: Part_v_Part_Status
@@ -52,6 +60,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Part_Status_Key]
+    page_key: Part_Status_Key
+    page_size: 500
 
   # Part group lookup
   - plex_view: Part_v_Part_Group
@@ -59,6 +69,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Part_Group_Key]
+    page_key: Part_Group_Key
+    page_size: 500
 
   # Building lookup — the part's main building
   - plex_view: Common_v_Building
@@ -66,6 +78,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Building_Key]
+    page_key: Building_Key
+    page_size: 500
 
   # The routing: one row per part operation
   - plex_view: Part_v_Part_Operation
@@ -73,6 +87,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Update_Date, Part_Operation_Key]
+    page_key: Part_Operation_Key
+    page_size: 5000
 
   # Operation lookup — code and inventory type
   - plex_view: Part_v_Operation
@@ -80,6 +96,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Operation_Key]
+    page_key: Operation_Key
+    page_size: 500
 
   # Approved workcenters per operation, with run rates and crew size.
   # The largest source (~65k rows on 2026-10-19) and the reason paging exists.
@@ -101,6 +119,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Workcenter_Key]
+    page_key: Workcenter_Key
+    page_size: 500
 
   # Part operation type lookup
   - plex_view: Part_v_Part_Op_Type
@@ -108,6 +128,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Part_Op_Type_Key]
+    page_key: Part_Op_Type_Key
+    page_size: 500
 
   # Location lookup — the routing's process location
   - plex_view: Common_v_Location
@@ -115,6 +137,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Update_Date, Location_Key]
+    page_key: Location_Key
+    page_size: 5000
 
   # Users — who created the part / last updated the routing
   - plex_view: Plexus_Control_v_Plexus_User
@@ -122,6 +146,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Plexus_User_No]
+    page_key: Plexus_User_No
+    page_size: 500
 
   # Approved suppliers per operation, with lead time. No change date, so the
   # probe SUMs the lead time (not Supplier_No: a key sum, already 2.09 billion
@@ -131,6 +157,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Approved_Supplier_Key, sum:Lead_Time]
+    page_key: Approved_Supplier_Key
+    page_size: 1000
 
   # Supplier lookup — code
   - plex_view: Common_v_Supplier
@@ -138,12 +166,16 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Supplier_No]
+    page_key: Supplier_No
+    page_size: 500
 
   # The PCN code shown as the report's first columns
   - plex_view: Plexus_Control_v_Customer_Group_Member
     bq_table: raw_Plexus_Control_v_Customer_Group_Member
     filter: ""
     date_col: ""
+    page_key: Customer_Group_No
+    page_size: 500
 
   # ── Added 2026-10-19 for the second view, part_info_routing_container_report
   # (procedure Audit - Part_Info_and_Routing_wContainerType). Every other table
@@ -169,6 +201,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Container_Type_Key]
+    page_key: Container_Type_Key
+    page_size: 500
 
   # ── Added 2026-10-19 for the third view, part_shelf_life_report ("Vox
   # Nutrition Item List with Shelf Life Details"). Part_v_Part is already above.
@@ -190,6 +224,8 @@ extractions:
     filter: ""
     date_col: ""
     probe: [Shelf_Life_Type_Key]
+    page_key: Shelf_Life_Type_Key
+    page_size: 500
 
 bq_view:
   - name: part_info_routing_report

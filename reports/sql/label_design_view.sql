@@ -364,8 +364,9 @@ dates AS (
 -- order + customer part rather than left as two near-identical rows for a
 -- person to puzzle over, or arbitrarily thinned by whichever release the
 -- Apps Script's own in-batch dedupe happens to keep first.
-release_lines AS (
+odbc_lines AS (
   SELECT
+    'odbc'                                        AS data_source,
     po.Order_No                                   AS order_number,
     po.PO_No                                      AS customer_po,
     cust.Name                                     AS customer_name,
@@ -551,6 +552,120 @@ release_lines AS (
     -- works those by hand, so the push must not create items for them. The 38
     -- already pushed on 2026-10-19 stay on the board.
     AND po.order_date_resolved >= DATE '2026-10-18'
+),
+
+-- ── The same rows, read from the live Plex screens (2026-11-05) ─────────────
+-- ODBC and the SQL Development Environment froze on 2026-11-04 ~18:56 MT
+-- (OPEN_ITEMS D20): every raw_* table above stopped at that instant, so new
+-- orders and lines moved into Label Design never reached this queue. Plex's own
+-- screens stayed live. scripts/plex_live_screens.py (hourly, Windows Task
+-- "Plex live screens") reads Order Entry's Pending Fulfillment search and each
+-- order's Rapid Entry page and writes one row per release to
+-- PlexProd.live_order_releases. Runbook: docs/PLEX_SCREEN_EXTRACTION.md.
+--
+-- live_lines produces EXACTLY odbc_lines' columns from that table. The screen
+-- carries the order/line/release keys, release status, priority key, due date,
+-- part and customer part keys and the Job Note; everything else (customer
+-- contact, AM/BDM user names, part attributes, bottle/label BOM) is a lookup by
+-- key into the same raw tables odbc_lines uses. Those lookups are master data
+-- that changes rarely, so a frozen copy still resolves them; a key the frozen
+-- copy has never seen falls back to the screen's own text where there is one
+-- (customer name, part number/revision/name, customer part number, the order's
+-- Inside Sales name) and is NULL otherwise. Known gap: an order created after
+-- the freeze has no Sales_v_Order_Salesperson row, so its BDM is NULL until
+-- ODBC returns.
+--
+-- WHICH SOURCE WINS (live_switch): live, when this is PlexProd AND the screen
+-- table was loaded in the last 3 hours. Otherwise ODBC, exactly as before. So
+-- PlexTest never changes, and if the laptop task stops the view falls back to
+-- ODBC by itself within 3 hours; nobody has to remember to undo anything. The
+-- two are never mixed: one source per query. data_source says which.
+live_switch AS (
+  SELECT
+    '{dataset}' = 'PlexProd'
+      AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
+  FROM `{gcp_project}.PlexProd.live_order_releases`
+),
+
+live_lines AS (
+  SELECT
+    'live'                                        AS data_source,
+    l.order_no                                    AS order_number,
+    l.po_no                                       AS customer_po,
+    COALESCE(cust.Name, l.customer_name)          AS customer_name,
+    COALESCE(cp.Customer_Part_No, l.customer_part_no_revision) AS customer_part_no,
+    l.release_status                              AS line_status,
+    pr.Description                                AS priority,
+    l.due_date                                    AS due_date_resolved,
+    l.order_date                                  AS order_date,
+    l.job_note                                    AS job_note,
+    NULLIF(TRIM(l.job_note), '')                  AS _note,
+    COALESCE(ui.user_name, NULLIF(TRIM(l.inside_sales), '')) AS sales_rep_inside,
+    ua.user_name                                  AS customer_account_rep,
+    COALESCE(ui.user_name, NULLIF(TRIM(l.inside_sales), ''), ua.user_name) AS am,
+    COALESCE(uo2.user_name, uo.user_name, ub.user_name) AS bdm,
+    cust.Email                                    AS customer_email,
+    cust.Phone                                    AS customer_phone,
+    cp.Customer_Part_Description                  AS customer_part_description,
+    l.po_status                                   AS order_status,
+    l.po_key                                      AS po_key,
+    l.part_key                                    AS part_key,
+    COALESCE(part.Part_No, l.part_no)             AS part_no,
+    COALESCE(part.Revision, l.part_revision)      AS part_revision,
+    COALESCE(part.Name, l.part_name)              AS part_name,
+    bt.b.part_no                                  AS bottle_part_no,
+    bt.b.name                                     AS bottle_name,
+    lb.l.part_key                                 AS label_part_key,
+    lb.l.part_no                                  AS label_part_no,
+    lb.l.name                                     AS label_part_name,
+    pap.part_label_size                            AS part_label_size,
+    pap.part_size                                  AS part_size,
+    pap.part_allergen                              AS part_allergen,
+    pap.part_hazardous                             AS part_hazardous,
+    pap.part_certifications                        AS part_certifications,
+    pap.part_printing_material                     AS part_printing_material,
+    pap.part_bottle_material                       AS part_bottle_material,
+    pap.part_california_pdp                        AS part_california_pdp,
+    pap.part_prop_65_requirement                   AS part_prop_65_requirement,
+    pap.part_trademark                             AS part_trademark,
+    pap.part_material_classification               AS part_material_classification,
+    l.po_line_key                                 AS po_line_key,
+    l.release_key                                 AS _tiebreak_release_key
+
+  FROM `{gcp_project}.PlexProd.live_order_releases` AS l
+
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_PO` AS po
+    ON SAFE_CAST(po.PO_Key AS INT64) = l.po_key
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Priority` AS pr
+    ON SAFE_CAST(pr.Priority_Key AS INT64) = l.priority_key
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Customer_Part` AS cp
+    ON SAFE_CAST(cp.Customer_Part_Key AS INT64) = l.customer_part_key
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` AS part
+    ON SAFE_CAST(part.Part_Key AS INT64) = l.part_key
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` AS cust
+    ON SAFE_CAST(cust.Customer_No AS INT64) = l.customer_no
+  LEFT JOIN users         AS ui  ON ui.Plexus_User_No = SAFE_CAST(po.Inside_Sales AS INT64)
+  LEFT JOIN users         AS ua  ON ua.Plexus_User_No = SAFE_CAST(cust.Assigned_To AS INT64)
+  LEFT JOIN rep_outside   AS ro  ON ro.PO_Key = l.po_key
+  LEFT JOIN users         AS uo2 ON uo2.Plexus_User_No = ro.Plexus_User_No
+  LEFT JOIN users         AS uo  ON uo.Plexus_User_No = SAFE_CAST(po.Outside_Sales AS INT64)
+  LEFT JOIN users         AS ub  ON ub.Plexus_User_No = SAFE_CAST(cust.Assigned_To2 AS INT64)
+  LEFT JOIN bottles AS bt ON bt.Part_Key = l.part_key
+  LEFT JOIN labels  AS lb ON lb.Part_Key = l.part_key
+  LEFT JOIN part_attributes_pivoted AS pap ON pap.Part_Key = lb.l.part_key
+
+  -- Same three filters as odbc_lines. The loader already keeps only Pending
+  -- Fulfillment orders from 2026-10-18 on; repeated so the view does not
+  -- depend on the loader's choices.
+  WHERE UPPER(TRIM(l.release_status)) = 'LABEL DESIGN'
+    AND UPPER(TRIM(l.po_status)) = 'PENDING FULFILLMENT'
+    AND l.order_date >= DATE '2026-10-18'
+),
+
+release_lines AS (
+  SELECT o.* FROM odbc_lines AS o CROSS JOIN live_switch AS sw WHERE NOT sw.use_live
+  UNION ALL
+  SELECT v.* FROM live_lines AS v CROSS JOIN live_switch AS sw WHERE sw.use_live
 )
 
 -- ── Collapse to one row per order + customer part ───────────────────────────
@@ -677,7 +792,11 @@ SELECT
   -- edited line is not pushed again as a new item. It replaced
   -- "<order>|<customer part>"; the items pushed under the old key had their
   -- LCR rewritten the same day (see CHANGELOG), so none is pushed twice.
-  CONCAT(CAST(order_number AS STRING), '|L', CAST(po_line_key AS STRING))   AS dedupe_key
+  CONCAT(CAST(order_number AS STRING), '|L', CAST(po_line_key AS STRING))   AS dedupe_key,
+
+  -- 'live' (Plex screens) or 'odbc' (raw tables); see live_switch above.
+  -- Added 2026-11-05; the push ignores it.
+  data_source
 
 FROM release_lines
 

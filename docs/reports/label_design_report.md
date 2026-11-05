@@ -44,6 +44,44 @@ email, and no push. The push itself also checks in BigQuery whether anything
 is new before it opens Monday at all. A quiet check costs seconds; one that
 finds a new order does the full job.
 
+## While Plex's database feed is down (since 4 Nov 2026)
+
+On the evening of 4 November, Plex stopped updating the copy of its data that
+this pipeline reads (ODBC). Plex's own screens kept working. Since then, every
+check here has been **held**: it doesn't call Plex, so no new order reached
+the queue or Monday.
+
+**Since 5 November, the queue is read from Plex's screens instead.** Every hour, a
+small program on Emilio's laptop logs into Plex the way a person would. It
+opens Sales Orders, lists every Pending Fulfillment order dated 18 Oct or
+later, and reads each order's line page: release status, priority, due date,
+part, customer part and job note. It writes those to
+`PlexProd.live_order_releases`.
+
+The queue then builds from those rows. Everything else comes from the last good
+database copy: customer contact details, rep names, part attributes, bottle and
+label parts. That data rarely changes. It then tells the push to send anything
+new to Monday. The `data_source` column says which way each build went:
+`live` (screens) or `odbc` (the database feed).
+
+What to expect:
+- **New orders reach Monday within about an hour** of being put in Label
+  Design, Monday to Friday, 5 AM to 5:50 PM Mountain. The 6:05 PM sweep still
+  runs.
+- **An order created after 4 Nov may show no BDM**, because that link only
+  comes through the database feed. The AM is still filled from the order's
+  Inside Sales.
+- **Some values are newer than the database copy.** For example, a customer
+  PO typed in after 4 Nov ("N/A" became "438"), or a job note edited since.
+  Items already on Monday are not changed: the push only creates new items.
+- **It switches back by itself.** If the laptop program stops for 3 hours,
+  the queue goes back to the database copy. When the feed returns, the
+  regular 15-minute checks start pushing again, and the laptop program stops
+  starting the push.
+
+PlexTest is not affected. How it works, what can go wrong and how to retire
+it: `docs/PLEX_SCREEN_EXTRACTION.md`.
+
 ## How it's built (high level)
 
 Takes every sales-order release whose status is **Label Design**, keeps only

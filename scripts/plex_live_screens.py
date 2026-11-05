@@ -57,6 +57,11 @@ Safety (details in the runbook):
     Backups.PlexProd__<table>_<yyyymmdd> (expires in 7 days). Within a day, BigQuery
     time travel (FOR SYSTEM_TIME AS OF) recovers any earlier hourly load.
 
+Monday push: after a good releases load (with --load, unless --no-push) this starts
+the Label Design push job, but only Mon-Fri 5:00-17:50 MT, only while the ETL is not
+reaching Plex itself, only when label_design_report reads the live table, and never
+while a push is still running. See maybe_start_push().
+
 Writes use Application Default Credentials. The ETL never touches these tables, and
 nothing here touches a table the ETL writes, so the two cannot collide.
 """
@@ -423,9 +428,59 @@ def load(c, table, rows, sch, floor, force, today):
     return f"{table} replaced: {n} rows (was {have})" + (f"; backup {bak}" if bak else "")
 
 
+# ── Monday push while the ETL cannot run ───────────────────────────────────────
+# Normally the label_design ETL job starts the push (POST_RUN_JOB) after a run
+# that extracted. While Plex's ODBC is down that job is held by the outage
+# breaker, so nothing starts the push except its 6:05 PM sweep. After a good
+# releases load this starts plex-etl-label-design-push itself, but only when ALL
+# of these hold, so it never doubles up with the ETL or the sweep:
+#   1. Mon-Fri 5:00 AM - 5:49 PM Mountain: the ETL's own window. The sweep runs at
+#      6:05 PM, and two pushes running at once would both create the same item.
+#   2. The ETL is NOT reaching Plex: its newest label_design run in the last 40
+#      minutes is not success/partial. Once ODBC is back, the ETL pushes and this
+#      steps aside on its own.
+#   3. label_design_report is reading the live table (data_source = 'live').
+#   4. No execution of the push job is still running.
+PUSH_JOB = "plex-etl-label-design-push"
+PUSH_REGION = "us-central1"
+PUSH_WINDOW = (dt.time(5, 0), dt.time(17, 50))
+
+
+def maybe_start_push(c):
+    """Start the Label Design push if every gate above passes. Returns what it did."""
+    now = dt.datetime.now(DEN)
+    if now.weekday() >= 5 or not (PUSH_WINDOW[0] <= now.time() < PUSH_WINDOW[1]):
+        return f"push not started: {now:%a %H:%M} MT is outside Mon-Fri 05:00-17:50 (the 6:05 PM sweep covers the day)"
+    etl = list(c.query(f"""
+        SELECT status, started_at FROM `{PROJECT}.PlexProd.job_run_log`
+        WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
+          AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 40 MINUTE)
+        ORDER BY started_at DESC LIMIT 1""").result())
+    if etl and etl[0].status in ("success", "partial"):
+        return f"push not started: the ETL reached Plex at {etl[0].started_at:%H:%M} UTC and starts the push itself"
+    src = list(c.query(f"SELECT ARRAY_AGG(DISTINCT data_source) s FROM `{PROJECT}.PlexProd.label_design_report`").result())[0].s
+    if src != ["live"]:
+        return f"push not started: label_design_report is not reading the live screens (data_source {src})"
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+    cred, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    s = AuthorizedSession(cred)
+    job = f"https://run.googleapis.com/v2/projects/{PROJECT}/locations/{PUSH_REGION}/jobs/{PUSH_JOB}"
+    r = s.get(f"{job}/executions", params={"pageSize": 5}, timeout=60)
+    r.raise_for_status()
+    running = [e["name"].rsplit("/", 1)[-1] for e in r.json().get("executions", []) if not e.get("completionTime")]
+    if running:
+        return f"push not started: {running[0]} is still running"
+    r = s.post(f"{job}:run", json={}, timeout=60)
+    r.raise_for_status()
+    return f"started {PUSH_JOB}: {r.json().get('metadata', {}).get('name', '').rsplit('/', 1)[-1]}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--load", action="store_true", help="replace the live_* tables in BigQuery")
+    ap.add_argument("--no-push", action="store_true",
+                    help="with --load, do not start the Label Design push after the releases load")
     ap.add_argument("--only", help="comma-separated screens: " + ", ".join(SCREENS))
     ap.add_argument("--force", action="store_true", help="load even if a table would shrink past its floor")
     args = ap.parse_args()
@@ -470,6 +525,12 @@ def main():
             except Exception as e:
                 failed[n] = str(e).splitlines()[0][:300]
                 print(f"{table}: NOT LOADED: {failed[n]}")
+        if "releases" in fetched and "releases" not in failed and not args.no_push:
+            try:
+                print(maybe_start_push(c))
+            except Exception as e:  # the tables are loaded; only the push start failed
+                failed["push"] = str(e).splitlines()[0][:300]
+                print(f"push: FAILED TO START: {failed['push']}")
     took = (dt.datetime.now(dt.timezone.utc) - started).total_seconds()
     print(f"done in {took:.0f}s: {len(names) - len(failed)}/{len(names)} screens ok"
           + (f"; FAILED {failed}" if failed else "") + ("" if args.load else " (dry run, nothing written)"))

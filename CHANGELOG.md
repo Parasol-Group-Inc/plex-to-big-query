@@ -36,6 +36,34 @@ don't need an entry.
   (7 days); `--only` runs a subset. **Added** `run_lock()` in `plex_web_export.py`, a
   lock file both scripts share (`etl-manual/plex_web.lock`, stale after 2 h, exit 75
   when held), so the hourly task never starts a second browser.
+- **Changed** `reports/sql/label_design_view.sql`: the release rows now come from one
+  of two sources. `odbc_lines` is the old query, unchanged. `live_lines` builds the
+  same columns from `PlexProd.live_order_releases`, using the raw tables only for
+  lookups by key (customer, users, part, customer part, BOM, attributes), with the
+  screen's own text as fallback. `live_switch` picks live when the dataset is PlexProd
+  AND the live table loaded in the last 3 hours, else ODBC, so PlexTest never changes
+  and prod falls back by itself if the laptop task stops. New column `data_source`
+  (`live` / `odbc`); the push ignores it. Tested before merge: with ODBC forced, the
+  new SQL equals the deployed prod view (66 rows, 0 differences both ways), and the
+  PlexTest build equals the deployed PlexTest view. The live build gives 71 lines:
+  65 shared with ODBC, 6 new since the freeze, 1 gone (341). The shared lines differ
+  only where Plex changed after the freeze (10 customer POs "N/A" -> a number, 1 Job
+  Note and due date). 9 lines are not in the push log yet, so a push would create at
+  most 9 items. That is 6 new lines plus 570, 561 and 399, which reached the frozen
+  copy after the last push ran.
+- **Added** to `plex_live_screens.py`: after a good releases load, start
+  `plex-etl-label-design-push`. The ETL normally starts it, but it is held by the
+  outage breaker. The start is gated:
+  - Mon-Fri 05:00-17:50 MT only; the 6:05 PM sweep is separate.
+  - The newest `label_design` ETL run in the last 40 min must not be success/partial,
+    so the ETL pushes once it is back.
+  - The view's `data_source` must be `live`.
+  - No push execution may still be running.
+
+  `--no-push` turns it off.
+- **Deploy note:** while the breaker holds the `label_design` job, it creates no
+  views. The new view is created once by hand from the deployed SQL (the same
+  substitution `main.py` does); the job recreates it identically once ODBC is back.
 - Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`.
 
 ## 2026-11-05 (dev) - Live Plex screens: shipping revenue and shipper history

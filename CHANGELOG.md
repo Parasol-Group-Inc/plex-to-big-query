@@ -14,6 +14,23 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Plex web export: raw tables via the SQL Development Environment
+
+- **Added** `scripts/plex_web_export.py`: logs into Plex with headless Chromium
+  (Playwright, `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD` from `.env`) and posts
+  `SELECT x.* FROM <view> AS x` to the page's own "Download Results As CSV" request
+  for the 21 raw tables the revenue, shipping, sales-MTD and AR invoice reports read.
+  Each file must match a `COUNT(*)` run the same way. Without `--swap` it only stages
+  and compares; with `--swap` it backs each raw table up (7-day expiry), skips any
+  table the ETL wrote during the run or a file under 90% of current rows, and
+  replaces the rest. First run: 21/21 exported and matched, 3 min.
+- **Changed** `scripts/load_plex_csv_dump.py`: the per-file work is now
+  `load_file()`, shared by both scripts; the CLI behaves as before.
+- **Found:** that page reads the same stale copy as ODBC. On 2026-11-05 its newest
+  rows were from 2026-11-04 ~18:56 Plex time (last shipper SH00188), while the live
+  Shipping Revenue by Part Group screen already showed SH00189-SH00208. So the
+  script cannot get newer data than the ETL would until Plex's copy catches up.
+
 ## 2026-11-05 - D28 paged reads deployed
 
 - PR #113 shipped: Cloud Build `a50baee9` put `etl:d1901eb` on all 31 Cloud Run jobs

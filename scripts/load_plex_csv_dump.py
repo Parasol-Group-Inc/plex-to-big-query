@@ -92,6 +92,75 @@ def same(a, b, typ):
     return False
 
 
+def load_file(c, f, tag, swap=False, min_ratio=None, stage_expiry_days=None):
+    """Stage one `<view>.csv`, compare it with raw_<view>, optionally swap it in.
+
+    Returns a dict with view, status ("staged", "swapped" or "skipped"), the row
+    counts and a one-line message. With min_ratio, refuses the swap when the CSV has
+    fewer than min_ratio x the current table's rows (a cut-off export).
+    """
+    view = Path(f).stem
+    raw = f"{PROJECT}.PlexProd.raw_{view}"
+    table = c.get_table(raw)
+    schema = {x.name: x.field_type for x in table.schema}
+    res = {"view": view, "status": "skipped", "csv_rows": 0, "current_rows": table.num_rows}
+    with open(f, newline="", encoding="utf-8-sig") as fh:
+        rows = list(csv.reader(fh))
+    header = rows[0][:-1] if rows[0] and rows[0][-1] == "" else rows[0]
+    missing = [x for x in schema if x not in header]
+    if missing:
+        res["message"] = f"{view}: SKIPPED, columns missing from the CSV: {missing}"
+        return res
+    out, errors = [], collections.Counter()
+    for r in rows[1:]:
+        d = dict(zip(header, r))
+        o = {}
+        for col, typ in schema.items():
+            try:
+                o[col] = convert(d[col], typ)
+            except ValueError:
+                errors[col] += 1
+                o[col] = None
+        out.append(o)
+    res["csv_rows"] = len(out)
+    if errors:
+        res["message"] = f"{view}: SKIPPED, conversion errors {dict(errors)}"
+        return res
+    stage = f"{PROJECT}.Backups.stage_raw_{view}_{tag}"
+    c.load_table_from_json(out, stage, job_config=bigquery.LoadJobConfig(
+        schema=table.schema, write_disposition="WRITE_TRUNCATE")).result()
+    if stage_expiry_days:
+        st = c.get_table(stage)
+        st.expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=stage_expiry_days)
+        c.update_table(st, ["expires"])
+    res["status"] = "staged"
+    key = KEYS.get(view)
+    diff, identical, changed = collections.Counter(), 0, 0
+    if key:
+        cols_of_key = key if isinstance(key, tuple) else (key,)
+        kf = lambda r: "|".join(str(r[k]) for k in cols_of_key)
+        old = {kf(r): dict(r.items()) for r in c.query(f"SELECT * FROM `{raw}`").result()}
+        for o in out:
+            b = old.get(kf(o))
+            if not b:
+                continue
+            cols = [col for col, typ in schema.items() if not same(o[col], b[col], typ)]
+            changed += bool(cols)
+            identical += not cols
+            diff.update(cols)
+    msg = (f"{view}: csv {len(out)} rows, current {table.num_rows}; matched rows identical {identical}, "
+           f"changed {changed}; columns differing {diff.most_common(6)}")
+    if swap:
+        if min_ratio and len(out) < min_ratio * table.num_rows:
+            res["message"] = msg + f"; NOT swapped: under {min_ratio:.0%} of the current rows"
+            return res
+        c.copy_table(stage, raw, job_config=bigquery.CopyJobConfig(write_disposition="WRITE_TRUNCATE")).result()
+        res["status"] = "swapped"
+        msg += f"; raw_{view} replaced"
+    res["message"] = msg
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("folder")
@@ -100,54 +169,7 @@ def main():
     args = ap.parse_args()
     c = bigquery.Client(project=PROJECT)
     for f in sorted(Path(args.folder).glob("*.csv")):
-        view = f.stem
-        raw = f"{PROJECT}.PlexProd.raw_{view}"
-        table = c.get_table(raw)
-        schema = {x.name: x.field_type for x in table.schema}
-        with open(f, newline="", encoding="utf-8-sig") as fh:
-            rows = list(csv.reader(fh))
-        header = rows[0][:-1] if rows[0] and rows[0][-1] == "" else rows[0]
-        missing = [x for x in schema if x not in header]
-        if missing:
-            print(f"{view}: SKIPPED, columns missing from the CSV: {missing}")
-            continue
-        out, errors = [], collections.Counter()
-        for r in rows[1:]:
-            d = dict(zip(header, r))
-            o = {}
-            for col, typ in schema.items():
-                try:
-                    o[col] = convert(d[col], typ)
-                except ValueError:
-                    errors[col] += 1
-                    o[col] = None
-            out.append(o)
-        if errors:
-            print(f"{view}: SKIPPED, conversion errors {dict(errors)}")
-            continue
-        stage = f"{PROJECT}.Backups.stage_raw_{view}_{args.tag}"
-        c.load_table_from_json(out, stage, job_config=bigquery.LoadJobConfig(
-            schema=table.schema, write_disposition="WRITE_TRUNCATE")).result()
-        key = KEYS.get(view)
-        cols_of_key = key if isinstance(key, tuple) else (key,)
-        kf = lambda r: "|".join(str(r[k]) for k in cols_of_key)
-        diff, identical, changed = collections.Counter(), 0, 0
-        if key:
-            old = {kf(r): dict(r.items()) for r in c.query(f"SELECT * FROM `{raw}`").result()}
-            for o in out:
-                b = old.get(kf(o))
-                if not b:
-                    continue
-                cols = [col for col, typ in schema.items() if not same(o[col], b[col], typ)]
-                changed += bool(cols)
-                identical += not cols
-                diff.update(cols)
-        print(f"{view}: csv {len(out)} rows, current {table.num_rows}; matched rows identical {identical}, "
-              f"changed {changed}; columns differing {diff.most_common(6)}")
-        if args.swap:
-            c.copy_table(stage, raw, job_config=bigquery.CopyJobConfig(write_disposition="WRITE_TRUNCATE")).result()
-            print(f"{view}: raw_{view} replaced")
-
+        print(load_file(c, f, args.tag, swap=args.swap)["message"])
 
 if __name__ == "__main__":
     main()

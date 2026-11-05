@@ -1,6 +1,7 @@
 # Plex screen extraction (Playwright), the stopgap for the ODBC outage
 
-> **Status (2026-11-05):** live. The hourly Windows task "Plex live screens" on Emilio's
+> **Status (2026-11-05):** live, deployed (tag `deploy/2026-11-05T2156Z`); the first push
+> from the screens created 10 Monday items. The hourly Windows task "Plex live screens" on Emilio's
 > laptop loads three Plex screens into `PlexProd.live_*`. `label_design_report` reads
 > one of them while it is fresh, and the task starts the Monday push.
 > **Retire it when ODBC is back** (see [Retiring it](#retiring-it-when-odbc-returns)).

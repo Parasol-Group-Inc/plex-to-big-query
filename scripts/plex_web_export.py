@@ -26,6 +26,7 @@ The ETL overwrites the raw tables on its next successful run, so nothing here
 needs undoing when ODBC returns.
 """
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import io
@@ -72,6 +73,53 @@ def creds():
     if not (u and pw):
         sys.exit("PLEX_PORTAL_USERNAME / PLEX_PORTAL_PASSWORD not set (environment or .env)")
     return u, pw
+
+
+# In the PRIMARY folder when it exists (the hourly task runs from there), so a manual
+# run from a project worktree (ptbq-dev, ...) waits for the task and vice versa.
+_PRIMARY = REPO.parent / "plex-to-big-query"
+LOCK = (_PRIMARY if _PRIMARY.is_dir() else REPO) / "etl-manual" / "plex_web.lock"
+
+
+@contextlib.contextmanager
+def run_lock():
+    """One Plex web run at a time, shared by plex_web_export.py and plex_live_screens.py.
+
+    Both log in as the same Plex user and the hourly task must not start a second
+    browser while the previous run is still going. The lock is an operating-system
+    lock on the file (msvcrt on Windows, flock on macOS/Linux), not the file's
+    existence, so a run that is killed (the task's 50-minute limit, a reboot)
+    releases it with its process and the next run starts normally. The file is
+    left in place and holds the last holder's pid and start time, for the log.
+    Exits 75 (temporary failure) if another run holds it.
+    """
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    f = open(LOCK, "a+", encoding="utf-8")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(1 << 20)  # lock a byte past the text, so a waiting run can still read who holds it
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        try:  # Windows locks are mandatory: the locked byte may not be readable
+            f.seek(0)
+            held = f.read().strip()
+        except OSError:
+            held = ""
+        f.close()
+        print(f"another Plex web run holds {LOCK.name} ({held or 'holder unknown'}); not starting")
+        sys.exit(75)
+    try:
+        f.seek(0)
+        f.truncate()
+        f.write(f"pid {os.getpid()} {Path(sys.argv[0]).name} since {dt.datetime.now():%Y-%m-%d %H:%M:%S}")
+        f.flush()
+        yield
+    finally:
+        f.close()  # closing the handle releases the lock
 
 
 def login(pg, user, password):
@@ -140,7 +188,8 @@ def main():
         shutil.rmtree(old, ignore_errors=True)
 
     user, password = creds()
-    exported = export(views, out, user, password)
+    with run_lock():
+        exported = export(views, out, user, password)
 
     c = bigquery.Client(project=PROJECT)
     failed = [v for v, e in exported.items() if e]

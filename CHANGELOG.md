@@ -14,6 +14,76 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Label Design from live Plex screens; screen loader hardened
+
+- **Added** a third screen to `scripts/plex_live_screens.py`: `releases` ->
+  `PlexProd.live_order_releases`, one row per release of every Pending Fulfillment
+  order dated 2026-10-18 or later. It runs the Sales Orders (Order Entry) search one
+  month at a time, then reads each order's Rapid Entry line page, whose embedded grid
+  holds the release status key, priority key, due date, part, customer part and Job
+  Note (the Line Items page has no Job Note). Status names come from
+  `raw_Sales_v_Release_Status`; an unknown key fails the screen. First load
+  2026-11-05: 160 orders, 362 releases, 71 in Label Design, about 3 min. Checked against
+  Jennilyn's screenshot (587, 604 lines 2-3, 615, 616 in Label Design; 610 Open) and
+  against the frozen `label_design_report`: 65 lines in both, 64 with the same Job
+  Note (16668960 was edited 5 -> 4 after the freeze), 6 new since the freeze, 1 since
+  moved off Label Design. The Line Items page agreed with Rapid Entry on all 362.
+- **Changed** `plex_live_screens.py` safety: each screen loads or fails on its own (a
+  failed screen keeps its previous table, the run exits 1); requests retry 3 times and
+  log in again when Plex returns the login page; a table that would shrink under 90%
+  (revenue, history) or 50% (releases) is not replaced without `--force`; the first
+  load of each Denver day copies the table to `Backups.PlexProd__<table>_<yyyymmdd>`
+  (7 days); `--only` runs a subset. **Added** `run_lock()` in `plex_web_export.py`, a
+  lock both scripts share, so the hourly task never starts a second browser. It is an
+  operating-system lock (msvcrt on Windows, flock elsewhere) on
+  `etl-manual/plex_web.lock` **in the primary folder**, so a manual run from a project
+  worktree and the task wait for each other. A killed run releases it with its process
+  (no stale-lock timeout); a held lock exits 75 and logs the holder's pid. Tested: a
+  second run while held exits 75, the next run after the holder is killed starts.
+- **Fixed** `releases`: an order whose Rapid Entry grid is empty (a line with no
+  release yet) now contributes nothing instead of failing the screen after 3 retries;
+  only a page with no grid model at all is retried and then fails.
+- **Changed** the Windows task "Plex live screens": runs on battery, starts a missed run
+  when the laptop wakes, never runs two at once, and is killed after 50 min.
+- **Changed** `reports/sql/label_design_view.sql`: the release rows now come from one
+  of two sources. `odbc_lines` is the old query, unchanged. `live_lines` builds the
+  same columns from `PlexProd.live_order_releases`, using the raw tables only for
+  lookups by key (customer, users, part, customer part, BOM, attributes), with the
+  screen's own text as fallback. `live_switch` picks live when the dataset is PlexProd
+  AND the live table loaded in the last 3 hours, else ODBC, so PlexTest never changes
+  and prod falls back by itself if the laptop task stops. New column `data_source`
+  (`live` / `odbc`); the push ignores it. Tested before merge: with ODBC forced, the
+  new SQL equals the deployed prod view (66 rows, 0 differences both ways), and the
+  PlexTest build equals the deployed PlexTest view. The live build gives 71 lines:
+  65 shared with ODBC, 6 new since the freeze, 1 gone (341). The shared lines differ
+  only where Plex changed after the freeze (10 customer POs "N/A" -> a number, 1 Job
+  Note and due date). 9 lines are not in the push log yet, so a push would create at
+  most 9 items. That is 6 new lines plus 570, 561 and 399, which reached the frozen
+  copy after the last push ran.
+- **Added** to `plex_live_screens.py`: after a good releases load, start
+  `plex-etl-label-design-push`. The ETL normally starts it, but it is held by the
+  outage breaker. The start is gated:
+  - Mon-Fri 05:00-17:50 MT only; the 6:05 PM sweep is separate.
+  - The newest `label_design` ETL run in the last 40 min must not be success/partial,
+    so the ETL pushes once it is back.
+  - The view's `data_source` must be `live`.
+  - No push execution may still be running.
+
+  `--no-push` turns it off.
+- **Deploy note:** while the breaker holds the `label_design` job, it creates no
+  views. The new view is created once by hand from the deployed SQL (the same
+  substitution `main.py` does); the job recreates it identically once ODBC is back.
+- Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`.
+- **Added** the hub tab "Screen extraction" (`scripts/hub/screens_tab.py`, live page only):
+  why and how the screens are read, a screenshot of each screen, safeguards, why it
+  cannot collide with the ETL, live status (table sizes and freshness, releases by
+  status, which source Label Design reads, today's push outcomes, the ETL's newest
+  Label Design runs, the task log's recent runs) and how to retire it.
+  `python scripts/hub/screens_tab.py --refresh` writes the status; screenshots and
+  status live in `docs/hub/screens/` (gitignored, customer data). **Fixed** the hub's
+  summary row, which stayed visible on the QuickBooks, Audit and new tab because
+  `.stats { display: grid }` overrode `hidden`.
+
 ## 2026-11-05 (dev) - Live Plex screens: shipping revenue and shipper history
 
 - **Added** `scripts/plex_live_screens.py` (+ `plex_live_screens.cmd` for Windows Task

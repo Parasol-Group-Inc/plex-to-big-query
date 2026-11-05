@@ -11,7 +11,23 @@
 
 ---
 
-## UPDATE — 2026-10-30 (latest): signed off by Jennilyn
+## UPDATE — 2026-11-05 (latest): running from Plex's screens during the ODBC outage
+
+Plex's ODBC feed froze on 2026-11-04 ~18:56 MT (OPEN_ITEMS D20), and the outage
+breaker has held the `label_design` job since, so no new orders reached Monday.
+Since 2026-11-05 an hourly task on Emilio's laptop reads the Pending Fulfillment
+orders from Plex's Sales Orders and Rapid Entry screens into
+`PlexProd.live_order_releases`. `label_design_report` uses that table while it is
+under 3 hours old (new column `data_source` = `live`), and the task starts the
+Monday push itself. Checked against Jennilyn's screenshot of 11-05 (587, 604 lines
+2-3, 615, 616 in Label Design; 610 Open). Known gap: an order created after the
+freeze has no BDM until ODBC returns. When the ETL succeeds again it takes over
+with no change needed; then the task is disabled. Runbook:
+`docs/PLEX_SCREEN_EXTRACTION.md`; open item D30.
+
+---
+
+## UPDATE — 2026-10-30: signed off by Jennilyn
 
 Jennilyn, 2026-10-30: "the label -> monday.com integration is g2g at this point."
 The Plex → Monday push is accepted as done. What remains is follow-up, not

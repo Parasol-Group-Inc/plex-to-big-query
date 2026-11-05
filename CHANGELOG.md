@@ -34,8 +34,17 @@ don't need an entry.
   (revenue, history) or 50% (releases) is not replaced without `--force`; the first
   load of each Denver day copies the table to `Backups.PlexProd__<table>_<yyyymmdd>`
   (7 days); `--only` runs a subset. **Added** `run_lock()` in `plex_web_export.py`, a
-  lock file both scripts share (`etl-manual/plex_web.lock`, stale after 2 h, exit 75
-  when held), so the hourly task never starts a second browser.
+  lock both scripts share, so the hourly task never starts a second browser. It is an
+  operating-system lock (msvcrt on Windows, flock elsewhere) on
+  `etl-manual/plex_web.lock` **in the primary folder**, so a manual run from a project
+  worktree and the task wait for each other. A killed run releases it with its process
+  (no stale-lock timeout); a held lock exits 75 and logs the holder's pid. Tested: a
+  second run while held exits 75, the next run after the holder is killed starts.
+- **Fixed** `releases`: an order whose Rapid Entry grid is empty (a line with no
+  release yet) now contributes nothing instead of failing the screen after 3 retries;
+  only a page with no grid model at all is retried and then fails.
+- **Changed** the Windows task "Plex live screens": runs on battery, starts a missed run
+  when the laptop wakes, never runs two at once, and is killed after 50 min.
 - **Changed** `reports/sql/label_design_view.sql`: the release rows now come from one
   of two sources. `odbc_lines` is the old query, unchanged. `live_lines` builds the
   same columns from `PlexProd.live_order_releases`, using the raw tables only for

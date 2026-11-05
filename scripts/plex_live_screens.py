@@ -372,14 +372,18 @@ def get_rows(pg, url, ctx, what, tries=3):
             elif r.status != 200:
                 print(f"  {what}: attempt {n}: HTTP {r.status}")
             else:
-                rows = [x for m in page_models(r.text()) for x in rapid_rows(m)]
+                models = page_models(r.text())
+                rows = [x for m in models for x in rapid_rows(m)]
                 if rows:
                     return rows
-                print(f"  {what}: attempt {n}: page had no release rows")
+                if models:  # the page drew its grid and it is empty: a line with no release yet
+                    print(f"  {what}: no releases on the page")
+                    return []
+                print(f"  {what}: attempt {n}: page had no grid model")
         except Exception as e:
             print(f"  {what}: attempt {n} failed ({str(e).splitlines()[0][:120]})")
         time.sleep(5 * n)
-    raise RuntimeError(f"{what}: no release rows after {tries} attempts ({url.split('/')[-1]})")
+    raise RuntimeError(f"{what}: no page model after {tries} attempts ({url.split('/')[-1]})")
 
 
 # ── Load ────────────────────────────────────────────────────────────────────────

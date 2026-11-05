@@ -75,8 +75,10 @@ def creds():
     return u, pw
 
 
-LOCK = REPO / "etl-manual" / "plex_web.lock"
-LOCK_STALE = dt.timedelta(hours=2)
+# In the PRIMARY folder when it exists (the hourly task runs from there), so a manual
+# run from a project worktree (ptbq-dev, ...) waits for the task and vice versa.
+_PRIMARY = REPO.parent / "plex-to-big-query"
+LOCK = (_PRIMARY if _PRIMARY.is_dir() else REPO) / "etl-manual" / "plex_web.lock"
 
 
 @contextlib.contextmanager
@@ -84,25 +86,40 @@ def run_lock():
     """One Plex web run at a time, shared by plex_web_export.py and plex_live_screens.py.
 
     Both log in as the same Plex user and the hourly task must not start a second
-    browser while the previous run is still going. A lock older than LOCK_STALE is
-    left over from a killed run and is taken over. Exits 75 (temp failure) if held.
+    browser while the previous run is still going. The lock is an operating-system
+    lock on the file (msvcrt on Windows, flock on macOS/Linux), not the file's
+    existence, so a run that is killed (the task's 50-minute limit, a reboot)
+    releases it with its process and the next run starts normally. The file is
+    left in place and holds the last holder's pid and start time, for the log.
+    Exits 75 (temporary failure) if another run holds it.
     """
     LOCK.parent.mkdir(parents=True, exist_ok=True)
+    f = open(LOCK, "a+", encoding="utf-8")
     try:
-        if LOCK.exists() and dt.datetime.now() - dt.datetime.fromtimestamp(LOCK.stat().st_mtime) > LOCK_STALE:
-            print(f"taking over a stale lock: {LOCK.read_text(encoding='utf-8', errors='replace').strip()}")
-            LOCK.unlink()
-        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        held = LOCK.read_text(encoding="utf-8", errors="replace").strip()
-        print(f"another Plex web run holds {LOCK.name} ({held}); not starting")
+        if os.name == "nt":
+            import msvcrt
+            f.seek(1 << 20)  # lock a byte past the text, so a waiting run can still read who holds it
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        try:  # Windows locks are mandatory: the locked byte may not be readable
+            f.seek(0)
+            held = f.read().strip()
+        except OSError:
+            held = ""
+        f.close()
+        print(f"another Plex web run holds {LOCK.name} ({held or 'holder unknown'}); not starting")
         sys.exit(75)
-    os.write(fd, f"pid {os.getpid()} {sys.argv[0]} since {dt.datetime.now():%Y-%m-%d %H:%M:%S}".encode())
-    os.close(fd)
     try:
+        f.seek(0)
+        f.truncate()
+        f.write(f"pid {os.getpid()} {Path(sys.argv[0]).name} since {dt.datetime.now():%Y-%m-%d %H:%M:%S}")
+        f.flush()
         yield
     finally:
-        LOCK.unlink(missing_ok=True)
+        f.close()  # closing the handle releases the lock
 
 
 def login(pg, user, password):

@@ -208,7 +208,35 @@ def _batch_note(report: Dict[str, object]) -> str:
 def _why_it_ran(report: Dict[str, object]) -> str:
     """One plain sentence on what triggered this run and what the probe saw,
     plus where it sits in its batch."""
-    return _why_it_ran_alone(report) + _batch_note(report)
+    return _why_it_ran_alone(report) + _data_age_note(report) + _batch_note(report)
+
+
+# Must match main.NO_NEW_DATA_PREFIX: a job_run_log detail starting with it is a
+# clean run that got no new data from Plex (main.no_new_data_info).
+NO_NEW_DATA_PREFIX = "No new data"
+
+
+def no_new_data(report: Dict[str, object]) -> bool:
+    """A clean run whose Plex data matched earlier probes while Plex was
+    failing to connect: most likely a frozen copy, not current data."""
+    probe = report.get("probe") or {}
+    return bool(probe.get("no_new_data")) and str(report.get("status", "")).lower() in ("success", "partial")
+
+
+def _data_age_note(report: Dict[str, object]) -> str:
+    """Since when Plex's data for this report has not changed, when the probe
+    saw the same data as earlier probes; '' otherwise."""
+    probe = report.get("probe") or {}
+    when = probe.get("unchanged_since_local")
+    status = str(report.get("status", "")).lower()
+    if not when or status not in ("success", "partial"):
+        return ""
+    if no_new_data(report):
+        return (f" Plex answered, but returned exactly the same data as at {when}. "
+                f"{probe.get('connect_failures')} run(s) failed to connect to Plex in the last "
+                f"{probe.get('connect_hours', 6)} h, and during an outage Plex can answer with a frozen "
+                f"copy, so this run does not show that Plex is current.")
+    return f" Plex's data in these tables is the same as at {when}."
 
 
 def _why_it_ran_alone(report: Dict[str, object]) -> str:
@@ -338,6 +366,8 @@ def send_report(report: Dict[str, object]) -> bool:
         "badge-error"
     )
     status_label = "NO CHANGES" if no_changes else status.upper()
+    if no_new_data(report):
+        status_label, status_class = f"{status_label} · NO NEW DATA", "badge-warning"
 
     events = [str(item) for item in report.get("events", [])]
     errors = [str(item) for item in report.get("errors", [])]
@@ -589,6 +619,8 @@ def _digest_rows(runs: List[Dict[str, object]], missing: List[str], zone: ZoneIn
     for r in runs:
         status = str(r.get("status", "?"))
         label, fg, bg = _DIGEST_STATUS.get(status, (status.upper(), "#475569", "#eef2f6"))
+        if status == "success" and str(r.get("detail") or "").startswith(NO_NEW_DATA_PREFIX):
+            label, fg, bg = "NO NEW DATA", "#92400e", "#fef3c7"
         name = _pipeline_name(str(r.get("job_name", "")))
         rows = r.get("rows_written")
         rows_txt = f"{rows:,}" if isinstance(rows, int) and status != "skipped" else "—"
@@ -711,12 +743,20 @@ def send_digest(digest: Dict[str, object]) -> bool:
     health_html, health_text, warnings = _digest_health(digest.get("health") or {}, zone)
     if warnings and status_class == "badge-success":
         status_label, status_class = f"All jobs OK, {warnings} health warning(s)", "badge-warning"
+    stale = sum(1 for r in runs if r.get("status") == "success"
+                and str(r.get("detail") or "").startswith(NO_NEW_DATA_PREFIX))
+    if stale and status_class == "badge-success":
+        status_label, status_class = f"{stale} job(s) got no new data from Plex", "badge-warning"
 
     summary = (f"{len(runs)} of {len(runs) + len(missing)} job(s) in the {label} reported: "
                f"{counts['success']} loaded, {counts['skipped']} had no changes in Plex, "
                f"{unclean} failed or ended partial.")
     if unclean:
         summary += " Each failed or partial job also sent its own email with the errors."
+    if stale:
+        summary += (f" {stale} of the loaded job(s) are marked NO NEW DATA: Plex answered with exactly "
+                    f"the data it returned before, while other runs were failing to connect, so they "
+                    f"do not show that Plex is current (it may be a frozen copy).")
     if missing:
         summary += " Jobs listed as NO RESULT YET had not finished when this digest was sent."
 

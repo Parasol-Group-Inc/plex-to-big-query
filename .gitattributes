@@ -9,6 +9,7 @@
 reports/**      text eol=lf
 deploy/**       text eol=lf
 terraform/*.tf  text eol=lf
+terraform/*.sql text eol=lf
 *.sh            text eol=lf
 *.py            text eol=lf
 .githooks/*     text eol=lf

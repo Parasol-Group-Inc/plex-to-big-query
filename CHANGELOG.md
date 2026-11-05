@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - LF pin for terraform/*.sql; etl-manual/ ignored
+
+- `.gitattributes`: `terraform/*.sql text eol=lf`. A Windows checkout wrote
+  `backup_snapshots.sql` and `msl_demand_daily.sql` as CRLF, so a plan from this
+  laptop showed both scheduled queries as "update" with identical text (the Mac
+  deploy had uploaded LF). Same fix as the 2026-09-24 one for `reports/**`.
+- `.gitignore`: `etl-manual/` (Plex SQL Developer exports hold customer data),
+  next to `manual-dumps/`.
+- `docs/CLAUDE_CODE_IAM.md`: `gcloud builds submit` works as `claude-operator`;
+  PR #113 shipped as `etl:d1901eb` on all 31 jobs.
+
 ## 2026-11-05 (dev) - Revenue and shipping refreshed from Plex SQL Developer exports
 
 Plex prod ODBC is still down (incident doc). Ad-hoc reruns of sales-orders

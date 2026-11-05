@@ -98,10 +98,13 @@ be `emiliodparasol` (see "GitHub" below).
 the first write, check that it really ran as `claude-operator`, and record the
 working command here.
 
-**Not yet exercised as `claude-operator` (2026-10-29):**
-`gcloud builds submit` (image deploys) and `gcloud functions deploy`
-(dispatcher). Both should work with `--impersonate-service-account`, but the
-first real use should be watched.
+**Image deploys work as `claude-operator` (2026-11-05):** `gcloud builds submit
+--config deploy/cloudbuild.yaml --project=voxdatalake
+--impersonate-service-account=claude-operator@voxdatalake.iam.gserviceaccount.com
+--substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .` built `etl:d1901eb`
+and moved all 31 jobs to it (build a50baee9, 7 min 24 s). `gcloud builds list`
+needs the same flag. **Not yet exercised:** `gcloud functions deploy`
+(dispatcher).
 
 ## What each identity can do
 

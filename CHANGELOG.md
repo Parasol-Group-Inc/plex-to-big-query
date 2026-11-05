@@ -74,6 +74,15 @@ don't need an entry.
   views. The new view is created once by hand from the deployed SQL (the same
   substitution `main.py` does); the job recreates it identically once ODBC is back.
 - Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`.
+- **Added** the hub tab "Screen extraction" (`scripts/hub/screens_tab.py`, live page only):
+  why and how the screens are read, a screenshot of each screen, safeguards, why it
+  cannot collide with the ETL, live status (table sizes and freshness, releases by
+  status, which source Label Design reads, today's push outcomes, the ETL's newest
+  Label Design runs, the task log's recent runs) and how to retire it.
+  `python scripts/hub/screens_tab.py --refresh` writes the status; screenshots and
+  status live in `docs/hub/screens/` (gitignored, customer data). **Fixed** the hub's
+  summary row, which stayed visible on the QuickBooks, Audit and new tab because
+  `.stats { display: grid }` overrode `hidden`.
 
 ## 2026-11-05 (dev) - Live Plex screens: shipping revenue and shipper history
 

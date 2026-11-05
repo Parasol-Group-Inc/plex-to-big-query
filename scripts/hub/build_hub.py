@@ -338,7 +338,8 @@ def main():
     OUT.write_text(html, encoding="utf-8", newline="\n")
     if snapshot:
         import audit_tab  # findings in docs/hub/audit.json (gitignored); no file, no tab
-        live = audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot})))
+        import screens_tab  # screenshots + status in docs/hub/screens/ (gitignored); no folder, no tab
+        live = screens_tab.add(audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot}))))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

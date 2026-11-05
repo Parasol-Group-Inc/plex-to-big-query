@@ -73,6 +73,8 @@ terraform/deploy.plan.json
 docs/hub/data_snapshot.json
 docs/hub/index_live.html
 docs/hub/audit.json
+# screenshots and status for the hub's Plex screen extraction tab (customer data)
+docs/hub/screens/
 
 # Plex SQL Developer CSV exports for scripts/load_plex_csv_dump.py: customer data, never commit
 manual-dumps/

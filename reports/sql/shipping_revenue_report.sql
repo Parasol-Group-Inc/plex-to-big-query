@@ -46,13 +46,14 @@
 -- (D20), the hourly laptop task loads Plex's own Shipper History and Shipping
 -- Revenue by Part Group screens into PlexProd.live_shipper_history and
 -- live_shipping_revenue (docs/PLEX_SCREEN_EXTRACTION.md). live_switch picks
--- them in PlexProd while the screens hold a shipper that ODBC's
--- raw_Sales_v_Shipper does not, i.e. until an ETL run brings fresh Plex data
--- (a frozen ODBC run still succeeds, so run status cannot be the test). Once
--- ODBC has caught up it reads ODBC again by itself; the two are never mixed.
--- data_source says which ran. PlexTest never changes. (Until 2026-11-06 the
--- test was "screens loaded within 3 hours", which fell back to the frozen
--- numbers every night after the 7 PM load.)
+-- them in PlexProd (when loaded at all) until ODBC is trusted again, which
+-- needs BOTH: PlexOps.odbc_health.odbc_stable (2+ clean ETL runs over 6+ h
+-- since the last connect failure, held slot or dead run) AND every shipper on
+-- the screens present in raw_Sales_v_Shipper (a frozen ODBC copy connects and
+-- "succeeds", so connection health alone cannot prove fresh data). Then it
+-- reads ODBC again by itself; the two are never mixed. data_source says which
+-- ran. PlexTest never changes. (Until 2026-11-06 the test was "screens loaded
+-- within 3 hours", which fell back to the frozen numbers every night.)
 --   * One row per shipped line: Shipper History (ship date, quantity, order)
 --     joined to the revenue screen on shipper_no + part number (unique on
 --     both sides, every shipped line had its invoice row on 2026-11-05).
@@ -70,13 +71,19 @@
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
-      AND EXISTS (
-        SELECT 1
-        FROM `{gcp_project}.PlexProd.live_shipper_history` lh
-        WHERE lh.shipper_no NOT IN (
-          SELECT os.Shipper_No
-          FROM `{gcp_project}.{dataset}.raw_Sales_v_Shipper` os
-          WHERE os.Shipper_No IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM `{gcp_project}.PlexProd.live_shipper_history`)
+      AND NOT (
+        -- ODBC is trusted again only when BOTH hold:
+        -- 1. connections have been stable 6+ h (PlexOps.odbc_health, Terraform);
+        IFNULL((SELECT hh.odbc_stable FROM `{gcp_project}.PlexOps.odbc_health` hh), FALSE)
+        -- 2. and its data has caught up: every shipper on the screens is in ODBC.
+        AND NOT EXISTS (
+          SELECT 1
+          FROM `{gcp_project}.PlexProd.live_shipper_history` lh
+          WHERE lh.shipper_no NOT IN (
+            SELECT os.Shipper_No
+            FROM `{gcp_project}.{dataset}.raw_Sales_v_Shipper` os
+            WHERE os.Shipper_No IS NOT NULL))
       ) AS use_live
 ),
 

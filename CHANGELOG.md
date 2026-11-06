@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-06 (dev) - Revenue switches back to ODBC only after 6 h of stable runs
+
+- **Added** `PlexOps.odbc_health` (Terraform view over `etl_dispatch_log`): one row,
+  `odbc_stable` = 2+ clean runs (success/skipped) since the last connect failure, held
+  slot, dead or 2 h-open run, the first of them 6+ h ago. Backtested: false every hour
+  since 11-04 13:00 MT.
+- **Changed** `shipping_revenue_report`'s `live_switch`: live (when loaded) until
+  `odbc_stable` AND ODBC holds every screen shipper. Checked against prod with the
+  health query inlined: live 281 / $1,801,612.62 now; forced stable alone, still live
+  (32 shippers missing); stable and caught up, `odbc`; PlexTest always `odbc`.
+
 ## 2026-11-06 (dev) - Revenue stays on the live screens until ODBC catches up
 
 - **Changed** the `live_switch` in `shipping_revenue_report`: live while

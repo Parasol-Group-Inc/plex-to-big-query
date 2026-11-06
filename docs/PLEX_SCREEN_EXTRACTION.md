@@ -149,16 +149,29 @@ shipped line from Shipper History, joined to `live_shipping_revenue` on `shipper
 part number for the invoice number, date, net price and amount. PlexProd only, never mixed,
 `data_source` column, like Label Design below, but the switch is different:
 
-- **Live while the screens hold a shipper ODBC does not have** (`live_shipper_history.shipper_no`
-  missing from `raw_Sales_v_Shipper`). That is "until an ETL run brings fresh Plex data". The
-  run's success cannot be the test, because a frozen ODBC run succeeds with old data.
-- So the overnight gap is closed: after the 7 PM load the report keeps the screens' numbers
-  instead of going back to the frozen copy, and if the task stops it keeps the last load,
-  still newer than ODBC.
-- Once ODBC is back, the next `sales_orders` run loads every shipper and the report reads
-  ODBC again by itself. Then disable the task: while it still runs, a shipper made in the
-  last hour can briefly put the report back on the screens (ODBC trails Plex ~50 min).
+- **Live until ODBC is trusted again**, which needs both:
+  1. **Stable connections for 6 h:** `PlexOps.odbc_health.odbc_stable` (below).
+  2. **Fresh data:** every `live_shipper_history.shipper_no` is in `raw_Sales_v_Shipper`.
+     A frozen ODBC copy connects and "succeeds", so (1) alone cannot prove fresh data.
+- So the overnight gap is closed: after the 7 PM load the report keeps the screens' numbers,
+  and if the task stops it keeps the last load, still newer than the frozen copy.
+- Once ODBC is back, `sales_orders` brings the missing shippers, and 6 h after the last
+  failure the report reads ODBC again by itself. Then disable the task: while it still runs,
+  a shipper made in the last hour can briefly put the report back on the screens (ODBC
+  trails Plex ~50 min).
 - Until 2026-11-06 the test was "loaded within 3 h", which fell back every night.
+
+**`PlexOps.odbc_health`** (a view, Terraform `odbc_health`, from `etl_dispatch_log`) is one
+row: `last_bad_at`, `stable_since`, `last_ok_at`, `ok_runs`, `stable_hours`, `odbc_stable`.
+- **Bad:** a `held-outage` slot, a `lost` run, a `failed` run whose detail starts
+  `ODBC connection failed` or `execution failed or was cancelled`, or a run still open 2 h
+  after dispatch. Failures of other kinds (a SQL error) do not count, so one broken report
+  cannot hold everything on the screens.
+- **Stable:** at least 2 `success`/`skipped` runs dispatched after the last bad one, the
+  first finished 6+ h ago. Any new bad run resets the clock.
+- Backtest on 2026-11-06: false every hour from 11-04 13:00 MT to now; during the flaky
+  10-27 to 10-30 week it flipped several times, which is the instability it waits out.
+- To ask "is ODBC back?": `SELECT * FROM voxdatalake.PlexOps.odbc_health`.
 
 On 2026-11-06 the screens held 32 shippers ODBC did not (SH00189-SH00225, ODBC's newest is
 SH00188). Its view is recreated only by a `sales_orders` run, so while the breaker holds

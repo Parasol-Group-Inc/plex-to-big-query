@@ -7,7 +7,7 @@ export PLEX_ODBC_USER
 SUDO=$([ "$(id -u)" = 0 ] || echo sudo)
 { command -v odbcinst >/dev/null && [ -e /usr/lib64/libpam.so.0 ]; } || $SUDO dnf install -y -q unixODBC pam
 command -v pip3 >/dev/null || $SUDO dnf install -y -q python3-pip
-python3 -c "import pyodbc" 2>/dev/null || pip3 install -q --user pyodbc
+python3 -c "import pyodbc" 2>/dev/null || pip3 install -q pyodbc || pip3 install -q --user pyodbc
 printf "[ODBC]\nInstallDir=%s\nIANAAppCodePage=4\nTrace=0\n" "$DIR/driver" > "$DIR/odbc.ini"
 export ODBCINI="$DIR/odbc.ini"
 export LD_LIBRARY_PATH="$DIR/driver/lib64" PLEX_DRIVER="$DIR/driver/lib64/ivoa27.so"

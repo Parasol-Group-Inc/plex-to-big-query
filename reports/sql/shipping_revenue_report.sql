@@ -41,8 +41,68 @@
 -- Sales_v_Shipper_Line_Release on every line in test and prod (2026-10-29),
 -- and each line reaches exactly one PO, so these joins cannot fan out
 -- revenue. A shipped-not-yet-invoiced line has a NULL invoice_no.
+--
+-- LIVE SOURCE (added 2026-11-05, OPEN_ITEMS D30): while Plex ODBC is frozen
+-- (D20), the hourly laptop task loads Plex's own Shipper History and Shipping
+-- Revenue by Part Group screens into PlexProd.live_shipper_history and
+-- live_shipping_revenue (docs/PLEX_SCREEN_EXTRACTION.md). live_switch picks
+-- them when the dataset is PlexProd and the screens loaded within 3 hours,
+-- otherwise ODBC; the two are never mixed. data_source says which ran.
+-- PlexTest never changes, and if the task stops the view returns to ODBC by
+-- itself 3 hours after the last load.
+--   * One row per shipped line: Shipper History (ship date, quantity, order)
+--     joined to the revenue screen on shipper_no + part number (unique on
+--     both sides, every shipped line had its invoice row on 2026-11-05).
+--   * price / shipping_revenue are the INVOICED net price and amount, where
+--     ODBC uses Shipper_Line.Price. They agreed on every October line except
+--     SH00105 (Shipper_Line.Price 2.53, invoiced at 1.265).
+--   * Names come from the raw master tables by key, falling back to the
+--     screen's own text for anything created after the freeze.
+--   * The screens start 2026-10-01; this report's first ship date is 10-19.
+--
+-- AR INVOICE DEDUPE (2026-11-05): raw_Sales_v_Shipper_AR_Invoice held the same
+-- (Shipper_Line_Key, Invoice_Link) row twice for SH00105, which doubled that
+-- line. One row per (Shipper_Line_Key, Invoice_Link) is now kept.
 
+WITH live_switch AS (
+  SELECT
+    '{dataset}' = 'PlexProd'
+      AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
+  FROM `{gcp_project}.PlexProd.live_shipper_history`
+),
+
+live_lines AS (
+  SELECT
+    'live'                                              AS data_source,
+    h.shipper_no                                        AS shipper_no,
+    h.order_no                                          AS order_no,
+    r.po_no                                             AS po_no,
+    r.invoice_no                                        AS invoice_no,
+    h.ship_date                                         AS ship_date,
+    r.invoice_date                                      AS invoice_date,
+    COALESCE(cust.Name, h.customer_code)                AS customer_name,
+    COALESCE(p.Part_No, r.part_no,
+             REGEXP_EXTRACT(h.part_no_revision, r'^(.*)-Rev '))
+                                                         AS part_no,
+    p.Name                                              AS part_name,
+    r.part_group                                        AS part_group,
+    h.quantity                                          AS quantity_shipped,
+    r.net_unit_price                                    AS price,
+    CAST(NULL AS FLOAT64)                               AS shipment_price_override,
+    r.revenue                                           AS shipping_revenue
+  FROM `{gcp_project}.PlexProd.live_shipper_history` h
+  LEFT JOIN `{gcp_project}.PlexProd.live_shipping_revenue` r
+    ON r.shipper_no = h.shipper_no
+   AND r.part_no = REGEXP_EXTRACT(h.part_no_revision, r'^(.*)-Rev ')
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Common_v_Customer` cust
+    ON cust.Customer_Code = h.customer_code
+  LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` p
+    ON p.Part_Key = r.part_key
+),
+
+odbc_lines AS (
 SELECT
+  'odbc'                                                AS data_source,
   s.Shipper_No                                          AS shipper_no,
   po.Order_No                                           AS order_no,
   po.PO_No                                              AS po_no,
@@ -77,7 +137,13 @@ JOIN `{gcp_project}.{dataset}.raw_Sales_v_Shipper_Line` sl
 JOIN `{gcp_project}.{dataset}.raw_Sales_v_Shipper_Status` ss
   ON SAFE_CAST(s.Shipper_Status_Key AS INT64) = SAFE_CAST(ss.Shipper_Status_Key AS INT64)
 
-LEFT JOIN `{gcp_project}.{dataset}.raw_Sales_v_Shipper_AR_Invoice` inv
+LEFT JOIN (
+  SELECT *
+  FROM `{gcp_project}.{dataset}.raw_Sales_v_Shipper_AR_Invoice`
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY SAFE_CAST(Shipper_Line_Key AS INT64), SAFE_CAST(Invoice_Link AS INT64)
+    ORDER BY CAST(Add_Date AS STRING)) = 1
+) inv
   ON SAFE_CAST(sl.Shipper_Line_Key AS INT64) = SAFE_CAST(inv.Shipper_Line_Key AS INT64)
 
 LEFT JOIN `{gcp_project}.{dataset}.raw_Accounting_v_AR_Invoice` ar
@@ -106,5 +172,11 @@ LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part_Group` pgrp
   ON SAFE_CAST(p.Part_Group_Key AS INT64) = SAFE_CAST(pgrp.Part_Group_Key AS INT64)
 
 WHERE SAFE_CAST(ss.Shipped AS INT64) = 1
+)
 
+SELECT * EXCEPT (data_source), data_source FROM (
+  SELECT o.* FROM odbc_lines AS o CROSS JOIN live_switch AS sw WHERE NOT sw.use_live
+  UNION ALL
+  SELECT v.* FROM live_lines AS v CROSS JOIN live_switch AS sw WHERE sw.use_live
+)
 ORDER BY invoice_date DESC

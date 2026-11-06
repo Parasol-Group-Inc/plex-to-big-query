@@ -291,6 +291,16 @@ docker run --rm --platform linux/amd64 --env-file .env -e PROBE_SOURCE="Mac" -v 
   queries in 0.2-0.6 s, while prod got no answer in 90 s on 4 of 6 logins, took
   43 s and 73 s on the other two, and then 7-21 s per tiny query. Three networks
   (Google Cloud us-central1, two office/home connections, AWS us-east-2), one result.
+- **Partly better by the afternoon of 2026-11-06, still not usable.** From AWS
+  (public IP `3.16.213.75`), 21:25-21:41 UTC: 8 of 9 prod logins got through, but
+  each took 29-74 s and a 1-row or 10-row query took 3-16 s; test in the same
+  minutes logged in in 0.4-1.3 s with 0.2-0.3 s queries. Our scheduled prod jobs
+  kept failing (14:25 MT batch). Separately, the SQL Development Environment caught
+  up to about 11:00 CT on 11-06 after being stuck at 11-04 ~18:56 MT, then stopped
+  again: at 14:37 CT the Shipping Revenue screen had four invoices (INV0000180-183,
+  $49,721.50) that SQL Development still did not show. So the data copy behind
+  SQL Development seems to refresh in batches, and the ODBC login service is
+  slow on top of that.
 
 ## Check it is over
 
@@ -337,3 +347,44 @@ Pending Fulfillment sales orders with their releases) into `PlexProd.live_*`, an
 Label Design reads the releases table while it is fresh, pushing new Label Design
 lines to Monday again. Details, safeguards and how to retire it:
 [PLEX_SCREEN_EXTRACTION.md](PLEX_SCREEN_EXTRACTION.md) (OPEN_ITEMS D30).
+
+## Update 2026-11-06 afternoon: logins mostly answer, slowly; SQL Development refreshed once
+
+**AWS CloudShell us-east-2 (public IP `3.16.213.75`), 21:25-21:41 UTC, `--passes 3`
+then `--passes 6`:**
+
+| UTC | Host | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|
+| 21:25:53 | prod | 0.03 s | no answer in 90 s | - | - |
+| 21:27:45 | prod | 0.03 s | 36.6 s | 3.8 s | 9.0 s |
+| 21:28:56 | prod | 0.04 s | 61.2 s | 7.6 s | 16.0 s |
+| 21:33:13 | prod | 0.03 s | 73.8 s | 3.7 s | 9.2 s |
+| 21:35:02 | prod | 0.03 s | 53.5 s | 5.3 s | 12.5 s |
+| 21:36:35 | prod | 0.03 s | 32.2 s | 3.9 s | 9.0 s |
+| 21:37:42 | prod | 0.03 s | 44.7 s | 4.4 s | 11.0 s |
+| 21:39:03 | prod | 0.03 s | 40.6 s | 4.1 s | 10.5 s |
+| 21:40:20 | prod | 0.03 s | 29.3 s | 3.0 s | 7.8 s |
+
+Test, alternating with each prod row: 9 of 9 logins in 0.4-1.3 s, queries 0.2-0.3 s.
+Compared with 18:49-19:00 UTC (2 of 6 prod logins), prod now answers almost every
+login, but 15-50x slower than test on every step after TCP. The ETL allows 60 s per
+connect attempt (2 of these 8 logins were longer) and reads 500-row pages, which
+were still hanging, so scheduled jobs kept failing: the 14:15 MT sales-quotes canary
+succeeded, the 14:25 MT batch failed, and `PlexOps.odbc_health` still reported 0 clean runs.
+
+**SQL Development refreshed once, then stopped.** A freshness query in the SQL
+Development Environment (newest `Accounting_v_AR_Invoice.Created_Date`,
+`Sales_v_Shipper.Add_Date`, `Sales_v_Shipper_AR_Invoice.Add_Date`) returned 11-06
+10:57-11:01 CT twice, about an hour apart, instead of 11-04. A November revenue query
+by part group (invoice lines on accounts `4%` in `Accounting_v_AR_Invoice_Dist`,
+which matched the Shipping Revenue screen to the cent on every day from 10-19 to
+11-03) gave 249,001 units and $652,135.67. That is exactly the 13:00 MT screen load.
+The screen's own export at 14:37 CT had four more invoices, INV0000180-183 (11,950
+units, $49,721.50 on 40200), that SQL Development lacked. So SQL Development is a
+copy that refreshed around 11:00 CT, not live. A CSV export from it
+(`scripts/plex_web_export.py`) is current only to that point.
+
+**The screen's Grand Total columns** are quantity, account 40200, account 41000 and
+revenue (40200 + 41000). The 11-06 total was 260,951 units, $701,857.17, -$1,765.80
+and $700,091.37. The -$1,765.80 is one line: INV0000180, Go-Live Temp part 14535 to
+CHAM1, $1,962.00 on 40200 and -$1,765.80 on 41000.

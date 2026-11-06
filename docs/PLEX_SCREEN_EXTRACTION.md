@@ -141,6 +141,15 @@ customer_part_no_revision, job_note`) + `loaded_at`.
 
 **First load (2026-11-05):** 160 orders, 362 releases, 71 in Label Design.
 
+## How Revenue uses it
+
+Since 2026-11-05 `shipping_revenue_report` (and so `sales_revenue_summary_report` and the
+scorecard Revenue tile) has the same `live_switch`, on `live_shipper_history`: one row per
+shipped line from Shipper History, joined to `live_shipping_revenue` on `shipper_no` +
+part number for the invoice number, date, net price and amount. Same rules as below: PlexProd
+only, under 3 h old, never mixed, `data_source` column. Its view is recreated only by a
+`sales_orders` run, so while the breaker holds that job it is created by hand once.
+
 ## How Label Design uses it
 
 `reports/sql/label_design_view.sql` builds its release rows in one of two ways:

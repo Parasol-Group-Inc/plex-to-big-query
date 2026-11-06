@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-05 (dev) - Revenue from live Plex screens; duplicate invoice link fixed
+
+- **Changed** `shipping_revenue_report` (and so `sales_revenue_summary_report` and the
+  scorecard Revenue tile) to read `PlexProd.live_shipper_history` +
+  `live_shipping_revenue` while the screens loaded within 3 h, the same `live_switch`
+  as `label_design_report` (D30). New last column `data_source` (`live`/`odbc`).
+  PlexTest is unchanged. Live price/revenue are the invoiced net price/amount.
+  Checked as a query on 11-05: prod live 281 lines, Oct $1,157,609.45, Nov
+  $644,003.17 (frozen ODBC: Nov $302,158.49), all lines with invoice, part name and
+  customer; PlexTest stays `odbc`.
+- **Fixed** a doubled line: `raw_Sales_v_Shipper_AR_Invoice` holds the
+  (Shipper_Line_Key 35546883, Invoice_Link 6218089) row twice (SH00105), which
+  doubled that line in the ODBC branch. One row per line and link is kept now.
+  The remaining October gap to the screens ($189.75) is that line's price:
+  `Shipper_Line.Price` 2.53, invoiced at 1.265.
+- Deploys like any report SQL (`./scripts/deploy.sh`). While the breaker holds
+  `sales_orders`, no run recreates views, so the view must be created once by hand
+  from the deployed SQL, as for Label Design.
+
 ## 2026-11-05 (dev) - Run emails say when Plex returned no new data
 
 - **Added** a "no new data" check to every probed run (`main.no_new_data_info`).

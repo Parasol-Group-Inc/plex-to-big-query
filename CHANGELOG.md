@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-06 (dev) - Revenue stays on the live screens until ODBC catches up
+
+- **Changed** the `live_switch` in `shipping_revenue_report`: live while
+  `live_shipper_history` holds a shipper missing from `raw_Sales_v_Shipper`, instead of
+  while the screens loaded within 3 h. A frozen ODBC run still succeeds, so the test is
+  the data, not the run status. Closes the nightly fallback to the frozen numbers after
+  the 7 PM load; the report returns to ODBC by itself once a `sales_orders` run brings
+  the missing shippers. Checked on 11-06: 32 live shippers missing from ODBC (newest
+  SH00225 vs SH00188), output identical to the deployed view (281 lines,
+  $1,801,612.62); PlexTest stays `odbc`. `label_design_report` keeps its 3 h rule.
+
 ## 2026-11-05 (dev) - Revenue from live Plex screens; duplicate invoice link fixed
 
 - **Changed** `shipping_revenue_report` (and so `sales_revenue_summary_report` and the

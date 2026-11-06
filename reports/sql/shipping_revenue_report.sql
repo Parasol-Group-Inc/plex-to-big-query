@@ -46,10 +46,13 @@
 -- (D20), the hourly laptop task loads Plex's own Shipper History and Shipping
 -- Revenue by Part Group screens into PlexProd.live_shipper_history and
 -- live_shipping_revenue (docs/PLEX_SCREEN_EXTRACTION.md). live_switch picks
--- them when the dataset is PlexProd and the screens loaded within 3 hours,
--- otherwise ODBC; the two are never mixed. data_source says which ran.
--- PlexTest never changes, and if the task stops the view returns to ODBC by
--- itself 3 hours after the last load.
+-- them in PlexProd while the screens hold a shipper that ODBC's
+-- raw_Sales_v_Shipper does not, i.e. until an ETL run brings fresh Plex data
+-- (a frozen ODBC run still succeeds, so run status cannot be the test). Once
+-- ODBC has caught up it reads ODBC again by itself; the two are never mixed.
+-- data_source says which ran. PlexTest never changes. (Until 2026-11-06 the
+-- test was "screens loaded within 3 hours", which fell back to the frozen
+-- numbers every night after the 7 PM load.)
 --   * One row per shipped line: Shipper History (ship date, quantity, order)
 --     joined to the revenue screen on shipper_no + part number (unique on
 --     both sides, every shipped line had its invoice row on 2026-11-05).
@@ -67,8 +70,14 @@
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
-      AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
-  FROM `{gcp_project}.PlexProd.live_shipper_history`
+      AND EXISTS (
+        SELECT 1
+        FROM `{gcp_project}.PlexProd.live_shipper_history` lh
+        WHERE lh.shipper_no NOT IN (
+          SELECT os.Shipper_No
+          FROM `{gcp_project}.{dataset}.raw_Sales_v_Shipper` os
+          WHERE os.Shipper_No IS NOT NULL)
+      ) AS use_live
 ),
 
 live_lines AS (

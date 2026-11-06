@@ -146,9 +146,23 @@ customer_part_no_revision, job_note`) + `loaded_at`.
 Since 2026-11-05 `shipping_revenue_report` (and so `sales_revenue_summary_report` and the
 scorecard Revenue tile) has the same `live_switch`, on `live_shipper_history`: one row per
 shipped line from Shipper History, joined to `live_shipping_revenue` on `shipper_no` +
-part number for the invoice number, date, net price and amount. Same rules as below: PlexProd
-only, under 3 h old, never mixed, `data_source` column. Its view is recreated only by a
-`sales_orders` run, so while the breaker holds that job it is created by hand once.
+part number for the invoice number, date, net price and amount. PlexProd only, never mixed,
+`data_source` column, like Label Design below, but the switch is different:
+
+- **Live while the screens hold a shipper ODBC does not have** (`live_shipper_history.shipper_no`
+  missing from `raw_Sales_v_Shipper`). That is "until an ETL run brings fresh Plex data". The
+  run's success cannot be the test, because a frozen ODBC run succeeds with old data.
+- So the overnight gap is closed: after the 7 PM load the report keeps the screens' numbers
+  instead of going back to the frozen copy, and if the task stops it keeps the last load,
+  still newer than ODBC.
+- Once ODBC is back, the next `sales_orders` run loads every shipper and the report reads
+  ODBC again by itself. Then disable the task: while it still runs, a shipper made in the
+  last hour can briefly put the report back on the screens (ODBC trails Plex ~50 min).
+- Until 2026-11-06 the test was "loaded within 3 h", which fell back every night.
+
+On 2026-11-06 the screens held 32 shippers ODBC did not (SH00189-SH00225, ODBC's newest is
+SH00188). Its view is recreated only by a `sales_orders` run, so while the breaker holds
+that job it is created by hand once.
 
 ## How Label Design uses it
 
@@ -217,7 +231,7 @@ The log line says which happened: `started plex-etl-label-design-push: <executio
 | Load did not land | After each `WRITE_TRUNCATE` the table's row count must equal the rows sent, or the screen fails. |
 | A bad load needs undoing | The first load of each Denver day copies the table to `Backups.PlexProd__<table>_<yyyymmdd>` (7-day expiry). BigQuery time travel covers every hourly load in between ([Restoring](#restoring-a-table)). |
 | Unknown data | An unknown release status key, a duplicate release key, or a non-Pending-Fulfillment order fails the releases screen. |
-| Screen copy goes stale | The view uses it only while it is under 3 h old. |
+| Screen copy goes stale | Label Design uses it only while it is under 3 h old. Revenue uses it only while it holds a shipper ODBC lacks. |
 
 ## Why it cannot collide with the ETL
 

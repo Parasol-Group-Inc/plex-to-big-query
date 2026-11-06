@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-06 (dev) - Production reports count Plex's screens while ODBC is frozen
+
+- **Added** a `production` screen to `scripts/plex_live_screens.py` (the hourly laptop task):
+  Plex's Job Production report (VisionPlex 6571) plus Production History for full employee
+  names, into `PlexProd.live_production`, every record since 2026-11-01. Days capped at
+  1,000 rows are re-read per workcenter; days are read with overlap and kept by each record's
+  own date. Full reload on the first run of each day, last 3 days after. Also `--dump DIR`.
+  First load 4,828 records; on the 2,100 ODBC also holds, every record matched.
+- **Added** view `part_production_current` (first `bq_view` in `work_orders.yaml`, test and
+  prod; SQL uploaded by Terraform): `raw_Part_v_Production`'s columns, plus in PlexProd the
+  live records with keys resolved from the raw master tables, until `PlexOps.odbc_health` is
+  stable and ODBC holds every live record over 3 h old. Part_Operation_Key falls back to the
+  part routing for jobs made after the freeze (agreed on all 4,596 records with both).
+- **Changed** the 9 reports that read `raw_Part_v_Production` to read the view: blending,
+  encap, labeling and packaging daily, weekly production update, production by work center
+  group, FPY by area, MFG job schedule success metrics, approaching MSL. Checked against the
+  deployed views: earlier rows unchanged (float rounding aside), November rows added.
+  Known gap: records on jobs created after the freeze (232) have no Job_Op_Key.
+- View definitions in PlexProd and PlexTest backed up first (`etl-manual/view_backups/2026-11-06/`).
+
 ## 2026-11-06 (dev) - Revenue switches back to ODBC only after 6 h of stable runs
 
 - **Added** `PlexOps.odbc_health` (Terraform view over `etl_dispatch_log`): one row,

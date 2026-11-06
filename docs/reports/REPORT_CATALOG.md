@@ -77,6 +77,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | MFG Job Schedule - Success Metrics (Done/YTD List, unified) | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_success_metrics_report.md](mfg_job_schedule_success_metrics_report.md) |
 | MFG Job Schedule - FG Testing Pending | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_fg_testing_pending_report.md](mfg_job_schedule_fg_testing_pending_report.md) |
 | MFG Job Schedule - YTD Gate Stats | Production | ✅ Built and deployed 2026-08-26 | [mfg_job_schedule_gate_stats_report.md](mfg_job_schedule_gate_stats_report.md) |
+| Production records (current), `part_production_current` | Production | ✅ Built 2026-11-06: raw production plus Plex's screens while ODBC is frozen | [part_production_current.md](part_production_current.md) |
 | Weekly Production Update | Production | ✅ Built and deployed 2026-08-26 (partial) | [weekly_production_update_report.md](weekly_production_update_report.md) |
 | Quality Supplier Returns Pending | Supply Chain | ✅ Built and deployed 2026-08-23 | [quality_supplier_returns_pending_report.md](quality_supplier_returns_pending_report.md) |
 | Inventory Snapshot | Inventory | ✅ Built | [inventory_snapshot_report.md](inventory_snapshot_report.md) |

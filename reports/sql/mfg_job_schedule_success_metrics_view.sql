@@ -83,7 +83,7 @@ job_production AS (
     SAFE_CAST(jo.Job_Key AS INT64)                                AS job_key,
     SUM(IF(COALESCE(SAFE_CAST(p.Rejected AS INT64), 0) = 0,
            SAFE_CAST(p.Quantity AS FLOAT64), 0))                   AS caps_made
-  FROM `{gcp_project}.{dataset}.raw_Part_v_Production` p
+  FROM `{gcp_project}.{dataset}.part_production_current` p
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
     ON SAFE_CAST(p.Job_Op_Key AS INT64) = SAFE_CAST(jo.Job_Op_Key AS INT64)
   GROUP BY job_key

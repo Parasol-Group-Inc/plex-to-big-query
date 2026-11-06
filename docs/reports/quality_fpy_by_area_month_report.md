@@ -21,6 +21,7 @@ DPMO is a provisional placeholder, decided 2026-09-01: the real formula needs an
 
 ## Flags and open questions
 
+- **Added 2026-11-06: counts Plex's production screens while ODBC is frozen.** It now reads `part_production_current` instead of `raw_Part_v_Production`: the same records, plus, in PlexProd, the production Plex has recorded since ODBC froze (11-04), loaded hourly from Plex's own screens (see [PLEX_SCREEN_EXTRACTION.md](../PLEX_SCREEN_EXTRACTION.md)). It returns to ODBC alone by itself once ODBC is stable and caught up. On 11-02 and 11-03 the screens matched ODBC on every record. Gap: records on jobs created after the freeze are missing where this report needs the job operation.
 - **⚠ Reversed 2026-09-24: scrap is `Rejected != 0`.** The 2026-08-23 change moved the test from `1` to `-1`; the only real rejected record in PlexTest (Bottling Line 1, 500 units, 2026-09-24) has `Rejected = 1`, so scrap read **0** from 2026-08-23 until this fix. `!= 0` counts either value. Found by the scorecard sandbox — see [`docs/SCORECARD_SANDBOX_FINDINGS.md`](../SCORECARD_SANDBOX_FINDINGS.md).
 - **DPMO is provisional** (Opportunities_Per_Unit = 1, a named constant in the SQL) — treat it as a placeholder, not a final number, until Quality Engineering gives a real per-process opportunity count.
 - **No Sigma column at all**, on purpose — see above.

@@ -1,5 +1,7 @@
 # Reports List — Production
 
+> **2026-11-06:** every production report here (blending, encap, labeling, packaging daily, weekly update, monthly by workcenter group, FPY, job schedule metrics, approaching MSL) now reads `part_production_current` instead of `raw_Part_v_Production`: the same records, plus Plex's production screens while ODBC is frozen (OPEN_ITEMS D30, `docs/reports/part_production_current.md`).
+
 Source file: `Reports List - Production.csv`. Columns: Report Name,
 Source, Function, Users, Link, Priority, Plex Report Equiv.
 

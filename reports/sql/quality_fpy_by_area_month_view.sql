@@ -56,7 +56,7 @@ prod AS (
       NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS DATE), DATE '1970-01-01'),
       NULLIF(DATE(SAFE_CAST(CAST(p.Record_Date AS STRING) AS TIMESTAMP)), DATE '1970-01-01')
     ) AS production_date
-  FROM `{gcp_project}.{dataset}.raw_Part_v_Production` p
+  FROM `{gcp_project}.{dataset}.part_production_current` p
 ),
 
 by_area_month AS (

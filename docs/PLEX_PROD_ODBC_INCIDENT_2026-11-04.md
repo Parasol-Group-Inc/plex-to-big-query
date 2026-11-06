@@ -233,6 +233,30 @@ on 11-06 (rows 5-6 above).
 4. Afterwards: `rm -rf plex_probe plex_probe.tgz` (the CloudShell home persists
    between sessions).
 
+**Result, 2026-11-06 18:49-19:00 UTC, AWS CloudShell us-east-2 (public IP
+`18.224.22.68`), two runs of `--passes 3`:**
+
+| UTC | Host | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|
+| 18:49:08 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:50:38 | test | 0.03 s | 1.3 s | 0.2 s | 0.4 s |
+| 18:51:01 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:52:31 | test | 0.03 s | 1.2 s | 0.3 s | 0.4 s |
+| 18:52:53 | prod | 0.03 s | 43.4 s | 21.0 s | 11.6 s |
+| 18:54:09 | test | 0.03 s | 0.4 s | 0.2 s | 0.2 s |
+| 18:54:39 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:56:09 | test | 0.03 s | 1.2 s | 0.2 s | 0.3 s |
+| 18:56:31 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:58:01 | test | 0.03 s | 0.5 s | 0.2 s | 0.3 s |
+| 18:58:22 | prod | 0.03 s | 72.9 s | 7.1 s | 18.4 s |
+| 19:00:02 | test | 0.03 s | 1.4 s | 0.6 s | 0.5 s |
+
+Test: 6 of 6 logins in 0.4-1.4 s, queries 0.2-0.6 s. Prod, in the same minutes from
+the same machine: 4 of 6 logins got no answer in 90 s, two took 43 s and 73 s, and
+their queries took 7-21 s (30-100x test). TCP to both answered in 0.03 s. So from a
+third network, neither Google Cloud nor ours, prod's ODBC service is the only thing
+that fails.
+
 The same probe runs anywhere the ETL image does:
 
 ```bash
@@ -262,6 +286,11 @@ docker run --rm --platform linux/amd64 --env-file .env -e PROBE_SOURCE="Mac" -v 
   (8.34.94.51) from the same place: 4 s login, about 1 s per query. Cloud Run in
   the same window: 4 of 10 prod connects succeeded, then a 500-row page of
   `Sales_v_PO` hung for 150 s three times in a row.
+- **And from AWS (us-east-2, public IP `18.224.22.68`), 2026-11-06 18:49-19:00 UTC:**
+  TCP to both hosts in 0.03 s; test logged in 6 of 6 times in 0.4-1.4 s with
+  queries in 0.2-0.6 s, while prod got no answer in 90 s on 4 of 6 logins, took
+  43 s and 73 s on the other two, and then 7-21 s per tiny query. Three networks
+  (Google Cloud us-central1, two office/home connections, AWS us-east-2), one result.
 
 ## Check it is over
 

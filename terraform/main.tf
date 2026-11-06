@@ -6133,6 +6133,56 @@ resource "google_bigquery_table" "etl_dispatch_log" {
   ])
 }
 
+# Is Plex ODBC stable again? One row, read by reports that switch to the live
+# Plex screens while ODBC is down (docs/PLEX_SCREEN_EXTRACTION.md, D30).
+# "Bad" = a held slot, a lost run, a run that failed to connect or died
+# (execution failed/cancelled), or a run still open after 2 h. Stable = at
+# least 2 clean runs (success/skipped) since the last bad one, the first of
+# them 6+ hours ago. Connection health only: a frozen copy can connect, so
+# each report adds its own data check. Backtested 2026-11-06: false from
+# 11-04 13:00 MT throughout the outage.
+resource "google_bigquery_table" "odbc_health" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "odbc_health"
+  deletion_protection = false
+  description         = "One row: is Plex ODBC stable (2+ clean runs over 6+ h since the last failure)? From etl_dispatch_log."
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      WITH log AS (
+        SELECT job_name, outcome, dispatched_at, finished_at, detail
+        FROM `${var.gcp_project}.${google_bigquery_dataset.ops.dataset_id}.${google_bigquery_table.etl_dispatch_log.table_id}`
+        WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+      ),
+      bad AS (
+        SELECT MAX(COALESCE(finished_at, dispatched_at)) AS last_bad_at
+        FROM log
+        WHERE outcome IN ('held-outage', 'lost')
+           OR (outcome = 'failed'
+               AND (STARTS_WITH(IFNULL(detail, ''), 'ODBC connection failed')
+                    OR STARTS_WITH(IFNULL(detail, ''), 'execution failed or was cancelled')))
+           OR (outcome IS NULL AND dispatched_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR))
+      ),
+      ok AS (
+        SELECT MIN(l.finished_at) AS stable_since, MAX(l.finished_at) AS last_ok_at, COUNT(*) AS ok_runs
+        FROM log l CROSS JOIN bad b
+        WHERE l.outcome IN ('success', 'skipped')
+          AND l.dispatched_at > IFNULL(b.last_bad_at, TIMESTAMP '1970-01-01')
+      )
+      SELECT
+        b.last_bad_at,
+        o.stable_since,
+        o.last_ok_at,
+        o.ok_runs,
+        ROUND(TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), o.stable_since, MINUTE) / 60, 1) AS stable_hours,
+        IFNULL(o.stable_since <= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR)
+               AND o.ok_runs >= 2, FALSE) AS odbc_stable
+      FROM bad b CROSS JOIN ok o
+    SQL
+  }
+}
+
 resource "google_cloud_scheduler_job" "etl_dispatcher" {
   name        = "plex-etl-dispatcher"
   description = "Every 5 minutes: start the ETL jobs due in PlexOps.etl_schedule (docs/PROBE_BUILD_PLAN.md)"

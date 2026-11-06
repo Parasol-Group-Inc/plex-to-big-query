@@ -125,7 +125,7 @@ prod AS (
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(Report_Date AS STRING) AS INT64), 0), 1000))),
       NULLIF(SAFE_CAST(CAST(Report_Date AS STRING) AS DATE), DATE '1970-01-01')
     )                                      AS d
-  FROM `{gcp_project}.{dataset}.raw_Part_v_Production`
+  FROM `{gcp_project}.{dataset}.part_production_current`
   WHERE COALESCE(SAFE_CAST(Rejected AS INT64), 0) = 0
 ),
 

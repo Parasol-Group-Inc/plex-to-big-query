@@ -12,6 +12,9 @@
 - [Why it exists](#why-it-exists)
 - [What runs, where, when](#what-runs-where-when)
 - [The three screens](#the-three-screens)
+- [4. `production`](#4-production-job-production--production-history--plexprodlive_production)
+- [How Revenue uses it](#how-revenue-uses-it)
+- [How the production reports use it](#how-the-production-reports-use-it)
 - [How Label Design uses it](#how-label-design-uses-it)
 - [Safeguards](#safeguards)
 - [Why it cannot collide with the ETL](#why-it-cannot-collide-with-the-etl)
@@ -141,6 +144,34 @@ customer_part_no_revision, job_note`) + `loaded_at`.
 
 **First load (2026-11-05):** 160 orders, 362 releases, 71 in Label Design.
 
+### 4. `production`: Job Production + Production History → `PlexProd.live_production`
+
+Added 2026-11-06. One row per production record (Plex `Part_v_Production`) since 2026-11-01.
+
+- **Job Production report** (VisionPlex action 6571, data source
+  `jpBWrHptieaF_6xmHXP5-w`) gives the job, op, part + revision, workcenter, quantity,
+  rejected flag, serial and record time. Its employee is the last name only (ambiguous for
+  17 of 60 users).
+- **Production History** (`ProductionTracking/ProductionHistory`) gives the employee's
+  full name, matched by production number.
+- Both stop at 1,000 rows. The script asks per day; a capped day is asked again per
+  workcenter (6571 by `WorkcenterCode`, a prefix match, so "Blending 5" also returns
+  "Blending 5a", which is skipped; Production History by `WorkcenterKey`). A workcenter that
+  is itself capped, or capped rows missing from the union, fail the screen.
+- Neither screen's day filter is the Mountain record date (6571 asked for 11-01 returned
+  11-02's records, the DST change). So it reads from the day before to tomorrow, de-duplicates
+  by production number and keeps each record by its own record date.
+- First run of each Mountain day: everything since 11-01 (about 3 min). Later runs: only
+  the last 3 days, keeping older rows from the table.
+- Fails if more than 2 % + 5 records have no Production History name.
+- **Checked 2026-11-06:** on the 2,100 records ODBC holds (11-02, 11-03), every production
+  number, record date and quantity matched, and so did every resolved key (below).
+- Columns: `production_no, record_date, record_time, report_date, shift, job_no, op_no,
+  operation_code, part_no, revision, workcenter_code, serial_no, quantity, rejected,
+  employee, employee_last_name, product_type, price, fetched_at, loaded_at`.
+
+**First load (2026-11-06):** 4,828 records, 11-02 to 11-06.
+
 ## How Revenue uses it
 
 Since 2026-11-05 `shipping_revenue_report` (and so `sales_revenue_summary_report` and the
@@ -176,6 +207,33 @@ row: `last_bad_at`, `stable_since`, `last_ok_at`, `ok_runs`, `stable_hours`, `od
 On 2026-11-06 the screens held 32 shippers ODBC did not (SH00189-SH00225, ODBC's newest is
 SH00188). Its view is recreated only by a `sales_orders` run, so while the breaker holds
 that job it is created by hand once.
+
+## How the production reports use it
+
+Since 2026-11-06 every report that counts production reads the view
+**`part_production_current`** instead of `raw_Part_v_Production`: the 5 daily reports
+(Blending, Encapsulating, Labeling, Packaging), Weekly Production Update, Production by
+Work Center Group (so the Production vs Goal tile), FPY by area, MFG Job Schedule success
+metrics and Approaching MSL. It is the first `bq_view` in `work_orders.yaml`.
+
+- Same columns and conventions as `raw_Part_v_Production` (Record_Date/Report_Date are
+  Mountain wall time stored as UTC nanoseconds; Report_Date is 22:00 the evening before),
+  plus `data_source`.
+- **Live** (PlexProd only, while `live_production` is loaded): every live record plus
+  every ODBC record the screens do not have. Back to ODBC alone, by itself, once
+  `PlexOps.odbc_health.odbc_stable` and ODBC holds every live record more than 3 h older
+  than the last load.
+- Keys come from the raw master tables: `Job_Op_Key`/`Part_Operation_Key` by job no + op no,
+  `Part_Key` by part no + revision, `Workcenter_Key` by code, `Record_By` by full name.
+  Shift `1st` = `7824`, none = `0`.
+- **Known gap:** jobs created after the freeze are not in the frozen `raw_Part_v_Job_Op`,
+  so their records have no `Job_Op_Key` (232 of 4,828 on 11-06). Reports that join Job_Op
+  (the daily reports, FPY, weekly, job schedule metrics) do not count them; Production by
+  Work Center Group does, and so does Approaching MSL: `Part_Operation_Key` falls back to the
+  part's routing (`raw_Part_v_Part_Operation`, part + op no), which agreed with Job_Op on all
+  4,596 records that have both.
+- Checked against the deployed views 2026-11-06: rows before November unchanged (rounding
+  aside); the differences are November days and the 274 jobs with November production.
 
 ## How Label Design uses it
 
@@ -342,7 +400,8 @@ The ETL is back when `PlexOps.etl_dispatch_log` shows prod runs succeeding and
    `Unregister-ScheduledTask` to remove it). Three hours later `label_design_report` returns
    `data_source = 'odbc'` with no deploy.
 3. Check: `SELECT data_source, COUNT(*) FROM label_design_report GROUP BY 1` gives `odbc`. The
-   line count should be close to the last live count.
+   line count should be close to the last live count. `part_production_current` and
+   `shipping_revenue_report` switch on `odbc_health` instead: check their `data_source` too.
 4. Later, optionally:
    - remove `live_switch`/`live_lines` from the view (keep `data_source = 'odbc'` or drop the column);
    - drop the `live_*` tables;

@@ -335,6 +335,155 @@ def fetch_releases(pg, today, ctx):
     return out
 
 
+# ── Production records (Job Production Report + Production History) ────────────
+
+PRODUCTION_TABLE = f"{PROJECT}.PlexProd.live_production"
+PRODUCTION_SCHEMA = schema([
+    ("production_no", "INT64"), ("record_date", "DATE"), ("record_time", "TIMESTAMP"),
+    ("report_date", "DATE"), ("shift", "STRING"), ("job_no", "STRING"), ("op_no", "INT64"),
+    ("operation_code", "STRING"), ("part_no", "STRING"), ("revision", "STRING"),
+    ("workcenter_code", "STRING"), ("serial_no", "STRING"), ("quantity", "FLOAT64"),
+    ("rejected", "INT64"), ("employee", "STRING"), ("employee_last_name", "STRING"),
+    ("product_type", "STRING"), ("price", "FLOAT64"), ("fetched_at", "TIMESTAMP"),
+    ("loaded_at", "TIMESTAMP"),
+])
+# raw_Part_v_Production is complete through 11-03, and the merge view
+# (reports/sql/part_production_current_view.sql) takes ODBC rows before this date.
+PRODUCTION_START = dt.date(2026, 11, 1)
+PRODUCTION_RECENT_DAYS = 3  # re-read every hour; older days once a Denver day (first run)
+JOBS_URL = f"{BASE}/api/MetaDataSource/jpBWrHptieaF_6xmHXP5-w?limit=true&sourceActionKey=6571"
+PH_URL = f"{BASE}/ProductionTracking/ProductionHistory/"
+PRODUCTION_CAP = 1000
+
+
+def workcenters(ctx):
+    rows = ctx["bq"]().query(
+        f"SELECT TRIM(Workcenter_Code) code, SAFE_CAST(Workcenter_Key AS INT64) k "
+        f"FROM `{PROJECT}.PlexProd.raw_Part_v_Workcenter`").result()
+    wc = {r.code: r.k for r in rows if r.code}
+    if not wc:
+        raise RuntimeError("raw_Part_v_Workcenter is empty; cannot split a capped day by workcenter")
+    return wc
+
+
+def capped_day(what, ask, wc, by):
+    """One day's rows. Both screens stop at 1,000 rows and filter only by whole day,
+    so a day at the cap is read again one workcenter at a time (`by` maps a
+    workcenter code to the screen's filter). Fails rather than loading a short day."""
+    rows, lim = ask({})
+    if not lim:
+        return rows
+    unknown = {x["WorkcenterCode"] for x in rows} - set(wc)
+    if unknown:
+        raise RuntimeError(f"{what}: workcenter(s) {sorted(unknown)} not in raw_Part_v_Workcenter")
+    out = {}
+    for code in wc:
+        part, lim = ask(by(code))
+        if lim:
+            raise RuntimeError(f"{what}: workcenter {code} alone is at the {PRODUCTION_CAP}-row cap")
+        for x in part:  # the filter matches by prefix: "Blending 5" also returns "Blending 5a"
+            if x["WorkcenterCode"] == code:
+                out[x["ProductionNo"]] = x
+    missing = [x["ProductionNo"] for x in rows if x["ProductionNo"] not in out]
+    if missing:
+        raise RuntimeError(f"{what}: {len(missing)} record(s) of the capped read missing per workcenter")
+    return list(out.values())
+
+
+def fetch_production(pg, today, ctx):
+    """Every production record from PRODUCTION_START, one row per Production_No.
+
+    Job Production Report (VisionPlex 6571; filters on RECORD date, Mountain) is the
+    master: it has the rejected flag, op no and revision. Production History (filters
+    on REPORT date) adds the employee's full name; 6571 has only the last name, and 17
+    of 60 recording users share one. Both matched raw_Part_v_Production record for
+    record on 11-02/03 (checked 2026-11-06: job, op, part, workcenter, rejected and
+    quantity on every record; full name = First_Name Last_Name).
+
+    Days before the last PRODUCTION_RECENT_DAYS are read on the first run of each
+    Denver day and otherwise kept from the current table, so hourly runs stay short."""
+    wc = workcenters(ctx)
+    c = ctx["bq"]()
+    kept, first_run = [], True
+    try:
+        last = list(c.query(f"SELECT MAX(loaded_at) t FROM `{PRODUCTION_TABLE}`").result())[0].t
+        first_run = last is None or last.astimezone(DEN).date() != today
+    except Exception:  # table not created yet
+        pass
+    begin = PRODUCTION_START
+    if not first_run:
+        begin = max(PRODUCTION_START, today - dt.timedelta(days=PRODUCTION_RECENT_DAYS - 1))
+        for r in c.query(
+                f"SELECT * EXCEPT (loaded_at) FROM `{PRODUCTION_TABLE}` WHERE record_date < @d",
+                job_config=bigquery.QueryJobConfig(query_parameters=[
+                    bigquery.ScalarQueryParameter("d", "DATE", begin)])).result():
+            kept.append({k: v.isoformat() if isinstance(v, (dt.date, dt.datetime)) else v
+                         for k, v in dict(r).items()})
+    print(f"  {'all days' if first_run else 'recent days'} from {begin}; keeping {len(kept)} older rows")
+
+    # Neither screen's day filter is the record date in Mountain time (6571 asked for
+    # 11-01 returned 11-02's records: the DST change). So read every day from the day
+    # before `begin` to tomorrow, de-duplicate by Production_No, and keep records by
+    # their own record date.
+    pg.goto(f"{BASE}/VisionPlex/screen/Index?__actionKey=6571", wait_until="networkidle", timeout=120000)
+    jobs = {}
+    d = begin - dt.timedelta(days=1)
+    while d <= today + dt.timedelta(days=1):
+        def ask(f, d=d):
+            r = post_json(pg, JOBS_URL, ctx, f"Job Production {d}", [
+                {"DateBegin": utc_midnight(d), "DateEnd": utc_midnight(d), "PCN": 338756, **f}])["Data"]
+            return r["Rows"], r.get("RecordLimitExceeded")
+        rows = capped_day(f"Job Production {d}", ask, wc, lambda code: {"WorkcenterCode": code})
+        for x in rows:
+            if jobs.get(x["ProductionNo"], x) != x:
+                raise RuntimeError(f"Job Production: record {x['ProductionNo']} differs between two days' reads")
+            jobs[x["ProductionNo"]] = x
+        print(f"  read {d}: {len(rows)} records")
+        d += dt.timedelta(days=1)
+
+    pg.goto(PH_URL + "Index", wait_until="networkidle", timeout=120000)
+    names = {}
+    d = begin - dt.timedelta(days=2)  # a record's report date can be the day before its record date
+    while d <= today + dt.timedelta(days=1):
+        def ask(f, d=d):
+            r = post_json(pg, PH_URL + "SearchProductionHistoryGrid?limit=true&sourceActionKey=13891", ctx,
+                          f"Production History {d}",
+                          {"StartDate": utc_midnight(d), "EndDate": utc_midnight(d), "PCN": 0, **f})["Data"]
+            return r["Rows"], r.get("RecordLimitExceeded")
+        for x in capped_day(f"Production History {d}", ask, wc, lambda code: {"WorkcenterKey": wc[code]}):
+            names[x["ProductionNo"]] = x
+        d += dt.timedelta(days=1)
+
+    fetched = dt.datetime.now(dt.timezone.utc).isoformat()
+    out = []
+    for k, x in jobs.items():
+        h = names.get(k, {})
+        t = dt.datetime.fromisoformat(x["RecordDate"].replace("Z", "+00:00"))
+        if t.astimezone(DEN).date() < begin:
+            continue  # an older day: kept from the table, or before PRODUCTION_START
+        out.append({
+            "production_no": k, "record_date": t.astimezone(DEN).date().isoformat(),
+            "record_time": t.isoformat(), "report_date": den_date(h.get("ReportDate")),
+            "shift": x.get("Shift"), "job_no": x.get("JobNo"), "op_no": x.get("OpNo"),
+            "operation_code": x.get("OperationCode"), "part_no": x.get("PartNo"),
+            "revision": x.get("Revision"), "workcenter_code": x.get("WorkcenterCode"),
+            "serial_no": x.get("TrackingNo"), "quantity": x.get("Quantity"),
+            "rejected": x.get("Rejected"), "employee": h.get("Employee"),
+            "employee_last_name": x.get("Employee"), "product_type": x.get("ProductType"),
+            "price": x.get("Price"), "fetched_at": fetched})
+    no_name = sum(1 for o in out if o["employee"] is None)
+    if no_name > 0.02 * len(out) + 5:  # only records entered between the two reads may lack one
+        raise RuntimeError(f"{no_name} of {len(out)} records have no Production History match")
+    days = {}
+    for o in out:
+        n, q = days.get(o["record_date"], (0, 0.0))
+        days[o["record_date"]] = (n + 1, q + (o["quantity"] or 0))
+    for k in sorted(days):
+        print(f"  {k}: {days[k][0]} records, quantity {days[k][1]:,.2f}")
+    print(f"  total {len(out)} read + {len(kept)} kept; {no_name} without a full employee name")
+    return kept + out
+
+
 # ── Plex requests with retry and re-login ───────────────────────────────────────
 
 def _relogin(pg, ctx, what, why):
@@ -392,6 +541,8 @@ SCREENS = {  # name: (title, fetch, table, schema, minimum share of the current 
     "revenue": ("Shipping Revenue by Part Group", fetch_revenue, REVENUE_TABLE, REVENUE_SCHEMA, 0.9),
     "history": ("Shipper History", fetch_history, HISTORY_TABLE, HISTORY_SCHEMA, 0.9),
     "releases": ("Sales order releases (Label Design)", fetch_releases, RELEASES_TABLE, RELEASES_SCHEMA, 0.5),
+    "production": ("Production records (Job Production + Production History)", fetch_production,
+                   PRODUCTION_TABLE, PRODUCTION_SCHEMA, 0.9),
 }
 
 
@@ -487,6 +638,7 @@ def main():
                     help="with --load, do not start the Label Design push after the releases load")
     ap.add_argument("--only", help="comma-separated screens: " + ", ".join(SCREENS))
     ap.add_argument("--force", action="store_true", help="load even if a table would shrink past its floor")
+    ap.add_argument("--dump", help="also write each screen's rows to <DIR>/<screen>.json (for checking)")
     args = ap.parse_args()
     names = args.only.split(",") if args.only else list(SCREENS)
     bad = [n for n in names if n not in SCREENS]
@@ -520,6 +672,10 @@ def main():
                 failed[n] = str(e).splitlines()[0][:300]
                 print(f"  FAILED: {failed[n]}")
         b.close()
+    if args.dump:
+        Path(args.dump).mkdir(parents=True, exist_ok=True)
+        for n, rows in fetched.items():
+            (Path(args.dump) / f"{n}.json").write_text(json.dumps(rows, default=str), encoding="utf-8")
     if args.load:
         c = ctx["bq"]()
         for n, rows in fetched.items():

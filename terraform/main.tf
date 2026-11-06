@@ -3273,6 +3273,16 @@ resource "google_storage_bucket_object" "weekly_production_update_view_sql" {
   content_type = "text/plain"
 }
 
+# Production records with Plex's screens merged in while ODBC is frozen
+# (OPEN_ITEMS D30, 2026-11-06). Every production report reads this view
+# instead of raw_Part_v_Production; first bq_view in work_orders.yaml.
+resource "google_storage_bucket_object" "part_production_current_view_sql" {
+  name         = "sql/part_production_current_view.sql"
+  bucket       = google_storage_bucket.report_configs.name
+  source       = "${path.module}/../reports/sql/part_production_current_view.sql"
+  content_type = "text/plain"
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Purchasing Pending Requisitions — "Vox | Purchasing | Pending Order
 # Requisitions" (NetSuite parity, customsearch2935). Scaffolded 2026-08-13,

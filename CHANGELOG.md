@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-06 (dev) - Plex ODBC probe for the D20 case
+
+- **Added** `scripts/plex_odbc_probe.py`: per host (prod, test) it times DNS, a bare
+  TCP handshake to port 19995, the ODBC login and two tiny reads, each under its own
+  deadline, and prints a table for the Plex case. Read-only; runs in the ETL image or,
+  with `scripts/plex_odbc_probe_run.sh` and the driver, on plain Amazon Linux (AWS
+  CloudShell). First results (Mac, 11-06): TCP to prod 0.2 s, ODBC login 52 s or no
+  answer in 90 s. Write-up in `docs/PLEX_PROD_ODBC_INCIDENT_2026-11-04.md`. Nothing deployed.
+
 ## 2026-11-06 (dev) - Production reports count Plex's screens while ODBC is frozen
 
 - **Added** a `production` screen to `scripts/plex_live_screens.py` (the hourly laptop task):

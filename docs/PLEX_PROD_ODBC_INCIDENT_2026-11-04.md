@@ -149,6 +149,96 @@ Cloud: a connect that takes the full minute, then a read that never returns.
 It is not Cloud Run, our egress, the image or the credentials. The fault is
 Plex's production ODBC service.
 
+## Second laptop check, and prod vs test from both places (2026-11-06)
+
+A second check from Emilio's Mac (public IP `149.88.25.130`), separate from the
+other PC's, while the outage was still open. The same 8 runs went out together at
+17:45-17:48 UTC: prod and test host, a small job (`sales_returns`, 2 views) and a
+big one (`sales_orders`, 29 views), from local Docker (OUTPUT_MODE=local, nothing
+written) and from Cloud Run `us-central1`. Neither job was running at the time; the
+`sales_quotes` canary and Label Design were left alone.
+
+| Where | Host | Job | Connect | Reads | Result |
+|---|---|---|---|---|---|
+| Mac Docker | test | small | attempt 1, ~5 s | 1 row 1.2 s, 8 rows 1.1 s | OK, 9 rows in 15 s |
+| Mac Docker | test | big | attempt 1 | paged normally | OK, 305,516 rows in 4.7 min |
+| Cloud Run | test | small | attempt 1, 1.5 s | ~1-3 s each | OK, 9 rows |
+| Cloud Run | test | big | attempt 1, 1.6 s | paged normally | 305,516 rows; one BigQuery view failed to build (not Plex) |
+| Mac Docker | **prod** | small | no answer 60 s twice, **attempt 3** (17:48:54) | 1 row **24 s**, 8 rows **19 s** | OK, 9 rows |
+| Mac Docker | **prod** | big | **no answer 60 s, 3 times** | - | failed |
+| Cloud Run | **prod** | small | **no answer 60 s, 3 times** | - | failed |
+| Cloud Run | **prod** | big | attempt 2 (17:50:31) | probe COUNTs 5-12 s; `Sales_v_PO` page 1 (500 rows) hung 150 s three times, with reconnects; then a COUNT on `Sales_v_PO_Line` hung | partial, 0 rows: the D28 guard stopped after 4 hangs, 22 min |
+
+Prod connects: 1 of 6 succeeded from the Mac, 4 of 10 from Cloud Run. Every
+failure was "no answer within 60 s", never a refusal or reset. At 17:48:54 the
+Mac's prod connect succeeded while Cloud Run's attempt in the same minute got no
+answer, so it is per session, not per network.
+
+**The ODBC probe (`scripts/plex_odbc_probe.py`)** was written for this: one round
+per host of DNS lookup, a bare TCP handshake to port 19995, the ODBC connect, an
+8-row COUNT and a `TOP 10`, each with its own deadline, printed as a table to paste
+into the case. From the Mac:
+
+| UTC | Host | DNS | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|---|
+| 11-06 18:25:55 | prod | 8.34.94.50 | 0.21 s | no answer in 90 s | - | - |
+| 11-06 18:27:25 | test | 8.34.94.51 | 0.21 s | 3.9 s | 1.1 s | 1.0 s |
+| 11-06 18:27:52 | prod | 8.34.94.50 | 0.22 s | 52.4 s | 6.1 s | 16.1 s |
+| 11-06 18:29:07 | test | 8.34.94.51 | 0.19 s | 5.0 s | 1.1 s | 0.9 s |
+| 11-06 18:34:48 | prod | 8.34.94.50 | 0.18 s | no answer in 90 s | - | - |
+| 11-06 18:36:19 | test | 8.34.94.51 | 0.22 s | 4.0 s | 1.1 s | 1.1 s |
+
+**The network reaches Plex fine:** prod's port completes a TCP handshake in 0.2 s,
+the same as test's. What doesn't answer is the ODBC service behind it: the login
+takes 50-90+ s or never completes, and a session that does log in reads 6-16x
+slower than test. The two hosts resolve to neighbouring addresses (`.50` prod,
+`.51` test), worth mentioning to Plex.
+
+Side notes from the runs:
+- A manual run of a prod job other than Label Design is invisible to the outage
+  breaker: only `plex-etl-label-design` sets `OUTAGE_BREAKER_TABLE`, the rest log
+  through the dispatcher. So the failed `sales_returns` run has no row in
+  `etl_dispatch_log`. That's by design, but it means ad-hoc runs don't count as
+  breaker evidence.
+- The two prod Cloud Run runs ended failed/partial and sent the usual emails. No
+  PlexProd table changed (0 rows written; a failed table keeps yesterday's rows).
+
+### A third angle: the probe from AWS CloudShell
+
+To show Plex the same result from a network that is neither Google Cloud nor
+ours, run the probe in AWS CloudShell (a browser terminal on Amazon Linux in our
+AWS account: no instance to create and nothing to pay for). It runs without
+Docker: the bundle holds the Plex Linux driver (29 MB, gitignored), the probe
+and `scripts/plex_odbc_probe_run.sh`, which installs unixODBC, pam and pyodbc and
+points the driver at its own files. Checked on a clean `amazonlinux:2023` image
+on 11-06 (rows 5-6 above).
+
+1. Build the bundle on a machine with the repo and `driver/`, from the repo root:
+   ```bash
+   mkdir -p /tmp/b/plex_probe && cp -R driver scripts/plex_odbc_probe.py /tmp/b/plex_probe/ && cp scripts/plex_odbc_probe_run.sh /tmp/b/plex_probe/run.sh
+   cd /tmp/b && COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf plex_probe.tgz plex_probe
+   ```
+   (Drop `--no-mac-metadata --no-xattrs` on Linux.)
+2. In the AWS console pick a region (us-east-1 or us-west-2 give a different
+   path than our us-central1), open CloudShell, Actions → Upload file →
+   `plex_probe.tgz`.
+3. In CloudShell:
+   ```bash
+   tar xzf plex_probe.tgz
+   read -rs PLEX_ACCESS_TOKEN && export PLEX_ACCESS_TOKEN
+   ./plex_probe/run.sh --passes 3
+   ```
+   Paste the token from `.env` at the silent prompt. The first line of the output
+   gives the AWS public IP for Plex to look up.
+4. Afterwards: `rm -rf plex_probe plex_probe.tgz` (the CloudShell home persists
+   between sessions).
+
+The same probe runs anywhere the ETL image does:
+
+```bash
+docker run --rm --platform linux/amd64 --env-file .env -e PROBE_SOURCE="Mac" -v "$PWD/scripts:/scripts:ro" --entrypoint python plex-to-big-query-etl /scripts/plex_odbc_probe.py --passes 3
+```
+
 ## What to send Plex (add to the D20 case)
 
 - Host `vox.odbc.plex.com:19995`, ODBC (OpenAccess SDK / DataDirect), IAM
@@ -165,6 +255,13 @@ Plex's production ODBC service.
 - **It reproduces outside Google Cloud.** From a laptop on 11-05 02:36 UTC,
   the prod connect took 60 s and `SELECT` on `Part_v_Part` returned nothing
   in 46 min; the next connect got no answer in 60 s. Test from the same laptop: 4 s connect, 622 rows in 1.7 s.
+- **Still the same on 2026-11-06, from a second laptop (public IP `149.88.25.130`).**
+  TCP to `vox.odbc.plex.com:19995` (8.34.94.50) completes in 0.2 s, so the network
+  path is fine, but the ODBC login takes 52 s or gets no answer in 90 s; once in,
+  an 8-row COUNT takes 6 s and `SELECT TOP 10` on `Sales_v_PO` 16 s. Test
+  (8.34.94.51) from the same place: 4 s login, about 1 s per query. Cloud Run in
+  the same window: 4 of 10 prod connects succeeded, then a 500-row page of
+  `Sales_v_PO` hung for 150 s three times in a row.
 
 ## Check it is over
 

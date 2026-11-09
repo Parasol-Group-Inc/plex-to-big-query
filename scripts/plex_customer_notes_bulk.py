@@ -42,6 +42,7 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import time
 import traceback
 import urllib.request
 from pathlib import Path
@@ -102,6 +103,18 @@ def env_file() -> dict:
 
 
 def api_customers() -> list[dict]:
+    """Every customer from the REST API, retried on network errors (4 tries, 30-90 s apart)."""
+    for attempt in range(1, 5):
+        try:
+            return _api_customers()
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 4:
+                raise
+            log("retry", what="api", attempt=attempt, error=f"{type(exc).__name__}: {str(exc)[:200]}")
+            time.sleep(30 * attempt)
+
+
+def _api_customers() -> list[dict]:
     env = env_file()
     req = urllib.request.Request(API, headers={
         "X-Plex-Connect-Api-Key": env["PLEX_API_CONSUMER_KEY"],
@@ -198,6 +211,39 @@ def page_customer(pg) -> tuple[str, str]:
     return name, code
 
 
+ATTEMPTS = 3  # per customer, for transient errors only; a guard that trips stops at once
+
+
+def write_one(pg, t, ctx) -> None:
+    """Write one customer's Note, with every check. Safe to repeat after a transient error: a
+    customer already holding the planned note is logged already-set and left alone."""
+    note = open_details(pg, t["customer_no"])
+    shown = page_customer(pg)
+    if shown != (t["plex_name"], t["code"]):
+        stop(f"screen shows customer {shown!r}, plan expects {(t['plex_name'], t['code'])!r}", **ctx)
+    current = norm(note.input_value())
+    if current == norm(t["new_note"]):
+        log("already-set", **ctx)
+        return
+    if current != norm(t["before_note"]):
+        stop("the Note on screen differs from the backup taken for the plan (changed since?)",
+             screen=current[:300], plan=norm(t["before_note"])[:300], **ctx)
+    note.fill(t["new_note"])
+    note.press("Tab")
+    pg.locator("button", has_text="Apply").first.click()
+    pg.wait_for_load_state("networkidle", timeout=60000)
+    pg.wait_for_timeout(1500)
+    errs = [e.strip() for e in pg.locator(".plex-error, .plex-banner-error, .validation-summary-errors,"
+                                          " .plex-dialog .plex-error-message").all_inner_texts() if e.strip()]
+    if errs:
+        stop("Plex showed an error after Apply", errors=errs[:3], **ctx)
+    saved = norm(open_details(pg, t["customer_no"]).input_value())
+    if saved != norm(t["new_note"]):
+        stop("after reload the Note is not the planned text", saved=saved[:300], **ctx)
+    log("saved", category=t["category"], **ctx)
+    print(f"  {t['seq']:>5} {t['code']:8} {t['category']:6} saved", flush=True)
+
+
 def cmd_run(args) -> None:
     if STOP.exists():
         sys.exit(f"{STOP.name} exists; read it, then `resume --reason ...` once it is safe:\n{STOP.read_text()}")
@@ -216,42 +262,41 @@ def cmd_run(args) -> None:
     from playwright.sync_api import sync_playwright
     with run_lock(), sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        pg = browser.new_page(viewport={"width": 1400, "height": 1000})
+        state = {"pg": None}
+
+        def fresh_page():
+            """A new tab, logged in. Used at the start and after a transient error."""
+            if state["pg"] is not None:
+                try:
+                    state["pg"].close()
+                except Exception:  # noqa: BLE001
+                    pass
+            state["pg"] = browser.new_page(viewport={"width": 1400, "height": 1000})
+            login(state["pg"], user, password)
+
         log("batch-start", batch=batch, size=len(todo), seqs=[t["seq"] for t in todo])
         try:
-            login(pg, user, password)
+            fresh_page()
             for t in todo:
                 ctx = {"batch": batch, "seq": t["seq"], "code": t["code"], "customer_no": t["customer_no"]}
-                note = open_details(pg, t["customer_no"])
-                shown = page_customer(pg)
-                if shown != (t["plex_name"], t["code"]):
-                    stop(f"screen shows customer {shown!r}, plan expects {(t['plex_name'], t['code'])!r}", **ctx)
-                current = norm(note.input_value())
-                if current == norm(t["new_note"]):
-                    log("already-set", **ctx)
-                    continue
-                if current != norm(t["before_note"]):
-                    stop("the Note on screen differs from the backup taken for the plan (changed since?)",
-                         screen=current[:300], plan=norm(t["before_note"])[:300], **ctx)
-                note.fill(t["new_note"])
-                note.press("Tab")
-                pg.locator("button", has_text="Apply").first.click()
-                pg.wait_for_load_state("networkidle", timeout=60000)
-                pg.wait_for_timeout(1500)
-                errs = [e.strip() for e in pg.locator(".plex-error, .plex-banner-error, .validation-summary-errors,"
-                                                      " .plex-dialog .plex-error-message").all_inner_texts() if e.strip()]
-                if errs:
-                    stop("Plex showed an error after Apply", errors=errs[:3], **ctx)
-                saved = norm(open_details(pg, t["customer_no"]).input_value())
-                if saved != norm(t["new_note"]):
-                    stop("after reload the Note is not the planned text", saved=saved[:300], **ctx)
-                log("saved", category=t["category"], **ctx)
-                print(f"  {t['seq']:>5} {t['code']:8} {t['category']:6} saved")
+                for attempt in range(1, ATTEMPTS + 1):
+                    try:
+                        write_one(state["pg"], t, ctx)
+                        break
+                    except SystemExit:
+                        raise  # a guard tripped: stop() already recorded why
+                    except Exception as exc:  # noqa: BLE001 - timeouts, a dropped session, a slow page
+                        if attempt == ATTEMPTS:
+                            raise
+                        log("retry", attempt=attempt, error=f"{type(exc).__name__}: {str(exc)[:300]}", **ctx)
+                        print(f"  {t['seq']:>5} {t['code']:8} retry {attempt}: {type(exc).__name__}")
+                        time.sleep(15 * attempt)
+                        fresh_page()  # re-login; write_one is safe to repeat (already-set / before check)
         except SystemExit:
             raise
-        except Exception as exc:  # noqa: BLE001 - any surprise stops the run
-            stop(f"unexpected error: {type(exc).__name__}: {str(exc)[:300]}", trace=traceback.format_exc()[-1500:],
-                 batch=batch)
+        except Exception as exc:  # noqa: BLE001 - still failing after the retries: stop
+            stop(f"unexpected error after {ATTEMPTS} attempts: {type(exc).__name__}: {str(exc)[:300]}",
+                 trace=traceback.format_exc()[-1500:], batch=batch)
         finally:
             browser.close()
     log("batch-end", batch=batch)
@@ -296,6 +341,31 @@ def cmd_verify(args) -> None:
           f"all {len(live)} customers match the plan or the backup")
 
 
+def cmd_loop(args) -> None:
+    """Run batch after batch, each verified through the API, until done or stopped. Standalone:
+    nobody needs to watch it; a stop leaves BULK_STOPPED.txt with the reason."""
+    log("loop-start", batch_size=args.batch_size)
+    while True:
+        if STOP.exists():
+            log("loop-end", result="stopped")
+            print("loop: stopped, see BULK_STOPPED.txt")
+            sys.exit(3)
+        done = done_seqs(entries())
+        left = [p for p in plan_rows() if p["category"] in WRITE_CATEGORIES and p["seq"] not in done]
+        if not left:
+            log("loop-end", result="finished", total_done=len(done))
+            print(f"loop: finished, {len(done)} written")
+            return
+        try:
+            cmd_run(args)
+            cmd_verify(args)
+        except SystemExit as exc:
+            if STOP.exists() or exc.code not in (None, 0):
+                log("loop-end", result="stopped", reason=str(exc.code))
+                print(f"loop: stopped ({exc.code})")
+                sys.exit(3)
+
+
 def cmd_log(args) -> None:
     log(args.event, actor=args.actor, text=args.text)
     print("logged")
@@ -329,6 +399,7 @@ def main():
     s = sub.add_parser("plan"); s.add_argument("--csv", required=True); s.set_defaults(fn=cmd_plan)
     s = sub.add_parser("run"); s.add_argument("--batch-size", type=int, required=True); s.set_defaults(fn=cmd_run)
     s = sub.add_parser("verify"); s.set_defaults(fn=cmd_verify)
+    s = sub.add_parser("loop"); s.add_argument("--batch-size", type=int, default=50); s.set_defaults(fn=cmd_loop)
     s = sub.add_parser("log"); s.add_argument("--actor", default="claude"); s.add_argument("--event", default="review")
     s.add_argument("text"); s.set_defaults(fn=cmd_log)
     s = sub.add_parser("resume"); s.add_argument("--actor", default="claude"); s.add_argument("--reason", required=True)

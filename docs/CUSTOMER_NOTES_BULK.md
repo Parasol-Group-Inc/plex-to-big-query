@@ -98,6 +98,20 @@ python scripts/plex_customer_notes_bulk.py log --actor claude --event review "ba
 python scripts/plex_customer_notes_bulk.py run --batch-size 50    # then repeat run / verify / review
 ```
 
+**Standalone (how the rest ran, from 2026-11-09):** `loop --batch-size 50` runs batch after
+batch, each followed by the API `verify`, until done or stopped, with no one watching:
+
+```bash
+nohup caffeinate -ims python -u scripts/plex_customer_notes_bulk.py loop --batch-size 50 \
+  >> etl-manual/customer_note/loop.out 2>&1 < /dev/null & disown
+```
+
+A transient error (timeout, dropped session) is retried up to 3 times per customer with a fresh
+login, 15-45 s apart, and API reads 4 times; a guard that trips (wrong customer, changed note,
+Plex error, wrong read-back, a note changed elsewhere) stops at once. Emilio chose to skip the
+per-batch Claude review for the rest (to save tokens); Claude verifies everything against the
+backup at the end. Progress: `status`, `loop.out`, or the hub tab once it is re-published.
+
 It takes the same Plex web lock as the screen task and the export, so only one runs at a time.
 After each reviewed batch the hub tab is re-injected into the published hub.
 

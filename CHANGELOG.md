@@ -31,6 +31,9 @@ don't need an entry.
 - **Pilot 2026-11-09:** 5 customers written and verified (SUPP7, NUT67, ADRI2, ALLNA, ASQU1). The
   first run stopped at ADRI2 on a false alarm (title parsing cut "… - rotulo-hgcg"); the guard
   now compares the screen's Name and Code fields.
+- **Standalone `loop`:** batches of 50 back to back, each verified through the API; transient
+  errors retried (3 tries per customer with a fresh login, 4 for API reads); guards still stop at
+  once. Started 2026-11-09 after the pilot, detached on the Mac.
 - **Docs:** `docs/CUSTOMER_NOTES_BULK.md` (new). Not deployed; runs by hand on the Mac.
 
 ## 2026-11-09 (dev) - Write a customer's Note through the Plex screen

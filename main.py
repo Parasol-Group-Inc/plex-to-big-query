@@ -17,7 +17,7 @@ import yaml
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import bigquery, secretmanager, storage
 
-from email_utils import send_digest, send_report
+from email_utils import send_digest, send_report, send_screens_alert
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -878,6 +878,121 @@ def record_breaker_evidence(status: str, detail: str = ""):
         ])).result()
     except Exception:
         log.exception("Failed to record breaker evidence.")
+
+
+# ── "Start the live screens" alert (2026-11-09) ───────────────────────────────
+# During the 11-04 → 11-08 ODBC outage the breaker mailed once, at its start,
+# and the outage then looked like every other short one. The Plex screens
+# stopgap (docs/PLEX_SCREEN_EXTRACTION.md) was started a day later, by hand. Now
+# a prod run that fails to connect checks the dispatcher's log: when ODBC has
+# failed in EVERY one of the last SCREENS_ALERT_HOURS hours and fewer than
+# SCREENS_ALERT_MAX_UP_SHARE of the runs reached Plex, it sends one distinct
+# email saying to start the screens task. Backtest on the log (10-20 → 11-09):
+# fires 10-25 18:05 MT and 11-04 17:20 MT, never on a normal day. A flapping
+# outage counts (a canary that connects now and then does not reset it), which
+# is why this is a share and not "the breaker has been open for 6 h": on 11-06
+# the breaker closed several times a day while almost every run failed.
+# The alert is written to the dispatch log as an inert row (reason
+# 'screens-alert', outcome 'alert': no Plex evidence, no follow-up, never busy),
+# and repeats at most every SCREENS_ALERT_REPEAT_HOURS. It is skipped while the
+# screens are already loading (live_order_releases loaded in the last 2 h).
+SCREENS_ALERT_HOURS = int(os.environ.get("SCREENS_ALERT_HOURS", "6"))
+SCREENS_ALERT_MAX_UP_SHARE = float(os.environ.get("SCREENS_ALERT_MAX_UP_SHARE", "0.25"))
+SCREENS_ALERT_REPEAT_HOURS = int(os.environ.get("SCREENS_ALERT_REPEAT_HOURS", "24"))
+SCREENS_FRESH_HOURS = 2
+# The same "bad" as PlexOps.odbc_health (Terraform), minus "still open after 2 h".
+_ODBC_BAD_SQL = """(outcome IN ('held-outage', 'lost')
+      OR (outcome = 'failed'
+          AND (STARTS_WITH(IFNULL(detail, ''), 'ODBC connection failed')
+               OR STARTS_WITH(IFNULL(detail, ''), 'execution failed or was cancelled'))))"""
+_ODBC_UP = ("success", "partial", "skipped", "succeeded-unrecorded")
+
+
+def screens_alert_due(events, now, hours: int = SCREENS_ALERT_HOURS,
+                      max_up_share: float = SCREENS_ALERT_MAX_UP_SHARE) -> Optional[dict]:
+    """Whether ODBC has been failing long enough to start the Plex screens.
+
+    events: (time, up) pairs from the dispatch log, up = the run reached Plex.
+    Due when, within the last `hours`, every hour (counted back from now) holds
+    at least one failure and fewer than max_up_share of the events are up.
+    Returns {"downs", "ups", "first_down"} when due, else None."""
+    window = [(t, up) for t, up in events if now - timedelta(hours=hours) < t <= now]
+    downs = [t for t, up in window if not up]
+    ups = len(window) - len(downs)
+    hours_with_failures = {int((now - t).total_seconds() // 3600) for t in downs}
+    if len(hours_with_failures) < hours or ups >= max_up_share * len(window):
+        return None
+    return {"downs": len(downs), "ups": ups, "first_down": min(downs)}
+
+
+def maybe_send_screens_alert(detail: str) -> bool:
+    """After a prod run failed to connect: send the "start the live screens"
+    email if screens_alert_due() and none went out recently. Never raises."""
+    table = OUTAGE_BREAKER_TABLE or (DISPATCH_LOG_TABLE if "." in DISPATCH_LOG_TABLE else "")
+    if (OUTPUT_MODE != "bigquery" or BQ_DATASET != "PlexProd" or not table
+            or not (detail or "").startswith("ODBC connection failed")):
+        return False
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        log_ref = f"`{GCP_PROJECT}.{table}`"
+        up = bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ArrayQueryParameter("up", "STRING", list(_ODBC_UP))])
+        recent = list(bq.query(f"""
+            SELECT COUNT(*) AS n FROM {log_ref}
+            WHERE reason = 'screens-alert'
+              AND dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {SCREENS_ALERT_REPEAT_HOURS} HOUR)
+        """).result())[0].n
+        if recent:
+            log.info("Live-screens alert already sent in the last %d h.", SCREENS_ALERT_REPEAT_HOURS)
+            return False
+        rows = list(bq.query(f"""
+            SELECT COALESCE(finished_at, dispatched_at) AS t, outcome IN UNNEST(@up) AS up
+            FROM {log_ref}
+            WHERE dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {SCREENS_ALERT_HOURS + 3} HOUR)
+              AND (outcome IN UNNEST(@up) OR {_ODBC_BAD_SQL})
+        """, job_config=up).result())
+        now = datetime.now(timezone.utc)
+        stats = screens_alert_due([(r.t, r.up) for r in rows], now)
+        if not stats:
+            return False
+        last_ok = list(bq.query(f"""
+            SELECT MAX(finished_at) AS t FROM {log_ref}
+            WHERE outcome IN UNNEST(@up) AND dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+        """, job_config=up).result())[0].t
+        try:
+            screens_at = list(bq.query(
+                f"SELECT MAX(loaded_at) AS t FROM `{GCP_PROJECT}.PlexProd.live_order_releases`").result())[0].t
+        except Exception:
+            screens_at = None
+        if screens_at and now - screens_at < timedelta(hours=SCREENS_FRESH_HOURS):
+            log.info("ODBC failing for %d h, but the live screens loaded at %s; no alert.",
+                     SCREENS_ALERT_HOURS, screens_at.isoformat())
+            return False
+        alert = {
+            "hours": SCREENS_ALERT_HOURS, "downs": stats["downs"], "ups": stats["ups"],
+            "first_down": stats["first_down"], "last_ok": last_ok, "screens_at": screens_at,
+            "job_name": os.environ.get("CLOUD_RUN_JOB", ""), "detail": detail,
+            "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+            "gcp_project": GCP_PROJECT, "bq_dataset": BQ_DATASET,
+        }
+        sent = send_screens_alert(alert)
+        bq.query(f"""
+            INSERT INTO {log_ref}
+              (dispatch_id, job_name, mode, reason, dispatched_at, outcome, finished_at, detail)
+            VALUES (@id, @job, 'probe', 'screens-alert', CURRENT_TIMESTAMP(), 'alert', CURRENT_TIMESTAMP(), @detail)
+        """, job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("id", "STRING", "alert-" + uuid.uuid4().hex[:12]),
+            bigquery.ScalarQueryParameter("job", "STRING", alert["job_name"]),
+            bigquery.ScalarQueryParameter("detail", "STRING",
+                f"{'sent' if sent else 'not sent (email off)'}: {stats['downs']} failed, "
+                f"{stats['ups']} reached Plex in {SCREENS_ALERT_HOURS} h"),
+        ])).result()
+        log.warning("ODBC failing for %d h: live-screens alert %s.", SCREENS_ALERT_HOURS,
+                    "sent" if sent else "recorded, email off")
+        return sent
+    except Exception:
+        log.exception("Live-screens alert check failed.")
+        return False
 
 
 # ── BigQuery helpers ──────────────────────────────────────────────────────────
@@ -2457,6 +2572,8 @@ def run_and_report():
 
     record_dispatch_outcome(status, detail="; ".join(errors) if errors else "")
     record_breaker_evidence(status, detail="; ".join(errors) if errors else "")
+    if status == "failed":
+        maybe_send_screens_alert("; ".join(errors) if errors else "")
 
     end_time = datetime.now(timezone.utc)
     report = {

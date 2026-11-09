@@ -592,13 +592,25 @@ def load(c, table, rows, sch, floor, force, today):
 #   1. Mon-Fri 5:00 AM - 5:49 PM Mountain: the ETL's own window. The sweep runs at
 #      6:05 PM, and two pushes running at once would both create the same item.
 #   2. The ETL is NOT reaching Plex: its newest label_design run in the last 40
-#      minutes is not success/partial. Once ODBC is back, the ETL pushes and this
-#      steps aside on its own.
+#      minutes is not success/partial, nor a 'skipped' run its change probe ended
+#      (only breaker-held skips, detail "Held — ...", count as not reaching Plex).
+#      Once ODBC is back, the ETL pushes and this steps aside on its own.
 #   3. label_design_report is reading the live table (data_source = 'live').
 #   4. No execution of the push job is still running.
 PUSH_JOB = "plex-etl-label-design-push"
 PUSH_REGION = "us-central1"
 PUSH_WINDOW = (dt.time(5, 0), dt.time(17, 50))
+
+
+def etl_reached_plex(status, detail):
+    """Gate 2: did this label_design run reach Plex? success/partial did. So did a
+    'skipped' run: its change probe asked Plex and found nothing new. Only a skip
+    the outage breaker made (detail "Held — Plex outage breaker open ...") did not.
+    Until 2026-11-09 only success/partial counted, so after ODBC recovered a healthy
+    ETL whose probe kept skipping left this task starting the push every hour."""
+    if status in ("success", "partial"):
+        return True
+    return status == "skipped" and not (detail or "").startswith("Held")
 
 
 def maybe_start_push(c):
@@ -607,11 +619,11 @@ def maybe_start_push(c):
     if now.weekday() >= 5 or not (PUSH_WINDOW[0] <= now.time() < PUSH_WINDOW[1]):
         return f"push not started: {now:%a %H:%M} MT is outside Mon-Fri 05:00-17:50 (the 6:05 PM sweep covers the day)"
     etl = list(c.query(f"""
-        SELECT status, started_at FROM `{PROJECT}.PlexProd.job_run_log`
+        SELECT status, detail, started_at FROM `{PROJECT}.PlexProd.job_run_log`
         WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
           AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 40 MINUTE)
         ORDER BY started_at DESC LIMIT 1""").result())
-    if etl and etl[0].status in ("success", "partial"):
+    if etl and etl_reached_plex(etl[0].status, etl[0].detail):
         return f"push not started: the ETL reached Plex at {etl[0].started_at:%H:%M} UTC and starts the push itself"
     src = list(c.query(f"SELECT ARRAY_AGG(DISTINCT data_source) s FROM `{PROJECT}.PlexProd.label_design_report`").result())[0].s
     if src != ["live"]:

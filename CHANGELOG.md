@@ -14,6 +14,49 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-09 - "Start the live screens" alert after 6 h of failing ODBC
+
+- **Added** a distinct email, `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h,
+  start the live screens — <date>` (`maybe_send_screens_alert` in `main.py`,
+  `render_screens_alert` in `email_utils.py`, `templates/odbc_screens_alert.html`).
+  A prod run that fails to connect reads `PlexOps.etl_dispatch_log`: when ODBC failed in
+  every one of the last 6 hours (`odbc_health`'s bad: held, lost, failed connect, killed
+  run) and fewer than a quarter of runs reached Plex, it mails the steps to start the
+  laptop task, with the counts, the last good run and when the screens last loaded.
+  At most once per 24 h, recorded as an inert log row (`reason = 'screens-alert'`,
+  `outcome = 'alert'`); not sent while the screens already load (under 2 h), from test,
+  or for failures of another kind. Never raises. Backtest on the log: 10-25 18:05 MT and
+  11-04 17:20 MT, no normal day. Tunable: `SCREENS_ALERT_HOURS`,
+  `SCREENS_ALERT_MAX_UP_SHARE`, `SCREENS_ALERT_REPEAT_HOURS`.
+- **Changed** `scripts/plex_live_screens.py`: gate 2's decision is `etl_reached_plex()`,
+  now tested.
+- **Tests:** `tests/test_screens_alert.py` (14). Full suite 134 passed.
+- **Docs:** OPERATIONS.md (breaker section), PLEX_SCREEN_EXTRACTION.md ("Starting it for
+  an outage", disabling from PowerShell, status: retired), incident doc, CLAUDE.md,
+  OPEN_ITEMS D30. Ships with Cloud Build (code), no Terraform change.
+
+## 2026-11-09 (dev) - ODBC recovered; screen stopgap retiring; probe documented
+
+- **Fixed** `scripts/plex_live_screens.py`, push gate 2: a `skipped` Label Design run
+  (its change probe found nothing new) now counts as the ETL reaching Plex, unless its
+  detail starts "Held" (held by the outage breaker). Before, only `success`/`partial`
+  counted, so after ODBC recovered the laptop task kept starting
+  `plex-etl-label-design-push` every hour (05:02, 06:04, 07:04 MT on 11-09; all found
+  nothing new). Reaches the laptop only after merge and `git pull` in the primary folder.
+- **Docs:** `docs/PLEX_ODBC_PROBE.md` (new) explains the ODBC probe: steps, deadlines,
+  why each runs on a thread, how to read and run it, and the two SQL Development checks.
+  The incident doc has a "Recovery" section (prod back 11-08 ~04:45 MT; Label Design
+  identical on ODBC and the screens). Runbook, OPEN_ITEMS D20/D30 and CLAUDE.md updated.
+
+## 2026-11-06 (dev) - Plex ODBC probe for the D20 case
+
+- **Added** `scripts/plex_odbc_probe.py`: per host (prod, test) it times DNS, a bare
+  TCP handshake to port 19995, the ODBC login and two tiny reads, each under its own
+  deadline, and prints a table for the Plex case. Read-only; runs in the ETL image or,
+  with `scripts/plex_odbc_probe_run.sh` and the driver, on plain Amazon Linux (AWS
+  CloudShell). First results (Mac, 11-06): TCP to prod 0.2 s, ODBC login 52 s or no
+  answer in 90 s. Write-up in `docs/PLEX_PROD_ODBC_INCIDENT_2026-11-04.md`. Nothing deployed.
+
 ## 2026-11-06 (dev) - Production reports count Plex's screens while ODBC is frozen
 
 - **Added** a `production` screen to `scripts/plex_live_screens.py` (the hourly laptop task):

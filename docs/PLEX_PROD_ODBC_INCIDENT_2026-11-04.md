@@ -1,4 +1,11 @@
-# Plex prod ODBC degradation and outage, 2026-11-02 → 2026-11-05
+# Plex prod ODBC degradation and outage, 2026-11-02 → 2026-11-08
+
+> **Recovered 2026-11-08 ~04:45 MT.** Every prod run since has succeeded, and
+> `PlexOps.odbc_health` has been stable since 11-08 11:47 UTC. Revenue and the production
+> reports went back to ODBC by themselves on 11-08; Label Design matched ODBC exactly on
+> 11-09 and the screen stopgap is being retired. See [Recovery](#recovery-2026-11-08-and-retiring-the-screens).
+> D20 closes after a week with no `held-outage` rows (2026-11-15). The probe used for
+> the evidence: [PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md).
 
 *Written 2026-11-05 ~02:30 UTC (2026-11-04 evening MT), while the outage was still
 open. Continues OPEN_ITEMS **D20** (Plex prod ODBC refuses sessions, since
@@ -149,6 +156,120 @@ Cloud: a connect that takes the full minute, then a read that never returns.
 It is not Cloud Run, our egress, the image or the credentials. The fault is
 Plex's production ODBC service.
 
+## Second laptop check, and prod vs test from both places (2026-11-06)
+
+A second check from Emilio's Mac (public IP `149.88.25.130`), separate from the
+other PC's, while the outage was still open. The same 8 runs went out together at
+17:45-17:48 UTC: prod and test host, a small job (`sales_returns`, 2 views) and a
+big one (`sales_orders`, 29 views), from local Docker (OUTPUT_MODE=local, nothing
+written) and from Cloud Run `us-central1`. Neither job was running at the time; the
+`sales_quotes` canary and Label Design were left alone.
+
+| Where | Host | Job | Connect | Reads | Result |
+|---|---|---|---|---|---|
+| Mac Docker | test | small | attempt 1, ~5 s | 1 row 1.2 s, 8 rows 1.1 s | OK, 9 rows in 15 s |
+| Mac Docker | test | big | attempt 1 | paged normally | OK, 305,516 rows in 4.7 min |
+| Cloud Run | test | small | attempt 1, 1.5 s | ~1-3 s each | OK, 9 rows |
+| Cloud Run | test | big | attempt 1, 1.6 s | paged normally | 305,516 rows; one BigQuery view failed to build (not Plex) |
+| Mac Docker | **prod** | small | no answer 60 s twice, **attempt 3** (17:48:54) | 1 row **24 s**, 8 rows **19 s** | OK, 9 rows |
+| Mac Docker | **prod** | big | **no answer 60 s, 3 times** | - | failed |
+| Cloud Run | **prod** | small | **no answer 60 s, 3 times** | - | failed |
+| Cloud Run | **prod** | big | attempt 2 (17:50:31) | probe COUNTs 5-12 s; `Sales_v_PO` page 1 (500 rows) hung 150 s three times, with reconnects; then a COUNT on `Sales_v_PO_Line` hung | partial, 0 rows: the D28 guard stopped after 4 hangs, 22 min |
+
+Prod connects: 1 of 6 succeeded from the Mac, 4 of 10 from Cloud Run. Every
+failure was "no answer within 60 s", never a refusal or reset. At 17:48:54 the
+Mac's prod connect succeeded while Cloud Run's attempt in the same minute got no
+answer, so it is per session, not per network.
+
+**The ODBC probe (`scripts/plex_odbc_probe.py`)** was written for this: one round
+per host of DNS lookup, a bare TCP handshake to port 19995, the ODBC connect, an
+8-row COUNT and a `TOP 10`, each with its own deadline, printed as a table to paste
+into the case. From the Mac:
+
+| UTC | Host | DNS | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|---|
+| 11-06 18:25:55 | prod | 8.34.94.50 | 0.21 s | no answer in 90 s | - | - |
+| 11-06 18:27:25 | test | 8.34.94.51 | 0.21 s | 3.9 s | 1.1 s | 1.0 s |
+| 11-06 18:27:52 | prod | 8.34.94.50 | 0.22 s | 52.4 s | 6.1 s | 16.1 s |
+| 11-06 18:29:07 | test | 8.34.94.51 | 0.19 s | 5.0 s | 1.1 s | 0.9 s |
+| 11-06 18:34:48 | prod | 8.34.94.50 | 0.18 s | no answer in 90 s | - | - |
+| 11-06 18:36:19 | test | 8.34.94.51 | 0.22 s | 4.0 s | 1.1 s | 1.1 s |
+
+**The network reaches Plex fine:** prod's port completes a TCP handshake in 0.2 s,
+the same as test's. What doesn't answer is the ODBC service behind it: the login
+takes 50-90+ s or never completes, and a session that does log in reads 6-16x
+slower than test. The two hosts resolve to neighbouring addresses (`.50` prod,
+`.51` test), worth mentioning to Plex.
+
+Side notes from the runs:
+- A manual run of a prod job other than Label Design is invisible to the outage
+  breaker: only `plex-etl-label-design` sets `OUTAGE_BREAKER_TABLE`, the rest log
+  through the dispatcher. So the failed `sales_returns` run has no row in
+  `etl_dispatch_log`. That's by design, but it means ad-hoc runs don't count as
+  breaker evidence.
+- The two prod Cloud Run runs ended failed/partial and sent the usual emails. No
+  PlexProd table changed (0 rows written; a failed table keeps yesterday's rows).
+
+### A third angle: the probe from AWS CloudShell
+
+To show Plex the same result from a network that is neither Google Cloud nor
+ours, run the probe in AWS CloudShell (a browser terminal on Amazon Linux in our
+AWS account: no instance to create and nothing to pay for). It runs without
+Docker: the bundle holds the Plex Linux driver (29 MB, gitignored), the probe
+and `scripts/plex_odbc_probe_run.sh`, which installs unixODBC, pam and pyodbc and
+points the driver at its own files. Checked on a clean `amazonlinux:2023` image
+on 11-06 (rows 5-6 above).
+
+1. Build the bundle on a machine with the repo and `driver/`, from the repo root:
+   ```bash
+   mkdir -p /tmp/b/plex_probe && cp -R driver scripts/plex_odbc_probe.py /tmp/b/plex_probe/ && cp scripts/plex_odbc_probe_run.sh /tmp/b/plex_probe/run.sh
+   cd /tmp/b && COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf plex_probe.tgz plex_probe
+   ```
+   (Drop `--no-mac-metadata --no-xattrs` on Linux.)
+2. In the AWS console pick a region (us-east-1 or us-west-2 give a different
+   path than our us-central1), open CloudShell, Actions → Upload file →
+   `plex_probe.tgz`.
+3. In CloudShell:
+   ```bash
+   tar xzf plex_probe.tgz
+   read -rs PLEX_ACCESS_TOKEN && export PLEX_ACCESS_TOKEN
+   ./plex_probe/run.sh --passes 3
+   ```
+   Paste the token from `.env` at the silent prompt. The first line of the output
+   gives the AWS public IP for Plex to look up.
+4. Afterwards: `rm -rf plex_probe plex_probe.tgz` (the CloudShell home persists
+   between sessions).
+
+**Result, 2026-11-06 18:49-19:00 UTC, AWS CloudShell us-east-2 (public IP
+`18.224.22.68`), two runs of `--passes 3`:**
+
+| UTC | Host | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|
+| 18:49:08 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:50:38 | test | 0.03 s | 1.3 s | 0.2 s | 0.4 s |
+| 18:51:01 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:52:31 | test | 0.03 s | 1.2 s | 0.3 s | 0.4 s |
+| 18:52:53 | prod | 0.03 s | 43.4 s | 21.0 s | 11.6 s |
+| 18:54:09 | test | 0.03 s | 0.4 s | 0.2 s | 0.2 s |
+| 18:54:39 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:56:09 | test | 0.03 s | 1.2 s | 0.2 s | 0.3 s |
+| 18:56:31 | prod | 0.03 s | no answer in 90 s | - | - |
+| 18:58:01 | test | 0.03 s | 0.5 s | 0.2 s | 0.3 s |
+| 18:58:22 | prod | 0.03 s | 72.9 s | 7.1 s | 18.4 s |
+| 19:00:02 | test | 0.03 s | 1.4 s | 0.6 s | 0.5 s |
+
+Test: 6 of 6 logins in 0.4-1.4 s, queries 0.2-0.6 s. Prod, in the same minutes from
+the same machine: 4 of 6 logins got no answer in 90 s, two took 43 s and 73 s, and
+their queries took 7-21 s (30-100x test). TCP to both answered in 0.03 s. So from a
+third network, neither Google Cloud nor ours, prod's ODBC service is the only thing
+that fails.
+
+The same probe runs anywhere the ETL image does:
+
+```bash
+docker run --rm --platform linux/amd64 --env-file .env -e PROBE_SOURCE="Mac" -v "$PWD/scripts:/scripts:ro" --entrypoint python plex-to-big-query-etl /scripts/plex_odbc_probe.py --passes 3
+```
+
 ## What to send Plex (add to the D20 case)
 
 - Host `vox.odbc.plex.com:19995`, ODBC (OpenAccess SDK / DataDirect), IAM
@@ -165,6 +286,28 @@ Plex's production ODBC service.
 - **It reproduces outside Google Cloud.** From a laptop on 11-05 02:36 UTC,
   the prod connect took 60 s and `SELECT` on `Part_v_Part` returned nothing
   in 46 min; the next connect got no answer in 60 s. Test from the same laptop: 4 s connect, 622 rows in 1.7 s.
+- **Still the same on 2026-11-06, from a second laptop (public IP `149.88.25.130`).**
+  TCP to `vox.odbc.plex.com:19995` (8.34.94.50) completes in 0.2 s, so the network
+  path is fine, but the ODBC login takes 52 s or gets no answer in 90 s; once in,
+  an 8-row COUNT takes 6 s and `SELECT TOP 10` on `Sales_v_PO` 16 s. Test
+  (8.34.94.51) from the same place: 4 s login, about 1 s per query. Cloud Run in
+  the same window: 4 of 10 prod connects succeeded, then a 500-row page of
+  `Sales_v_PO` hung for 150 s three times in a row.
+- **And from AWS (us-east-2, public IP `18.224.22.68`), 2026-11-06 18:49-19:00 UTC:**
+  TCP to both hosts in 0.03 s; test logged in 6 of 6 times in 0.4-1.4 s with
+  queries in 0.2-0.6 s, while prod got no answer in 90 s on 4 of 6 logins, took
+  43 s and 73 s on the other two, and then 7-21 s per tiny query. Three networks
+  (Google Cloud us-central1, two office/home connections, AWS us-east-2), one result.
+- **Partly better by the afternoon of 2026-11-06, still not usable.** From AWS
+  (public IP `3.16.213.75`), 21:25-21:41 UTC: 8 of 9 prod logins got through, but
+  each took 29-74 s and a 1-row or 10-row query took 3-16 s; test in the same
+  minutes logged in in 0.4-1.3 s with 0.2-0.3 s queries. Our scheduled prod jobs
+  kept failing (14:25 MT batch). Separately, the SQL Development Environment caught
+  up to about 11:00 CT on 11-06 after being stuck at 11-04 ~18:56 MT, then stopped
+  again: at 14:37 CT the Shipping Revenue screen had four invoices (INV0000180-183,
+  $49,721.50) that SQL Development still did not show. So the data copy behind
+  SQL Development seems to refresh in batches, and the ODBC login service is
+  slow on top of that.
 
 ## Check it is over
 
@@ -211,3 +354,101 @@ Pending Fulfillment sales orders with their releases) into `PlexProd.live_*`, an
 Label Design reads the releases table while it is fresh, pushing new Label Design
 lines to Monday again. Details, safeguards and how to retire it:
 [PLEX_SCREEN_EXTRACTION.md](PLEX_SCREEN_EXTRACTION.md) (OPEN_ITEMS D30).
+
+## Update 2026-11-06 afternoon: logins mostly answer, slowly; SQL Development refreshed once
+
+**AWS CloudShell us-east-2 (public IP `3.16.213.75`), 21:25-21:41 UTC, `--passes 3`
+then `--passes 6`:**
+
+| UTC | Host | TCP | Connect | 8-row COUNT | TOP 10 `Sales_v_PO` |
+|---|---|---|---|---|---|
+| 21:25:53 | prod | 0.03 s | no answer in 90 s | - | - |
+| 21:27:45 | prod | 0.03 s | 36.6 s | 3.8 s | 9.0 s |
+| 21:28:56 | prod | 0.04 s | 61.2 s | 7.6 s | 16.0 s |
+| 21:33:13 | prod | 0.03 s | 73.8 s | 3.7 s | 9.2 s |
+| 21:35:02 | prod | 0.03 s | 53.5 s | 5.3 s | 12.5 s |
+| 21:36:35 | prod | 0.03 s | 32.2 s | 3.9 s | 9.0 s |
+| 21:37:42 | prod | 0.03 s | 44.7 s | 4.4 s | 11.0 s |
+| 21:39:03 | prod | 0.03 s | 40.6 s | 4.1 s | 10.5 s |
+| 21:40:20 | prod | 0.03 s | 29.3 s | 3.0 s | 7.8 s |
+
+Test, alternating with each prod row: 9 of 9 logins in 0.4-1.3 s, queries 0.2-0.3 s.
+Compared with 18:49-19:00 UTC (2 of 6 prod logins), prod now answers almost every
+login, but 15-50x slower than test on every step after TCP. The ETL allows 60 s per
+connect attempt (2 of these 8 logins were longer) and reads 500-row pages, which
+were still hanging, so scheduled jobs kept failing: the 14:15 MT sales-quotes canary
+succeeded, the 14:25 MT batch failed, and `PlexOps.odbc_health` still reported 0 clean runs.
+
+**SQL Development refreshed once, then stopped.** A freshness query in the SQL
+Development Environment (newest `Accounting_v_AR_Invoice.Created_Date`,
+`Sales_v_Shipper.Add_Date`, `Sales_v_Shipper_AR_Invoice.Add_Date`) returned 11-06
+10:57-11:01 CT twice, about an hour apart, instead of 11-04. A November revenue query
+by part group (invoice lines on accounts `4%` in `Accounting_v_AR_Invoice_Dist`,
+which matched the Shipping Revenue screen to the cent on every day from 10-19 to
+11-03) gave 249,001 units and $652,135.67. That is exactly the 13:00 MT screen load.
+The screen's own export at 14:37 CT had four more invoices, INV0000180-183 (11,950
+units, $49,721.50 on 40200), that SQL Development lacked. So SQL Development is a
+copy that refreshed around 11:00 CT, not live. A CSV export from it
+(`scripts/plex_web_export.py`) is current only to that point.
+
+**The screen's Grand Total columns** are quantity, account 40200, account 41000 and
+revenue (40200 + 41000). The 11-06 total was 260,951 units, $701,857.17, -$1,765.80
+and $700,091.37. The -$1,765.80 is one line: INV0000180, Go-Live Temp part 14535 to
+CHAM1, $1,962.00 on 40200 and -$1,765.80 on 41000.
+
+## Recovery (2026-11-08) and retiring the screens
+
+**Timeline (prod dispatches, Mountain time):**
+
+| Day | Success | Failed | Held by breaker |
+|---|---|---|---|
+| 11-05 | 2 | 29 | 9 |
+| 11-06 | 13 | 75 | 9 |
+| 11-07 | 9 | 58 | 14 |
+| 11-08 | 13 (all from 04:45) | 9 (all before 04:45) | 0 |
+| 11-09 to 07:30 | 14 of 14 (4 AM full batch) | 0 | 0 |
+
+- The last bad run was 11-08 11:43 UTC (04:43 MT). From 04:45 MT every run succeeded:
+  the 4 AM full batch, the 1 PM and 6 PM probe batches, and the whole 4 AM full batch of
+  11-09.
+- `PlexOps.odbc_health` turned `odbc_stable` (2 clean runs, the first 6+ h old) on 11-08
+  around 10:45 MT. On 11-09 07:40 MT it read 64 clean runs over 26.9 h.
+- Plex did not tell us what changed. The probe from AWS on 11-06 21:25-21:41 UTC
+  already showed logins answering again (8 of 9), only slowly.
+
+**What switched back by itself (11-08),** as designed: `shipping_revenue_report` (so
+the revenue summary and the scorecard Revenue tile) and `part_production_current` (the
+production reports) both read `data_source = 'odbc'` on 11-08 evening. ODBC held all 308
+screen shippers (newest SH00243) and all 403 screen order releases.
+
+**Label Design, assessed 2026-11-09 07:40 MT:**
+- Its own job runs only Mon-Fri 05:00-17:45 MT, so its first chance was 11-09 05:00.
+  All 11 runs from 05:00 to 07:30 succeeded: the first ran in full (the last run that
+  did work had failed), the rest ended `skipped` because their change probe found
+  nothing new.
+- **ODBC and the screens give the same report.** The view's SQL run twice, once forced
+  to each source: 68 lines each, the same 68 `dedupe_key`s, every field equal except
+  `job_note` on 5 lines (`''` from ODBC, `NULL` from the screens). The push matches on
+  `dedupe_key` and only creates new items, so this changes nothing on Monday. The BDM gap
+  (orders created after the freeze had no BDM from the screens) is gone on ODBC.
+- **The push ran three times** (05:02, 06:04, 07:04 MT): the first from the ETL, the next
+  two from the laptop task. All found nothing new. The laptop kept starting it because
+  its gate 2 counted only `success`/`partial` as "the ETL reached Plex", and a healthy run
+  whose change probe found nothing ends `skipped`. Fixed in `plex_live_screens.py` on
+  11-09 (a `skipped` run counts unless its detail starts "Held"). The fix reaches the
+  laptop only after merge and `git pull` in the primary folder; disabling the task makes
+  that moot for now.
+
+**What we changed so the next one is shorter (2026-11-09):**
+- The ETL now emails "ACTION NEEDED: Plex ODBC failing for 6 h, start the live
+  screens" once ODBC has failed in every one of 6 hours (OPERATIONS.md, breaker
+  section). On this log it would have fired 11-04 17:20 MT, about a day before the
+  screens were started by hand.
+- The screen task's push gate steps aside for a healthy ETL whose change probe skips.
+- The probe and the SQL Development checks are written up in
+  [PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md).
+
+**To finish:** disable the task on the laptop (`Disable-ScheduledTask -TaskName "Plex live
+screens"`). Three hours later `label_design_report` reads `data_source = 'odbc'` with no
+deploy. Then D30 closes; D20 closes on 11-15 if no `held-outage` rows appear.
+

@@ -905,3 +905,100 @@ def send_push_alert(alert: Dict[str, object]) -> bool:
     subject, html_content, text_content = render_push_alert(alert)
     _send(config, subject, html_content, text_content)
     return True
+
+
+# ── "Start the live screens" alert (2026-11-09) ───────────────────────────────
+# Sent by main.maybe_send_screens_alert when Plex's prod ODBC has failed in
+# every one of the last 6 hours. Its own subject, so it does not thread with
+# (or drown in) the routine failure emails; at most once a day.
+SCREENS_TASK = "Plex live screens"
+SCREENS_RUNBOOK = ("https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/"
+                   "docs/PLEX_SCREEN_EXTRACTION.md")
+
+
+def _local_stamp(value, zone: ZoneInfo) -> str:
+    """'Mon 11-09 14:05 MT'-style local time, or 'never'."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if not isinstance(value, datetime):
+        return "never"
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ZoneInfo("UTC"))
+    local = value.astimezone(zone)
+    return local.strftime("%a %m-%d %H:%M ") + (local.tzname() or "")
+
+
+def render_screens_alert(alert: Dict[str, object]):
+    """(subject, html, text) for the live-screens alert."""
+    zone = ZoneInfo(os.environ.get("REPORT_TIME_ZONE", "America/Denver"))
+    hours = int(alert.get("hours") or 6)
+    downs, ups = int(alert.get("downs") or 0), int(alert.get("ups") or 0)
+    first_down = _local_stamp(alert.get("first_down"), zone)
+    last_ok = _local_stamp(alert.get("last_ok"), zone)
+    screens_at = _local_stamp(alert.get("screens_at"), zone)
+    today = datetime.now(zone).strftime("%Y-%m-%d")
+    summary = (f"Plex's production ODBC has failed in every one of the last {hours} hours: "
+               f"{downs} runs could not reach Plex (or were held by the outage breaker) and {ups} got "
+               f"through. The last run that reached Plex finished {last_ok}. Until ODBC is back, the "
+               f"reports keep their last good data and Label Design gets no new lines. Plex's own screens "
+               f"usually keep working: start the live-screens task so revenue, production and Label "
+               f"Design read from them.")
+    steps = [
+        ("On the Windows laptop (logged in, awake, on the network), open PowerShell and run:",
+         f'Enable-ScheduledTask -TaskName "{SCREENS_TASK}"; Start-ScheduledTask -TaskName "{SCREENS_TASK}"'),
+        ("After about 10 minutes, check the end of the log: each run ends with \"exit 0\".",
+         r"Get-Content C:\F\Parasol\plex-to-big-query\etl-manual\live_screens.log -Tail 20"),
+        ("Then confirm Label Design reads the screens (data_source = live) in BigQuery:",
+         "SELECT data_source, COUNT(*) FROM `voxdatalake.PlexProd.label_design_report` GROUP BY 1"),
+        ("Revenue and production switch to the screens by themselves while ODBC is unhealthy. "
+         "Tell Plex support (customercare@plex.com) the time it started.", ""),
+        ("When ODBC is back (SELECT * FROM `voxdatalake.PlexOps.odbc_health` shows odbc_stable = true, "
+         "and Label Design runs succeed on a weekday), stop the task:",
+         f'Disable-ScheduledTask -TaskName "{SCREENS_TASK}"'),
+    ]
+    lis = "".join(
+        f"<li>{html.escape(text)}" + (f'<span class="what mono">{html.escape(cmd)}</span>' if cmd else "") + "</li>"
+        for text, cmd in steps)
+    actions_html = f'<p class="health-title"><b>What to do</b></p><ol class="actions">{lis}</ol>'
+    detail = str(alert.get("detail") or "")
+    context = {
+        "alert_date": today,
+        "gcp_project": str(alert.get("gcp_project", "")),
+        "bq_dataset": str(alert.get("bq_dataset", "")),
+        "hours": str(hours),
+        "downs": str(downs),
+        "ups": str(ups),
+        "first_down": first_down,
+        "last_ok": last_ok,
+        "screens_at": screens_at,
+        "summary": summary,
+        "actions_html": actions_html,
+        "detail": detail[:500],
+        "job_name": str(alert.get("job_name") or "?"),
+        "execution_name": str(alert.get("execution_name") or "local"),
+        "runbook_url": SCREENS_RUNBOOK,
+        "company_name": os.environ.get("COMPANY_NAME", "Vox Nutrition"),
+    }
+    html_content = _render_template(_load_template("odbc_screens_alert.html"), context)
+    text = [f"Plex ODBC failing for {hours} h: start the live screens — {today}", "", summary, "",
+            f"First failure in the window: {first_down}", f"Last run that reached Plex: {last_ok}",
+            f"Live screens last loaded: {screens_at}", "", "What to do:"]
+    for i, (step, cmd) in enumerate(steps, 1):
+        text.append(f"{i}. {step}")
+        if cmd:
+            text.append(f"   {cmd}")
+    text += ["", f"Last error ({context['job_name']}): {detail[:500]}", f"Runbook: {SCREENS_RUNBOOK}"]
+    subject = f"[Plex ETL] - ACTION NEEDED: Plex ODBC failing for {hours} h, start the live screens — {today}"
+    return subject, html_content, "\n".join(text) + "\n"
+
+
+def send_screens_alert(alert: Dict[str, object]) -> bool:
+    config = _sendgrid_config()
+    if config is None:
+        return False
+    subject, html_content, text_content = render_screens_alert(alert)
+    _send(config, subject, html_content, text_content)
+    return True

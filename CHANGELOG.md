@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-09 (dev) - Write a customer's Note through the Plex screen
+
+- **Added** `scripts/plex_customer_note.py`: reads or sets a customer's Note on the
+  Customer Details screen with the screen task's Playwright login and lock, reloads and
+  reads the value back, and refuses to replace a non-empty note without `--overwrite`.
+  The REST Customers API ignores `note` on update (test tenant, AEREL: 200, note still
+  empty). First use: production, 101 Via Imports (808258), `PLACEHOLDER`, verified.
+  Not deployed; run by hand. Docs: PLEX_SCREEN_EXTRACTION.md, "Related: writing a
+  customer note".
+
 ## 2026-11-09 - "Start the live screens" alert after 6 h of failing ODBC
 
 - **Added** a distinct email, `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h,

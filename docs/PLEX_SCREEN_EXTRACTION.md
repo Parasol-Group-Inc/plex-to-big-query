@@ -30,6 +30,7 @@
 - [Troubleshooting](#troubleshooting)
 - [Starting it for an outage](#starting-it-for-an-outage)
 - [Retiring it when ODBC returns](#retiring-it-when-odbc-returns)
+- [Related: writing a customer note](#related-writing-a-customer-note-plex_customer_notepy)
 - [Related: the SQL Development Environment export](#related-the-sql-development-environment-export)
 - [Security](#security)
 
@@ -468,6 +469,29 @@ The ETL is back when `PlexOps.etl_dispatch_log` shows prod runs succeeding and
    - close OPEN_ITEMS D30.
 
    Keeping the branch costs nothing and makes a future outage a matter of re-enabling the task.
+
+## Related: writing a customer note (`plex_customer_note.py`)
+
+`scripts/plex_customer_note.py` sets a customer's **Note** (Customer Details screen,
+Contact Information section, `textarea[name="Note"]`) through the same login and lock.
+- **Why the screen, not the API:** `PUT /mdm/v1/customers/{id}` with `note` on a
+  test-tenant customer that had no note (AEREL, 2026-11-09) returned 200 and stamped
+  the record modified, but the note stayed empty. Reads of `note` work.
+- **How:** opens `SalesAndCRM/customeraddresses?__sk=3&__sak=23&CustomerNo=<no>`, clicks
+  the "Customer Details" side tab, reads the note, types the text, clicks Apply, then
+  reloads and reads it back. It refuses to replace a note that is not empty unless
+  `--overwrite`. Screenshots go to `etl-manual/customer_note/` (gitignored). In a headless
+  screenshot the Note box draws blank even when filled; trust the read-back.
+- **First use:** 2026-11-09, production, 101 Via Imports (808258): `PLACEHOLDER` written
+  and read back; Plex shows "Updated 11/9/2026 10:26 AM, Dominguez, Emilio".
+
+```bash
+python scripts/plex_customer_note.py 808258                        # read only
+python scripts/plex_customer_note.py 808258 --set "PLACEHOLDER"    # write if empty
+```
+
+Needs `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD` in `.env` and Playwright with
+Chromium (`pip install playwright` then `python -m playwright install chromium`).
 
 ## Related: the SQL Development Environment export
 

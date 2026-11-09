@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-09 (dev) - ODBC recovered; screen stopgap retiring; probe documented
+
+- **Fixed** `scripts/plex_live_screens.py`, push gate 2: a `skipped` Label Design run
+  (its change probe found nothing new) now counts as the ETL reaching Plex, unless its
+  detail starts "Held" (held by the outage breaker). Before, only `success`/`partial`
+  counted, so after ODBC recovered the laptop task kept starting
+  `plex-etl-label-design-push` every hour (05:02, 06:04, 07:04 MT on 11-09; all found
+  nothing new). Reaches the laptop only after merge and `git pull` in the primary folder.
+- **Docs:** `docs/PLEX_ODBC_PROBE.md` (new) explains the ODBC probe: steps, deadlines,
+  why each runs on a thread, how to read and run it, and the two SQL Development checks.
+  The incident doc has a "Recovery" section (prod back 11-08 ~04:45 MT; Label Design
+  identical on ODBC and the screens). Runbook, OPEN_ITEMS D20/D30 and CLAUDE.md updated.
+
 ## 2026-11-06 (dev) - Plex ODBC probe for the D20 case
 
 - **Added** `scripts/plex_odbc_probe.py`: per host (prod, test) it times DNS, a bare

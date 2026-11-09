@@ -5,6 +5,11 @@
 > laptop loads three Plex screens into `PlexProd.live_*`. `label_design_report` reads
 > one of them while it is fresh, and the task starts the Monday push.
 > **Retire it when ODBC is back** (see [Retiring it](#retiring-it-when-odbc-returns)).
+>
+> **Status (2026-11-09): ODBC is back (since 11-08 ~04:45 MT); retiring.** Revenue and
+> production went back to ODBC by themselves on 11-08. Label Design's ETL runs succeed
+> again, and ODBC gives exactly the same 68 lines as the screens. Last step: disable the
+> laptop task. The tables and the live branches stay, for the next outage.
 > Open item: OPEN_ITEMS **D30**. Incident: [PLEX_PROD_ODBC_INCIDENT_2026-11-04.md](PLEX_PROD_ODBC_INCIDENT_2026-11-04.md).
 
 ## Contents
@@ -280,6 +285,8 @@ held, `plex_live_screens.py` starts the push after a good releases load, but onl
 1. Mon-Fri, 05:00-17:50 Mountain. The 6:05 PM sweep is separate; two pushes at once would
    both create the same item.
 2. The newest prod `label_design` run in the last 40 minutes is **not** success/partial.
+   A `skipped` run counts as reaching Plex too, unless its detail starts "Held" (since
+   2026-11-09).
    Once ODBC is back, the ETL pushes, and this steps aside without anyone touching it.
 3. `label_design_report` returns `data_source = 'live'` only.
 4. No execution of the push job is still running (Cloud Run executions list).
@@ -388,6 +395,17 @@ first if the restore has to stick: `Disable-ScheduledTask -TaskName "Plex live s
 | Task result `0x41306` / run killed | The run hit the 50-minute limit. Look at the log for the slow step. |
 
 ## Retiring it when ODBC returns
+
+**Done 2026-11-09** (assessment in the incident doc, "Recovery"): step 1 checked; steps 2 and 3
+(disable the task, then confirm `odbc`) remain. Lessons for next time:
+- Revenue and production switch on `odbc_health`, so they need 6 h of clean runs and
+  come back on any day. Label Design switches on the task stopping, and its own ETL runs
+  only Mon-Fri, so check it on the first weekday after recovery.
+- To compare the two sources before switching, run `label_design_view.sql` twice with
+  `use_live` forced to `TRUE` and to `FALSE`, and compare on `dedupe_key`. On 11-09 they
+  differed only in empty vs NULL `job_note`.
+- Gate 2 of the push used to miss `skipped` runs (a healthy ETL whose change probe found
+  nothing), so the task kept starting the push every hour after recovery. Fixed 11-09.
 
 The ETL is back when `PlexOps.etl_dispatch_log` shows prod runs succeeding and
 `label_design` runs in `job_run_log` read `success` again.

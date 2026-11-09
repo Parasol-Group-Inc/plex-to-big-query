@@ -327,6 +327,10 @@ falls back to ODBC by itself; the task also starts the Monday push, gated so it
 steps aside once the ETL runs again. One Plex web run at a time: an OS lock on
 `etl-manual/plex_web.lock`, exit 75 if held. Runbook, retirement and restore:
 `docs/PLEX_SCREEN_EXTRACTION.md`; OPEN_ITEMS D30.
+**ODBC recovered 2026-11-08 ~04:45 MT;** revenue and production switched back by
+themselves, Label Design matched ODBC on 11-09, and the task is being disabled.
+The tables and live branches stay for the next outage. To tell our side from
+Plex's in one, run `scripts/plex_odbc_probe.py` (`docs/PLEX_ODBC_PROBE.md`).
 
 ## Job naming
 

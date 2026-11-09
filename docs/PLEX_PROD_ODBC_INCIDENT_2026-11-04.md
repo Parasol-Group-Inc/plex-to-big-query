@@ -1,4 +1,11 @@
-# Plex prod ODBC degradation and outage, 2026-11-02 → 2026-11-05
+# Plex prod ODBC degradation and outage, 2026-11-02 → 2026-11-08
+
+> **Recovered 2026-11-08 ~04:45 MT.** Every prod run since has succeeded, and
+> `PlexOps.odbc_health` has been stable since 11-08 11:47 UTC. Revenue and the production
+> reports went back to ODBC by themselves on 11-08; Label Design matched ODBC exactly on
+> 11-09 and the screen stopgap is being retired. See [Recovery](#recovery-2026-11-08-and-retiring-the-screens).
+> D20 closes after a week with no `held-outage` rows (2026-11-15). The probe used for
+> the evidence: [PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md).
 
 *Written 2026-11-05 ~02:30 UTC (2026-11-04 evening MT), while the outage was still
 open. Continues OPEN_ITEMS **D20** (Plex prod ODBC refuses sessions, since
@@ -388,3 +395,51 @@ copy that refreshed around 11:00 CT, not live. A CSV export from it
 revenue (40200 + 41000). The 11-06 total was 260,951 units, $701,857.17, -$1,765.80
 and $700,091.37. The -$1,765.80 is one line: INV0000180, Go-Live Temp part 14535 to
 CHAM1, $1,962.00 on 40200 and -$1,765.80 on 41000.
+
+## Recovery (2026-11-08) and retiring the screens
+
+**Timeline (prod dispatches, Mountain time):**
+
+| Day | Success | Failed | Held by breaker |
+|---|---|---|---|
+| 11-05 | 2 | 29 | 9 |
+| 11-06 | 13 | 75 | 9 |
+| 11-07 | 9 | 58 | 14 |
+| 11-08 | 13 (all from 04:45) | 9 (all before 04:45) | 0 |
+| 11-09 to 07:30 | 14 of 14 (4 AM full batch) | 0 | 0 |
+
+- The last bad run was 11-08 11:43 UTC (04:43 MT). From 04:45 MT every run succeeded:
+  the 4 AM full batch, the 1 PM and 6 PM probe batches, and the whole 4 AM full batch of
+  11-09.
+- `PlexOps.odbc_health` turned `odbc_stable` (2 clean runs, the first 6+ h old) on 11-08
+  around 10:45 MT. On 11-09 07:40 MT it read 64 clean runs over 26.9 h.
+- Plex did not tell us what changed. The probe from AWS on 11-06 21:25-21:41 UTC
+  already showed logins answering again (8 of 9), only slowly.
+
+**What switched back by itself (11-08),** as designed: `shipping_revenue_report` (so
+the revenue summary and the scorecard Revenue tile) and `part_production_current` (the
+production reports) both read `data_source = 'odbc'` on 11-08 evening. ODBC held all 308
+screen shippers (newest SH00243) and all 403 screen order releases.
+
+**Label Design, assessed 2026-11-09 07:40 MT:**
+- Its own job runs only Mon-Fri 05:00-17:45 MT, so its first chance was 11-09 05:00.
+  All 11 runs from 05:00 to 07:30 succeeded: the first ran in full (the last run that
+  did work had failed), the rest ended `skipped` because their change probe found
+  nothing new.
+- **ODBC and the screens give the same report.** The view's SQL run twice, once forced
+  to each source: 68 lines each, the same 68 `dedupe_key`s, every field equal except
+  `job_note` on 5 lines (`''` from ODBC, `NULL` from the screens). The push matches on
+  `dedupe_key` and only creates new items, so this changes nothing on Monday. The BDM gap
+  (orders created after the freeze had no BDM from the screens) is gone on ODBC.
+- **The push ran three times** (05:02, 06:04, 07:04 MT): the first from the ETL, the next
+  two from the laptop task. All found nothing new. The laptop kept starting it because
+  its gate 2 counted only `success`/`partial` as "the ETL reached Plex", and a healthy run
+  whose change probe found nothing ends `skipped`. Fixed in `plex_live_screens.py` on
+  11-09 (a `skipped` run counts unless its detail starts "Held"). The fix reaches the
+  laptop only after merge and `git pull` in the primary folder; disabling the task makes
+  that moot for now.
+
+**To finish:** disable the task on the laptop (`Disable-ScheduledTask -TaskName "Plex live
+screens"`). Three hours later `label_design_report` reads `data_source = 'odbc'` with no
+deploy. Then D30 closes; D20 closes on 11-15 if no `held-outage` rows appear.
+

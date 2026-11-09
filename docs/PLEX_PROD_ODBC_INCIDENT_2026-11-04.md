@@ -439,6 +439,15 @@ screen shippers (newest SH00243) and all 403 screen order releases.
   laptop only after merge and `git pull` in the primary folder; disabling the task makes
   that moot for now.
 
+**What we changed so the next one is shorter (2026-11-09):**
+- The ETL now emails "ACTION NEEDED: Plex ODBC failing for 6 h, start the live
+  screens" once ODBC has failed in every one of 6 hours (OPERATIONS.md, breaker
+  section). On this log it would have fired 11-04 17:20 MT, about a day before the
+  screens were started by hand.
+- The screen task's push gate steps aside for a healthy ETL whose change probe skips.
+- The probe and the SQL Development checks are written up in
+  [PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md).
+
 **To finish:** disable the task on the laptop (`Disable-ScheduledTask -TaskName "Plex live
 screens"`). Three hours later `label_design_report` reads `data_source = 'odbc'` with no
 deploy. Then D30 closes; D20 closes on 11-15 if no `held-outage` rows appear.

@@ -602,6 +602,17 @@ PUSH_REGION = "us-central1"
 PUSH_WINDOW = (dt.time(5, 0), dt.time(17, 50))
 
 
+def etl_reached_plex(status, detail):
+    """Gate 2: did this label_design run reach Plex? success/partial did. So did a
+    'skipped' run: its change probe asked Plex and found nothing new. Only a skip
+    the outage breaker made (detail "Held — Plex outage breaker open ...") did not.
+    Until 2026-11-09 only success/partial counted, so after ODBC recovered a healthy
+    ETL whose probe kept skipping left this task starting the push every hour."""
+    if status in ("success", "partial"):
+        return True
+    return status == "skipped" and not (detail or "").startswith("Held")
+
+
 def maybe_start_push(c):
     """Start the Label Design push if every gate above passes. Returns what it did."""
     now = dt.datetime.now(DEN)
@@ -612,12 +623,7 @@ def maybe_start_push(c):
         WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
           AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 40 MINUTE)
         ORDER BY started_at DESC LIMIT 1""").result())
-    # A 'skipped' run reached Plex too (its change probe found nothing new), unless the
-    # outage breaker held it: those carry detail "Held — Plex outage breaker open ...".
-    # Until 2026-11-09 only success/partial counted, so a healthy ETL whose probe kept
-    # skipping left this task starting the push every hour.
-    if etl and (etl[0].status in ("success", "partial")
-                or (etl[0].status == "skipped" and not (etl[0].detail or "").startswith("Held"))):
+    if etl and etl_reached_plex(etl[0].status, etl[0].detail):
         return f"push not started: the ETL reached Plex at {etl[0].started_at:%H:%M} UTC and starts the push itself"
     src = list(c.query(f"SELECT ARRAY_AGG(DISTINCT data_source) s FROM `{PROJECT}.PlexProd.label_design_report`").result())[0].s
     if src != ["live"]:

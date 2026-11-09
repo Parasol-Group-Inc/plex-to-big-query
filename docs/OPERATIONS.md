@@ -700,13 +700,35 @@ log shows failures since the last good run, which closes the streak without a
 row every 15 minutes. Its Cloud Run `max_retries` is 0: the retry used to hit a
 down Plex twice per run, and the next 15-minute run is the retry.
 
+**A long outage mails "start the live screens"** (since 2026-11-09). The
+breaker mails once, when it opens, and a day-long outage then looks like a
+short one. So when a prod run fails to connect, `main.py`
+(`maybe_send_screens_alert`) also reads this log: if ODBC failed in **every one
+of the last 6 hours** (`SCREENS_ALERT_HOURS`) and fewer than a quarter of the
+runs reached Plex (`SCREENS_ALERT_MAX_UP_SHARE`), it sends one email with its own
+subject, `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h, start the live
+screens — <date>`, with the PowerShell to start the task
+([PLEX_SCREEN_EXTRACTION.md](PLEX_SCREEN_EXTRACTION.md)).
+- "Failed" is `odbc_health`'s bad: `held-outage`, `lost`, a failed connect, or a
+  run Cloud Run killed. A share, not "breaker open for 6 h": on 11-06 a canary
+  connected now and then, closing the breaker, while almost every run failed.
+- At most once per 24 h (`SCREENS_ALERT_REPEAT_HOURS`): the email is logged here
+  as `reason = 'screens-alert'`, `outcome = 'alert'`, which nothing else reads
+  (no Plex evidence, no follow-up, never busy).
+- Not sent while the screens already load (`live_order_releases` under 2 h old),
+  from test, or for failures of another kind.
+- Backtest on this log (10-20 → 11-09): it would have fired 10-25 18:05 MT and
+  11-04 17:20 MT (then 11-05 18:40 MT), and on no normal day.
+
 **Is Plex down right now?**
 ```sql
 SELECT job_name, reason, outcome, dispatched_at, detail
 FROM `voxdatalake.PlexOps.etl_dispatch_log`
-WHERE reason IN ('canary', 'recovery') OR outcome = 'held-outage'
+WHERE reason IN ('canary', 'recovery', 'screens-alert') OR outcome = 'held-outage'
 ORDER BY dispatched_at DESC LIMIT 30;
 ```
+Or in one row: `SELECT * FROM voxdatalake.PlexOps.odbc_health`. To tell our
+side from Plex's, run the ODBC probe ([PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md)).
 
 **Connect deadline (the job side).** Each Plex connect gets 60 s wall-clock
 (`CONNECT_DEADLINE_SECONDS`), 3 attempts (`CONNECT_ATTEMPTS`), backoff 20 s

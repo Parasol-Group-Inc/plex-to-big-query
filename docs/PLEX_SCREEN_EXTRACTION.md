@@ -6,10 +6,11 @@
 > one of them while it is fresh, and the task starts the Monday push.
 > **Retire it when ODBC is back** (see [Retiring it](#retiring-it-when-odbc-returns)).
 >
-> **Status (2026-11-09): ODBC is back (since 11-08 ~04:45 MT); retiring.** Revenue and
-> production went back to ODBC by themselves on 11-08. Label Design's ETL runs succeed
-> again, and ODBC gives exactly the same 68 lines as the screens. Last step: disable the
-> laptop task. The tables and the live branches stay, for the next outage.
+> **Status (2026-11-09): retired, ready to restart.** ODBC is back since 11-08 ~04:45 MT;
+> revenue and production went back to ODBC by themselves on 11-08, Label Design matched
+> ODBC exactly on 11-09, and the laptop task is disabled. The tables and the live
+> branches stay. **Next outage:** the ETL emails "ACTION NEEDED: Plex ODBC failing for
+> 6 h, start the live screens"; then follow [Starting it](#starting-it-for-an-outage).
 > Open item: OPEN_ITEMS **D30**. Incident: [PLEX_PROD_ODBC_INCIDENT_2026-11-04.md](PLEX_PROD_ODBC_INCIDENT_2026-11-04.md).
 
 ## Contents
@@ -27,6 +28,7 @@
 - [Changing it](#changing-it)
 - [Restoring a table](#restoring-a-table)
 - [Troubleshooting](#troubleshooting)
+- [Starting it for an outage](#starting-it-for-an-outage)
 - [Retiring it when ODBC returns](#retiring-it-when-odbc-returns)
 - [Related: the SQL Development Environment export](#related-the-sql-development-environment-export)
 - [Security](#security)
@@ -394,10 +396,50 @@ first if the restore has to stick: `Disable-ScheduledTask -TaskName "Plex live s
 | `push: FAILED TO START: 403` | The laptop's ADC account lacks `run.jobs.run` on the push job. Run `gcloud auth application-default login` as a user who has it. |
 | Task result `0x41306` / run killed | The run hit the 50-minute limit. Look at the log for the slow step. |
 
+## Starting it for an outage
+
+**When:** the ETL sends `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h, start
+the live screens` (since 2026-11-09), once ODBC has failed in every one of the last 6
+hours and fewer than a quarter of the runs reached Plex. The rule and its backtest are
+in [OPERATIONS.md](OPERATIONS.md#plex-outages-breaker-canary-recovery-since-2026-10-22).
+It repeats at most daily and stays quiet while the screens already load. To check by
+hand: `SELECT * FROM voxdatalake.PlexOps.odbc_health` (`odbc_stable = false` for hours)
+and the probe ([PLEX_ODBC_PROBE.md](PLEX_ODBC_PROBE.md)).
+
+**On the Windows laptop** (logged in, awake, on the network), in PowerShell:
+
+```powershell
+cd C:\F\Parasol\plex-to-big-query
+git pull
+Enable-ScheduledTask -TaskName "Plex live screens"
+Start-ScheduledTask -TaskName "Plex live screens"
+```
+
+`git pull` first: the task runs the primary folder's copy. Then, after about 10 minutes:
+
+```powershell
+Get-Content C:\F\Parasol\plex-to-big-query\etl-manual\live_screens.log -Tail 20
+Get-ScheduledTaskInfo -TaskName "Plex live screens"
+```
+
+The log's last run should end `exit 0`, and `LastTaskResult` should be `0`. Then in
+BigQuery `SELECT data_source, COUNT(*) FROM voxdatalake.PlexProd.label_design_report
+GROUP BY 1` gives `live`. Revenue and production switch on `odbc_health` by themselves.
+If the Plex login fails, see [Troubleshooting](#troubleshooting). Tell Plex support
+(customercare@plex.com) when it started, with probe output.
+
 ## Retiring it when ODBC returns
 
-**Done 2026-11-09** (assessment in the incident doc, "Recovery"): step 1 checked; steps 2 and 3
-(disable the task, then confirm `odbc`) remain. Lessons for next time:
+**Done 2026-11-09** (assessment in the incident doc, "Recovery"). Disable it from
+PowerShell on the laptop, and check:
+
+```powershell
+Disable-ScheduledTask -TaskName "Plex live screens"
+Get-ScheduledTask -TaskName "Plex live screens" | Select-Object TaskName, State
+```
+
+`State` should read `Disabled`. A run already under way finishes; nothing else is
+needed. Lessons for next time:
 - Revenue and production switch on `odbc_health`, so they need 6 h of clean runs and
   come back on any day. Label Design switches on the task stopping, and its own ETL runs
   only Mon-Fri, so check it on the first weekday after recovery.

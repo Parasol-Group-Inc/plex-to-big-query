@@ -14,6 +14,27 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-09 - "Start the live screens" alert after 6 h of failing ODBC
+
+- **Added** a distinct email, `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h,
+  start the live screens — <date>` (`maybe_send_screens_alert` in `main.py`,
+  `render_screens_alert` in `email_utils.py`, `templates/odbc_screens_alert.html`).
+  A prod run that fails to connect reads `PlexOps.etl_dispatch_log`: when ODBC failed in
+  every one of the last 6 hours (`odbc_health`'s bad: held, lost, failed connect, killed
+  run) and fewer than a quarter of runs reached Plex, it mails the steps to start the
+  laptop task, with the counts, the last good run and when the screens last loaded.
+  At most once per 24 h, recorded as an inert log row (`reason = 'screens-alert'`,
+  `outcome = 'alert'`); not sent while the screens already load (under 2 h), from test,
+  or for failures of another kind. Never raises. Backtest on the log: 10-25 18:05 MT and
+  11-04 17:20 MT, no normal day. Tunable: `SCREENS_ALERT_HOURS`,
+  `SCREENS_ALERT_MAX_UP_SHARE`, `SCREENS_ALERT_REPEAT_HOURS`.
+- **Changed** `scripts/plex_live_screens.py`: gate 2's decision is `etl_reached_plex()`,
+  now tested.
+- **Tests:** `tests/test_screens_alert.py` (14). Full suite 134 passed.
+- **Docs:** OPERATIONS.md (breaker section), PLEX_SCREEN_EXTRACTION.md ("Starting it for
+  an outage", disabling from PowerShell, status: retired), incident doc, CLAUDE.md,
+  OPEN_ITEMS D30. Ships with Cloud Build (code), no Terraform change.
+
 ## 2026-11-09 (dev) - ODBC recovered; screen stopgap retiring; probe documented
 
 - **Fixed** `scripts/plex_live_screens.py`, push gate 2: a `skipped` Label Design run

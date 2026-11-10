@@ -36,7 +36,7 @@
 --     uses it. Weights, Production_Value, Log_Key and the like are NULL.
 
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
 -- disagrees. Since 2026-11-10 (Emilio) production is NOT compared: live_source has no
 -- 'production' row, so this view stays on ODBC. Re-adding the production screen to
@@ -58,7 +58,7 @@ WITH live_switch AS (
       AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
                   WHERE ls.report_group = 'production'), FALSE)
       AND IFNULL((SELECT MAX(l.loaded_at) FROM `{gcp_project}.PlexProd.live_production` l)
-                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS use_live
 ),
 
 job_ops AS (

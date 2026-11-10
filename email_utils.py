@@ -700,15 +700,15 @@ def _digest_health(health: Dict[str, object], zone: ZoneInfo):
         items.append((html.escape(msg), msg))
     # Report groups reading the Plex screens, or on old ODBC data in work hours
     # (PlexOps.data_freshness, 2026-11-10).
-    local_now = datetime.now(zone)
-    work = local_now.weekday() < 5 and 9 <= local_now.hour < 17
     for r in health.get("sources") or []:
         group = str(r.get("report_group", "")).replace("_", " ")
         age = r.get("age_min")
         if r.get("data_source") == "live":
             msg = f"{group}: reading the Plex screens because ODBC is behind ({r.get('data_label')})"
-        elif work and age is not None and age >= int(health.get("stale_minutes") or 120):
-            msg = f"{group}: ODBC data is {age / 60:.1f} h old ({r.get('data_label')})"
+        elif age is not None and age >= int(health.get("stale_minutes") or 120):
+            # measured by the screens check (ODBC vs the screens), not by record age:
+            # a quiet hour in Plex is not a stale feed
+            msg = f"{group}: ODBC was {age / 60:.1f} h behind Plex's screens at the last check ({r.get('data_label')})"
         else:
             continue
         items.append((html.escape(msg), msg))

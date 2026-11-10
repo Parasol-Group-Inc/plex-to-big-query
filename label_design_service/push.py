@@ -249,7 +249,7 @@ COLUMNS = [
     ("Allergen", "text", _text("part_allergen")),
     ("LCR", "text", _text("_lcr")),
     # 2026-11-10: where this line came from and how current it was when pushed,
-    # e.g. "ODBC, data to 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT"
+    # e.g. "ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT"
     # (label_design_report.data_label, from PlexOps.data_freshness). A plain text
     # column "Data Source" on Plex Import Test and Design & QA, so a move keeps it.
     ("Data Source", "text", _text("data_label")),
@@ -334,6 +334,10 @@ def audited_lcrs(bq):
 
 def view_rows(bq):
     rows = [dict(r) for r in bq.query(f"SELECT * FROM `{GCP_PROJECT}.{BQ_DATASET}.{VIEW}`").result()]
+    # The view's own ORDER BY no longer orders its output (2026-11-10 source-label
+    # wrapper), so keep Monday's creation order: newest order date first.
+    rows.sort(key=lambda r: (str(r.get("order_number") or ""), str(r.get("customer_part_no") or "")))
+    rows.sort(key=lambda r: str(r.get("order_date") or ""), reverse=True)
     for r in rows:
         r["_lcr"] = lcr_hash(r["dedupe_key"])
     return rows

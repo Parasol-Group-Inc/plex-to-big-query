@@ -69,7 +69,7 @@
 -- line. One row per (Shipper_Line_Key, Invoice_Link) is now kept.
 
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
 -- disagrees, and empties the live table after 2 clean runs. It runs every 4 h, so the
 -- freshness backstop is 5 h: if the job stops, the view is back on ODBC within 5 h.

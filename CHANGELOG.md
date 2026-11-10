@@ -18,11 +18,12 @@ don't need an entry.
 
 - **Added: `PlexOps.data_freshness`** (Terraform view): per dataset and report group, `data_source`
   (odbc | live), `data_as_of` (ODBC: newest change delivered; live: when the screens were read) and
-  `data_label` ("ODBC, data to 11-10 11:56 MT"). Same rule as the views' switch.
-- **Changed: 17 report views** built on `label_design_report`, `shipping_revenue_report` or
+  `data_label` ("ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT"). Same rule as the views' switch.
+- **Changed: 16 report views** built on `label_design_report`, `shipping_revenue_report` or
   `part_production_current` (and those three) now end with `data_source`, `data_as_of`, `data_label`
   from that view (a wrapper around each unchanged query; `mfg_job_schedule_fg_testing_pending_report`
-  inherits them). Dry-run against PlexProd: 18/18 valid, no duplicate columns. Row order from a view's
+  inherits them; `approaching_msl_report` is not labeled: its inputs are inventory and orders, so the
+  production group's time would mislead). Dry-run against PlexProd: all valid, no duplicate columns. Row order from a view's
   `ORDER BY` is no longer guaranteed.
 - **Added: Monday "Data Source"** text column on Plex Import Test (`text_mm8z1nze`) and Design & QA
   (`text_mm8z55hw`); the push fills it with `data_label`.

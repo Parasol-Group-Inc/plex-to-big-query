@@ -33,7 +33,7 @@ Rolls up [`sales_revenue_summary_report`](sales_revenue_summary_report.md) per m
 |---|---|
 | `data_source` | `odbc` (Plex's database feed, the normal case) or `live` (read from Plex's own screens because the database feed was behind) |
 | `data_as_of` | for `odbc`, the newest change the feed had delivered; for `live`, when the screens were read |
-| `data_label` | the two in words, e.g. "ODBC, data to 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT" |
+| `data_label` | the two in words, e.g. "ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT" |
 
 They come from `PlexOps.data_freshness`, group **revenue and shipments**. An old `data_as_of` on a working day means the feed has stopped, even if every run succeeded (as on 2026-11-10). See [data_freshness.md](data_freshness.md).
 

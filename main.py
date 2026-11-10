@@ -1477,8 +1477,7 @@ def batch_health(bq: bigquery.Client) -> dict:
     # 2026-11-10: report groups on the Plex screens, or on ODBC data that is old.
     try:
         health["sources"] = [dict(r) for r in bq.query(f"""
-            SELECT report_group, data_source, data_label,
-                   TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), data_as_of, MINUTE) AS age_min
+            SELECT report_group, data_source, data_label, odbc_lag_min AS age_min
             FROM `{GCP_PROJECT}.PlexOps.data_freshness`
             WHERE dataset = @ds""", job_config=bigquery.QueryJobConfig(query_parameters=[
                 bigquery.ScalarQueryParameter("ds", "STRING", BQ_DATASET)])).result()]

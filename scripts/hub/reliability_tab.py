@@ -161,7 +161,8 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <li>Emilio gets one email per cause per day with what Plex showed and the fix. After fixing, run the job with <code>--force-login</code>.</li></ul></div>
 <div class="panel"><h3>MSL usage, changed 2026-11-10 (Jennilyn)</h3><ul class="plain">
 <li><b>NetSuite usage is held for 6 months.</b> Approaching MSL used to switch to Plex usage after 30 days of Plex history (about 11-16); now after 183 days, about 2027-04-18, and Plex is then averaged over the last 6 months. With 30 days, 240 parts would have switched on 3 weeks of data.</li>
-<li><b>New: usage by part by month</b> (<code>PlexProd.part_usage_monthly</code>): recorded on the 1st of each month for the month before, with the daily average, measured exactly like the MSL report (matches it on 506/506 parts). October 2026 is in (13 days from go-live).</li></ul></div></div>
+<li><b>New: usage by part by month</b> (<code>PlexProd.part_usage_monthly</code>): recorded on the 1st of each month for the month before, with the daily average, measured exactly like the MSL report (matches it on 506/506 parts). October 2026 is in (13 days from go-live).</li>
+<li><b>New: month to date</b> (<code>PlexProd.part_usage_month_to_date</code>): the same figures for the current month so far, through yesterday, updated daily. Both come from one function, <code>part_usage_for_month(month)</code>, so they always agree.</li></ul></div></div>
 <div class="block"><h2>Check it yourself</h2><pre class="code">{esc(QUERIES)}</pre></div>
 </div></section>{END}"""
 

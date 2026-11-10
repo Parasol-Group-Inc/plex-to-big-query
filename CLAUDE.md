@@ -275,7 +275,9 @@ example and check queries: `docs/BOM_DEMAND_NETTING.md`.
 - **MSL usage holds NetSuite for 6 months (since 2026-11-10, Jennilyn):** `usage_min_days` 183, and
   Plex usage is averaged over GREATEST(90, usage_min_days) days. Two defaults to keep in step: the view's
   `cfg` CTE and the manual-data app's `Code.gs` (an `msl_rules` row overrides both).
-- **`PlexProd.part_usage_monthly`** (scheduled query on the 1st, `terraform/part_usage_monthly.sql`):
+- **`PlexProd.part_usage_monthly`** (scheduled query on the 1st, `terraform/part_usage_monthly.sql`) and the
+  view **`part_usage_month_to_date`** (current month through yesterday) both call the table function
+  `part_usage_for_month(month)` (`terraform/part_usage_for_month.sql`): change the measurement there only.
   usage per part per month, the MSL method with production dated by its Mountain record date (the view's
   `DATE(Report_Date)` is a day early; harmless for its rolling sum, not for months). BigQuery-only data.
 - The `reports/plex_sql/` copies of available-to-sell and out-of-stock carry

@@ -14,6 +14,29 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - Stale ODBC data alert (Label Design missed order 675)
+
+- **Found:** Kelli reported Monday had received nothing. Plex's prod ODBC answered normally but
+  its data froze at ~08:10 MT and caught up at ~12:50 (then stalled again at 12:09 data). Order
+  675 (SALU1, Pending Fulfillment at 09:35) was invisible to ODBC, the Label Design probe reported
+  "unchanged" for 4.5 h, and every run succeeded. A hand run at 12:58 MT pushed its 4 lines to
+  "Plex Import Test"; the board then held all 63 Label Design lines on the screen. Nothing new had
+  entered Label Design between 11-06 and 11-10 otherwise.
+- **Added:** `check_odbc_freshness` in `main.py`. Every prod run logs how old the newest order
+  update, production record and shipper in ODBC are. On weekdays from 09:00 to 17:00 MT, 2 h or
+  more sends `[Plex ETL] - ACTION NEEDED: Plex ODBC data is N h old` (once per 24 h, `reason =
+  'stale-alert'` in `etl_dispatch_log`, not while the screens load). Template
+  `templates/odbc_stale_alert.html`, tests `tests/test_stale_alert.py`. Backtest: the longest normal
+  weekday gap is 48 min. Docs: OPERATIONS.md, PLEX_SCREEN_EXTRACTION.md, CLAUDE.md.
+
+## 2026-11-10 (docs) - ETL audit after the ODBC recovery
+
+- **Docs:** `docs/ETL_AUDIT_2026-11-10.md`. Runs, logs and data were checked by two independent
+  agents and against Plex's live screens. Healthy: 112/112 prod dispatches, 0 prod errors, every
+  rebuilt figure equals its view, and shippers, production, releases and invoiced revenue equal
+  Plex's screens. One divergence: the revenue report (quantity × price) is $1,898.08 above Plex's
+  invoiced November revenue. Proposed fixes in OPEN_ITEMS D32; nothing changed.
+
 ## 2026-11-10 - D30 closed: live screen tables backed up and emptied
 
 - **Fixed (data, no code):** `shipping_revenue_report` (and the scorecard Revenue tile) had gone back

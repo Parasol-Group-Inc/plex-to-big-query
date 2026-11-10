@@ -175,6 +175,11 @@ GROUP BY pg.Part_Group WITH ROLLUP
 ORDER BY GROUPING(pg.Part_Group), part_group;
 ```
 
+**Credit memos** (`Invoice_No` `CM…`, `Credit_Memo = 1`) have revenue lines with no
+`Shipper_Line_Key`: `shipped_revenue` leaves them out, `net_revenue` includes them. The screen
+shows them as negative lines under the original shipper (first one: CM0000001, 11-09, reversing
+INV0000161), so compare the screen with `net_revenue`.
+
 **The screen's Grand Total columns** are quantity, account 40200, account 41000 and
 Revenue (40200 + 41000). `net_revenue` above adds both accounts, so compare it with the
 screen's last column, not the 40200 one. On 11-06 the screen read 260,951 /

@@ -17,7 +17,7 @@ import yaml
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import bigquery, secretmanager, storage
 
-from email_utils import send_digest, send_report, send_screens_alert
+from email_utils import send_digest, send_report, send_screens_alert, send_stale_alert
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -992,6 +992,135 @@ def maybe_send_screens_alert(detail: str) -> bool:
         return sent
     except Exception:
         log.exception("Live-screens alert check failed.")
+        return False
+
+
+# ── Stale ODBC data alert (2026-11-10) ────────────────────────────────────────
+# On 11-10 Plex's prod ODBC kept answering logins and queries, but its data
+# stopped at ~08:10 MT and caught up at ~12:50 MT. Every run "succeeded"; the
+# Label Design probe saw no change for 4.5 h, so order 675 (Pending Fulfillment
+# at 09:35) reached Monday only after a hand run at 12:58. The breaker and the
+# screens alert above only see FAILED connects, so nothing noticed. Now every
+# prod run asks Plex for the newest order update, production record and shipper
+# (three tiny reads, filtered to the last 4 days) and logs how far behind the
+# newest of them is. On a weekday between 09:00 and 17:00 MT, a lag of
+# STALE_ALERT_MINUTES or more sends one "Plex ODBC data is stale" email a day
+# (reason 'stale-alert' rows in the dispatch log). Backtest 10-20 → 11-10: the
+# longest weekday gap between 08:00 and 17:00 in the real data is 48 min, so
+# 120 min never fires on a normal working day (a holiday can, once). Fails open:
+# any error here is logged and the run carries on.
+STALE_ALERT_MINUTES = int(os.environ.get("STALE_ALERT_MINUTES", "120"))
+STALE_CHECK_HOURS = (9, 17)              # MT, weekdays, [start, end)
+PLEX_TIME_ZONE = ZoneInfo("America/Denver")   # Plex returns naive MT datetimes
+_FRESHNESS_SQL = (
+    ("order update", "SELECT MAX(t.Update_Date) FROM Sales_v_PO AS t WHERE t.Update_Date >= '{since}'"),
+    ("production record", "SELECT MAX(t.Record_Date) FROM Part_v_Production AS t WHERE t.Record_Date >= '{since}'"),
+    ("shipper", "SELECT MAX(t.Add_Date) FROM Sales_v_Shipper AS t WHERE t.Add_Date >= '{since}'"),
+)
+
+
+def odbc_data_lag(newest: dict, now_local: datetime) -> Optional[float]:
+    """Minutes between now (naive MT) and the newest of the values, or None
+    when there is none. Values more than 10 min in the future (a hand-typed
+    date) are ignored."""
+    vals = [v for v in newest.values()
+            if isinstance(v, datetime) and v <= now_local + timedelta(minutes=10)]
+    if not vals:
+        return None
+    return round((now_local - max(vals)).total_seconds() / 60, 1)
+
+
+def stale_alert_due(lag_min: Optional[float], now_local: datetime,
+                    threshold: int = STALE_ALERT_MINUTES) -> bool:
+    """Weekday, 09:00-17:00 MT, and nothing newer than `threshold` minutes
+    (no value at all in 4 days counts as stale)."""
+    start, end = STALE_CHECK_HOURS
+    if now_local.weekday() >= 5 or not (start <= now_local.hour < end):
+        return False
+    return lag_min is None or lag_min >= threshold
+
+
+def check_odbc_freshness(conn, now_local: Optional[datetime] = None) -> Optional[float]:
+    """Prod only: log the ODBC data lag, alert when stale. Never raises.
+    now_local (naive MT) is for tests."""
+    if OUTPUT_MODE != "bigquery" or BQ_DATASET != "PlexProd":
+        return None
+    try:
+        now_local = now_local or datetime.now(PLEX_TIME_ZONE).replace(tzinfo=None)
+        since = (now_local - timedelta(days=4)).strftime("%Y-%m-%d")
+        newest = {}
+        for name, sql in _FRESHNESS_SQL:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(sql.format(since=since))
+                row = cursor.fetchone()
+                newest[name] = row[0] if row else None
+            finally:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+        lag = odbc_data_lag(newest, now_local)
+        shown = ", ".join(f"{k} {v:%m-%d %H:%M}" if isinstance(v, datetime) else f"{k} none"
+                          for k, v in newest.items())
+        log.info("ODBC data freshness (MT): %s; lag %s min.", shown,
+                 "n/a" if lag is None else lag)
+        if stale_alert_due(lag, now_local):
+            log.warning("Plex ODBC data looks stale: newest change %s min old.", lag)
+            maybe_send_stale_alert(lag, newest)
+        return lag
+    except Exception:
+        log.exception("ODBC freshness check failed; carrying on.")
+        return None
+
+
+def maybe_send_stale_alert(lag_min: Optional[float], newest: dict) -> bool:
+    """Send the stale-data email unless one went out in the last
+    SCREENS_ALERT_REPEAT_HOURS or the live screens are already loading.
+    Never raises."""
+    table = OUTAGE_BREAKER_TABLE or (DISPATCH_LOG_TABLE if "." in DISPATCH_LOG_TABLE else "")
+    if not table:
+        return False
+    try:
+        bq = bigquery.Client(project=GCP_PROJECT)
+        log_ref = f"`{GCP_PROJECT}.{table}`"
+        recent = list(bq.query(f"""
+            SELECT COUNT(*) AS n FROM {log_ref}
+            WHERE reason = 'stale-alert'
+              AND dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {SCREENS_ALERT_REPEAT_HOURS} HOUR)
+        """).result())[0].n
+        if recent:
+            log.info("Stale-data alert already sent in the last %d h.", SCREENS_ALERT_REPEAT_HOURS)
+            return False
+        try:
+            screens_at = list(bq.query(
+                f"SELECT MAX(loaded_at) AS t FROM `{GCP_PROJECT}.PlexProd.live_order_releases`").result())[0].t
+        except Exception:
+            screens_at = None
+        if screens_at and datetime.now(timezone.utc) - screens_at < timedelta(hours=SCREENS_FRESH_HOURS):
+            log.info("ODBC data stale, but the live screens loaded at %s; no alert.", screens_at.isoformat())
+            return False
+        alert = {
+            "lag_minutes": lag_min, "newest": newest, "threshold": STALE_ALERT_MINUTES,
+            "screens_at": screens_at, "job_name": os.environ.get("CLOUD_RUN_JOB", ""),
+            "execution_name": os.environ.get("CLOUD_RUN_EXECUTION", ""),
+            "gcp_project": GCP_PROJECT, "bq_dataset": BQ_DATASET,
+        }
+        sent = send_stale_alert(alert)
+        bq.query(f"""
+            INSERT INTO {log_ref}
+              (dispatch_id, job_name, mode, reason, dispatched_at, outcome, finished_at, detail)
+            VALUES (@id, @job, 'probe', 'stale-alert', CURRENT_TIMESTAMP(), 'alert', CURRENT_TIMESTAMP(), @detail)
+        """, job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("id", "STRING", "stale-" + uuid.uuid4().hex[:12]),
+            bigquery.ScalarQueryParameter("job", "STRING", alert["job_name"]),
+            bigquery.ScalarQueryParameter("detail", "STRING",
+                f"{'sent' if sent else 'not sent (email off)'}: newest change {lag_min} min old"),
+        ])).result()
+        log.warning("Stale ODBC data: alert %s.", "sent" if sent else "recorded, email off")
+        return sent
+    except Exception:
+        log.exception("Stale-data alert check failed.")
         return False
 
 
@@ -2026,6 +2155,9 @@ def main():
         except Exception as exc:
             log.exception("Failed to establish ODBC connection to Plex.")
             raise RuntimeError(f"ODBC connection failed: {exc}") from exc
+
+        # Is Plex's ODBC copy current? Logs the lag, emails when stale (prod).
+        check_odbc_freshness(conn)
 
         # ── Change probe ──────────────────────────────────────────────────
         # Fingerprints what this report reads from Plex (see run_probe). When

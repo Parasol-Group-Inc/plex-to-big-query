@@ -448,10 +448,20 @@ screen shippers (newest SH00243) and all 403 screen order releases.
   shippers ODBC had from 11-09. `part_production_current` likewise kept merging 5,788 screen records.
 - **Screens vs ODBC, read live the same evening (dry run, nothing written):** every shipper shipped
   since 10-19 matches (SH00206 is gone from the screens too; only SH00272, shipped after ODBC's 6 PM
-  refresh, is screen-only). Revenue by invoice date is identical every day except 11-05 (ODBC still
-  holds SH00206's invoice, now flagged as a credit memo; the report drops it with the shipper) and
-  11-09 (+$7,496.50 on screen, invoices after 6 PM). Production is identical 11-02 to 11-05; the
+  refresh, is screen-only). Revenue by invoice date is identical every day; 11-09 is +$7,496.50 on
+  screen (invoices after 6 PM). **11-05 is $162,183.23 everywhere:** Plex reversed SH00206's
+  invoice INV0000161 ($11,760) with credit memo **CM0000001** (created 11-09 10:22 MT, dated
+  11-05, flagged `Credit_Memo = 1`; the invoice became `Credit_Memo = 2`) and removed the shipper.
+  ODBC has both; the credit memo's revenue line has no `Shipper_Line_Key`, so a sum restricted to
+  shipped lines shows 173,943.23 (gross), and netting the credit memo gives 162,183.23, the same as
+  the screens and `shipping_revenue_report`. Production is identical 11-02 to 11-05; the
   screen has 7 more records on 11-06 and 5 more on 11-09 (late entries, picked up by the next run).
+- **Audited 2026-11-10** by two independent agents (Sonnet, Opus), read-only: report sources and
+  row counts, empty `live_*` tables and backup counts, November revenue (96 shippers, $833,627.82
+  through 11-09), the SH00206 / INV0000161 / CM0000001 trail, production per day, and the customer
+  notes (all 1,542 hold their planned note through the API; 1,545 customers have a note; no other
+  note changed; one `saved` event per target in the log) all reproduced. Their one "mismatch" was
+  my comparison of ODBC's shipped-line gross with a screen backup taken before the credit memo.
 - **Fix (retirement step 4):** the four `live_*` tables were copied to
   `voxdatalake.Backups.PlexProd__live_<name>_20261110` (90 days; 308/308/421/5,788 rows) and
   emptied. Revenue (340 rows, through 11-09), production (18,785 records) and Label Design all read

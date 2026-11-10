@@ -272,6 +272,12 @@ example and check queries: `docs/BOM_DEMAND_NETTING.md`.
 - **`PlexProd.msl_demand_daily`** is the daily history of both numbers (scheduled
   query `msl_demand_daily` in Terraform, SQL `terraform/msl_demand_daily.sql`). It
   is BigQuery-only data, in the backup list; the ETL never writes it.
+- **MSL usage holds NetSuite for 6 months (since 2026-11-10, Jennilyn):** `usage_min_days` 183, and
+  Plex usage is averaged over GREATEST(90, usage_min_days) days. Two defaults to keep in step: the view's
+  `cfg` CTE and the manual-data app's `Code.gs` (an `msl_rules` row overrides both).
+- **`PlexProd.part_usage_monthly`** (scheduled query on the 1st, `terraform/part_usage_monthly.sql`):
+  usage per part per month, the MSL method with production dated by its Mountain record date (the view's
+  `DATE(Report_Date)` is a day early; harmless for its rolling sum, not for months). BigQuery-only data.
 - The `reports/plex_sql/` copies of available-to-sell and out-of-stock carry
   the netting in T-SQL since 2026-10-30, untested in Plex (OPEN_ITEMS D13).
 

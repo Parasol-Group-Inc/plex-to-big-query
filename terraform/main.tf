@@ -6248,6 +6248,22 @@ resource "google_bigquery_data_transfer_config" "msl_demand_daily" {
   }
 }
 
+# Monthly usage per part (Jennilyn, 2026-11-10): what production consumed through the BOM,
+# same method as approaching_msl_report (docs/reports/part_usage_monthly.md). 1st of the
+# month 13:30 UTC = after the 4 AM MT full prod run; records the PREVIOUS month. Creates
+# PlexProd.part_usage_monthly if missing and replaces that month's rows, so a re-run is safe.
+# Same service account as the backup query.
+resource "google_bigquery_data_transfer_config" "part_usage_monthly" {
+  display_name         = "part_usage_monthly"
+  location             = "US"
+  data_source_id       = "scheduled_query"
+  schedule             = "1 of month 13:30"
+  service_account_name = google_service_account.etl.email
+  params = {
+    query = file("${path.module}/part_usage_monthly.sql")
+  }
+}
+
 # ══ Screens reconciliation, watchdog and Google-side alerts (2026-11-10) ═══════
 # After Plex ODBC served frozen data on 11-10 while every run succeeded, and an
 # audit found the weekly backup and the manual-data push failing silently.

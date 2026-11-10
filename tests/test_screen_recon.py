@@ -118,9 +118,13 @@ def test_screen_records_revenue_sums_by_invoice_and_part():
 
 class FakePage:
     url = "https://vox.on.plex.com/SqlDevelopmentEnvironment"
+    text = ""
 
     def screenshot(self, **kw):
         return b"png"
+
+    def evaluate(self, js):
+        return self.text
 
 
 def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
@@ -142,19 +146,66 @@ def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
         pass
     assert [x["reason"] for x in audit.logins] == ["first", "re-login", "re-login"]
     assert [x["ok"] for x in audit.logins] == [True, True, False]
-    assert "password" not in str(audit.logins) and audit.logins[2]["error"].startswith("login did not")
+    assert "password" not in str(audit.logins).replace("password_change", "")
+    assert audit.logins[2]["error"].startswith("unknown: login did not") and audit.logins[2]["retryable"]
 
 
-def test_failed_login_mails_only_the_login_address(monkeypatch):
+class LoginBQ:
+    def __init__(self, mailed=0):
+        self.mailed, self.inserts = mailed, []
+
+    def query(self, sql, job_config=None):
+        from types import SimpleNamespace
+        if sql.lstrip().startswith("INSERT"):
+            self.inserts.append(sql)
+            rows = []
+        else:
+            rows = [SimpleNamespace(last_ok=FETCH - dt.timedelta(hours=9), streak=2, mailed=self.mailed)]
+        return SimpleNamespace(result=lambda: rows)
+
+
+def failed_rec(cause="wrong_credentials", text="The password you entered is incorrect."):
+    return {"ok": False, "error": f"{cause}: x | page: {text}", "cause": cause, "retryable": False,
+            "page_text": text, "attempted_at": FETCH, "reason": "first", "seconds": 9.0,
+            "final_url": "https://accounts.plex.com/", "screenshot": "gs://b/x.png", "execution": "e", "job": "j"}
+
+
+def test_failed_login_mails_only_the_login_address_with_the_cause(monkeypatch):
     import email_utils
     sent = []
     monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: sent.append((alert, to)) or True)
     monkeypatch.setattr(r, "LOGIN_ALERT_EMAILS", "ops@example.com")
     audit = r.Audit("run1", FETCH, dry_run=False)
-    audit.logins = [{"ok": False, "error": "timeout", "attempted_at": FETCH, "reason": "first", "seconds": 90.0,
-                     "final_url": "https://accounts.plex.com/", "screenshot": "", "execution": "x", "job": "j"}]
-    audit.mail_failed_logins()
-    assert sent and sent[0][1] == ["ops@example.com"] and "login failed" in sent[0][0]["headline"]
+    audit.logins = [failed_rec()]
+    bq = LoginBQ()
+    audit.mail_failed_logins(bq)
+    alert, to = sent[0]
+    assert to == ["ops@example.com"] and "rejected the username or password" in alert["headline"]
+    assert "did not retry" in alert["summary"] and "2 run(s) in a row" in alert["summary"]
+    assert any("gcloud secrets versions add plex-portal-password" in st for st in alert["steps"])
+    assert bq.inserts and "login-alert" in bq.inserts[0]
+
+
+def test_failed_login_not_mailed_twice_a_day_or_after_a_good_retry(monkeypatch):
+    import email_utils
+    sent = []
+    monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: sent.append(alert) or True)
+    audit = r.Audit("run1", FETCH, dry_run=False)
+    audit.logins = [failed_rec()]
+    audit.mail_failed_logins(LoginBQ(mailed=1))
+    audit.logins = [failed_rec("timeout", ""), dict(failed_rec(), ok=True)]
+    audit.mail_failed_logins(LoginBQ())
+    assert sent == []
+
+
+def test_login_causes():
+    assert r.classify_login("x", "The password you entered is incorrect", "")[0] == "wrong_credentials"
+    assert r.classify_login("x", "Enter the verification code from your authenticator", "")[0] == "verification"
+    assert r.classify_login("x", "Your account is locked", "")[0] == "locked"
+    assert r.classify_login("Timeout 118615ms exceeded.", "", "")[0] == "timeout"
+    assert r.classify_login("x", "503 Service Unavailable", "")[0] == "plex_down"
+    assert r.classify_login("login did not reach the SQL Development Environment", "Welcome", "")[0] == "unknown"
+    assert not r.classify_login("x", "incorrect password", "")[2] and r.classify_login("timeout", "", "")[2]
 
 
 def test_screenshot_paths_are_dated_in_mountain_time():

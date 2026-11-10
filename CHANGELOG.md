@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
+
+- **Changed (`approaching_msl_report`):** `usage_min_days` default 30 → 183 (about 6 months), and Plex
+  usage is averaged over `GREATEST(90, usage_min_days)` days (it was capped at 90, so 183 could never be
+  met). Plex takes over from NetSuite around 2027-04-18 instead of ~11-16, when 240 parts would have
+  switched on 3 weeks of production (182 of them more than 25% away from NetSuite). Today's figures
+  are unchanged (Plex has 23 days). The manual-data app's "MSL rules" default and help text say 183
+  (needs a clasp push of deploy/manual_data_app).
+- **Added: `PlexProd.part_usage_monthly`**, scheduled query `part_usage_monthly` (1st of the month,
+  13:30 UTC, previous month; `terraform/part_usage_monthly.sql`): usage per part per month with the
+  daily average, by the MSL report's own method (reconciles on 506/506 parts), production dated by its
+  Mountain record date. October 2026 backfilled (265 parts, 13 of 31 days). In the weekly backup list.
+  Doc: `docs/reports/part_usage_monthly.md`. Designed by an Opus agent, impact checked by a Sonnet agent.
+
+## 2026-11-10 - Plex login failures diagnosed; manual-data push flagged broken
+
+- **Changed:** a failed Plex web login is classified (wrong credentials, password change, MFA,
+  locked, Plex down, network, timeout, unknown) from the error and the page text; transient causes
+  are retried once after 60 s, credential causes never. The email to Emilio names the cause, quotes
+  what Plex showed, gives that cause's fix, the failing streak and the last good login, and goes once
+  per cause per 24 h (`login-alert` rows in `etl_dispatch_log`). Tests added.
+- **Flagged:** OPEN_ITEMS D34 is a confirmed break (manual-data app push), also on the hub's
+  Reliability tab.
+
 ## 2026-11-10 - Fourth pass after deploy (two Sonnet audits)
 
 - **Fixed:** `pipeline_behind` fired during normal ODBC lag (a record ODBC delivered after our load);

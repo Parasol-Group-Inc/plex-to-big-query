@@ -43,7 +43,7 @@ VERDICTS = [
 
 EMAILS = [
     ("Screens digest", "Emilio, Jennilyn, marketing", "8:20, 12:20, 4:20 PM MT runs, and any run with a problem", "each group's source label, each screen's verdict, rows and timing, logins, screenshot folder"),
-    ("Plex login failed", "Emilio only", "every failed web login", "the error, how long it took, the page it stopped on, the screenshot"),
+    ("Plex login failed", "Emilio only", "once a day per cause (a new cause mails at once), after one retry for causes that can pass on their own", "the cause (wrong password, password change, MFA, locked, Plex down, network, timeout), what Plex showed, the fix, the streak and last good login, the screenshot"),
     ("Reports switched to the screens / back on ODBC", "Emilio, Jennilyn, marketing", "when a group switches", "lag, verdicts, why"),
     ("ODBC disagrees / BigQuery missing records", "Emilio, Jennilyn, marketing", "once a day while it lasts", "examples; details in screen_recon_diff"),
     ("ODBC data is N h old", "Emilio, Jennilyn, marketing", "weekdays 9-5, newest ODBC change 2 h+ old, once a day", "from every prod ETL run (check_odbc_freshness)"),
@@ -148,6 +148,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <div class="panel"><h3>Where things are</h3><ul class="plain">
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
+<li><b>Broken now (D34):</b> the manual-data app's hourly push has not loaded safety incidents since 10-19 or goals since 11-05; goals and MSL rules typed in the app don't reach BigQuery until its Apps Script trigger is fixed. The watchdog mails it daily.</li>
 <li>Settings: lag tolerance 120 min, 2 clean runs to switch back, digest hours 8/12/16 (Terraform, job plex-live-screens).</li>
 <li>Cost: about $2.40 a month for the screens job, $1 for the watchdog.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>

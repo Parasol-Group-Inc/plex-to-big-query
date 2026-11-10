@@ -35,6 +35,8 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
+import time
 import sys
 import traceback
 import uuid
@@ -492,6 +494,55 @@ def send(alert):
 # one is emailed on its own to LOGIN_ALERT_EMAILS. Screenshots go to
 # gs://SCREENSHOT_BUCKET/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png.
 
+# Why a Plex web login failed, from the error and the text on the page it stopped
+# on. Order matters: the first match wins. retry = may pass on its own a minute
+# later (never for credentials: retrying a wrong password can lock the user).
+LOGIN_CAUSES = [
+    ("wrong_credentials", r"incorrect|invalid (user|password|credential)|wrong password|not recognized|does not match",
+     False, "Plex rejected the username or password.",
+     ["Log into https://vox.on.plex.com as the portal user by hand to confirm the password.",
+      "Put the right one in Secret Manager: printf '%s' \"$NEW\" | gcloud secrets versions add plex-portal-password --data-file=- --project=voxdatalake"]),
+    ("password_change", r"password (has )?expired|change (your )?password|reset (your )?password|new password",
+     False, "Plex wants the portal user's password changed.",
+     ["Log in by hand, set a new password, then store it: printf '%s' \"$NEW\" | gcloud secrets versions add plex-portal-password --data-file=- --project=voxdatalake"]),
+    ("verification", r"verification code|one[- ]time|authenticator|multi-factor|two[- ]factor|2fa|mfa|verify (it'?s|your)",
+     False, "Plex asked for an extra verification step (MFA or a code), which a job cannot answer.",
+     ["Ask the Plex admin to exempt the portal user from MFA, or use a service user without it."]),
+    ("locked", r"locked|disabled|suspended|too many (failed )?attempts|inactive user",
+     False, "The portal user is locked or disabled in Plex.",
+     ["Ask the Plex admin to unlock the user (too many failed attempts locks it); nothing is retried until then."]),
+    ("plex_down", r"maintenance|service unavailable|bad gateway|gateway time-?out|502|503|504|temporarily unavailable",
+     True, "Plex's web site answered with an error or a maintenance page.",
+     ["Nothing to do if it passes on the next run; if it lasts, check https://status.plex.com or tell Plex support."]),
+    ("network", r"net::err|name not resolved|dns|connection (refused|reset|closed)|econn|ssl|certificate",
+     True, "The job could not reach Plex over the network.",
+     ["Usually transient. If it lasts, check that vox.on.plex.com opens from the office."]),
+    ("timeout", r"timeout|timed out|exceeded",
+     True, "The login pages did not answer in time.",
+     ["Usually transient (a slow Plex). If several runs fail, open the screenshot to see where it stopped."]),
+]
+LOGIN_UNKNOWN = ("unknown", None, True, "The login stopped somewhere unexpected (the login page may have changed).",
+                 ["Open the screenshot and the page text below; if Plex changed its login page, "
+                  "scripts/plex_web_export.py login() needs its selectors updated."])
+
+
+def classify_login(error, page_text, url):
+    blob = " ".join(x or "" for x in (error, page_text, url)).lower()
+    for cause in LOGIN_CAUSES:
+        if re.search(cause[1], blob):
+            return cause
+    return LOGIN_UNKNOWN
+
+
+def page_text(pg, limit=600):
+    """Visible text of the page the login stopped on, collapsed; never raises."""
+    try:
+        t = pg.evaluate("() => document.body ? document.body.innerText : ''") or ""
+        return re.sub(r"\s+", " ", t).strip()[:limit]
+    except Exception:
+        return ""
+
+
 class Audit:
     def __init__(self, run_id, started, dry_run):
         self.run_id, self.dry_run, self.n = run_id, dry_run, 0
@@ -531,9 +582,15 @@ class Audit:
             try:
                 real_login(pg, user, password)
             except Exception as e:
-                err = str(e).splitlines()[0][:500]
-                rec = {"ok": False, "error": err}
-                print(f"PLEX LOGIN FAILED ({reason}) as {user}: {err}")
+                err = str(e).splitlines()[0][:400]
+                text = page_text(pg)
+                cause = classify_login(err, text, pg.url)
+                # error column: "<cause>: <first line> | page: <visible text>" (no new columns needed)
+                rec = {"ok": False, "error": f"{cause[0]}: {err} | page: {text[:300]}"[:1000],
+                       "cause": cause[0], "retryable": cause[2], "page_text": text}
+                print(f"PLEX LOGIN FAILED ({reason}) as {user}: cause={cause[0]} retry={cause[2]}: {err}")
+                if text:
+                    print(f"  page said: {text[:300]}")
                 raise_it = e
             else:
                 rec, raise_it = {"ok": True, "error": None}, None
@@ -544,7 +601,7 @@ class Audit:
                        job=os.environ.get("CLOUD_RUN_JOB", "local"),
                        execution=os.environ.get("CLOUD_RUN_EXECUTION", ""),
                        final_url=(pg.url or "").split("?")[0][:500])
-            rec["screenshot"] = self.shot(pg, f"login_{'ok' if rec['ok'] else 'FAILED'}")
+            rec["screenshot"] = self.shot(pg, f"login_{'ok' if rec['ok'] else 'FAILED_' + rec.get('cause', '')}")
             self.logins.append(rec)
             if raise_it is not None:
                 raise raise_it
@@ -553,37 +610,77 @@ class Audit:
     def save(self, c):
         if self.dry_run or not self.logins:
             return
+        cols = ("run_id", "attempted_at", "reason", "user", "ok", "error", "seconds", "final_url",
+                "screenshot", "job", "execution")
         try:
             errs = c.insert_rows_json(LOGIN_TABLE, [
-                {k: (v.isoformat() if isinstance(v, dt.datetime) else v) for k, v in r.items()}
+                {k: (r[k].isoformat() if isinstance(r.get(k), dt.datetime) else r.get(k)) for k in cols}
                 for r in self.logins])
             if errs:
                 print(f"plex_login_log insert errors: {errs}")
         except Exception as e:
             print(f"plex_login_log not written: {str(e).splitlines()[0][:200]}")
 
-    def mail_failed_logins(self):
+    def mail_failed_logins(self, c):
+        """One email per failure cause per 24 h (a new cause mails at once), to
+        LOGIN_ALERT_EMAILS only, with the diagnosis and what to do. Never raises."""
         failed = [r for r in self.logins if not r["ok"]]
-        if self.dry_run or not failed:
+        if self.dry_run or not failed or any(r["ok"] for r in self.logins):
+            return  # a later attempt in this run logged in: nothing to fix
+        last = failed[-1]
+        cause = next((x for x in LOGIN_CAUSES if x[0] == last.get("cause")), LOGIN_UNKNOWN)
+        streak, last_ok = 0, None
+        table = os.environ.get("OUTAGE_BREAKER_TABLE") or "PlexOps.etl_dispatch_log"
+        try:
+            rows = list(c.query(f"""
+                SELECT
+                  (SELECT MAX(attempted_at) FROM `{LOGIN_TABLE}` WHERE ok) AS last_ok,
+                  (SELECT COUNT(DISTINCT run_id) FROM `{LOGIN_TABLE}`
+                   WHERE NOT ok AND attempted_at > IFNULL((SELECT MAX(attempted_at) FROM `{LOGIN_TABLE}` WHERE ok),
+                                                         TIMESTAMP '2026-01-01')) AS streak,
+                  (SELECT COUNT(*) FROM `{PROJECT}.{table}` WHERE reason = 'login-alert'
+                     AND detail LIKE CONCAT(@cause, ':%')
+                     AND dispatched_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS mailed""",
+                job_config=bigquery.QueryJobConfig(query_parameters=[
+                    bigquery.ScalarQueryParameter("cause", "STRING", cause[0])])).result())[0]
+            last_ok, streak, mailed = rows.last_ok, rows.streak, rows.mailed
+        except Exception as e:
+            print(f"login history unreadable ({str(e).splitlines()[0][:150]}); mailing anyway")
+            mailed = 0
+        if mailed:
+            print(f"failed-login email: already sent for '{cause[0]}' in the last 24 h")
             return
         to = [e.strip() for e in LOGIN_ALERT_EMAILS.split(",") if e.strip()]
         alert = {
-            "headline": f"Plex login failed ({len(failed)} attempt{'s' if len(failed) > 1 else ''})",
-            "summary": ("The screens job could not log into Plex's web screens as the portal user. Until it "
-                        "can, nothing compares ODBC with the screens and no report can switch to them. A wrong "
-                        "or expired password, a locked user or a changed login page are the usual causes."),
-            "facts": [(f"{r['attempted_at'].astimezone(DEN):%m-%d %H:%M} MT ({r['reason']})",
-                       f"{r['error']} | after {r['seconds']} s | page {r['final_url'][:120]}") for r in failed]
+            "headline": f"Plex login failed: {cause[3].rstrip('.')}",
+            "summary": (f"{cause[3]} The screens job could not log into Plex's web screens, so this run compared "
+                        f"nothing and no report can switch to the screens until it can. "
+                        + ("It retried once a minute later and that failed too. " if len(failed) > 1 else "")
+                        + ("It did not retry: retrying a rejected login can lock the user. " if not cause[2] else "")
+                        + f"Logins have failed in {streak or 1} run(s) in a row; the last good one was "
+                        + (f"{last_ok.astimezone(DEN):%a %m-%d %H:%M} MT." if last_ok else "never recorded.")),
+            "facts": [("Cause", cause[0]),
+                      ("Plex said", last.get("page_text") or "(no text on the page)"),
+                      ("Error", (last.get("error") or "").split(" | page:")[0])]
+                     + [(f"Attempt {r['attempted_at'].astimezone(DEN):%m-%d %H:%M} MT", f"{r.get('cause')} after {r['seconds']} s, "
+                         f"page {r['final_url'][:100]}") for r in failed]
                      + [("Screenshot", r["screenshot"]) for r in failed if r["screenshot"]]
-                     + [("Execution", failed[0]["execution"] or failed[0]["job"])],
-            "steps": ["Log into https://vox.on.plex.com as the portal user by hand to see what Plex shows.",
-                      "If the password changed: printf '%s' \"$NEW\" | gcloud secrets versions add "
-                      "plex-portal-password --data-file=-",
-                      "History: SELECT * FROM `voxdatalake.PlexOps.plex_login_log` ORDER BY attempted_at DESC"],
+                     + [("Execution", last["execution"] or last["job"])],
+            "steps": cause[4] + [
+                "Test it now: gcloud run jobs execute plex-live-screens --region=us-central1",
+                "History: SELECT attempted_at, ok, error FROM `voxdatalake.PlexOps.plex_login_log` "
+                "ORDER BY attempted_at DESC LIMIT 20"],
             "source": "plex-live-screens"}
         try:
             from email_utils import send_ops_alert
-            print(f"failed-login email: {'sent' if send_ops_alert(alert, to=to or None) else 'not sent'}")
+            sent = send_ops_alert(alert, to=to or None)
+            print(f"failed-login email ({cause[0]}): {'sent' if sent else 'not sent (email off)'}")
+            c.query(f"""INSERT INTO `{PROJECT}.{table}`
+                  (dispatch_id, job_name, mode, reason, dispatched_at, outcome, finished_at, detail)
+                VALUES (@id, 'plex-live-screens', 'probe', 'login-alert', CURRENT_TIMESTAMP(), 'alert',
+                        CURRENT_TIMESTAMP(), @d)""", job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("id", "STRING", "login-" + uuid.uuid4().hex[:12]),
+                bigquery.ScalarQueryParameter("d", "STRING", f"{cause[0]}: {'sent' if sent else 'not sent'}")])).result()
         except Exception:
             print("failed-login email failed:\n" + traceback.format_exc())
 
@@ -610,8 +707,19 @@ def run(args):
         try:
             pls.login(pg, *ctx["creds"])
         except Exception as e:
-            for n in names:
-                fetch_err[n] = f"login failed: {str(e).splitlines()[0][:250]}"
+            last = audit.logins[-1] if audit.logins else {}
+            if last.get("retryable"):
+                print("  retrying the login once in 60 s on a fresh page")
+                time.sleep(60)
+                pg = b.new_context().new_page()
+                try:
+                    pls.login(pg, *ctx["creds"])
+                    e = None
+                except Exception as e2:
+                    e = e2
+            if e is not None:
+                for n in names:
+                    fetch_err[n] = f"login failed: {str(e).splitlines()[0][:250]}"
         for n in names:
             if n in fetch_err:
                 continue
@@ -632,7 +740,7 @@ def run(args):
                   f"{len(fetched.get(n, []))} rows, {fetch_secs[n]}s")
         b.close()
     audit.save(c)
-    audit.mail_failed_logins()
+    audit.mail_failed_logins(c)
 
     conn, odbc_err = None, ""
     try:

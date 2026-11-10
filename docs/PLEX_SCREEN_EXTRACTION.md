@@ -62,7 +62,13 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    cap). `--only production` still compares production by hand.
    **Every login** (first and any re-login mid-screen) is timed and written to
    `PlexOps.plex_login_log` (ok, error, seconds, final page, screenshot). **A failed
-   login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio). **Screenshots** of every
+   login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio), with a diagnosis: the
+   cause is read from the error and the page text (`wrong_credentials`, `password_change`,
+   `verification`, `locked`, `plex_down`, `network`, `timeout`, `unknown`) and the email gives
+   that cause's fix, what Plex showed, the run streak and the last good login. Causes that can
+   pass by themselves are retried once after 60 s; credential causes never (a retry can lock
+   the user). One email per cause per 24 h (`reason = 'login-alert'` rows in
+   `etl_dispatch_log`); `plex_login_log.error` starts with the cause. **Screenshots** of every
    login and screen read go to `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/
    HHMM-MT_<run>/NN_<what>.png` (e.g. `01_login_ok.png`, `02_releases_ok_461rows.png`,
    `..._FAILED.png`), kept 365 days. Each screen's read logs `extraction <screen>: ok,

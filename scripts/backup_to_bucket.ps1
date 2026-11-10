@@ -9,7 +9,10 @@
     the reason this script exists — losing the machine loses them:
 
       terraform/terraform.tfvars   every real value behind the pipeline
-      .env                         the local docker-compose credentials
+      .env                         the local docker-compose credentials, plus on the
+                                   Mac since 2026-11-09 the Plex portal login
+                                   (PLEX_PORTAL_USERNAME / PLEX_PORTAL_PASSWORD) the
+                                   screen tools use
       assets/*.csv                 the sheet exports the Label Design mapping
                                    was derived from
       driver/  zipfiles/           the licensed Plex ODBC driver and the vendor
@@ -17,6 +20,12 @@
                                    is also in gs://voxdatalake-build-assets;
                                    zipfiles/ exists nowhere else (added
                                    2026-09-30, docs/DISASTER_RECOVERY.md).
+      etl-manual/                  Plex web work products, zipped (added 2026-11-09):
+                                   customer_note/ holds the pre-update backup of every
+                                   Plex customer, the bulk Note plan and its full
+                                   action log (docs/CUSTOMER_NOTES_BULK.md), and the
+                                   live-screens log on the Windows machine. Customer
+                                   data, no secrets.
       ../ptbq-label-design/.env    the sibling worktrees' own gitignored files
       ../ptbq-sandbox/.env.clickup (added 2026-10-20)
       secrets.env                  the eight Secret Manager VALUES, read with
@@ -124,7 +133,7 @@ Write-Host ''
 # The licensed ODBC driver and the vendor packages with the licence serials.
 # Zipped so a folder is one object, and restorable with Expand-Archive/unzip.
 $Folders = @()
-foreach ($dir in @('driver', 'zipfiles')) {
+foreach ($dir in @('driver', 'zipfiles', 'etl-manual')) {
     $src = Join-Path $RepoRoot $dir
     if (-not (Test-Path $src)) {
         Write-Host ("  - {0,-42} NOT PRESENT" -f "$dir/") -ForegroundColor DarkGray

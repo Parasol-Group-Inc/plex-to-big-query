@@ -14,6 +14,45 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-09 (dev) - Bulk customer Notes from CustomerNotesResults9.csv, verified in batches
+
+- **Added** `scripts/plex_customer_notes_bulk.py` (plan / run / verify / log / resume / status):
+  writes each matched customer's comment to the Note on the Customer Details screen, in
+  batches. Exact matches only (code and name identical); Inactive, name-differs, not-in-Plex and
+  no-code rows are flagged, not written; a customer that already has a note gets the comment
+  appended on a new line (also flagged). Backup of all customers first. Per write: the screen's
+  Name and Code must be the planned customer and its Note the backed-up one; after Apply the
+  screen is reloaded and must hold the planned text. Per batch: `verify` reads all customers
+  through the API (written ones hold their note, no other note changed); Claude reviews and logs
+  before the next batch. Anything odd writes BULK_STOPPED.txt and stops until `resume --reason`.
+  Every step goes to bulk_actions.jsonl.
+- **Added** the hub's **Customer notes** tab (`scripts/hub/customer_notes_tab.py`, live page
+  only): every row with a state pill and its log history, the run log, the four checks.
+- **Pilot 2026-11-09:** 5 customers written and verified (SUPP7, NUT67, ADRI2, ALLNA, ASQU1). The
+  first run stopped at ADRI2 on a false alarm (title parsing cut "… - rotulo-hgcg"); the guard
+  now compares the screen's Name and Code fields.
+- **Standalone `loop`:** batches of 50 back to back, each verified through the API; transient
+  errors retried (3 tries per customer with a fresh login, 4 for API reads); guards still stop at
+  once. Started 2026-11-09 after the pilot, detached on the Mac.
+- **Result:** 1,542 notes written (1,532 new, 10 appended), 34 batches all verified; final check
+  of all 4,110 customers through the API and 13 on screen: exact. Flagged rows not written.
+- **Docs:** `docs/CUSTOMER_NOTES_BULK.md` (new). Not deployed; runs by hand on the Mac.
+- **Backups:** `scripts/backup_to_bucket.ps1` now zips `etl-manual/` (customer-notes backup, plan,
+  log). The customer-notes folder is already in
+  `gs://voxdatalake-terraform-state/plex-to-big-query/backups/customer-notes/2026-11-10T032245Z/`.
+  The Mac's `.env` gained `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD`; the backup script
+  uploads `.env` as before. OPEN_ITEMS D31 tracks the flagged rows.
+
+## 2026-11-09 (dev) - Write a customer's Note through the Plex screen
+
+- **Added** `scripts/plex_customer_note.py`: reads or sets a customer's Note on the
+  Customer Details screen with the screen task's Playwright login and lock, reloads and
+  reads the value back, and refuses to replace a non-empty note without `--overwrite`.
+  The REST Customers API ignores `note` on update (test tenant, AEREL: 200, note still
+  empty). First use: production, 101 Via Imports (808258), `PLACEHOLDER`, verified.
+  Not deployed; run by hand. Docs: PLEX_SCREEN_EXTRACTION.md, "Related: writing a
+  customer note".
+
 ## 2026-11-09 - "Start the live screens" alert after 6 h of failing ODBC
 
 - **Added** a distinct email, `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h,

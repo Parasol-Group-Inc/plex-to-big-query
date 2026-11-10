@@ -17,7 +17,8 @@ update the dates when you change something.
 | Code, docs, SQL, YAML | GitHub `Parasol-Group-Inc/plex-to-big-query` | yes | GitHub, plus a `repo-<stamp>.zip` in every backup | |
 | QuickBooks pipeline | GitHub `quickbooks-to-biquery` | yes | GitHub | its own repo, own remote and project (`parasoldatalake`) |
 | `terraform/terraform.tfvars` | primary folder only | no | `backup_to_bucket` | every real value behind the pipeline |
-| `.env` | each machine | no | `backup_to_bucket` | the Mac and the Windows one differ; see "Backup" |
+| `.env` | each machine | no | `backup_to_bucket` | the Mac and the Windows one differ; see "Backup". Since 2026-11-09 the Mac's also holds `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD` (Plex web login for the screen tools) and `PLEX_API_CONSUMER_KEY` / `_SECRET` |
+| `etl-manual/` (screen tools' work products) | each machine | no | `backup_to_bucket` (zipped, since 2026-11-09) | `customer_note/`: the customer backup, plan and action log of the 2026-11-09 bulk Note update; also copied to `backups/customer-notes/2026-11-10T032245Z/` |
 | `driver/` (licensed Plex ODBC driver) | each machine | no | zipped in the backup, and `gs://voxdatalake-build-assets/plex-odbc-driver/` | the bucket copy lacked `libicudata.so.42` until 2026-10-24 |
 | `zipfiles/` (vendor packages, licence serials) | Windows machine only | no | `backup_to_bucket` from Windows | not on the Mac |
 | Secret values (8) | Secret Manager | no | `secrets.env` in the backup | anyone who can read the backup can read them |

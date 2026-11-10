@@ -336,6 +336,16 @@ of 6 hours, a failing prod run emails "ACTION NEEDED: ... start the live screens
 "Starting it". To tell our side from Plex's, run `scripts/plex_odbc_probe.py`
 (`docs/PLEX_ODBC_PROBE.md`).
 
+## Customer Notes in Plex (2026-11-09)
+
+Plex's customer **Note** (Customer Details, NOTES section) is not in ODBC and the REST API ignores
+it on update (200, nothing saved), so it is written through the screen:
+`scripts/plex_customer_note.py` for one customer, `scripts/plex_customer_notes_bulk.py` for a CSV
+(plan, verified batches, stop file, full action log). 1,542 notes went in on 2026-11-09 from
+`docs/reference/CustomerNotesResults9.csv`; 3,015 rows were flagged and not written (OPEN_ITEMS
+D31). Runbook: `docs/CUSTOMER_NOTES_BULK.md`; hub tab "Customer notes". Keep the laptop lid
+open while it runs: a sleep stops it (safely) mid-batch.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers

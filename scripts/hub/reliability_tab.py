@@ -134,7 +134,7 @@ screens only while the feed is behind, every report says where its data came fro
 <div class="panel"><h3>The screens check (plex-live-screens)</h3><ol class="steps">
 <li>Every 4 hours (00:20, 04:20 ... 20:20 MT) it logs into Plex's web screens. Every login, and any re-login, is logged with a screenshot; a failed one emails Emilio.</li>
 <li>Reads three screens: Label Design order releases, Shipper History and Shipping Revenue by Part Group, and screenshots each.</li>
-<li>Reads the same records from ODBC and from our BigQuery tables, and compares them record by record (records under 15 minutes old are skipped).</li>
+<li>Reads the same records from ODBC <b>live</b> (its own connection, minutes after the screen read, not our extracted copy) and from our BigQuery tables, and compares them record by record (records under 15 minutes old are skipped). So "ODBC is behind" is Plex's lag, never a sign that our ETL hasn't extracted lately; only the BigQuery comparison depends on our extraction schedule.</li>
 <li>Gives each screen a verdict and records every difference.</li>
 <li>Switches Label Design or revenue to the screens after one bad check, and back to ODBC after two clean ones (8 hours), emptying the screen tables (with a backup).</li>
 <li>Sends the digest and any alert.</li></ol></div>

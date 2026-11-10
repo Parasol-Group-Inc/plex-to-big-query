@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 (docs) - ETL audit after the ODBC recovery
+
+- **Docs:** `docs/ETL_AUDIT_2026-11-10.md`. Runs, logs and data were checked by two independent
+  agents and against Plex's live screens. Healthy: 112/112 prod dispatches, 0 prod errors, every
+  rebuilt figure equals its view, and shippers, production, releases and invoiced revenue equal
+  Plex's screens. One divergence: the revenue report (quantity × price) is $1,898.08 above Plex's
+  invoiced November revenue. Proposed fixes in OPEN_ITEMS D32; nothing changed.
+
 ## 2026-11-10 - D30 closed: live screen tables backed up and emptied
 
 - **Fixed (data, no code):** `shipping_revenue_report` (and the scorecard Revenue tile) had gone back

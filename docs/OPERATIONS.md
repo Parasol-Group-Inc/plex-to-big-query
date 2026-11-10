@@ -720,11 +720,31 @@ screens — <date>`, with the PowerShell to start the task
 - Backtest on this log (10-20 → 11-09): it would have fired 10-25 18:05 MT and
   11-04 17:20 MT (then 11-05 18:40 MT), and on no normal day.
 
+**Stale data mails too** (since 2026-11-10). On 11-10 Plex's ODBC answered every
+login and query, but its data stopped at ~08:10 MT, caught up at ~12:50, and stalled
+again at 12:09 data. Every run succeeded, the Label Design probe saw no change, and
+order 675 reached Monday only after a hand run. So every prod run now reads, right
+after connecting, the newest order update (`Sales_v_PO.Update_Date`), production
+record (`Part_v_Production.Record_Date`) and shipper (`Sales_v_Shipper.Add_Date`)
+since 4 days ago, and logs `ODBC data freshness (MT): ...; lag N min`
+(`check_odbc_freshness`). On a weekday from 09:00 to 17:00 MT, when even the newest of
+the three is **2 h** old or more (`STALE_ALERT_MINUTES`), it sends `[Plex ETL] -
+ACTION NEEDED: Plex ODBC data is N h old — <date>`.
+- Backtest 10-20 → 11-10: the longest gap between 08:00 and 17:00 on a weekday is 48
+  min, so it never fires on a normal day. A holiday with no activity can fire it once;
+  the email says so.
+- At most once per 24 h, logged here as `reason = 'stale-alert'`, `outcome = 'alert'`
+  (inert, like the screens alert). Not sent while the screens already load, or from
+  test. Any error in the check is logged and the run carries on.
+- Three reads of about 0.3 s each.
+- To see the lag over a day:
+  `gcloud logging read 'textPayload:"ODBC data freshness"' --project=voxdatalake --freshness=1d`.
+
 **Is Plex down right now?**
 ```sql
 SELECT job_name, reason, outcome, dispatched_at, detail
 FROM `voxdatalake.PlexOps.etl_dispatch_log`
-WHERE reason IN ('canary', 'recovery', 'screens-alert') OR outcome = 'held-outage'
+WHERE reason IN ('canary', 'recovery', 'screens-alert', 'stale-alert') OR outcome = 'held-outage'
 ORDER BY dispatched_at DESC LIMIT 30;
 ```
 Or in one row: `SELECT * FROM voxdatalake.PlexOps.odbc_health`. To tell our

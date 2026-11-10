@@ -406,7 +406,9 @@ first if the restore has to stick: `Disable-ScheduledTask -TaskName "Plex live s
 
 **When:** the ETL sends `[Plex ETL] - ACTION NEEDED: Plex ODBC failing for 6 h, start
 the live screens` (since 2026-11-09), once ODBC has failed in every one of the last 6
-hours and fewer than a quarter of the runs reached Plex. The rule and its backtest are
+hours and fewer than a quarter of the runs reached Plex. Or `[Plex ETL] - ACTION NEEDED:
+Plex ODBC data is N h old` (since 2026-11-10): ODBC answers but its newest data is 2 h+
+old on a weekday 9-5 MT; start the task if it lasts. The rules and their backtests are
 in [OPERATIONS.md](OPERATIONS.md#plex-outages-breaker-canary-recovery-since-2026-10-22).
 It repeats at most daily and stays quiet while the screens already load. To check by
 hand: `SELECT * FROM voxdatalake.PlexOps.odbc_health` (`odbc_stable = false` for hours)

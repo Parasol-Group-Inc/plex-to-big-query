@@ -1002,3 +1002,72 @@ def send_screens_alert(alert: Dict[str, object]) -> bool:
     subject, html_content, text_content = render_screens_alert(alert)
     _send(config, subject, html_content, text_content)
     return True
+
+
+def render_stale_alert(alert: Dict[str, object]):
+    """(subject, html, text) for the stale-ODBC-data alert (2026-11-10)."""
+    zone = ZoneInfo(os.environ.get("REPORT_TIME_ZONE", "America/Denver"))
+    lag = alert.get("lag_minutes")
+    lag_text = "no change at all in 4 days" if lag is None else f"{float(lag) / 60:.1f} h"
+    newest = alert.get("newest") or {}
+    newest_rows = [(name, v.strftime("%a %m-%d %H:%M") if isinstance(v, datetime) else "none in 4 days")
+                   for name, v in newest.items()]
+    screens_at = _local_stamp(alert.get("screens_at"), zone)
+    today = datetime.now(zone).strftime("%Y-%m-%d")
+    summary = (f"Plex's production ODBC is answering, but its data has stopped moving: the newest order "
+               f"update, production record or shipper it returns is {lag_text} old, on a working day. "
+               f"Runs still succeed, so nothing else warns about this. New orders do not reach Label "
+               f"Design or Monday, and revenue and production stop at that time. On 11-10 the same thing "
+               f"lasted 4.5 h and caught up by itself. If today is a holiday with no activity in Plex, "
+               f"ignore this email.")
+    steps = [
+        ("Check that Plex's screens show newer work than the times below (for example a sales order "
+         "or a production record from the last hour).", ""),
+        ("If the stale data lasts, start the live-screens task on the Windows laptop, so Label Design "
+         "reads the screens:",
+         f'Enable-ScheduledTask -TaskName "{SCREENS_TASK}"; Start-ScheduledTask -TaskName "{SCREENS_TASK}"'),
+        ("Tell Plex support (customercare@plex.com): ODBC logins work but the data is behind the "
+         "screens, since the time below.", ""),
+        ("When ODBC catches up, Label Design picks the new lines up at its next 15-minute run. Then "
+         "stop the task:", f'Disable-ScheduledTask -TaskName "{SCREENS_TASK}"'),
+    ]
+    lis = "".join(
+        f"<li>{html.escape(text)}" + (f'<span class="what mono">{html.escape(cmd)}</span>' if cmd else "") + "</li>"
+        for text, cmd in steps)
+    newest_html = "".join(f"<tr><td>Newest {html.escape(n)}</td><td>{html.escape(v)} MT</td></tr>"
+                          for n, v in newest_rows)
+    context = {
+        "alert_date": today,
+        "gcp_project": str(alert.get("gcp_project", "")),
+        "bq_dataset": str(alert.get("bq_dataset", "")),
+        "lag_text": lag_text,
+        "threshold_h": f"{int(alert.get('threshold') or 120) / 60:g}",
+        "screens_at": screens_at,
+        "summary": summary,
+        "actions_html": f'<p class="health-title"><b>What to do</b></p><ol class="actions">{lis}</ol>',
+        "newest_html": newest_html,
+        "job_name": str(alert.get("job_name") or "?"),
+        "execution_name": str(alert.get("execution_name") or "local"),
+        "runbook_url": SCREENS_RUNBOOK,
+        "company_name": os.environ.get("COMPANY_NAME", "Vox Nutrition"),
+    }
+    html_content = _render_template(_load_template("odbc_stale_alert.html"), context)
+    text = [f"Plex ODBC data is stale ({lag_text}) — {today}", "", summary, ""]
+    text += [f"Newest {n}: {v} MT" for n, v in newest_rows]
+    text += [f"Live screens last loaded: {screens_at}", "", "What to do:"]
+    for i, (step, cmd) in enumerate(steps, 1):
+        text.append(f"{i}. {step}")
+        if cmd:
+            text.append(f"   {cmd}")
+    text += ["", f"Raised by: {context['job_name']}", f"Runbook: {SCREENS_RUNBOOK}"]
+    subject = f"[Plex ETL] - ACTION NEEDED: Plex ODBC data is {lag_text} old — {today}"
+    return subject, html_content, "\n".join(text) + "\n"
+
+
+def send_stale_alert(alert: Dict[str, object]) -> bool:
+    config = _sendgrid_config()
+    if config is None:
+        return False
+    subject, html_content, text_content = render_stale_alert(alert)
+    _send(config, subject, html_content, text_content)
+    return True

@@ -334,7 +334,11 @@ a shipper Plex deleted had kept revenue on the frozen screen copy. The live bran
 stay; retiring the task again means emptying the tables too. **Next outage:** once ODBC has failed in every one
 of 6 hours, a failing prod run emails "ACTION NEEDED: ... start the live screens"
 (`maybe_send_screens_alert` in `main.py`; logged in `etl_dispatch_log` as
-`reason = 'screens-alert'`, at most daily). Starting steps: the runbook's
+`reason = 'screens-alert'`, at most daily). **ODBC can also answer with stale data**
+(11-10: frozen ~08:10-12:50 MT, logins fine): every prod run logs the lag of the newest
+order update / production record / shipper, and on weekdays 9-5 MT a lag of 2 h+
+emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
+`reason = 'stale-alert'`). Starting steps: the runbook's
 "Starting it". To tell our side from Plex's, run `scripts/plex_odbc_probe.py`
 (`docs/PLEX_ODBC_PROBE.md`).
 

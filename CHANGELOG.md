@@ -37,6 +37,11 @@ don't need an entry.
 - **Result:** 1,542 notes written (1,532 new, 10 appended), 34 batches all verified; final check
   of all 4,110 customers through the API and 13 on screen: exact. Flagged rows not written.
 - **Docs:** `docs/CUSTOMER_NOTES_BULK.md` (new). Not deployed; runs by hand on the Mac.
+- **Backups:** `scripts/backup_to_bucket.ps1` now zips `etl-manual/` (customer-notes backup, plan,
+  log). The customer-notes folder is already in
+  `gs://voxdatalake-terraform-state/plex-to-big-query/backups/customer-notes/2026-11-10T032245Z/`.
+  The Mac's `.env` gained `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD`; the backup script
+  uploads `.env` as before. OPEN_ITEMS D31 tracks the flagged rows.
 
 ## 2026-11-09 (dev) - Write a customer's Note through the Plex screen
 

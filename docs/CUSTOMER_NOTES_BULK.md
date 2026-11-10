@@ -21,6 +21,15 @@ multi-line "Note". The Brief Note and the Contact Information note are left alon
 > for a later decision:** 927 inactive customers, 3 name mismatches, 690 codes not in Plex,
 > 1,395 comments with no code (hub tab filters).
 
+**Backups:** everything in `etl-manual/customer_note/` (the customer backups taken before the
+update, the plan, the action log, `loop.out`, screenshots) is in
+`gs://voxdatalake-terraform-state/plex-to-big-query/backups/customer-notes/2026-11-10T032245Z/customer_note.zip`,
+and `scripts/backup_to_bucket.ps1` now zips `etl-manual/` with every run.
+
+**Credentials it needs** (in `.env`, never in git): `PLEX_PORTAL_USERNAME` /
+`PLEX_PORTAL_PASSWORD` for the screen (added to the Mac's `.env` on 2026-11-09) and
+`PLEX_API_CONSUMER_KEY` / `PLEX_API_CONSUMER_SECRET` for the API reads.
+
 ## Contents
 
 - [Which Note field](#which-note-field)

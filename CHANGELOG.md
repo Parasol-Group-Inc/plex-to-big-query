@@ -28,6 +28,11 @@ don't need an entry.
   `live_source` has a group live. The Label Design push skips its "ETL reached Plex" gate in live mode
   (on 11-10 a successful run on frozen data blocked it). Revenue screen read in half-month windows
   (the 500-row cap would be reached mid-November).
+- **Scope and cadence (Emilio, same day):** every 4 h, three screens only (Label Design releases, revenue,
+  shipments); production stays on ODBC. Back to ODBC after 2 clean runs; views' freshness backstop 5 h.
+  Every Plex login is logged to `PlexOps.plex_login_log` (ok/failed, seconds, page, screenshot) and a
+  failed one is emailed to Emilio alone; screenshots of each login and screen read go to
+  `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/` (365 days).
 - **Added: `plex-etl-watchdog`** (`watchdog.py`, every 30 min, `PlexOps.watchdog_log`): 12 checks
   from a second Opus audit (missed/stuck dispatches, Label Design running and reaching Monday, the
   screens job, raw freshness, MSL history, backups, manual data, test cascade, schedulers, image drift).

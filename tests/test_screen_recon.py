@@ -112,3 +112,51 @@ def test_screen_records_revenue_sums_by_invoice_and_part():
     rows = [{"invoice_link": 5, "part_key": 9, "revenue": 10.0}, {"invoice_link": 5, "part_key": 9, "revenue": 1}]
     out = r.screen_records("revenue", rows)
     assert out == {"5|9": {"num": 5, "event": None, "m": {"revenue_cents": 1100}}}
+
+
+# ── login audit (2026-11-10) ──────────────────────────────────────────────────
+
+class FakePage:
+    url = "https://vox.on.plex.com/SqlDevelopmentEnvironment"
+
+    def screenshot(self, **kw):
+        return b"png"
+
+
+def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
+    audit = r.Audit("run1", FETCH, dry_run=False)
+    calls = {"n": 0}
+
+    def real(pg, user, password):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise RuntimeError("login did not reach the SQL Development Environment")
+
+    login = audit.wrap_login(real)
+    login(FakePage(), "u", "p")
+    login(FakePage(), "u", "p")
+    try:
+        login(FakePage(), "u", "p")
+        raise AssertionError("should have raised")
+    except RuntimeError:
+        pass
+    assert [x["reason"] for x in audit.logins] == ["first", "re-login", "re-login"]
+    assert [x["ok"] for x in audit.logins] == [True, True, False]
+    assert "password" not in str(audit.logins) and audit.logins[2]["error"].startswith("login did not")
+
+
+def test_failed_login_mails_only_the_login_address(monkeypatch):
+    import email_utils
+    sent = []
+    monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: sent.append((alert, to)) or True)
+    monkeypatch.setattr(r, "LOGIN_ALERT_EMAILS", "ops@example.com")
+    audit = r.Audit("run1", FETCH, dry_run=False)
+    audit.logins = [{"ok": False, "error": "timeout", "attempted_at": FETCH, "reason": "first", "seconds": 90.0,
+                     "final_url": "https://accounts.plex.com/", "screenshot": "", "execution": "x", "job": "j"}]
+    audit.mail_failed_logins()
+    assert sent and sent[0][1] == ["ops@example.com"] and "login failed" in sent[0][0]["headline"]
+
+
+def test_screenshot_paths_are_dated_in_mountain_time():
+    audit = r.Audit("abc", FETCH, dry_run=True)
+    assert audit.prefix == "plex-screens/2026/11/10/1315-MT_abc"

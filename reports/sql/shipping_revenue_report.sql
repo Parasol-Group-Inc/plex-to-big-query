@@ -71,8 +71,8 @@
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
 -- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
--- disagrees, and empties the live table after 3 clean hours. The 3-hour freshness
--- check stays as a backstop: if the job stops, the view is back on ODBC within 3 h.
+-- disagrees, and empties the live table after 2 clean runs. It runs every 4 h, so the
+-- freshness backstop is 5 h: if the job stops, the view is back on ODBC within 5 h.
 -- (Until 2026-11-10 this used odbc_health plus "every screen shipper is in ODBC",
 -- which a shipper deleted in Plex could never satisfy: D30.)
 WITH live_switch AS (
@@ -81,9 +81,9 @@ WITH live_switch AS (
       AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
                   WHERE ls.report_group = 'revenue'), FALSE)
       AND IFNULL((SELECT MAX(lh.loaded_at) FROM `{gcp_project}.PlexProd.live_shipper_history` lh)
-                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE)
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE)
       AND IFNULL((SELECT MAX(lr.loaded_at) FROM `{gcp_project}.PlexProd.live_shipping_revenue` lr)
-                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS use_live
 ),
 
 live_lines AS (

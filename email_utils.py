@@ -1116,10 +1116,13 @@ def render_ops_alert(alert: Dict[str, object]):
     return subject, html_content, "\n".join(text) + "\n"
 
 
-def send_ops_alert(alert: Dict[str, object]) -> bool:
+def send_ops_alert(alert: Dict[str, object], to: Optional[List[str]] = None) -> bool:
+    """`to` overrides REPORT_TO_EMAILS (the failed-login email goes to one person)."""
     config = _sendgrid_config()
     if config is None:
         return False
+    if to:
+        config = (config[0], list(to), config[2])
     subject, html_content, text_content = render_ops_alert(alert)
     _send(config, subject, html_content, text_content)
     return True

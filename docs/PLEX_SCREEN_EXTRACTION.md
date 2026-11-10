@@ -2,8 +2,8 @@
 
 > **Status (2026-11-10): a cloud job, hourly, permanent.** The screens are no longer a
 > laptop stopgap. Cloud Run job `plex-live-screens` (scheduler `plex-live-screens-sync`,
-> :20 every hour, Dockerfile.screens) runs `scripts/screen_recon.py`: it reads the four
-> screens, compares them with ODBC and BigQuery, and switches a report to the screens
+> every 4 hours at :20 MT from 00:20, Dockerfile.screens) runs `scripts/screen_recon.py`: it reads three
+> screens (Label Design releases, revenue, shipments), compares them with ODBC and BigQuery, and switches a report to the screens
 > only while ODBC is behind or disagrees. See
 > [Reconciliation (cloud job)](#reconciliation-cloud-job). The laptop task is not needed
 > any more; the history below is kept for the record.
@@ -52,13 +52,21 @@
 
 **Why.** Plex ODBC failed in two ways in November 2026: no answer (11-04 to 11-08), and,
 on 11-10, answers from data frozen ~08:10-12:50 MT while every ETL run succeeded. The
-screens were right both times. So every hour a job checks ODBC against them.
+screens were right both times. So every 4 hours a job checks ODBC against them (Label Design, revenue and
+shipments; production was dropped from the check on 11-10, its view stays on ODBC).
 
-**One cycle** (`scripts/screen_recon.py`, about 5-10 min):
+**One cycle** (`scripts/screen_recon.py`, about 5 min):
 1. Logs into Plex (secrets `plex-portal-username` / `plex-portal-password`) and reads
-   the four screens: `releases` (Sales Orders + Rapid Entry), `production` (last
-   `RECON_PRODUCTION_DAYS` = 2 days), `history` (Shipper History) and `revenue`
-   (Shipping Revenue by Part Group, half-month windows since the 500-row cap).
+   three screens: `releases` (Sales Orders + Rapid Entry), `history` (Shipper History)
+   and `revenue` (Shipping Revenue by Part Group, half-month windows since the 500-row
+   cap). `--only production` still compares production by hand.
+   **Every login** (first and any re-login mid-screen) is timed and written to
+   `PlexOps.plex_login_log` (ok, error, seconds, final page, screenshot). **A failed
+   login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio). **Screenshots** of every
+   login and screen read go to `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/
+   HHMM-MT_<run>/NN_<what>.png` (e.g. `01_login_ok.png`, `02_releases_ok_461rows.png`,
+   `..._FAILED.png`), kept 365 days. Each screen's read logs `extraction <screen>: ok,
+   N rows, S s` and `screen_recon.fetch_seconds`.
 2. Appends every record to `PlexOps.screen_snapshot` (30 days).
 3. Reads the same records from ODBC (one connection, filtered queries with `TOP`) and
    the keys of the matching `raw_*` tables.
@@ -88,22 +96,24 @@ screens were right both times. So every hour a job checks ODBC against them.
    | `screens_failed` | a screen could not be read, or read under 90% (50% releases/production) of last run |
 
 6. **Switching.** `PlexOps.live_source` (a view) sets `use_live` per report group
-   (`label_design` ← releases, `revenue` ← history + revenue, `production` ←
-   production) when any of the screen's last 3 good runs was `behind`, `diverged` or
+   (`label_design` ← releases, `revenue` ← history + revenue) when any of the screen's
+   last 2 good runs was `behind`, `diverged` or
    `odbc_unreachable`. While `use_live`, the job reloads that group's `PlexProd.live_*`
    tables every hour (and starts the Label Design push, skipping the "ETL reached Plex"
-   gate). When it turns false (3 clean runs), it backs the tables up to
-   `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The three views read
-   the screens only when `use_live` is true **and** their live table is under 3 h old,
-   so if the job stops they are back on ODBC within 3 hours.
+   gate). When it turns false (2 clean runs, 8 h), it backs the tables up to
+   `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The two views read
+   the screens only when `use_live` is true **and** their live table is under 5 h old,
+   so if the job stops they are back on ODBC within 5 hours.
 7. **Emails** (SendGrid, `[Plex ETL] - ACTION NEEDED: ...`): a group going to the screens,
    a group back on ODBC (for information), `diverged` / `pipeline_behind` (daily), and a
    screen that failed twice running (daily). Google Monitoring separately mails if the
-   job's `recon heartbeat` log line is missing for 3 h.
+   job's `recon heartbeat` log line is missing for 9 h.
 
 **Check it:**
 ```sql
 SELECT * FROM `voxdatalake.PlexOps.live_source`;
+SELECT attempted_at, reason, ok, error, seconds, screenshot
+FROM `voxdatalake.PlexOps.plex_login_log` ORDER BY attempted_at DESC LIMIT 20;
 SELECT run_started_at, screen, verdict, odbc_lag_min, compared, missing_tail, missing_hole,
        status_diff, value_diff, odbc_extra, bq_missing, fetch_error, odbc_error
 FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20;
@@ -113,9 +123,9 @@ FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20;
 command is `python`). Locally on Apple Silicon the amd64 image is too slow for Plex's
 login; test in Cloud Run.
 
-**Cost** (Cloud Run, us-central1, 2 vCPU / 4 GiB, ~8 min a run, before the free tier):
-hourly 24/7 = 720 runs/month ≈ $12.40 CPU + $2.80 memory ≈ **$15/month**; weekdays
-06:00-18:00 only ≈ $6. The watchdog (30 s every 30 min) ≈ $1. BigQuery reads and the
+**Cost** (Cloud Run, us-central1, 2 vCPU / 4 GiB, ~5 min a run, before the free tier):
+every 4 h = 180 runs/month ≈ $1.95 CPU + $0.45 memory ≈ **$2.40/month** (hourly would be
+≈ $10). Screenshots: ~10 PNGs a run, well under 1 GB a year (< $0.03/month). The watchdog (30 s every 30 min) ≈ $1. BigQuery reads and the
 snapshot storage stay inside the free tier. A screens image per build adds ~1.5 GB to
 Artifact Registry (~$0.15/month each until old ones are cleaned).
 

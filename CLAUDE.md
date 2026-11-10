@@ -346,13 +346,15 @@ emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
 
 ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every run
 "succeeded"). So two Cloud Run jobs now watch from outside the ETL:
-- **`plex-live-screens`** (`scripts/screen_recon.py`, Dockerfile.screens, hourly at :20)
-  reads the four Plex screens, compares them with ODBC and the `raw_*` tables, and writes
+- **`plex-live-screens`** (`scripts/screen_recon.py`, Dockerfile.screens, every 4 h at :20)
+  reads three Plex screens (Label Design releases, revenue, shipments; not production), compares them with ODBC and the `raw_*` tables, and writes
   a verdict per screen to `PlexOps.screen_recon` (diffs in `screen_recon_diff`).
   `PlexOps.live_source` turns `use_live` on for a report group after one `behind` /
-  `diverged` / `odbc_unreachable` run and off after 3 clean ones; the job then loads or
-  empties `PlexProd.live_*`. Label Design, revenue and production read the screens only
-  while `use_live` **and** their live table is under 3 h old. Tolerance:
+  `diverged` / `odbc_unreachable` run and off after 2 clean ones; the job then loads or
+  empties `PlexProd.live_*`. Label Design and revenue read the screens only
+  while `use_live` **and** their live table is under 5 h old. Every Plex login goes to
+  `PlexOps.plex_login_log` with a screenshot in `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/`;
+  a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`). Tolerance:
   `RECON_LAG_TOLERANCE_MIN` (120) in Terraform. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".

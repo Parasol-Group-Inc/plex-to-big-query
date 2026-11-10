@@ -60,12 +60,17 @@ UTC = dt.timezone.utc
 
 LAG_TOLERANCE_MIN = int(os.environ.get("RECON_LAG_TOLERANCE_MIN", "120"))
 GRACE_MIN = int(os.environ.get("RECON_GRACE_MIN", "15"))
-CLEAN_RUNS = int(os.environ.get("RECON_CLEAN_RUNS", "3"))
+CLEAN_RUNS = int(os.environ.get("RECON_CLEAN_RUNS", "2"))
 PRODUCTION_DAYS = int(os.environ.get("RECON_PRODUCTION_DAYS", "2"))
 ALERT_REPEAT_HOURS = 24
 SHORT_READ = {"releases": 0.5, "production": 0.5, "history": 0.9, "revenue": 0.9}
-SCREEN_ORDER = ["releases", "production", "history", "revenue"]
-GROUPS = {"label_design": ["releases"], "revenue": ["history", "revenue"], "production": ["production"]}
+# 2026-11-10 (Emilio): every 4 hours, Label Design, revenue and shipments only.
+# Production can still be compared by hand (--only production).
+SCREEN_ORDER = ["releases", "history", "revenue"]
+GROUPS = {"label_design": ["releases"], "revenue": ["history", "revenue"]}
+LOGIN_TABLE = f"{OPS}.plex_login_log"
+SCREENSHOT_BUCKET = os.environ.get("SCREENSHOT_BUCKET", "")
+LOGIN_ALERT_EMAILS = os.environ.get("LOGIN_ALERT_EMAILS", "")
 LIVE_TABLE = {"releases": pls.RELEASES_TABLE, "production": pls.PRODUCTION_TABLE,
               "history": pls.HISTORY_TABLE, "revenue": pls.REVENUE_TABLE}
 ODBC_TOP = 50000
@@ -436,6 +441,108 @@ def send(alert):
         return False
 
 
+# ── Login and screenshot audit (2026-11-10) ───────────────────────────────────
+# Every Plex login the job makes (the first one and any re-login in the middle of
+# a screen) is timed, logged to PlexOps.plex_login_log and screenshotted; a failed
+# one is emailed on its own to LOGIN_ALERT_EMAILS. Screenshots go to
+# gs://SCREENSHOT_BUCKET/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png.
+
+class Audit:
+    def __init__(self, run_id, started, dry_run):
+        self.run_id, self.dry_run, self.n = run_id, dry_run, 0
+        self.logins, self.shots = [], []
+        mt = started.astimezone(DEN)
+        self.prefix = f"plex-screens/{mt:%Y/%m/%d}/{mt:%H%M}-MT_{run_id}"
+        self.bucket = None
+        if SCREENSHOT_BUCKET and not dry_run:
+            try:
+                from google.cloud import storage
+                self.bucket = storage.Client(project=PROJECT).bucket(SCREENSHOT_BUCKET)
+            except Exception as e:
+                print(f"screenshots off: {str(e).splitlines()[0][:150]}")
+
+    def shot(self, pg, what):
+        """Full-page PNG to the bucket; returns its gs:// path or ''. Never raises."""
+        self.n += 1
+        name = f"{self.prefix}/{self.n:02d}_{what}.png"
+        try:
+            png = pg.screenshot(full_page=True, timeout=30000)
+            if self.bucket is None:
+                return ""
+            blob = self.bucket.blob(name)
+            blob.metadata = {"run_id": self.run_id, "what": what, "url": (pg.url or "")[:500]}
+            blob.upload_from_string(png, content_type="image/png")
+            path = f"gs://{SCREENSHOT_BUCKET}/{name}"
+            self.shots.append(path)
+            return path
+        except Exception as e:
+            print(f"  screenshot {what} failed: {str(e).splitlines()[0][:150]}")
+            return ""
+
+    def wrap_login(self, real_login):
+        def login(pg, user, password):
+            reason = "first" if not self.logins else "re-login"
+            t0 = dt.datetime.now(UTC)
+            try:
+                real_login(pg, user, password)
+            except Exception as e:
+                err = str(e).splitlines()[0][:500]
+                rec = {"ok": False, "error": err}
+                print(f"PLEX LOGIN FAILED ({reason}) as {user}: {err}")
+                raise_it = e
+            else:
+                rec, raise_it = {"ok": True, "error": None}, None
+                print(f"Plex login ok ({reason}) as {user} in "
+                      f"{(dt.datetime.now(UTC) - t0).total_seconds():.1f}s")
+            rec.update(run_id=self.run_id, attempted_at=t0, reason=reason, user=user,
+                       seconds=round((dt.datetime.now(UTC) - t0).total_seconds(), 1),
+                       job=os.environ.get("CLOUD_RUN_JOB", "local"),
+                       execution=os.environ.get("CLOUD_RUN_EXECUTION", ""),
+                       final_url=(pg.url or "")[:500])
+            rec["screenshot"] = self.shot(pg, f"login_{'ok' if rec['ok'] else 'FAILED'}")
+            self.logins.append(rec)
+            if raise_it is not None:
+                raise raise_it
+        return login
+
+    def save(self, c):
+        if self.dry_run or not self.logins:
+            return
+        try:
+            errs = c.insert_rows_json(LOGIN_TABLE, [
+                {k: (v.isoformat() if isinstance(v, dt.datetime) else v) for k, v in r.items()}
+                for r in self.logins])
+            if errs:
+                print(f"plex_login_log insert errors: {errs}")
+        except Exception as e:
+            print(f"plex_login_log not written: {str(e).splitlines()[0][:200]}")
+
+    def mail_failed_logins(self):
+        failed = [r for r in self.logins if not r["ok"]]
+        if self.dry_run or not failed:
+            return
+        to = [e.strip() for e in LOGIN_ALERT_EMAILS.split(",") if e.strip()]
+        alert = {
+            "headline": f"Plex login failed ({len(failed)} attempt{'s' if len(failed) > 1 else ''})",
+            "summary": ("The screens job could not log into Plex's web screens as the portal user. Until it "
+                        "can, nothing compares ODBC with the screens and no report can switch to them. A wrong "
+                        "or expired password, a locked user or a changed login page are the usual causes."),
+            "facts": [(f"{r['attempted_at'].astimezone(DEN):%m-%d %H:%M} MT ({r['reason']})",
+                       f"{r['error']} | after {r['seconds']} s | page {r['final_url'][:120]}") for r in failed]
+                     + [("Screenshot", r["screenshot"]) for r in failed if r["screenshot"]]
+                     + [("Execution", failed[0]["execution"] or failed[0]["job"])],
+            "steps": ["Log into https://vox.on.plex.com as the portal user by hand to see what Plex shows.",
+                      "If the password changed: printf '%s' \"$NEW\" | gcloud secrets versions add "
+                      "plex-portal-password --data-file=-",
+                      "History: SELECT * FROM `voxdatalake.PlexOps.plex_login_log` ORDER BY attempted_at DESC"],
+            "source": "plex-live-screens"}
+        try:
+            from email_utils import send_ops_alert
+            print(f"failed-login email: {'sent' if send_ops_alert(alert, to=to or None) else 'not sent'}")
+        except Exception:
+            print("failed-login email failed:\n" + traceback.format_exc())
+
+
 # ── The cycle ─────────────────────────────────────────────────────────────────
 
 def run(args):
@@ -444,9 +551,11 @@ def run(args):
     today = dt.datetime.now(DEN).date()
     names = args.only.split(",") if args.only else SCREEN_ORDER
     c = bigquery.Client(project=PROJECT)
+    audit = Audit(run_id, started, args.dry_run)
+    pls.login = audit.wrap_login(pls.login)  # _relogin() inside the fetchers uses it too
     ctx = {"creds": pls.creds(), "bq": lambda: c, "production_begin": screen_since("production", today)}
     prev = previous_counts(c) if not args.dry_run else {}
-    fetched, fetch_err, fetch_at = {}, {}, {}
+    fetched, fetch_err, fetch_at, fetch_secs = {}, {}, {}, {}
 
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
@@ -467,10 +576,17 @@ def run(args):
                 if prev.get(n) and len(rows) < SHORT_READ[n] * prev[n]:
                     raise RuntimeError(f"short read: {len(rows)} rows against {prev[n]} last run")
                 fetched[n] = rows
+                audit.shot(pg, f"{n}_ok_{len(rows)}rows")
             except Exception as e:
                 fetch_err[n] = str(e).splitlines()[0][:300]
                 print(f"  FAILED: {fetch_err[n]}")
+                audit.shot(pg, f"{n}_FAILED")
+            fetch_secs[n] = round((dt.datetime.now(UTC) - fetch_at[n]).total_seconds(), 1)
+            print(f"  extraction {n}: {'ok' if n in fetched else 'FAILED'}, "
+                  f"{len(fetched.get(n, []))} rows, {fetch_secs[n]}s")
         b.close()
+    audit.save(c)
+    audit.mail_failed_logins()
 
     conn, odbc_err = None, ""
     try:
@@ -483,6 +599,7 @@ def run(args):
     for n in names:
         rec = {"run_id": run_id, "screen": n, "run_started_at": started, "fetch_started_at": fetch_at.get(n),
                "fetch_ok": n in fetched, "fetch_error": fetch_err.get(n), "screen_rows": len(fetched.get(n, [])),
+               "fetch_seconds": fetch_secs.get(n), "screenshots": len([s for s in audit.shots if f"_{n}_" in s]),
                "prev_screen_rows": prev.get(n), "odbc_ok": False, "odbc_error": None, "odbc_rows": None,
                "odbc_max_key": None, "odbc_max_time": None, "odbc_lag_min": None, "bq_modified_at": None,
                "verdict": None, "detail": None, "tolerance_min": LAG_TOLERANCE_MIN, "grace_min": GRACE_MIN,
@@ -590,7 +707,9 @@ def run(args):
                     bigquery.ScalarQueryParameter("r", "STRING", run_id),
                     bigquery.ScalarQueryParameter("s", "STRING", alert["_screen"])])).result()
     took = (dt.datetime.now(UTC) - started).total_seconds()
-    print(f"recon heartbeat run={run_id} took={took:.0f}s " + " ".join(
+    print(f"recon heartbeat run={run_id} took={took:.0f}s logins_ok="
+          f"{sum(r['ok'] for r in audit.logins)} logins_failed={sum(not r['ok'] for r in audit.logins)} "
+          f"screenshots={len(audit.shots)} " + " ".join(
         f"{n}={summary[n]['verdict']}" for n in names))
     return 1 if fetch_err else 0
 

@@ -714,7 +714,9 @@ screens — <date>`, with the PowerShell to start the task
   connected now and then, closing the breaker, while almost every run failed.
 - At most once per 24 h (`SCREENS_ALERT_REPEAT_HOURS`): the email is logged here
   as `reason = 'screens-alert'`, `outcome = 'alert'`, which nothing else reads
-  (no Plex evidence, no follow-up, never busy).
+  (no Plex evidence, no follow-up, never busy). The same inert shape is used by
+  `stale-alert` (main.py) and `login-alert` (the screens job's failed-login email,
+  one per cause per 24 h); each is read only by its own dedupe.
 - Not sent while the screens job has already switched a report to the screens
   (`PlexOps.live_source.use_live`, since 2026-11-10), from test, or for failures of
   another kind.
@@ -761,6 +763,7 @@ Since 2026-11-10 two jobs watch the ETL from outside it:
 | `screens_job` | no `screen_recon` row for 5 h, or a screen failed 2 runs running | the screens job, its login or a screen changed |
 | `raw_freshness` | a `raw_*` table with rows not rewritten in 30 h | Plex returns 0 rows (the ETL keeps yesterday's, D3) or a pipeline stopped |
 | `msl_daily` | no `msl_demand_daily` row for today after 7:30 | the scheduled query failed |
+| `usage_monthly` | from the 2nd, no `part_usage_monthly` rows for last month | the scheduled query failed, or its guard refused a month with no production records; re-run the month (docs/reports/part_usage_monthly.md) |
 | `backups` | under 20 snapshots for the last Monday in `Backups` | `backup_snapshots_weekly` failed (it failed 10-27 to 11-09 for want of `deleteSnapshot`; fixed by the dataset grant) |
 | `manual_data` | `scorecard_goals_app` / `safety_incidents` older than 3 h | the manual-data app's hourly `pushAll` trigger (Apps Script) stopped: OPEN_ITEMS D34 |
 | `test_cascade` | fewer than 12 test jobs logged since 7 PM yesterday | a test scheduler paused or failing |

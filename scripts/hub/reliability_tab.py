@@ -60,6 +60,7 @@ CHECKS = [
     ("screens_job", "no screens check for 5 h, or a screen failing twice running"),
     ("raw_freshness", "a raw table with rows not refreshed in 30 h"),
     ("msl_daily", "no MSL demand history row for today after 7:30 AM"),
+    ("usage_monthly", "last month's part usage not recorded by the 2nd"),
     ("backups", "the weekly BigQuery snapshots missing (they had failed since 10-27)"),
     ("manual_data", "goals or safety incidents not loaded in 3 h (D34)"),
     ("test_cascade", "fewer than 12 test jobs ran overnight"),
@@ -92,7 +93,7 @@ DIAGRAM = """flowchart LR
   DF["data_freshness&lt;br/&gt;source + as-of per group"]
   Reports["17 reports&lt;br/&gt;data_source, data_as_of, data_label"]
   Monday["Monday: Data Source column&lt;br/&gt;Plex Import Test, Design &amp; QA"]
-  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 12 checks"]
+  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 13 checks"]
   GM["Google Monitoring&lt;br/&gt;heartbeats, email failures"]
   Screens --&gt; Job
   ODBC --&gt; Job
@@ -111,7 +112,7 @@ DIAGRAM = """flowchart LR
 
 def render_tab() -> str:
     stats = [("3", "Plex screens checked every 4 h"), ("17", "reports labeled with their source"),
-             ("12", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
+             ("13", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
              ("2 h", "ODBC lag tolerated before switching")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     verdicts = table(["Verdict", "When", "What happens"], [(code(v), esc(w), esc(h)) for v, w, h in VERDICTS])
@@ -148,11 +149,19 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <div class="panel"><h3>Where things are</h3><ul class="plain">
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
-<li><b>Broken now (D34):</b> the manual-data app's hourly push has not loaded safety incidents since 10-19 or goals since 11-05; goals and MSL rules typed in the app don't reach BigQuery until its Apps Script trigger is fixed. The watchdog mails it daily.</li>
+<li><b>Broken now (D34):</b> the manual-data app's hourly push trigger is not running (no table refreshed since its last form save). Saves still push at once, so typed data arrives; only the hourly retry of a failed push is missing. The watchdog mails it daily.</li>
 <li>Settings: lag tolerance 120 min, 2 clean runs to switch back, digest hours 8/12/16 (Terraform, job plex-live-screens).</li>
 <li>Cost: about $2.40 a month for the screens job, $1 for the watchdog.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>
+<div class="two">
+<div class="panel"><h3>Plex logins (screens job)</h3><ul class="plain">
+<li>Every login is logged with a screenshot; a failed one is diagnosed: wrong password, password change, MFA, locked, Plex down, network, timeout.</li>
+<li>Only Plex-down, network and ordinary timeouts are retried (once). A rejected or unclear login is not, and the job then stops logging in for 24 h, so it can never lock the user by repetition.</li>
+<li>Emilio gets one email per cause per day with what Plex showed and the fix. After fixing, run the job with <code>--force-login</code>.</li></ul></div>
+<div class="panel"><h3>MSL usage, changed 2026-11-10 (Jennilyn)</h3><ul class="plain">
+<li><b>NetSuite usage is held for 6 months.</b> Approaching MSL used to switch to Plex usage after 30 days of Plex history (about 11-16); now after 183 days, about 2027-04-18, and Plex is then averaged over the last 6 months. With 30 days, 240 parts would have switched on 3 weeks of data.</li>
+<li><b>New: usage by part by month</b> (<code>PlexProd.part_usage_monthly</code>): recorded on the 1st of each month for the month before, with the daily average, measured exactly like the MSL report (matches it on 506/506 parts). October 2026 is in (13 days from go-live).</li></ul></div></div>
 <div class="block"><h2>Check it yourself</h2><pre class="code">{esc(QUERIES)}</pre></div>
 </div></section>{END}"""
 

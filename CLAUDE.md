@@ -360,7 +360,9 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   empties `PlexProd.live_*`. Label Design and revenue read the screens only
   while `use_live` **and** their live table is under 5 h old. Every Plex login goes to
   `PlexOps.plex_login_log` with a screenshot in `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/`;
-  a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`). Tolerance:
+  a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`), diagnosed (cause + fix, one mail
+  per cause per 24 h via `login-alert` rows). A rejected/unclear login is not retried and suspends
+  logins for 24 h (no lockout by repetition); after fixing, run the job with `--force-login`. Tolerance:
   `RECON_LAG_TOLERANCE_MIN` (120) in Terraform. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".

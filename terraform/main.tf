@@ -6132,7 +6132,7 @@ resource "google_bigquery_table" "etl_dispatch_log" {
     { name = "dispatch_id", type = "STRING", mode = "REQUIRED" },
     { name = "job_name", type = "STRING", mode = "REQUIRED" },
     { name = "mode", type = "STRING", mode = "REQUIRED" },
-    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up" },
+    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up | canary | recovery | external; inert alert rows (outcome alert): screens-alert, stale-alert, login-alert" },
     { name = "scheduled_for", type = "TIMESTAMP", mode = "NULLABLE", description = "the schedule slot (UTC); NULL for a follow-up" },
     { name = "followup_of", type = "STRING", mode = "NULLABLE", description = "dispatch_id of the failed run this follows up" },
     { name = "dispatched_at", type = "TIMESTAMP", mode = "REQUIRED" },

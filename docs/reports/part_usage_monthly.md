@@ -1,6 +1,6 @@
 # Part usage by month (`PlexProd.part_usage_monthly`)
 
-> **Status:** ✅ Live 2026-11-10. October 2026 backfilled (partial: 13 of 31 days, from go-live). Each later month is recorded on the 1st of the next month, 06:30 MT, by the scheduled query `part_usage_monthly`. · **Category:** Supply Chain · **Asked for by:** Jennilyn (2026-11-10)
+> **Status:** ✅ Live 2026-11-10. October 2026 backfilled (partial: 13 of 31 days, from go-live). Each later month is recorded on the 1st of the next month at 13:30 UTC (06:30 MST / 07:30 MDT, after the 4 AM full ETL run), by the scheduled query `part_usage_monthly`. · **Category:** Supply Chain · **Asked for by:** Jennilyn (2026-11-10)
 
 **What it answers:** how much of each part did production use in a month, and what was the daily average? A table of usage by item by month, for purchasing and production planning reports.
 
@@ -29,10 +29,13 @@ Checked on 2026-11-10: summed over the same days, this table equals the MSL repo
 
 ## Things to know
 
-- **The production day is the Mountain record date.** Plex stamps a day's production at 22:00 the evening before; this table corrects for that, so production on the 1st counts in its own month.
+- **The production day is the day Plex recorded it.** Plex stamps a day's production report at 22:00 the evening before; this table corrects for that, so production on the 1st counts in its own month.
 - **The bill of materials is read when the month is recorded**, not as it was during the month. A BOM changed later does not rewrite history; re-running a month (SQL below) would.
 - **Usage outside recorded production is not counted** (material issued by hand, scrap).
-- **If Plex's database feed was behind on the 1st**, the month is short: check `source_tables_loaded_at`, then re-run that month.
+- **If Plex's database feed was behind on the 1st**, the month may be short: check `source_tables_loaded_at`, then re-run that month. A month with no production records at all is refused (the query fails rather than record it empty), and the watchdog reports a month not recorded by the 2nd.
+- **Joining it in another report:** the table only has rows for parts that were used, so join on `(usage_month, part_no)` with a LEFT JOIN and treat a missing row as 0 (`COALESCE(qty_used, 0)`). Use `part_no`, not `part_key` (one row per part number, on its stocked key).
+- **Units:** `unit` is blank for most raw materials, which are kilos; other parts are in their stocked unit (often eaches).
+- **No month-to-date row:** the current month appears on the 1st of the next. Ask if a running month-to-date view would help.
 
 ## Re-running or backfilling a month
 

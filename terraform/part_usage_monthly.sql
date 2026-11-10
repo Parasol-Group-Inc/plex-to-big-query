@@ -11,10 +11,11 @@
 --   into its own wrapper) skipped, usage on a wrapper key converted into the stocked key's
 --   unit by its factor, rolled up per part NUMBER. Summed over the view's window, this table
 --   matches the view's plex_avg_daily_usage x usage_days on every part (506/506, 2026-11-10).
--- ONE DIFFERENCE, ON PURPOSE: the production date. ODBC's Report_Date is 22:00 Mountain the
+-- ONE DIFFERENCE, ON PURPOSE: the production date. ODBC's Report_Date is 22:00 the
 --   evening BEFORE the day produced, so the view's DATE(Report_Date) is one day early (a
 --   Monday record dates Sunday). The view's 90-day sum does not care; a month boundary does.
---   Here d = DATE(Report_Date + 2 h), which equals the Mountain record date on every record
+--   Here d = DATE(Report_Date + 2 h), the production day (= the calendar date of Plex's
+--   Record_Date as stored) on every record
 --   (19,748/19,748 on 2026-11-10).
 --
 -- WHICH PARTS GET ROWS: every part number consumed as a BOM COMPONENT of production recorded
@@ -61,6 +62,21 @@ CREATE TABLE IF NOT EXISTS `voxdatalake.PlexProd.part_usage_monthly` (
 PARTITION BY DATE_TRUNC(usage_month, MONTH)
 CLUSTER BY part_no
 OPTIONS (description = "Monthly usage per part from recorded production x BOM, same method as approaching_msl_report. Filled by the part_usage_monthly scheduled query.");
+
+-- GUARD (audit 2026-11-10): refuse to record a month that has no production records at all
+-- (a failed ETL or a frozen Plex feed), instead of recording it empty. The scheduled query
+-- then fails, the watchdog's `usage_monthly` check reports the missing month, and a re-run
+-- after the data arrives records it.
+ASSERT (
+  SELECT COUNT(*) FROM `voxdatalake.PlexProd.part_production_current`
+  WHERE COALESCE(SAFE_CAST(Rejected AS INT64), 0) = 0
+    AND COALESCE(
+      DATE(TIMESTAMP_ADD(
+        TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(Report_Date AS STRING) AS INT64), 0), 1000)),
+        INTERVAL 2 HOUR)),
+      NULLIF(SAFE_CAST(CAST(Report_Date AS STRING) AS DATE), DATE '1970-01-01')
+    ) BETWEEN target_month AND month_end
+) > 0 AS 'part_usage_monthly: no production records for the month; not recording it (ETL failed or Plex feed frozen?)';
 
 DELETE FROM `voxdatalake.PlexProd.part_usage_monthly`
 WHERE usage_month = target_month;

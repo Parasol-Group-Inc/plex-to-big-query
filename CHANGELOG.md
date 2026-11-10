@@ -16,6 +16,10 @@ don't need an entry.
 
 ## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
 
+- **Audited (two Sonnet agents):** the monthly query now refuses to record a month with no production
+  records (ASSERT; the watchdog's new 13th check, `usage_monthly`, reports a month not recorded by the
+  2nd); join, unit and month-to-date notes in the doc; the table is last in the backup list.
+
 - **Changed (`approaching_msl_report`):** `usage_min_days` default 30 → 183 (about 6 months), and Plex
   usage is averaged over `GREATEST(90, usage_min_days)` days (it was capped at 90, so 183 could never be
   met). Plex takes over from NetSuite around 2027-04-18 instead of ~11-16, when 240 parts would have
@@ -31,12 +35,16 @@ don't need an entry.
 ## 2026-11-10 - Plex login failures diagnosed; manual-data push flagged broken
 
 - **Changed:** a failed Plex web login is classified (wrong credentials, password change, MFA,
-  locked, Plex down, network, timeout, unknown) from the error and the page text; transient causes
-  are retried once after 60 s, credential causes never. The email to Emilio names the cause, quotes
-  what Plex showed, gives that cause's fix, the failing streak and the last good login, and goes once
-  per cause per 24 h (`login-alert` rows in `etl_dispatch_log`). Tests added.
-- **Flagged:** OPEN_ITEMS D34 is a confirmed break (manual-data app push), also on the hub's
-  Reliability tab.
+  locked, Plex down, network, timeout, timeout on the sign-in page, unknown): credential causes from
+  the page text, transport causes from the error, with word boundaries. Only Plex-down, network and a
+  timeout off the sign-in page are retried (once, 60 s); anything else is not, and suspends logins for
+  24 h so repetition can never lock the user (`--force-login` after fixing). The password is masked out
+  of every error and page text; non-retryable failures raise `LoginFailed`, so the fetchers' own
+  retries stop too. The email to Emilio alone names the cause, quotes what Plex showed, gives the fix,
+  the streak and the last good login, once per cause per 24 h (`login-alert: sent` rows). Two Sonnet
+  audits; tests added (171).
+- **Flagged:** OPEN_ITEMS D34: the manual-data app's hourly push trigger is not running (form saves
+  still push; the hourly retry is missing), also on the hub's Reliability tab.
 
 ## 2026-11-10 - Fourth pass after deploy (two Sonnet audits)
 

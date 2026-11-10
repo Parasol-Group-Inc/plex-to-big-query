@@ -65,9 +65,17 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio), with a diagnosis: the
    cause is read from the error and the page text (`wrong_credentials`, `password_change`,
    `verification`, `locked`, `plex_down`, `network`, `timeout`, `unknown`) and the email gives
-   that cause's fix, what Plex showed, the run streak and the last good login. Causes that can
-   pass by themselves are retried once after 60 s; credential causes never (a retry can lock
-   the user). One email per cause per 24 h (`reason = 'login-alert'` rows in
+   that cause's fix, what Plex showed, the run streak and the last good login. Only
+   `plex_down`, `network` and a `timeout` that did not stop on Plex's sign-in page are retried
+   (once, after 60 s). Anything else (a rejected, locked or MFA login, a timeout on the sign-in
+   page, or words we don't recognise) is not retried, and **the job then does not log in at all
+   for 24 h** (`login_suspended`), so it can never lock the user by repetition. After fixing
+   it, start a run by hand with `--force-login`:
+   `gcloud run jobs execute plex-live-screens --region=us-central1 --args=python,scripts/screen_recon.py,--force-login`.
+   Credential and lock causes are read from the page text, transport causes from the error, so
+   the "Reset password" link on every sign-in page is not mistaken for a password change. The
+   password is masked out of every error and page text before anything is printed or stored.
+   One email per cause per 24 h (`reason = 'login-alert'`, `detail = '<cause>: sent'` rows in
    `etl_dispatch_log`); `plex_login_log.error` starts with the cause. **Screenshots** of every
    login and screen read go to `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/
    HHMM-MT_<run>/NN_<what>.png` (e.g. `01_login_ok.png`, `02_releases_ok_461rows.png`,

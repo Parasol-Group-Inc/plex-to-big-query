@@ -153,6 +153,18 @@ def check_msl_daily(c, now_mt):
     return [] if r.n else ["PlexProd.msl_demand_daily has no row for today (scheduled query msl_demand_daily, 6 AM MT)."]
 
 
+def check_usage_monthly(c, now_mt):
+    """From the 2nd of each month, last month must be in part_usage_monthly (the
+    scheduled query part_usage_monthly runs on the 1st, 13:30 UTC)."""
+    if now_mt.day < 2:
+        return []
+    last_month = (now_mt.date().replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+    n = q(c, f"SELECT COUNT(*) n FROM `{PROJECT}.PlexProd.part_usage_monthly` WHERE usage_month = DATE(@m)",
+          m=last_month.isoformat())[0].n
+    return [] if n else [f"Monthly part usage for {last_month:%Y-%m} was not recorded (scheduled query "
+                         f"part_usage_monthly failed, or the month had no production records)."]
+
+
 def check_backups(c, now_mt):
     monday = now_mt.date() - dt.timedelta(days=now_mt.weekday())
     if now_mt.date() == monday and now_mt.hour < 2:
@@ -231,6 +243,7 @@ CHECKS = [
     ("screens_job", check_screens_job),
     ("raw_freshness", check_raw_freshness),
     ("msl_daily", check_msl_daily),
+    ("usage_monthly", check_usage_monthly),
     ("backups", check_backups),
     ("manual_data", check_manual_data),
     ("test_cascade", check_test_cascade),

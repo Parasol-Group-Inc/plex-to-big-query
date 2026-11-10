@@ -142,12 +142,12 @@ def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
     try:
         login(FakePage(), "u", "p")
         raise AssertionError("should have raised")
-    except RuntimeError:
+    except RuntimeError:  # LoginFailed is a RuntimeError
         pass
     assert [x["reason"] for x in audit.logins] == ["first", "re-login", "re-login"]
     assert [x["ok"] for x in audit.logins] == [True, True, False]
     assert "password" not in str(audit.logins).replace("password_change", "")
-    assert audit.logins[2]["error"].startswith("unknown: login did not") and audit.logins[2]["retryable"]
+    assert audit.logins[2]["error"].startswith("unknown: login did not") and not audit.logins[2]["retryable"]
 
 
 class LoginBQ:
@@ -181,7 +181,7 @@ def test_failed_login_mails_only_the_login_address_with_the_cause(monkeypatch):
     audit.mail_failed_logins(bq)
     alert, to = sent[0]
     assert to == ["ops@example.com"] and "rejected the username or password" in alert["headline"]
-    assert "did not retry" in alert["summary"] and "2 run(s) in a row" in alert["summary"]
+    assert "did not retry" in alert["summary"] and "24 h" in alert["summary"] and "2 run(s) in a row" in alert["summary"]
     assert any("gcloud secrets versions add plex-portal-password" in st for st in alert["steps"])
     assert bq.inserts and "login-alert" in bq.inserts[0]
 
@@ -198,14 +198,84 @@ def test_failed_login_not_mailed_twice_a_day_or_after_a_good_retry(monkeypatch):
     assert sent == []
 
 
+def cause(err, text="", url="https://vox.on.plex.com/x"):
+    c = r.classify_login(err, text, url)
+    return c[0], c[3]
+
+
 def test_login_causes():
-    assert r.classify_login("x", "The password you entered is incorrect", "")[0] == "wrong_credentials"
-    assert r.classify_login("x", "Enter the verification code from your authenticator", "")[0] == "verification"
-    assert r.classify_login("x", "Your account is locked", "")[0] == "locked"
-    assert r.classify_login("Timeout 118615ms exceeded.", "", "")[0] == "timeout"
-    assert r.classify_login("x", "503 Service Unavailable", "")[0] == "plex_down"
-    assert r.classify_login("login did not reach the SQL Development Environment", "Welcome", "")[0] == "unknown"
-    assert not r.classify_login("x", "incorrect password", "")[2] and r.classify_login("timeout", "", "")[2]
+    assert cause("x", "The password you entered is incorrect") == ("wrong_credentials", False)
+    assert cause("x", "Invalid login or password") == ("wrong_credentials", False)
+    assert cause("x", "Authentication failed") == ("wrong_credentials", False)
+    assert cause("x", "Unable to sign in. Try again.") == ("wrong_credentials", False)
+    assert cause("x", "Your account has been deactivated") == ("locked", False)
+    assert cause("x", "Too many login attempts") == ("locked", False)
+    assert cause("x", "Enter the verification code from your authenticator") == ("verification", False)
+    assert cause("x", "Your password has expired") == ("password_change", False)
+    assert cause("Timeout 118615ms exceeded.") == ("timeout", True)
+    assert cause("x", "503 Service Unavailable") == ("plex_down", True)
+    assert cause("net::ERR_NAME_NOT_RESOLVED") == ("network", True)
+
+
+def test_login_causes_do_not_overreach():
+    # the "Reset password" link on every sign-in page is not a password change
+    assert cause("wait_for_url: Timeout 120000ms exceeded", "Forgot your password? Reset password") == ("timeout", True)
+    # a timeout that stopped on Plex's sign-in page is a rejected login: never retried
+    assert cause("wait_for_url: Timeout 120000ms exceeded", "Sign in",
+                 "https://accounts.plex.com/u/login")[1] is False
+    # words we don't know: not retried
+    assert cause("login did not reach the SQL Development Environment", "Welcome") == ("unknown", False)
+    # "Cookies are disabled" is not a locked account; a URL with 503 in it is not Plex down
+    assert cause("x", "Cookies are disabled in this browser")[0] == "unknown"
+    assert cause("x", "", "https://vox.on.plex.com/503abc")[0] == "unknown"
+
+
+def test_password_never_logged():
+    audit = r.Audit("run1", FETCH, dry_run=False)
+
+    class P(FakePage):
+        text = "Hello s3cret-pw"
+
+    def real(pg, user, password):
+        raise RuntimeError(f"fill('#pwd', '{password}') timed out")
+
+    try:
+        audit.wrap_login(real)(P(), "u", "s3cret-pw")
+    except Exception as e:
+        assert "s3cret-pw" not in str(e)
+    assert "s3cret-pw" not in str(audit.logins)
+
+
+def test_non_retryable_failure_raises_login_failed():
+    audit = r.Audit("run1", FETCH, dry_run=False)
+
+    class P(FakePage):
+        text = "The password you entered is incorrect"
+
+    def real(pg, user, password):
+        raise RuntimeError("login did not reach the SQL Development Environment")
+    try:
+        audit.wrap_login(real)(P(), "u", "p")
+        raise AssertionError("should raise")
+    except r.LoginFailed:
+        pass
+
+
+class SuspendBQ:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def query(self, sql, job_config=None):
+        from types import SimpleNamespace
+        return SimpleNamespace(result=lambda: [SimpleNamespace(**x) for x in self.rows])
+
+
+def test_login_suspended_after_credential_failure_only():
+    t = FETCH - dt.timedelta(hours=3)
+    assert r.login_suspended(SuspendBQ([{"ok": False, "error": "wrong_credentials: x", "attempted_at": t}]))
+    assert r.login_suspended(SuspendBQ([{"ok": False, "error": "timeout: x", "attempted_at": t}])) is None
+    assert r.login_suspended(SuspendBQ([{"ok": True, "error": None, "attempted_at": t}])) is None
+    assert r.login_suspended(SuspendBQ([])) is None
 
 
 def test_screenshot_paths_are_dated_in_mountain_time():

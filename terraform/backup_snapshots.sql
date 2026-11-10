@@ -6,7 +6,6 @@ DECLARE src_tables ARRAY<STRING> DEFAULT [
   'PlexProd.label_design_push_log', 'PlexProd.safety_incidents', 'PlexProd.scorecard_goals',
   'PlexProd.scorecard_goals_app', 'PlexProd.msl_item_inputs', 'PlexProd.msl_rules',
   'PlexProd.turnaround_standards', 'PlexProd.job_run_log', 'PlexProd.msl_demand_daily',
-  'PlexProd.part_usage_monthly',
   'PlexOps.etl_schedule', 'PlexOps.etl_dispatch_log',
   'PlexTest.plex_api_audit', 'PlexTest.plex_api_payloads', 'PlexTest.plex_api_push_log',
   'VoxScorecardsLive.DN_15_MO_Expiring', 'VoxScorecardsLive.Overstock_NS', 'VoxScorecardsLive.Product_Cost',
@@ -16,7 +15,9 @@ DECLARE src_tables ARRAY<STRING> DEFAULT [
   'VoxScorecardsLive.pipeline_snapshot', 'VoxScorecardsLive.sales_goals', 'VoxScorecardsLive.shipping_daily_ops',
   'VoxScorecardsLive.shipping_revenue_blanket_daily', 'VoxScorecardsLive.shipping_revenue_daily',
   'VoxScorecardsLive.shipping_revenue_shipped_daily', 'VoxScorecardsLive.stalled_win_lost_18409621334',
-  'VoxScorecardsLive.stalled_won_lost_18409621334'
+  'VoxScorecardsLive.stalled_won_lost_18409621334',
+  -- last: a table missing here stops the loop, so newer tables go at the end
+  'PlexProd.part_usage_monthly'
 ];
 
 FOR t IN (SELECT x FROM UNNEST(src_tables) AS x) DO

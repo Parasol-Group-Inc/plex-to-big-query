@@ -707,11 +707,46 @@ def run(args):
                     bigquery.ScalarQueryParameter("r", "STRING", run_id),
                     bigquery.ScalarQueryParameter("s", "STRING", alert["_screen"])])).result()
     took = (dt.datetime.now(UTC) - started).total_seconds()
+    send_digest(c, run_id, started, took, summary, audit, after)
     print(f"recon heartbeat run={run_id} took={took:.0f}s logins_ok="
           f"{sum(r['ok'] for r in audit.logins)} logins_failed={sum(not r['ok'] for r in audit.logins)} "
           f"screenshots={len(audit.shots)} " + " ".join(
         f"{n}={summary[n]['verdict']}" for n in names))
     return 1 if fetch_err else 0
+
+
+DIGEST_HOURS = {int(h) for h in os.environ.get("RECON_DIGEST_HOURS", "8,12,16").split(",") if h.strip()}
+
+
+def send_digest(c, run_id, started, took, summary, audit, after):
+    """The screens digest to REPORT_TO_EMAILS: on the RECON_DIGEST_HOURS runs (MT),
+    and on any run with a problem (a verdict other than current, a failed login).
+    Never raises."""
+    try:
+        problems = sum(1 for r in summary.values() if r["verdict"] != "current") \
+            + sum(1 for r in audit.logins if not r["ok"])
+        if started.astimezone(DEN).hour not in DIGEST_HOURS and not problems:
+            return
+        try:
+            fresh = {r.report_group: dict(r) for r in c.query(
+                f"SELECT * FROM `{OPS}.data_freshness` WHERE dataset = 'PlexProd'").result()}
+        except Exception:
+            fresh = {}
+        names = {"label_design": "Label Design", "revenue": "Revenue and shipments"}
+        groups = [{"name": names[g], "label": (fresh.get(g) or {}).get("data_label") or "?",
+                   "lag": (after.get(g) or {}).get("latest_lag_min")} for g in GROUPS]
+        screens = [{"screen": n, "verdict": r["verdict"], "rows": r["screen_rows"], "seconds": r.get("fetch_seconds"),
+                    "compared": r.get("compared"), "missing": (r.get("missing_tail") or 0) + (r.get("missing_hole") or 0),
+                    "differ": (r.get("status_diff") or 0) + (r.get("value_diff") or 0),
+                    "error": r.get("fetch_error") or r.get("odbc_error")} for n, r in summary.items()]
+        folder = f"gs://{SCREENSHOT_BUCKET}/{audit.prefix}/" if audit.shots else ""
+        from email_utils import send_screens_digest
+        ok = send_screens_digest({"run_id": run_id, "took": took, "problems": problems, "groups": groups,
+                                  "screens": screens, "logins_ok": sum(r["ok"] for r in audit.logins),
+                                  "logins_failed": sum(not r["ok"] for r in audit.logins), "screenshots": folder})
+        print(f"screens digest: {'sent' if ok else 'not sent (email off)'}")
+    except Exception:
+        print("screens digest failed:\n" + traceback.format_exc())
 
 
 def decide_alerts(c, before, after, summary):

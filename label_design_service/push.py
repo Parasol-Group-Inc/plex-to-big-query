@@ -248,6 +248,11 @@ COLUMNS = [
     ("Printing Material", "status", _label("part_printing_material")),
     ("Allergen", "text", _text("part_allergen")),
     ("LCR", "text", _text("_lcr")),
+    # 2026-11-10: where this line came from and how current it was when pushed,
+    # e.g. "ODBC, data to 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT"
+    # (label_design_report.data_label, from PlexOps.data_freshness). A plain text
+    # column "Data Source" on Plex Import Test and Design & QA, so a move keeps it.
+    ("Data Source", "text", _text("data_label")),
 ]
 
 

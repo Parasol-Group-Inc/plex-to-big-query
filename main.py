@@ -1474,6 +1474,17 @@ def batch_health(bq: bigquery.Client) -> dict:
         except Exception as exc:
             log.exception("Digest health: dispatch log check failed.")
             health["errors"].append(f"dispatch log check failed: {exc}")
+    # 2026-11-10: report groups on the Plex screens, or on ODBC data that is old.
+    try:
+        health["sources"] = [dict(r) for r in bq.query(f"""
+            SELECT report_group, data_source, data_label,
+                   TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), data_as_of, MINUTE) AS age_min
+            FROM `{GCP_PROJECT}.PlexOps.data_freshness`
+            WHERE dataset = @ds""", job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("ds", "STRING", BQ_DATASET)])).result()]
+        health["stale_minutes"] = STALE_ALERT_MINUTES
+    except Exception as exc:
+        health["errors"].append(f"data source check failed: {exc}")
     return health
 
 

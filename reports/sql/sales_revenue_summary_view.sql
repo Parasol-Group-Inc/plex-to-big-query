@@ -26,7 +26,15 @@
 -- GRAIN: one row per (month, part_group). A month/group with no shipments
 -- simply won't appear — treat a missing row as $0, not NULL. Sum across
 -- part_group for a whole-company total.
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_source, data_as_of and data_label
+-- from PlexOps.data_freshness, report group 'revenue': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
 
+SELECT __b.*, __src.data_source, __src.data_as_of, __src.data_label
+FROM (
 SELECT
   DATE_TRUNC(ship_date, MONTH)          AS revenue_month,
   COALESCE(part_group, '(no group)')    AS part_group,
@@ -37,3 +45,9 @@ FROM `{gcp_project}.{dataset}.shipping_revenue_report`
 WHERE ship_date IS NOT NULL
 GROUP BY revenue_month, part_group
 ORDER BY revenue_month DESC, shipping_revenue DESC
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'revenue'
+) AS __src ON TRUE

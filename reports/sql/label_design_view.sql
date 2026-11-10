@@ -53,7 +53,15 @@
 --
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- from PlexOps.data_freshness, report group 'label_design': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
 
+SELECT __b.*, __src.data_as_of, __src.data_label
+FROM (
 WITH rep_outside AS (
   SELECT
     SAFE_CAST(sp.PO_Key AS INT64) AS PO_Key,
@@ -816,3 +824,9 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1
 
 ORDER BY order_date DESC, order_number, customer_part_no
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'label_design'
+) AS __src ON TRUE

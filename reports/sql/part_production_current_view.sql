@@ -43,6 +43,15 @@
 -- screen_recon.py GROUPS and the live_source view turns the switch back on.
 -- In live mode the job loads only the days it re-reads (RECON_PRODUCTION_DAYS); every
 -- other record still comes from ODBC through the merge below.
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- from PlexOps.data_freshness, report group 'production': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
+
+SELECT __b.*, __src.data_as_of, __src.data_label
+FROM (
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
@@ -182,3 +191,9 @@ SELECT v.*
 FROM live_rows AS v
 CROSS JOIN live_switch AS sw
 WHERE sw.use_live
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'production'
+) AS __src ON TRUE

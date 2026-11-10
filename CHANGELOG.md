@@ -14,6 +14,24 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - Every report says where its data came from; screens digest
+
+- **Added: `PlexOps.data_freshness`** (Terraform view): per dataset and report group, `data_source`
+  (odbc | live), `data_as_of` (ODBC: newest change delivered; live: when the screens were read) and
+  `data_label` ("ODBC, data to 11-10 11:56 MT"). Same rule as the views' switch.
+- **Changed: 17 report views** built on `label_design_report`, `shipping_revenue_report` or
+  `part_production_current` (and those three) now end with `data_source`, `data_as_of`, `data_label`
+  from that view (a wrapper around each unchanged query; `mfg_job_schedule_fg_testing_pending_report`
+  inherits them). Dry-run against PlexProd: 18/18 valid, no duplicate columns. Row order from a view's
+  `ORDER BY` is no longer guaranteed.
+- **Added: Monday "Data Source"** text column on Plex Import Test (`text_mm8z1nze`) and Design & QA
+  (`text_mm8z55hw`); the push fills it with `data_label`.
+- **Added: screens digest** (`send_screens_digest`): the screens job mails REPORT_TO_EMAILS (Emilio,
+  Jennilyn, marketing) at its 8:20 / 12:20 / 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
+  problem. The ETL batch digest's health section now lists a report group on the screens, or on ODBC
+  data 2 h+ old in work hours.
+- Docs: each of the 18 reports' docs ("Where the data came from"), `docs/reports/data_freshness.md`.
+
 ## 2026-11-10 - Screens vs ODBC reconciliation (cloud job) and a watchdog
 
 - **Added: `plex-live-screens`** (Cloud Run, hourly, `scripts/screen_recon.py`, `Dockerfile.screens`).

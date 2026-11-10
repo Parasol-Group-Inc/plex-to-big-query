@@ -61,3 +61,16 @@ CREATE TABLE IF NOT EXISTS `voxdatalake.PlexProd.msl_rules` (rule STRING, value 
 - **NetSuite usage unit.** The upload carries no unit; the report assumes NetSuite uses the same unit as Plex's stocked record (kilos for powders). Usage now agrees within 2x for most parts, but a few still differ by 10x or more (e.g. 33008 Caralluma capsules), which may be the short Plex history or a unit difference.
 - Parts with no recorded production show no usage, so no days figures. Raw powders consumed outside recorded production appear this way.
 - Pipeline: `reports/sales_orders.yaml` (and test copy) → `approaching_msl_report`; SQL `reports/sql/approaching_msl_view.sql`. Plex SQL Developer copy (Plex-side figures only, not yet run in Plex): `reports/plex_sql/approaching_msl_view.sql`.
+
+## Where the data came from
+
+*Added 2026-11-10.* Every row carries three columns that say where its data came from and how current it was:
+
+| Column | Meaning |
+|---|---|
+| `data_source` | `odbc` (Plex's database feed, the normal case) or `live` (read from Plex's own screens because the database feed was behind) |
+| `data_as_of` | for `odbc`, the newest change the feed had delivered; for `live`, when the screens were read |
+| `data_label` | the two in words, e.g. "ODBC, data to 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT" |
+
+They come from `PlexOps.data_freshness`, group **production**. Production always reads ODBC: the hourly screens check covers Label Design, revenue and shipments only. An old `data_as_of` on a working day means the feed has stopped, even if every run succeeded (as on 2026-11-10). See [data_freshness.md](data_freshness.md).
+

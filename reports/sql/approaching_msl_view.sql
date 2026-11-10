@@ -83,7 +83,15 @@
 -- the purchasing pipeline's raw Purchasing_v_* tables, and msl_item_inputs / msl_rules,
 -- which the manual-data app creates on its first push. THE VIEW FAILS TO CREATE IF EITHER
 -- APP TABLE IS MISSING: create them empty first (DDL in docs/reports/approaching_msl_report.md).
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_source, data_as_of and data_label
+-- from PlexOps.data_freshness, report group 'production': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
 
+SELECT __b.*, __src.data_source, __src.data_as_of, __src.data_label
+FROM (
 WITH
 
 part AS (
@@ -361,3 +369,9 @@ SELECT
   gross_demand_qty
 FROM final
 WHERE reorder_point > 0 OR avg_daily_usage > 0
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'production'
+) AS __src ON TRUE

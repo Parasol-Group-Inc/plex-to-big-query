@@ -109,6 +109,14 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    screen that failed twice running (daily). Google Monitoring separately mails if the
    job's `recon heartbeat` log line is missing for 9 h.
 
+8. **Digest** (`send_screens_digest`), to REPORT_TO_EMAILS (Emilio, Jennilyn, marketing):
+   at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
+   problem. One line per report group (its `data_label`), one per screen (verdict, rows,
+   seconds, compared / missing / differing), logins and the screenshot folder.
+9. **Labels.** `PlexOps.data_freshness` turns the same rule into `data_source`,
+   `data_as_of` and `data_label`, carried by every report built on the three base views
+   and written to Monday's "Data Source" column (`docs/reports/data_freshness.md`).
+
 **Check it:**
 ```sql
 SELECT * FROM `voxdatalake.PlexOps.live_source`;

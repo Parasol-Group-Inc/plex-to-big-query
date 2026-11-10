@@ -6824,3 +6824,81 @@ resource "google_monitoring_alert_policy" "task_timeouts" {
     auto_close = "86400s"
   }
 }
+
+# ── Which source each report reads, and how current it is (2026-11-10) ─────────
+# One row per (dataset, report group). data_source applies the same rule as the
+# views' live_switch: 'live' only in PlexProd, while live_source.use_live AND the
+# group's live table(s) were loaded in the last 5 h; otherwise 'odbc'.
+# data_as_of: when the screens were read (live), or the newest change ODBC had
+# delivered into the raw tables (odbc), in Plex's Mountain clock. So a frozen ODBC
+# copy shows as an old data_as_of even while every run succeeds (the 11-10 case).
+# Every report built on label_design_report / shipping_revenue_report /
+# part_production_current carries these two columns from here; Looker can show
+# this view as a banner. Reads only raw/live tables and live_source, so it does
+# not depend on any ETL-created view.
+resource "google_bigquery_table" "data_freshness" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "data_freshness"
+  deletion_protection = false
+  description         = "Per dataset and report group: which source the reports read (odbc | live) and how current that data is."
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      WITH odbc AS (
+        SELECT 'PlexProd' AS dataset, 'label_design' AS report_group,
+               (SELECT MAX(SAFE_CAST(t.Update_Date AS INT64)) FROM `${var.gcp_project}.PlexProd.raw_Sales_v_PO` t) AS ns
+        UNION ALL SELECT 'PlexProd', 'revenue', GREATEST(
+               IFNULL((SELECT MAX(SAFE_CAST(t.Add_Date AS INT64)) FROM `${var.gcp_project}.PlexProd.raw_Sales_v_Shipper` t), 0),
+               IFNULL((SELECT MAX(SAFE_CAST(t.Updated_Date AS INT64)) FROM `${var.gcp_project}.PlexProd.raw_Accounting_v_AR_Invoice` t), 0))
+        UNION ALL SELECT 'PlexProd', 'production',
+               (SELECT MAX(SAFE_CAST(t.Record_Date AS INT64)) FROM `${var.gcp_project}.PlexProd.raw_Part_v_Production` t)
+        UNION ALL SELECT 'PlexTest', 'label_design',
+               (SELECT MAX(SAFE_CAST(t.Update_Date AS INT64)) FROM `${var.gcp_project}.PlexTest.raw_Sales_v_PO` t)
+        UNION ALL SELECT 'PlexTest', 'revenue', GREATEST(
+               IFNULL((SELECT MAX(SAFE_CAST(t.Add_Date AS INT64)) FROM `${var.gcp_project}.PlexTest.raw_Sales_v_Shipper` t), 0),
+               IFNULL((SELECT MAX(SAFE_CAST(t.Updated_Date AS INT64)) FROM `${var.gcp_project}.PlexTest.raw_Accounting_v_AR_Invoice` t), 0))
+        UNION ALL SELECT 'PlexTest', 'production',
+               (SELECT MAX(SAFE_CAST(t.Record_Date AS INT64)) FROM `${var.gcp_project}.PlexTest.raw_Part_v_Production` t)
+      ),
+      live AS (
+        SELECT 'label_design' AS report_group,
+               (SELECT MAX(l.loaded_at) FROM `${var.gcp_project}.PlexProd.live_order_releases` l) AS read_at
+        UNION ALL SELECT 'revenue', LEAST(
+               (SELECT MAX(l.loaded_at) FROM `${var.gcp_project}.PlexProd.live_shipper_history` l),
+               (SELECT MAX(l.loaded_at) FROM `${var.gcp_project}.PlexProd.live_shipping_revenue` l))
+        UNION ALL SELECT 'production',
+               (SELECT MAX(l.loaded_at) FROM `${var.gcp_project}.PlexProd.live_production` l)
+      ),
+      joined AS (
+        SELECT
+          o.dataset,
+          o.report_group,
+          IF(o.ns > 0, TIMESTAMP(DATETIME(TIMESTAMP_MICROS(DIV(o.ns, 1000))), 'America/Denver'), NULL) AS odbc_data_as_of,
+          IF(o.dataset = 'PlexProd', lv.read_at, NULL) AS screens_read_at,
+          o.dataset = 'PlexProd'
+            AND IFNULL(ls.use_live, FALSE)
+            AND IFNULL(lv.read_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS on_screens,
+          IF(o.dataset = 'PlexProd', ls.latest_lag_min, NULL) AS odbc_lag_min,
+          IF(o.dataset = 'PlexProd', ls.latest_verdicts, NULL) AS latest_verdicts,
+          IF(o.dataset = 'PlexProd', ls.last_run_at, NULL) AS last_check_at
+        FROM odbc o
+        LEFT JOIN live lv ON lv.report_group = o.report_group
+        LEFT JOIN `${var.gcp_project}.${google_bigquery_dataset.ops.dataset_id}.${google_bigquery_table.live_source.table_id}` ls
+          ON ls.report_group = o.report_group
+      )
+      SELECT
+        dataset,
+        report_group,
+        IF(on_screens, 'live', 'odbc') AS data_source,
+        IF(on_screens, screens_read_at, odbc_data_as_of) AS data_as_of,
+        CONCAT(IF(on_screens, 'Plex screens, read ', 'ODBC, data to '),
+               FORMAT_TIMESTAMP('%m-%d %H:%M MT', IF(on_screens, screens_read_at, odbc_data_as_of), 'America/Denver')) AS data_label,
+        odbc_data_as_of,
+        screens_read_at,
+        odbc_lag_min,
+        latest_verdicts,
+        last_check_at
+      FROM joined
+    SQL
+  }
+}

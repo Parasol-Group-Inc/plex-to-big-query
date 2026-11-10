@@ -1071,3 +1071,55 @@ def send_stale_alert(alert: Dict[str, object]) -> bool:
     subject, html_content, text_content = render_stale_alert(alert)
     _send(config, subject, html_content, text_content)
     return True
+
+
+# ── Generic operations alert (2026-11-10) ─────────────────────────────────────
+# One template for the screens reconciliation (scripts/screen_recon.py) and the
+# watchdog (watchdog.py): a headline, a summary, a table of facts, the steps.
+OPS_RUNBOOK = ("https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/"
+               "docs/OPERATIONS.md#watchdog-and-screen-reconciliation")
+
+
+def render_ops_alert(alert: Dict[str, object]):
+    """(subject, html, text). alert: headline, summary, facts [(label, value)],
+    steps [str], severity 'action'|'info', source (job name)."""
+    zone = ZoneInfo(os.environ.get("REPORT_TIME_ZONE", "America/Denver"))
+    today = datetime.now(zone).strftime("%Y-%m-%d")
+    headline = str(alert.get("headline") or "Plex ETL alert")
+    action = alert.get("severity", "action") == "action"
+    facts = [(str(a), str(b)) for a, b in (alert.get("facts") or [])]
+    steps = [str(s) for s in (alert.get("steps") or [])]
+    facts_html = "".join(
+        f"<tr><td>{html.escape(a)}</td><td class=\"mono\">{html.escape(b)}</td></tr>" for a, b in facts)
+    steps_html = ("" if not steps else '<p class="health-title"><b>What to do</b></p><ol class="actions">'
+                  + "".join(f"<li>{html.escape(s)}</li>" for s in steps) + "</ol>")
+    context = {
+        "alert_date": today,
+        "headline": headline,
+        "badge_html": ('<span class="badge badge-error">ACTION NEEDED</span>' if action
+                       else '<span class="badge badge-success">FOR INFORMATION</span>'),
+        "summary": str(alert.get("summary") or ""),
+        "steps_html": steps_html,
+        "facts_html": facts_html,
+        "source": str(alert.get("source") or "?"),
+        "runbook_url": str(alert.get("runbook_url") or OPS_RUNBOOK),
+        "company_name": os.environ.get("COMPANY_NAME", "Vox Nutrition"),
+    }
+    html_content = _render_template(_load_template("ops_alert.html"), context)
+    text = [f"{headline} — {today}", "", context["summary"], ""]
+    text += [f"{a}: {b}" for a, b in facts]
+    if steps:
+        text += ["", "What to do:"] + [f"{i}. {s}" for i, s in enumerate(steps, 1)]
+    text += ["", f"Sent by: {context['source']}", f"Runbook: {context['runbook_url']}"]
+    prefix = "ACTION NEEDED: " if action else ""
+    subject = f"[Plex ETL] - {prefix}{headline} — {today}"
+    return subject, html_content, "\n".join(text) + "\n"
+
+
+def send_ops_alert(alert: Dict[str, object]) -> bool:
+    config = _sendgrid_config()
+    if config is None:
+        return False
+    subject, html_content, text_content = render_ops_alert(alert)
+    _send(config, subject, html_content, text_content)
+    return True

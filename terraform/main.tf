@@ -6247,3 +6247,517 @@ resource "google_bigquery_data_transfer_config" "msl_demand_daily" {
     query = file("${path.module}/msl_demand_daily.sql")
   }
 }
+
+# ══ Screens reconciliation, watchdog and Google-side alerts (2026-11-10) ═══════
+# After Plex ODBC served frozen data on 11-10 while every run succeeded, and an
+# audit found the weekly backup and the manual-data push failing silently.
+# Runbooks: docs/PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)" and
+# docs/OPERATIONS.md "Watchdog and screen reconciliation".
+
+locals {
+  # Google Monitoring mails this address directly (not SendGrid), so an alert
+  # still arrives when our code, our schedulers or SendGrid are down.
+  ops_alert_email = trimspace(split(",", var.report_to_emails)[0])
+}
+
+# Every screen record read by scripts/screen_recon.py, every hour (30 days).
+resource "google_bigquery_table" "screen_snapshot" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "screen_snapshot"
+  deletion_protection = false
+  description         = "Plex screen records read hourly by plex-live-screens (scripts/screen_recon.py). 30-day partitions."
+  time_partitioning {
+    type          = "DAY"
+    field         = "fetch_started_at"
+    expiration_ms = 2592000000
+  }
+  schema = jsonencode([
+    { name = "run_id", type = "STRING", mode = "REQUIRED" },
+    { name = "screen", type = "STRING", mode = "REQUIRED", description = "releases | production | history | revenue" },
+    { name = "record_key", type = "STRING", mode = "REQUIRED" },
+    { name = "row_hash", type = "STRING", mode = "REQUIRED", description = "hash of the compared measures" },
+    { name = "event_time", type = "TIMESTAMP", mode = "NULLABLE", description = "record/ship time when the screen has one" },
+    { name = "fetch_started_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "payload", type = "STRING", mode = "NULLABLE", description = "the compared measures, JSON" },
+  ])
+}
+
+# One row per screen per hourly run: the verdict on ODBC.
+resource "google_bigquery_table" "screen_recon" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "screen_recon"
+  deletion_protection = true
+  description         = "Hourly Plex screens vs ODBC vs BigQuery verdict per screen (scripts/screen_recon.py)."
+  time_partitioning {
+    type  = "DAY"
+    field = "run_started_at"
+  }
+  schema = jsonencode([
+    { name = "run_id", type = "STRING", mode = "REQUIRED" },
+    { name = "screen", type = "STRING", mode = "REQUIRED" },
+    { name = "run_started_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "fetch_started_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "fetch_ok", type = "BOOLEAN", mode = "NULLABLE" },
+    { name = "fetch_error", type = "STRING", mode = "NULLABLE" },
+    { name = "screen_rows", type = "INT64", mode = "NULLABLE" },
+    { name = "prev_screen_rows", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_ok", type = "BOOLEAN", mode = "NULLABLE" },
+    { name = "odbc_error", type = "STRING", mode = "NULLABLE" },
+    { name = "odbc_rows", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_max_key", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_max_time", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "compared", type = "INT64", mode = "NULLABLE" },
+    { name = "excluded_recent", type = "INT64", mode = "NULLABLE" },
+    { name = "missing_tail", type = "INT64", mode = "NULLABLE" },
+    { name = "missing_hole", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_extra", type = "INT64", mode = "NULLABLE" },
+    { name = "status_diff", type = "INT64", mode = "NULLABLE" },
+    { name = "value_diff", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_newer", type = "INT64", mode = "NULLABLE" },
+    { name = "bq_missing", type = "INT64", mode = "NULLABLE" },
+    { name = "odbc_lag_min", type = "FLOAT64", mode = "NULLABLE", description = "age of the oldest screen record or edit ODBC lacks" },
+    { name = "bq_modified_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "verdict", type = "STRING", mode = "NULLABLE", description = "current | behind | diverged | odbc_unreachable | pipeline_behind | screens_failed" },
+    { name = "detail", type = "STRING", mode = "NULLABLE", description = "JSON: why + first examples" },
+    { name = "tolerance_min", type = "INT64", mode = "NULLABLE" },
+    { name = "grace_min", type = "INT64", mode = "NULLABLE" },
+    { name = "live_action", type = "STRING", mode = "NULLABLE" },
+    { name = "alert", type = "STRING", mode = "NULLABLE", description = "the alert kind mailed by this run, if any" },
+    { name = "recorded_at", type = "TIMESTAMP", mode = "NULLABLE" },
+  ])
+}
+
+resource "google_bigquery_table" "screen_recon_diff" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "screen_recon_diff"
+  deletion_protection = false
+  description         = "Each screen vs ODBC difference found by scripts/screen_recon.py (up to 500 per screen per run). 90 days."
+  time_partitioning {
+    type          = "DAY"
+    field         = "recorded_at"
+    expiration_ms = 7776000000
+  }
+  schema = jsonencode([
+    { name = "run_id", type = "STRING", mode = "REQUIRED" },
+    { name = "screen", type = "STRING", mode = "REQUIRED" },
+    { name = "record_key", type = "STRING", mode = "REQUIRED" },
+    { name = "kind", type = "STRING", mode = "REQUIRED", description = "missing_tail | missing_hole | odbc_extra | status_diff | value_diff | bq_missing" },
+    { name = "field", type = "STRING", mode = "NULLABLE" },
+    { name = "screen_value", type = "STRING", mode = "NULLABLE" },
+    { name = "odbc_value", type = "STRING", mode = "NULLABLE" },
+    { name = "event_time", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "first_seen_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "odbc_updated_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "age_min", type = "FLOAT64", mode = "NULLABLE" },
+    { name = "recorded_at", type = "TIMESTAMP", mode = "REQUIRED" },
+  ])
+}
+
+# Which report groups read the Plex screens now. Read by label_design_report,
+# shipping_revenue_report and part_production_current (their live_switch), by
+# main.py (no ODBC alert while the screens are in use) and by screen_recon.py.
+# Live after ONE bad verdict among a screen's last 3 runs (failed reads ignored),
+# back to ODBC after 3 clean runs. 3 = RECON_CLEAN_RUNS in the job.
+resource "google_bigquery_table" "live_source" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "live_source"
+  deletion_protection = false
+  description         = "Per report group: read the Plex screens (use_live) because ODBC is behind or disagrees? From screen_recon."
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      WITH groups AS (
+        SELECT 'label_design' AS report_group, 'releases' AS screen UNION ALL
+        SELECT 'revenue', 'history' UNION ALL
+        SELECT 'revenue', 'revenue' UNION ALL
+        SELECT 'production', 'production'
+      ),
+      runs AS (
+        SELECT screen, run_started_at, verdict, odbc_lag_min,
+               ROW_NUMBER() OVER (PARTITION BY screen ORDER BY run_started_at DESC) AS rn
+        FROM `${var.gcp_project}.${google_bigquery_dataset.ops.dataset_id}.${google_bigquery_table.screen_recon.table_id}`
+        WHERE verdict IS NOT NULL AND verdict != 'screens_failed'
+          AND run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)
+      )
+      SELECT
+        g.report_group,
+        IFNULL(LOGICAL_OR(r.verdict IN ('behind', 'diverged', 'odbc_unreachable')), FALSE) AS use_live,
+        MAX(r.run_started_at) AS last_run_at,
+        MAX(IF(r.rn = 1, r.odbc_lag_min, NULL)) AS latest_lag_min,
+        STRING_AGG(DISTINCT IF(r.rn = 1, CONCAT(r.screen, ': ', r.verdict), NULL)) AS latest_verdicts
+      FROM groups g
+      LEFT JOIN runs r ON r.screen = g.screen AND r.rn <= 3
+      GROUP BY g.report_group
+    SQL
+  }
+}
+
+resource "google_bigquery_table" "watchdog_log" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "watchdog_log"
+  deletion_protection = false
+  description         = "Every watchdog check result, every 30 min (watchdog.py). 90 days."
+  time_partitioning {
+    type          = "DAY"
+    field         = "checked_at"
+    expiration_ms = 7776000000
+  }
+  schema = jsonencode([
+    { name = "run_id", type = "STRING", mode = "REQUIRED" },
+    { name = "checked_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "check_id", type = "STRING", mode = "REQUIRED" },
+    { name = "ok", type = "BOOLEAN", mode = "REQUIRED" },
+    { name = "detail", type = "STRING", mode = "NULLABLE" },
+    { name = "alerted", type = "BOOLEAN", mode = "NULLABLE" },
+  ])
+}
+
+# Plex web login for the screens job. Versions are added by hand (never in git):
+#   printf '%s' "$VALUE" | gcloud secrets versions add plex-portal-password --data-file=-
+resource "google_secret_manager_secret" "plex_portal_username" {
+  secret_id = "plex-portal-username"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "plex_portal_password" {
+  secret_id = "plex-portal-password"
+  replication {
+    auto {}
+  }
+}
+
+# The watchdog lists schedulers and jobs; the screens job lists push executions.
+resource "google_project_iam_member" "etl_watch_roles" {
+  for_each = toset(["roles/cloudscheduler.viewer", "roles/run.viewer"])
+  project  = var.gcp_project
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.etl.email}"
+}
+
+# backup_snapshots_weekly creates snapshots with an expiry, which needs
+# bigquery.tables.deleteSnapshot on Backups; it failed on 10-27, 11-02 and 11-09.
+resource "google_bigquery_dataset_iam_member" "etl_backups_owner" {
+  dataset_id = "Backups"
+  role       = "roles/bigquery.dataOwner"
+  member     = "serviceAccount:${google_service_account.etl.email}"
+}
+
+resource "google_cloud_run_v2_job" "live_screens" {
+  name     = "plex-live-screens"
+  location = var.gcp_region
+
+  template {
+    parallelism = 1
+    task_count  = 1
+    template {
+      service_account = google_service_account.etl.email
+      # Cloud Build replaces this with the screens image (Dockerfile.screens).
+      containers {
+        image = local.etl_image
+        args  = ["python", "scripts/screen_recon.py"]
+        resources {
+          limits = {
+            cpu    = "2"
+            memory = "4Gi"
+          }
+        }
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "OUTPUT_MODE"
+          value = "bigquery"
+        }
+        env {
+          name  = "PLEX_HOST"
+          value = var.plex_host
+        }
+        env {
+          name  = "PLEX_ODBC_USER"
+          value = var.plex_odbc_user
+        }
+        env {
+          name  = "SECRET_ACCESS_TOKEN"
+          value = var.secret_access_token
+        }
+        env {
+          name = "PLEX_PORTAL_USERNAME"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.plex_portal_username.secret_id
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name = "PLEX_PORTAL_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.plex_portal_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name  = "RECON_LAG_TOLERANCE_MIN"
+          value = "120"
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+      }
+      max_retries = 0
+      timeout     = "2700s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "live_screens" {
+  name        = "plex-live-screens-sync"
+  description = "Hourly: Plex screens vs ODBC reconciliation; switches reports to the screens while ODBC is behind (scripts/screen_recon.py)"
+  schedule    = "20 * * * *"
+  time_zone   = "America/Denver"
+  region      = var.gcp_region
+  paused      = false
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.live_screens.name}:run"
+    body        = base64encode("{}")
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+resource "google_cloud_run_v2_job" "watchdog" {
+  name     = "plex-etl-watchdog"
+  location = var.gcp_region
+
+  template {
+    template {
+      service_account = google_service_account.etl.email
+      containers {
+        image = local.etl_image
+        args  = ["python", "watchdog.py"]
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "GCP_REGION"
+          value = var.gcp_region
+        }
+        env {
+          name  = "SENDGRID_ENABLED"
+          value = var.sendgrid_enabled
+        }
+        env {
+          name  = "REPORT_FROM_EMAIL"
+          value = var.report_from_email
+        }
+        env {
+          name  = "REPORT_TO_EMAILS"
+          value = var.report_to_emails
+        }
+        env {
+          name  = "SECRET_SENDGRID_KEY"
+          value = var.secret_sendgrid_key
+        }
+      }
+      max_retries = 0
+      timeout     = "600s"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
+resource "google_cloud_scheduler_job" "watchdog" {
+  name        = "plex-etl-watchdog-sync"
+  description = "Every 30 min: check that every part of the ETL ran and its data is current (watchdog.py)"
+  schedule    = "10,40 * * * *"
+  time_zone   = "America/Denver"
+  region      = var.gcp_region
+  paused      = false
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.watchdog.name}:run"
+    body        = base64encode("{}")
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# ── Google Monitoring: alerts that do not depend on our code or SendGrid ──────
+resource "google_monitoring_notification_channel" "ops_email" {
+  display_name = "Plex ETL operations (email)"
+  type         = "email"
+  labels = {
+    email_address = local.ops_alert_email
+  }
+}
+
+resource "google_logging_metric" "watchdog_heartbeat" {
+  name   = "plex_watchdog_heartbeat"
+  filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"plex-etl-watchdog\" AND textPayload:\"watchdog heartbeat\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_logging_metric" "recon_heartbeat" {
+  name   = "plex_recon_heartbeat"
+  filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"plex-live-screens\" AND textPayload:\"recon heartbeat\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_logging_metric" "email_failures" {
+  name   = "plex_email_failures"
+  filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name:\"plex-\" AND (textPayload:\"Failed to send\" OR textPayload:\"SendGrid config incomplete\" OR textPayload:\"Could not fetch SendGrid\" OR textPayload:\"email failed\")"
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_logging_metric" "task_timeouts" {
+  name   = "plex_task_timeouts"
+  filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name:\"plex-\" AND textPayload:\"maximum timeout\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_monitoring_alert_policy" "watchdog_silent" {
+  display_name          = "Plex ETL watchdog stopped"
+  combiner              = "OR"
+  notification_channels = [google_monitoring_notification_channel.ops_email.id]
+  documentation {
+    content = "No watchdog heartbeat for 90 min: plex-etl-watchdog or its scheduler is not running, so nothing checks the ETL. docs/OPERATIONS.md, Watchdog."
+  }
+  conditions {
+    display_name = "no watchdog heartbeat in 90 min"
+    condition_absent {
+      filter   = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.watchdog_heartbeat.name}\" AND resource.type=\"cloud_run_job\""
+      duration = "5400s"
+      aggregations {
+        alignment_period   = "600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "recon_silent" {
+  display_name          = "Plex screens reconciliation stopped"
+  combiner              = "OR"
+  notification_channels = [google_monitoring_notification_channel.ops_email.id]
+  documentation {
+    content = "No heartbeat from plex-live-screens for 3 h: nothing compares ODBC with the Plex screens. docs/PLEX_SCREEN_EXTRACTION.md, Reconciliation."
+  }
+  conditions {
+    display_name = "no recon heartbeat in 3 h"
+    condition_absent {
+      filter   = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.recon_heartbeat.name}\" AND resource.type=\"cloud_run_job\""
+      duration = "10800s"
+      aggregations {
+        alignment_period   = "600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "email_failures" {
+  display_name          = "Plex ETL emails failing"
+  combiner              = "OR"
+  notification_channels = [google_monitoring_notification_channel.ops_email.id]
+  documentation {
+    content = "A Plex ETL job could not send its email (SendGrid key, config or service). Our own alerts may not be arriving."
+  }
+  conditions {
+    display_name = "email send failures"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.email_failures.name}\" AND resource.type=\"cloud_run_job\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "3600s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+  alert_strategy {
+    auto_close = "86400s"
+  }
+}
+
+resource "google_monitoring_alert_policy" "task_timeouts" {
+  display_name          = "Plex ETL runs killed by timeout"
+  combiner              = "OR"
+  notification_channels = [google_monitoring_notification_channel.ops_email.id]
+  documentation {
+    content = "More than 3 Plex ETL runs killed by their task timeout in an hour. A killed run sends no email of its own."
+  }
+  conditions {
+    display_name = "task timeouts > 3 per hour"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.task_timeouts.name}\" AND resource.type=\"cloud_run_job\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 3
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "3600s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+  alert_strategy {
+    auto_close = "86400s"
+  }
+}

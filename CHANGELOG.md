@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - Screens vs ODBC reconciliation (cloud job) and a watchdog
+
+- **Added: `plex-live-screens`** (Cloud Run, hourly, `scripts/screen_recon.py`, `Dockerfile.screens`).
+  Reads the four Plex screens, compares them with ODBC and the raw tables, records a verdict per
+  screen (`PlexOps.screen_recon`, `screen_recon_diff`, `screen_snapshot`), and switches Label Design,
+  revenue and production to the screens only while ODBC is behind (> 120 min) or disagrees
+  (`PlexOps.live_source`), emptying the live tables after 3 clean runs. Replaces the laptop task.
+  Design by an Opus audit tested on 11-10's dumps. Emails on each switch and on divergence.
+- **Changed:** the three views' `live_switch` now follow `PlexOps.live_source` (plus the 3-hour
+  freshness backstop) instead of "live table fresh" / `odbc_health` + completeness, which a shipper
+  deleted in Plex could never satisfy (D30). `main.py`'s screens and stale alerts stand down while
+  `live_source` has a group live. The Label Design push skips its "ETL reached Plex" gate in live mode
+  (on 11-10 a successful run on frozen data blocked it). Revenue screen read in half-month windows
+  (the 500-row cap would be reached mid-November).
+- **Added: `plex-etl-watchdog`** (`watchdog.py`, every 30 min, `PlexOps.watchdog_log`): 12 checks
+  from a second Opus audit (missed/stuck dispatches, Label Design running and reaching Monday, the
+  screens job, raw freshness, MSL history, backups, manual data, test cascade, schedulers, image drift).
+- **Added: Google Cloud Monitoring** alerts mailed by Google, not SendGrid: watchdog or recon heartbeat
+  missing, email send failures, more than 3 task-timeout kills an hour.
+- **Fixed:** `backup_snapshots_weekly` had failed every week since 10-27 (no `bigquery.tables.deleteSnapshot`
+  on `Backups`); the ETL service account now owns that dataset. It also gets `cloudscheduler.viewer` and
+  `run.viewer` for the watchdog.
+- **Found, not fixed here:** the manual-data app's hourly push has not loaded `safety_incidents` since
+  10-19 or `scorecard_goals_app` since 11-05 (OPEN_ITEMS D34).
+- Tests: `tests/test_screen_recon.py`. Docs: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)",
+  OPERATIONS.md "Watchdog and screen reconciliation", CLAUDE.md, label_design_report.md.
+
 ## 2026-11-10 - Stale ODBC data alert (Label Design missed order 675)
 
 - **Found:** Kelli reported Monday had received nothing. Plex's prod ODBC answered normally but

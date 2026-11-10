@@ -180,7 +180,7 @@ def fetch_revenue(pg, today, ctx):
         for o in lines.values():
             o["gl_amounts"] = "; ".join(f"{k}: {v}" for k, v in sorted(o.pop("_gl").items()))
             out.append(o)
-        print(f"  {beg:%Y-%m}: {len(rows)} screen rows -> {len(lines)} lines, "
+        print(f"  {beg:%Y-%m-%d}: {len(rows)} screen rows -> {len(lines)} lines, "
               f"revenue {sum(o['revenue'] or 0 for o in lines.values()):,.2f}")
     print(f"  total {len(out)} lines, last invoice {max((o['invoice_no'] or '' for o in out), default='-')}")
     return out

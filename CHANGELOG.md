@@ -14,6 +14,50 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
+
+- **Audited (two Sonnet agents):** the monthly query now refuses to record a month with no production
+  records (ASSERT; the watchdog's new 13th check, `usage_monthly`, reports a month not recorded by the
+  2nd); join, unit and month-to-date notes in the doc; the table is last in the backup list.
+
+- **Changed (`approaching_msl_report`):** `usage_min_days` default 30 → 183 (about 6 months), and Plex
+  usage is averaged over `GREATEST(90, usage_min_days)` days (it was capped at 90, so 183 could never be
+  met). Plex takes over from NetSuite around 2027-04-18 instead of ~11-16, when 240 parts would have
+  switched on 3 weeks of production (182 of them more than 25% away from NetSuite). Today's figures
+  are unchanged (Plex has 23 days). The manual-data app's "MSL rules" default and help text say 183
+  (needs a clasp push of deploy/manual_data_app).
+- **Added: `PlexProd.part_usage_monthly`**, scheduled query `part_usage_monthly` (1st of the month,
+  13:30 UTC, previous month; `terraform/part_usage_monthly.sql`): usage per part per month with the
+  daily average, by the MSL report's own method (reconciles on 506/506 parts), production dated by its
+  Mountain record date. October 2026 backfilled (265 parts, 13 of 31 days). In the weekly backup list.
+  Doc: `docs/reports/part_usage_monthly.md`. Designed by an Opus agent, impact checked by a Sonnet agent.
+
+## 2026-11-10 - Plex login failures diagnosed; manual-data push flagged broken
+
+- **Changed:** a failed Plex web login is classified (wrong credentials, password change, MFA,
+  locked, Plex down, network, timeout, timeout on the sign-in page, unknown): credential causes from
+  the page text, transport causes from the error, with word boundaries. Only Plex-down, network and a
+  timeout off the sign-in page are retried (once, 60 s); anything else is not, and suspends logins for
+  24 h so repetition can never lock the user (`--force-login` after fixing). The password is masked out
+  of every error and page text; non-retryable failures raise `LoginFailed`, so the fetchers' own
+  retries stop too. The email to Emilio alone names the cause, quotes what Plex showed, gives the fix,
+  the streak and the last good login, once per cause per 24 h (`login-alert: sent` rows). Two Sonnet
+  audits; tests added (171).
+- **Flagged:** OPEN_ITEMS D34: the manual-data app's hourly push trigger is not running (form saves
+  still push; the hourly retry is missing), also on the hub's Reliability tab.
+
+## 2026-11-10 - Fourth pass after deploy (two Sonnet audits)
+
+- **Fixed:** `pipeline_behind` fired during normal ODBC lag (a record ODBC delivered after our load);
+  it now needs the record to predate our load by more than the lag tolerance. A screen whose row count
+  drops for real no longer fails "short read" for 3 days: a second short read of the same size is
+  accepted. The digest's failure line matches the "emails failing" Google alert. `docs/reference/`
+  is now in `.gitignore` (it was only excluded locally).
+- **Docs:** leftover "hourly / four screens / 3 h" wording from the first design corrected (report
+  docs, OPEN_ITEMS D35, OPERATIONS screens-alert rule, runbook dry-run command, Terraform comments,
+  part_production_current header); the first reconciliation entry below is marked superseded.
+- **Seen live:** the stale-data alert fired at 14:16 MT (ODBC frozen again since ~12:09 MT).
+
 ## 2026-11-10 - Every report says where its data came from; screens digest
 
 - **Fixed before deploy (two audits, Opus and Sonnet):** `live_source` used the reserved word `groups`
@@ -40,9 +84,13 @@ don't need an entry.
   Jennilyn, marketing) at its 8:20 / 12:20 / 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
   problem. The ETL batch digest's health section now lists a report group on the screens, or on ODBC
   data 2 h+ old in work hours.
-- Docs: each of the 18 reports' docs ("Where the data came from"), `docs/reports/data_freshness.md`.
+- Docs: each of the 17 reports' docs ("Where the data came from"), `docs/reports/data_freshness.md`.
 
 ## 2026-11-10 - Screens vs ODBC reconciliation (cloud job) and a watchdog
+
+> Superseded in part the same day: every 4 h (not hourly), three screens (production dropped), back
+> to ODBC after 2 clean runs, 5-hour view backstop. See the "Scope and cadence" bullet below and the
+> entries above.
 
 - **Added: `plex-live-screens`** (Cloud Run, hourly, `scripts/screen_recon.py`, `Dockerfile.screens`).
   Reads the four Plex screens, compares them with ODBC and the raw tables, records a verdict per

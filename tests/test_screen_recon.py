@@ -101,8 +101,8 @@ def test_ineligible_odbc_rows_are_not_extra():
 
 
 def test_pipeline_behind_when_bigquery_lacks_odbc_rows():
-    scr = {"1": prod(1, 100)}
-    od = {"1": odbc(prod(1, 100))}
+    scr = {"1": prod(1, 200)}
+    od = {"1": odbc(prod(1, 200))}
     _, _, verdict, _, _ = r.compare("production", scr, od, 1, od["1"]["event"], {}, FETCH,
                                     raw=set(), raw_modified=FETCH - dt.timedelta(minutes=10))
     assert verdict == "pipeline_behind"
@@ -118,9 +118,13 @@ def test_screen_records_revenue_sums_by_invoice_and_part():
 
 class FakePage:
     url = "https://vox.on.plex.com/SqlDevelopmentEnvironment"
+    text = ""
 
     def screenshot(self, **kw):
         return b"png"
+
+    def evaluate(self, js):
+        return self.text
 
 
 def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
@@ -138,23 +142,140 @@ def test_login_audit_records_ok_relogin_and_failure(monkeypatch):
     try:
         login(FakePage(), "u", "p")
         raise AssertionError("should have raised")
-    except RuntimeError:
+    except RuntimeError:  # LoginFailed is a RuntimeError
         pass
     assert [x["reason"] for x in audit.logins] == ["first", "re-login", "re-login"]
     assert [x["ok"] for x in audit.logins] == [True, True, False]
-    assert "password" not in str(audit.logins) and audit.logins[2]["error"].startswith("login did not")
+    assert "password" not in str(audit.logins).replace("password_change", "")
+    assert audit.logins[2]["error"].startswith("unknown: login did not") and not audit.logins[2]["retryable"]
 
 
-def test_failed_login_mails_only_the_login_address(monkeypatch):
+class LoginBQ:
+    def __init__(self, mailed=0):
+        self.mailed, self.inserts = mailed, []
+
+    def query(self, sql, job_config=None):
+        from types import SimpleNamespace
+        if sql.lstrip().startswith("INSERT"):
+            self.inserts.append(sql)
+            rows = []
+        else:
+            rows = [SimpleNamespace(last_ok=FETCH - dt.timedelta(hours=9), streak=2, mailed=self.mailed)]
+        return SimpleNamespace(result=lambda: rows)
+
+
+def failed_rec(cause="wrong_credentials", text="The password you entered is incorrect."):
+    return {"ok": False, "error": f"{cause}: x | page: {text}", "cause": cause, "retryable": False,
+            "page_text": text, "attempted_at": FETCH, "reason": "first", "seconds": 9.0,
+            "final_url": "https://accounts.plex.com/", "screenshot": "gs://b/x.png", "execution": "e", "job": "j"}
+
+
+def test_failed_login_mails_only_the_login_address_with_the_cause(monkeypatch):
     import email_utils
     sent = []
     monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: sent.append((alert, to)) or True)
     monkeypatch.setattr(r, "LOGIN_ALERT_EMAILS", "ops@example.com")
     audit = r.Audit("run1", FETCH, dry_run=False)
-    audit.logins = [{"ok": False, "error": "timeout", "attempted_at": FETCH, "reason": "first", "seconds": 90.0,
-                     "final_url": "https://accounts.plex.com/", "screenshot": "", "execution": "x", "job": "j"}]
-    audit.mail_failed_logins()
-    assert sent and sent[0][1] == ["ops@example.com"] and "login failed" in sent[0][0]["headline"]
+    audit.logins = [failed_rec()]
+    bq = LoginBQ()
+    audit.mail_failed_logins(bq)
+    alert, to = sent[0]
+    assert to == ["ops@example.com"] and "rejected the username or password" in alert["headline"]
+    assert "did not retry" in alert["summary"] and "24 h" in alert["summary"] and "2 run(s) in a row" in alert["summary"]
+    assert any("gcloud secrets versions add plex-portal-password" in st for st in alert["steps"])
+    assert bq.inserts and "login-alert" in bq.inserts[0]
+
+
+def test_failed_login_not_mailed_twice_a_day_or_after_a_good_retry(monkeypatch):
+    import email_utils
+    sent = []
+    monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: sent.append(alert) or True)
+    audit = r.Audit("run1", FETCH, dry_run=False)
+    audit.logins = [failed_rec()]
+    audit.mail_failed_logins(LoginBQ(mailed=1))
+    audit.logins = [failed_rec("timeout", ""), dict(failed_rec(), ok=True)]
+    audit.mail_failed_logins(LoginBQ())
+    assert sent == []
+
+
+def cause(err, text="", url="https://vox.on.plex.com/x"):
+    c = r.classify_login(err, text, url)
+    return c[0], c[3]
+
+
+def test_login_causes():
+    assert cause("x", "The password you entered is incorrect") == ("wrong_credentials", False)
+    assert cause("x", "Invalid login or password") == ("wrong_credentials", False)
+    assert cause("x", "Authentication failed") == ("wrong_credentials", False)
+    assert cause("x", "Unable to sign in. Try again.") == ("wrong_credentials", False)
+    assert cause("x", "Your account has been deactivated") == ("locked", False)
+    assert cause("x", "Too many login attempts") == ("locked", False)
+    assert cause("x", "Enter the verification code from your authenticator") == ("verification", False)
+    assert cause("x", "Your password has expired") == ("password_change", False)
+    assert cause("Timeout 118615ms exceeded.") == ("timeout", True)
+    assert cause("x", "503 Service Unavailable") == ("plex_down", True)
+    assert cause("net::ERR_NAME_NOT_RESOLVED") == ("network", True)
+
+
+def test_login_causes_do_not_overreach():
+    # the "Reset password" link on every sign-in page is not a password change
+    assert cause("wait_for_url: Timeout 120000ms exceeded", "Forgot your password? Reset password") == ("timeout", True)
+    # a timeout that stopped on Plex's sign-in page is a rejected login: never retried
+    assert cause("wait_for_url: Timeout 120000ms exceeded", "Sign in",
+                 "https://accounts.plex.com/u/login")[1] is False
+    # words we don't know: not retried
+    assert cause("login did not reach the SQL Development Environment", "Welcome") == ("unknown", False)
+    # "Cookies are disabled" is not a locked account; a URL with 503 in it is not Plex down
+    assert cause("x", "Cookies are disabled in this browser")[0] == "unknown"
+    assert cause("x", "", "https://vox.on.plex.com/503abc")[0] == "unknown"
+
+
+def test_password_never_logged():
+    audit = r.Audit("run1", FETCH, dry_run=False)
+
+    class P(FakePage):
+        text = "Hello s3cret-pw"
+
+    def real(pg, user, password):
+        raise RuntimeError(f"fill('#pwd', '{password}') timed out")
+
+    try:
+        audit.wrap_login(real)(P(), "u", "s3cret-pw")
+    except Exception as e:
+        assert "s3cret-pw" not in str(e)
+    assert "s3cret-pw" not in str(audit.logins)
+
+
+def test_non_retryable_failure_raises_login_failed():
+    audit = r.Audit("run1", FETCH, dry_run=False)
+
+    class P(FakePage):
+        text = "The password you entered is incorrect"
+
+    def real(pg, user, password):
+        raise RuntimeError("login did not reach the SQL Development Environment")
+    try:
+        audit.wrap_login(real)(P(), "u", "p")
+        raise AssertionError("should raise")
+    except r.LoginFailed:
+        pass
+
+
+class SuspendBQ:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def query(self, sql, job_config=None):
+        from types import SimpleNamespace
+        return SimpleNamespace(result=lambda: [SimpleNamespace(**x) for x in self.rows])
+
+
+def test_login_suspended_after_credential_failure_only():
+    t = FETCH - dt.timedelta(hours=3)
+    assert r.login_suspended(SuspendBQ([{"ok": False, "error": "wrong_credentials: x", "attempted_at": t}]))
+    assert r.login_suspended(SuspendBQ([{"ok": False, "error": "timeout: x", "attempted_at": t}])) is None
+    assert r.login_suspended(SuspendBQ([{"ok": True, "error": None, "attempted_at": t}])) is None
+    assert r.login_suspended(SuspendBQ([])) is None
 
 
 def test_screenshot_paths_are_dated_in_mountain_time():
@@ -189,3 +310,12 @@ def test_new_release_counts_at_once_when_odbc_is_already_stale():
     _, _, v2, _, _ = r.compare("releases", scr, od, 1, None, {}, FETCH,
                                odbc_newest_change=FETCH - dt.timedelta(minutes=20))
     assert v2 == "current"
+
+
+def test_pipeline_not_behind_during_normal_odbc_lag():
+    # created 100 min ago, our load 10 min ago: ODBC may have delivered it after the load
+    scr = {"1": prod(1, 100)}
+    od = {"1": odbc(prod(1, 100))}
+    _, _, verdict, _, _ = r.compare("production", scr, od, 1, od["1"]["event"], {}, FETCH,
+                                    raw=set(), raw_modified=FETCH - dt.timedelta(minutes=10))
+    assert verdict == "current"

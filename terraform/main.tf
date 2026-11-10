@@ -6132,7 +6132,7 @@ resource "google_bigquery_table" "etl_dispatch_log" {
     { name = "dispatch_id", type = "STRING", mode = "REQUIRED" },
     { name = "job_name", type = "STRING", mode = "REQUIRED" },
     { name = "mode", type = "STRING", mode = "REQUIRED" },
-    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up" },
+    { name = "reason", type = "STRING", mode = "REQUIRED", description = "schedule | follow-up | canary | recovery | external; inert alert rows (outcome alert): screens-alert, stale-alert, login-alert" },
     { name = "scheduled_for", type = "TIMESTAMP", mode = "NULLABLE", description = "the schedule slot (UTC); NULL for a follow-up" },
     { name = "followup_of", type = "STRING", mode = "NULLABLE", description = "dispatch_id of the failed run this follows up" },
     { name = "dispatched_at", type = "TIMESTAMP", mode = "REQUIRED" },
@@ -6248,6 +6248,22 @@ resource "google_bigquery_data_transfer_config" "msl_demand_daily" {
   }
 }
 
+# Monthly usage per part (Jennilyn, 2026-11-10): what production consumed through the BOM,
+# same method as approaching_msl_report (docs/reports/part_usage_monthly.md). 1st of the
+# month 13:30 UTC = after the 4 AM MT full prod run; records the PREVIOUS month. Creates
+# PlexProd.part_usage_monthly if missing and replaces that month's rows, so a re-run is safe.
+# Same service account as the backup query.
+resource "google_bigquery_data_transfer_config" "part_usage_monthly" {
+  display_name         = "part_usage_monthly"
+  location             = "US"
+  data_source_id       = "scheduled_query"
+  schedule             = "1 of month 13:30"
+  service_account_name = google_service_account.etl.email
+  params = {
+    query = file("${path.module}/part_usage_monthly.sql")
+  }
+}
+
 # ══ Screens reconciliation, watchdog and Google-side alerts (2026-11-10) ═══════
 # After Plex ODBC served frozen data on 11-10 while every run succeeded, and an
 # audit found the weekly backup and the manual-data push failing silently.
@@ -6260,12 +6276,12 @@ locals {
   ops_alert_email = trimspace(split(",", var.report_to_emails)[0])
 }
 
-# Every screen record read by scripts/screen_recon.py, every hour (30 days).
+# Every screen record read by scripts/screen_recon.py, every 4 hours (30 days).
 resource "google_bigquery_table" "screen_snapshot" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "screen_snapshot"
   deletion_protection = false
-  description         = "Plex screen records read hourly by plex-live-screens (scripts/screen_recon.py). 30-day partitions."
+  description         = "Plex screen records read every 4 h by plex-live-screens (scripts/screen_recon.py). 30-day partitions."
   time_partitioning {
     type          = "DAY"
     field         = "fetch_started_at"
@@ -6282,7 +6298,7 @@ resource "google_bigquery_table" "screen_snapshot" {
   ])
 }
 
-# One row per screen per hourly run: the verdict on ODBC.
+# One row per screen per run (every 4 h): the verdict on ODBC.
 resource "google_bigquery_table" "screen_recon" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "screen_recon"

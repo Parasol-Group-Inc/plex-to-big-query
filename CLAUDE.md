@@ -272,6 +272,12 @@ example and check queries: `docs/BOM_DEMAND_NETTING.md`.
 - **`PlexProd.msl_demand_daily`** is the daily history of both numbers (scheduled
   query `msl_demand_daily` in Terraform, SQL `terraform/msl_demand_daily.sql`). It
   is BigQuery-only data, in the backup list; the ETL never writes it.
+- **MSL usage holds NetSuite for 6 months (since 2026-11-10, Jennilyn):** `usage_min_days` 183, and
+  Plex usage is averaged over GREATEST(90, usage_min_days) days. Two defaults to keep in step: the view's
+  `cfg` CTE and the manual-data app's `Code.gs` (an `msl_rules` row overrides both).
+- **`PlexProd.part_usage_monthly`** (scheduled query on the 1st, `terraform/part_usage_monthly.sql`):
+  usage per part per month, the MSL method with production dated by its Mountain record date (the view's
+  `DATE(Report_Date)` is a day early; harmless for its rolling sum, not for months). BigQuery-only data.
 - The `reports/plex_sql/` copies of available-to-sell and out-of-stock carry
   the netting in T-SQL since 2026-10-30, untested in Plex (OPEN_ITEMS D13).
 
@@ -354,7 +360,9 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   empties `PlexProd.live_*`. Label Design and revenue read the screens only
   while `use_live` **and** their live table is under 5 h old. Every Plex login goes to
   `PlexOps.plex_login_log` with a screenshot in `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/`;
-  a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`). Tolerance:
+  a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`), diagnosed (cause + fix, one mail
+  per cause per 24 h via `login-alert` rows). A rejected/unclear login is not retried and suspends
+  logins for 24 h (no lockout by repetition); after fixing, run the job with `--force-login`. Tolerance:
   `RECON_LAG_TOLERANCE_MIN` (120) in Terraform. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".
@@ -369,8 +377,8 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
 ## Every report says where its data came from (since 2026-11-10)
 
 `PlexOps.data_freshness` (Terraform view) gives, per dataset and report group, `data_source`
-(odbc | live), `data_as_of` and `data_label`. The 17 views built on `label_design_report`,
-`shipping_revenue_report` or `part_production_current` end with those columns: each SQL file wraps
+(odbc | live), `data_as_of` and `data_label`. 17 reports built on `label_design_report`,
+`shipping_revenue_report` or `part_production_current` end with those columns: 16 SQL files wrap
 its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness ON TRUE`), marked
 "DATA SOURCE LABEL (2026-11-10)". **A new view built on one of them needs the same wrapper**, unless
 it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).

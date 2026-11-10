@@ -62,7 +62,21 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    cap). `--only production` still compares production by hand.
    **Every login** (first and any re-login mid-screen) is timed and written to
    `PlexOps.plex_login_log` (ok, error, seconds, final page, screenshot). **A failed
-   login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio). **Screenshots** of every
+   login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio), with a diagnosis: the
+   cause is read from the error and the page text (`wrong_credentials`, `password_change`,
+   `verification`, `locked`, `plex_down`, `network`, `timeout`, `unknown`) and the email gives
+   that cause's fix, what Plex showed, the run streak and the last good login. Only
+   `plex_down`, `network` and a `timeout` that did not stop on Plex's sign-in page are retried
+   (once, after 60 s). Anything else (a rejected, locked or MFA login, a timeout on the sign-in
+   page, or words we don't recognise) is not retried, and **the job then does not log in at all
+   for 24 h** (`login_suspended`), so it can never lock the user by repetition. After fixing
+   it, start a run by hand with `--force-login`:
+   `gcloud run jobs execute plex-live-screens --region=us-central1 --args=python,scripts/screen_recon.py,--force-login`.
+   Credential and lock causes are read from the page text, transport causes from the error, so
+   the "Reset password" link on every sign-in page is not mistaken for a password change. The
+   password is masked out of every error and page text before anything is printed or stored.
+   One email per cause per 24 h (`reason = 'login-alert'`, `detail = '<cause>: sent'` rows in
+   `etl_dispatch_log`); `plex_login_log.error` starts with the cause. **Screenshots** of every
    login and screen read go to `gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/
    HHMM-MT_<run>/NN_<what>.png` (e.g. `01_login_ok.png`, `02_releases_ok_461rows.png`,
    `..._FAILED.png`), kept 365 days. Each screen's read logs `extraction <screen>: ok,
@@ -130,8 +144,8 @@ SELECT run_started_at, screen, verdict, odbc_lag_min, compared, missing_tail, mi
 FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20;
 ```
 **Run it by hand:** `gcloud run jobs execute plex-live-screens --region=us-central1`
-(writes). A read-only pass: add `--args=scripts/screen_recon.py,--dry-run` (the container
-command is `python`). Locally on Apple Silicon the amd64 image is too slow for Plex's
+(writes). A read-only pass: use `--args=python,scripts/screen_recon.py,--dry-run` (the job's
+args replace the whole command). Locally on Apple Silicon the amd64 image is too slow for Plex's
 login; test in Cloud Run.
 
 **Cost** (Cloud Run, us-central1, 2 vCPU / 4 GiB, ~5 min a run, before the free tier):

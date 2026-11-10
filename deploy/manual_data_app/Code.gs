@@ -286,9 +286,9 @@ var METRIC_UNITS = { revenue: 'USD', sales: 'USD', production: 'units' };
 // The MSL rules and their defaults. The DEFAULTS LIVE IN approaching_msl_view.sql
 // (the cfg CTE) — keep the two in step, this copy only labels the form.
 var MSL_RULES = {
-  usage_min_days: { def: '30', kind: 'number',
+  usage_min_days: { def: '183', kind: 'number',
     label: 'Days of Plex history needed',
-    help: 'Until Plex has this many days of production, the report uses NetSuite usage where it has it.' },
+    help: 'Until Plex has this many days of production, the report uses NetSuite usage where it has it. 183 is about 6 months (Jennilyn, 2026-11-10); Plex is then averaged over the same number of days.' },
   reorder_source: { def: 'ns', kind: 'source',
     label: 'Reorder point from',
     help: 'ns or plex: whose reorder point wins when both exist. A NetSuite 0 counts as none set.' },

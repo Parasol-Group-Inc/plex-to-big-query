@@ -58,7 +58,8 @@
 --
 -- AVG DAILY USAGE: component quantity consumed by recorded production
 --   = SUM(Part_v_Production.Quantity x Part_v_BOM.Quantity) joined on Part_Operation_Key,
---   rejected production excluded, over the last 90 days or since Plex's first recorded
+--   rejected production excluded, over the last GREATEST(90, usage_min_days) days (183 since
+--   2026-11-10) or since Plex's first recorded
 --   production if that is shorter (usage_days). Plex production history starts 2026-10-18,
 --   so early figures rest on very few days: check usage_days before trusting a number.
 --   Production IS recorded on wrapper operations (stocked key into wrapper); those BOM lines
@@ -69,7 +70,8 @@
 --   so most parts have no usable average. The manual-data app's "MSL inputs" tab holds
 --   NetSuite's average daily usage and reorder point per part (msl_item_inputs), and its
 --   "MSL rules" tab holds the thresholds below (msl_rules). Rules and defaults:
---     usage_min_days  30    Plex usage is trusted once it rests on this many days; until
+--     usage_min_days  183   (30 until 2026-11-10; Jennilyn: hold NetSuite usage for 6 months)
+--                           Plex usage is trusted once it rests on this many days; until
 --                           then NetSuite's figure is used if there is one.
 --     reorder_source        NO LONGER READ (2026-10-28): the reorder point is Plex's.
 --     disagree_pct    25    flag when trusted Plex usage and NetSuite usage differ by more.
@@ -129,10 +131,31 @@ prod AS (
   WHERE COALESCE(SAFE_CAST(Rejected AS INT64), 0) = 0
 ),
 
+-- Rules: newest row per rule, a tombstone removes it. Defaults apply to anything unset.
+rules AS (
+  SELECT rule, value
+  FROM (
+    SELECT rule, value, is_deleted,
+           ROW_NUMBER() OVER (PARTITION BY rule ORDER BY updated_at DESC) AS rn
+    FROM `{gcp_project}.{dataset}.msl_rules`
+  )
+  WHERE rn = 1 AND NOT IFNULL(is_deleted, FALSE)
+),
+cfg AS (
+  SELECT
+    COALESCE(MAX(IF(rule = 'usage_min_days', SAFE_CAST(value AS FLOAT64), NULL)), 183) AS usage_min_days,
+    COALESCE(MAX(IF(rule = 'disagree_pct',   SAFE_CAST(value AS FLOAT64), NULL)), 25) AS disagree_pct,
+    COALESCE(MAX(IF(rule = 'stale_days',     SAFE_CAST(value AS FLOAT64), NULL)), 45) AS stale_days
+  FROM rules
+),
+
 span AS (
   SELECT
     MAX(d) AS last_d,
-    GREATEST(DATE_SUB(MAX(d), INTERVAL 89 DAY), MIN(d)) AS first_d
+    -- 2026-11-10 (Jennilyn): the window is at least usage_min_days long, or Plex usage
+    -- could never reach the 6-month bar (it was capped at 90 days).
+    GREATEST(DATE_SUB(MAX(d), INTERVAL CAST(GREATEST(90, (SELECT c.usage_min_days FROM cfg c)) AS INT64) - 1 DAY),
+             MIN(d)) AS first_d
   FROM prod
 ),
 
@@ -186,24 +209,6 @@ open_jobs AS (
     AND COALESCE(SAFE_CAST(js.Cancelled_Status AS INT64), 0) = 0
     AND COALESCE(SAFE_CAST(js.Hold_Status AS INT64), 0) = 0
   GROUP BY part_key
-),
-
--- Rules: newest row per rule, a tombstone removes it. Defaults apply to anything unset.
-rules AS (
-  SELECT rule, value
-  FROM (
-    SELECT rule, value, is_deleted,
-           ROW_NUMBER() OVER (PARTITION BY rule ORDER BY updated_at DESC) AS rn
-    FROM `{gcp_project}.{dataset}.msl_rules`
-  )
-  WHERE rn = 1 AND NOT IFNULL(is_deleted, FALSE)
-),
-cfg AS (
-  SELECT
-    COALESCE(MAX(IF(rule = 'usage_min_days', SAFE_CAST(value AS FLOAT64), NULL)), 30) AS usage_min_days,
-    COALESCE(MAX(IF(rule = 'disagree_pct',   SAFE_CAST(value AS FLOAT64), NULL)), 25) AS disagree_pct,
-    COALESCE(MAX(IF(rule = 'stale_days',     SAFE_CAST(value AS FLOAT64), NULL)), 45) AS stale_days
-  FROM rules
 ),
 
 -- NetSuite figures: newest row per NetSuite item, then ONE row per Plex part. Two NetSuite

@@ -1,6 +1,6 @@
 # Plex screen extraction (Playwright), the stopgap for the ODBC outage
 
-> **Status (2026-11-10): a cloud job, hourly, permanent.** The screens are no longer a
+> **Status (2026-11-10): a cloud job, every 4 hours, permanent.** The screens are no longer a
 > laptop stopgap. Cloud Run job `plex-live-screens` (scheduler `plex-live-screens-sync`,
 > every 4 hours at :20 MT from 00:20, Dockerfile.screens) runs `scripts/screen_recon.py`: it reads three
 > screens (Label Design releases, revenue, shipments), compares them with ODBC and BigQuery, and switches a report to the screens
@@ -81,7 +81,10 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    | `odbc_newer` | ODBC changed after the screen was read: ignored |
    | `bq_missing` | ODBC has it, our `raw_*` table (loaded after it) does not |
 
-   Records newer than `RECON_GRACE_MIN` (15) are not compared. The age of a record
+   Records newer than `RECON_GRACE_MIN` (15) are not compared, except a revenue or
+   release record seen for the first time that ODBC lacks while ODBC's newest change is
+   already older than the tolerance: that is stale ODBC now (the 11-10 order-675 case),
+   not something to wait 4 h for. The age of a record
    comes from its own time (production record time, ship time) or, for revenue and
    releases, from when the snapshot first showed its current values.
 5. Writes one verdict per screen to `PlexOps.screen_recon`:
@@ -99,7 +102,7 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    (`label_design` ← releases, `revenue` ← history + revenue) when any of the screen's
    last 2 good runs was `behind`, `diverged` or
    `odbc_unreachable`. While `use_live`, the job reloads that group's `PlexProd.live_*`
-   tables every hour (and starts the Label Design push, skipping the "ETL reached Plex"
+   tables on each run (and starts the Label Design push, skipping the "ETL reached Plex"
    gate). When it turns false (2 clean runs, 8 h), it backs the tables up to
    `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The two views read
    the screens only when `use_live` is true **and** their live table is under 5 h old,

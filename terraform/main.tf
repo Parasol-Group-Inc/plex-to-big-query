@@ -6537,23 +6537,15 @@ resource "google_cloud_run_v2_job" "live_screens" {
           name  = "SECRET_ACCESS_TOKEN"
           value = var.secret_access_token
         }
+        # Secret NAMES; screen_recon.py reads them at run time (a value_source ref to a
+        # secret with no version yet would stop the job from being created).
         env {
-          name = "PLEX_PORTAL_USERNAME"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.plex_portal_username.secret_id
-              version = "latest"
-            }
-          }
+          name  = "SECRET_PLEX_PORTAL_USERNAME"
+          value = google_secret_manager_secret.plex_portal_username.secret_id
         }
         env {
-          name = "PLEX_PORTAL_PASSWORD"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.plex_portal_password.secret_id
-              version = "latest"
-            }
-          }
+          name  = "SECRET_PLEX_PORTAL_PASSWORD"
+          value = google_secret_manager_secret.plex_portal_password.secret_id
         }
         env {
           name  = "RECON_LAG_TOLERANCE_MIN"

@@ -439,6 +439,27 @@ screen shippers (newest SH00243) and all 403 screen order releases.
   laptop only after merge and `git pull` in the primary folder; disabling the task makes
   that moot for now.
 
+**Check, 2026-11-10 ~04:00 UTC (D30 close-out):**
+- **Label Design** read `odbc` (59 lines): the task was disabled on 11-09 (last screen load 08:00 MT).
+- **Revenue was stuck on the screens' copy from 11-06.** Shipper SH00206 (shipped 11-05, invoice
+  INV0000161, $11,760) was removed in Plex after 11-08: ODBC lost it, and the switch rule "ODBC holds
+  every screen shipper" could then never pass, while the disabled task left the screen copy frozen.
+  So `shipping_revenue_report` (and the scorecard Revenue tile) read `live` again, missing the 20
+  shippers ODBC had from 11-09. `part_production_current` likewise kept merging 5,788 screen records.
+- **Screens vs ODBC, read live the same evening (dry run, nothing written):** every shipper shipped
+  since 10-19 matches (SH00206 is gone from the screens too; only SH00272, shipped after ODBC's 6 PM
+  refresh, is screen-only). Revenue by invoice date is identical every day except 11-05 (ODBC still
+  holds SH00206's invoice, now flagged as a credit memo; the report drops it with the shipper) and
+  11-09 (+$7,496.50 on screen, invoices after 6 PM). Production is identical 11-02 to 11-05; the
+  screen has 7 more records on 11-06 and 5 more on 11-09 (late entries, picked up by the next run).
+- **Fix (retirement step 4):** the four `live_*` tables were copied to
+  `voxdatalake.Backups.PlexProd__live_<name>_20261110` (90 days; 308/308/421/5,788 rows) and
+  emptied. Revenue (340 rows, through 11-09), production (18,785 records) and Label Design all read
+  `odbc` at once. A future `--load` run of the task refills them.
+- **Lesson:** the "ODBC holds every screen row" rule assumes Plex never deletes a row the screens
+  saw. When the task is off, the screen copy should stop counting: for a next outage, add a staleness
+  limit (live data older than a day is ignored) or empty the tables as part of retiring the task.
+
 **What we changed so the next one is shorter (2026-11-09):**
 - The ETL now emails "ACTION NEEDED: Plex ODBC failing for 6 h, start the live
   screens" once ODBC has failed in every one of 6 hours (OPERATIONS.md, breaker

@@ -328,8 +328,10 @@ steps aside once the ETL runs again. One Plex web run at a time: an OS lock on
 `etl-manual/plex_web.lock`, exit 75 if held. Runbook, retirement and restore:
 `docs/PLEX_SCREEN_EXTRACTION.md`; OPEN_ITEMS D30.
 **ODBC recovered 2026-11-08 ~04:45 MT;** revenue and production switched back by
-themselves, Label Design matched ODBC on 11-09, and the task is disabled. The
-tables and live branches stay. **Next outage:** once ODBC has failed in every one
+themselves, Label Design matched ODBC on 11-09, and the task is disabled. On 11-10
+the `live_*` tables were backed up (`Backups.PlexProd__live_*_20261110`) and emptied:
+a shipper Plex deleted had kept revenue on the frozen screen copy. The live branches
+stay; retiring the task again means emptying the tables too. **Next outage:** once ODBC has failed in every one
 of 6 hours, a failing prod run emails "ACTION NEEDED: ... start the live screens"
 (`maybe_send_screens_alert` in `main.py`; logged in `etl_dispatch_log` as
 `reason = 'screens-alert'`, at most daily). Starting steps: the runbook's

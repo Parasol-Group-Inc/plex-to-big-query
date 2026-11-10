@@ -14,6 +14,17 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - D30 closed: live screen tables backed up and emptied
+
+- **Fixed (data, no code):** `shipping_revenue_report` (and the scorecard Revenue tile) had gone back
+  to the frozen screen copy from 11-06: shipper SH00206 was removed in Plex, so the rule "ODBC holds
+  every screen shipper" could not pass with the task disabled. `part_production_current` still merged
+  5,788 screen records. The four `PlexProd.live_*` tables were copied to
+  `Backups.PlexProd__live_*_20261110` and truncated; all three reports read `odbc` (revenue through
+  11-09). Screens read live the same evening matched ODBC apart from timing and SH00206.
+- **Docs:** incident doc "Check, 2026-11-10", screen runbook (empty the tables when retiring),
+  CLAUDE.md, OPEN_ITEMS D30 removed.
+
 ## 2026-11-09 (dev) - Bulk customer Notes from CustomerNotesResults9.csv, verified in batches
 
 - **Added** `scripts/plex_customer_notes_bulk.py` (plan / run / verify / log / resume / status):

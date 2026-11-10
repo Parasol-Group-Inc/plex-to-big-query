@@ -6,6 +6,11 @@
 > one of them while it is fresh, and the task starts the Monday push.
 > **Retire it when ODBC is back** (see [Retiring it](#retiring-it-when-odbc-returns)).
 >
+> **Closed 2026-11-10:** the task is disabled, and the `live_*` tables were backed up to
+> `Backups.PlexProd__live_*_20261110` and emptied, so revenue, production and Label Design read
+> ODBC (one shipper removed in Plex had kept revenue on the stale screen copy; incident doc,
+> "Check, 2026-11-10"). **When starting it for an outage, its first `--load` refills the tables.**
+>
 > **Status (2026-11-09): retired, ready to restart.** ODBC is back since 11-08 ~04:45 MT;
 > revenue and production went back to ODBC by themselves on 11-08, Label Design matched
 > ODBC exactly on 11-09, and the laptop task is disabled. The tables and the live
@@ -457,7 +462,9 @@ The ETL is back when `PlexOps.etl_dispatch_log` shows prod runs succeeding and
    - the ETL starts pushing again;
    - this script stops starting the push (gate 2);
    - the view keeps preferring live while the task runs, and the live data is the same or fresher.
-2. Stop the task: `Disable-ScheduledTask -TaskName "Plex live screens"` (or
+2. Stop the task: `Disable-ScheduledTask -TaskName "Plex live screens"`. **Then back up and empty the
+   `live_*` tables** (lesson of 2026-11-10): a row Plex later deletes keeps revenue and production on
+   the frozen screen copy for good otherwise. (or
    `Unregister-ScheduledTask` to remove it). Three hours later `label_design_report` returns
    `data_source = 'odbc'` with no deploy.
 3. Check: `SELECT data_source, COUNT(*) FROM label_design_report GROUP BY 1` gives `odbc`. The

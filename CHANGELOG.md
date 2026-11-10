@@ -16,6 +16,11 @@ don't need an entry.
 
 ## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
 
+- **Fixed (watchdog `backups`):** it looked only for last Monday's stamp, so the hand-run backup of 11-10
+  (32 tables) still read as "2 snapshots" until 11-16. It now accepts any full set (20+ tables) dated in
+  the last 8 days. Cloud Build bb31644d put every job on 63d5b30 (login hardening, `usage_monthly` check);
+  a watchdog run then passed 11 of 13 checks (`manual_data`, D34, is real).
+
 - **Deployed 2026-11-10 22:24 UTC** (tag `deploy/2026-11-10T2224Z`): routine `part_usage_for_month`, view
   `part_usage_month_to_date` (335 parts, Nov 1-9, checked), scheduled query `part_usage_monthly`.
   `approaching_msl_report` rebuilt with `usage_min_days` 183 by a hand run of plex-etl-sales-orders

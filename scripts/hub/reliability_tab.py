@@ -61,7 +61,7 @@ CHECKS = [
     ("raw_freshness", "a raw table with rows not refreshed in 30 h"),
     ("msl_daily", "no MSL demand history row for today after 7:30 AM"),
     ("usage_monthly", "last month's part usage not recorded by the 2nd"),
-    ("backups", "the weekly BigQuery snapshots missing (they had failed since 10-27)"),
+    ("backups", "no full weekly BigQuery snapshot set in the last 8 days (they had failed 10-27 to 11-09; fixed 11-10)"),
     ("manual_data", "goals or safety incidents not loaded in 3 h (D34)"),
     ("test_cascade", "fewer than 12 test jobs ran overnight"),
     ("schedulers", "a Cloud Scheduler job paused or failing"),

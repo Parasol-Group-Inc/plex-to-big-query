@@ -46,6 +46,7 @@ WORKDIR /app
 COPY main.py .
 COPY email_utils.py .
 COPY extract_schema_catalog.py .
+COPY watchdog.py .
 COPY label_design_service/*.py label_design_service/
 COPY templates/ templates/
 # Just the logo, not all of assets/ — that directory also holds the 5,000-row

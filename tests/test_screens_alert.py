@@ -84,6 +84,8 @@ class FakeBQ:
             rows = []
         elif "reason = 'screens-alert'" in sql:
             rows = [SimpleNamespace(n=self.already_sent)]
+        elif "live_source" in sql:  # 2026-11-10: "screens in use" is PlexOps.live_source
+            rows = [SimpleNamespace(u=bool(self.screens_at and NOW - self.screens_at < timedelta(hours=2)))]
         elif "live_order_releases" in sql:
             rows = [SimpleNamespace(t=self.screens_at)]
         elif "MAX(finished_at)" in sql:

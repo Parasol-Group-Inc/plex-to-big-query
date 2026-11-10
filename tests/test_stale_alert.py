@@ -124,6 +124,9 @@ class FakeBQ:
             rows = []
         elif "reason = 'stale-alert'" in sql:
             rows = [SimpleNamespace(n=self.already_sent)]
+        elif "live_source" in sql:
+            rows = [SimpleNamespace(u=bool(self.screens_at and datetime.now(timezone.utc) - self.screens_at
+                                           < timedelta(hours=2)))]
         else:
             rows = [SimpleNamespace(t=self.screens_at)]
         return SimpleNamespace(result=lambda: rows)

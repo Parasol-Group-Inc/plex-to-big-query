@@ -68,23 +68,22 @@
 -- (Shipper_Line_Key, Invoice_Link) row twice for SH00105, which doubled that
 -- line. One row per (Shipper_Line_Key, Invoice_Link) is now kept.
 
+-- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
+-- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
+-- disagrees, and empties the live table after 3 clean hours. The 3-hour freshness
+-- check stays as a backstop: if the job stops, the view is back on ODBC within 3 h.
+-- (Until 2026-11-10 this used odbc_health plus "every screen shipper is in ODBC",
+-- which a shipper deleted in Plex could never satisfy: D30.)
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
-      AND EXISTS (SELECT 1 FROM `{gcp_project}.PlexProd.live_shipper_history`)
-      AND NOT (
-        -- ODBC is trusted again only when BOTH hold:
-        -- 1. connections have been stable 6+ h (PlexOps.odbc_health, Terraform);
-        IFNULL((SELECT hh.odbc_stable FROM `{gcp_project}.PlexOps.odbc_health` hh), FALSE)
-        -- 2. and its data has caught up: every shipper on the screens is in ODBC.
-        AND NOT EXISTS (
-          SELECT 1
-          FROM `{gcp_project}.PlexProd.live_shipper_history` lh
-          WHERE lh.shipper_no NOT IN (
-            SELECT os.Shipper_No
-            FROM `{gcp_project}.{dataset}.raw_Sales_v_Shipper` os
-            WHERE os.Shipper_No IS NOT NULL))
-      ) AS use_live
+      AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
+                  WHERE ls.report_group = 'revenue'), FALSE)
+      AND IFNULL((SELECT MAX(lh.loaded_at) FROM `{gcp_project}.PlexProd.live_shipper_history` lh)
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE)
+      AND IFNULL((SELECT MAX(lr.loaded_at) FROM `{gcp_project}.PlexProd.live_shipping_revenue` lr)
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
 ),
 
 live_lines AS (

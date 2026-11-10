@@ -1,5 +1,13 @@
 # Plex screen extraction (Playwright), the stopgap for the ODBC outage
 
+> **Status (2026-11-10): a cloud job, hourly, permanent.** The screens are no longer a
+> laptop stopgap. Cloud Run job `plex-live-screens` (scheduler `plex-live-screens-sync`,
+> :20 every hour, Dockerfile.screens) runs `scripts/screen_recon.py`: it reads the four
+> screens, compares them with ODBC and BigQuery, and switches a report to the screens
+> only while ODBC is behind or disagrees. See
+> [Reconciliation (cloud job)](#reconciliation-cloud-job). The laptop task is not needed
+> any more; the history below is kept for the record.
+
 > **Status (2026-11-05):** live, deployed (tag `deploy/2026-11-05T2156Z`); the first push
 > from the screens created 10 Monday items. The hourly Windows task "Plex live screens" on Emilio's
 > laptop loads three Plex screens into `PlexProd.live_*`. `label_design_report` reads
@@ -20,6 +28,7 @@
 
 ## Contents
 
+- [Reconciliation (cloud job)](#reconciliation-cloud-job)
 - [Why it exists](#why-it-exists)
 - [What runs, where, when](#what-runs-where-when)
 - [The three screens](#the-three-screens)
@@ -38,6 +47,82 @@
 - [Related: writing a customer note](#related-writing-a-customer-note-plex_customer_notepy)
 - [Related: the SQL Development Environment export](#related-the-sql-development-environment-export)
 - [Security](#security)
+
+## Reconciliation (cloud job)
+
+**Why.** Plex ODBC failed in two ways in November 2026: no answer (11-04 to 11-08), and,
+on 11-10, answers from data frozen ~08:10-12:50 MT while every ETL run succeeded. The
+screens were right both times. So every hour a job checks ODBC against them.
+
+**One cycle** (`scripts/screen_recon.py`, about 5-10 min):
+1. Logs into Plex (secrets `plex-portal-username` / `plex-portal-password`) and reads
+   the four screens: `releases` (Sales Orders + Rapid Entry), `production` (last
+   `RECON_PRODUCTION_DAYS` = 2 days), `history` (Shipper History) and `revenue`
+   (Shipping Revenue by Part Group, half-month windows since the 500-row cap).
+2. Appends every record to `PlexOps.screen_snapshot` (30 days).
+3. Reads the same records from ODBC (one connection, filtered queries with `TOP`) and
+   the keys of the matching `raw_*` tables.
+4. Classifies each difference into `PlexOps.screen_recon_diff`:
+
+   | Kind | Meaning |
+   |---|---|
+   | `missing_tail` | the screen has it, ODBC does not, and it is newer than anything ODBC has: lag |
+   | `missing_hole` | ODBC lacks it although ODBC has newer records |
+   | `status_diff` / `value_diff` | in both, a compared value differs |
+   | `odbc_extra` | ODBC has it, the screen does not (deleted in Plex?) |
+   | `odbc_newer` | ODBC changed after the screen was read: ignored |
+   | `bq_missing` | ODBC has it, our `raw_*` table (loaded after it) does not |
+
+   Records newer than `RECON_GRACE_MIN` (15) are not compared. The age of a record
+   comes from its own time (production record time, ship time) or, for revenue and
+   releases, from when the snapshot first showed its current values.
+5. Writes one verdict per screen to `PlexOps.screen_recon`:
+
+   | Verdict | Rule |
+   |---|---|
+   | `current` | lag at most `RECON_LAG_TOLERANCE_MIN` (120, Terraform env; Plex's nominal ODBC lag was "up to 4 h", so it may be raised to 240) |
+   | `behind` | the oldest missing record or unseen edit is older than the tolerance |
+   | `diverged` | a hole older than the tolerance, ODBC changed a value after the screen showed a different one, or ODBC has records the screen lacks in two runs running |
+   | `odbc_unreachable` | ODBC connect or query failed, or a query hit its `TOP` |
+   | `pipeline_behind` | ODBC is fine but BigQuery lacks records ODBC had before our last load |
+   | `screens_failed` | a screen could not be read, or read under 90% (50% releases/production) of last run |
+
+6. **Switching.** `PlexOps.live_source` (a view) sets `use_live` per report group
+   (`label_design` ← releases, `revenue` ← history + revenue, `production` ←
+   production) when any of the screen's last 3 good runs was `behind`, `diverged` or
+   `odbc_unreachable`. While `use_live`, the job reloads that group's `PlexProd.live_*`
+   tables every hour (and starts the Label Design push, skipping the "ETL reached Plex"
+   gate). When it turns false (3 clean runs), it backs the tables up to
+   `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The three views read
+   the screens only when `use_live` is true **and** their live table is under 3 h old,
+   so if the job stops they are back on ODBC within 3 hours.
+7. **Emails** (SendGrid, `[Plex ETL] - ACTION NEEDED: ...`): a group going to the screens,
+   a group back on ODBC (for information), `diverged` / `pipeline_behind` (daily), and a
+   screen that failed twice running (daily). Google Monitoring separately mails if the
+   job's `recon heartbeat` log line is missing for 3 h.
+
+**Check it:**
+```sql
+SELECT * FROM `voxdatalake.PlexOps.live_source`;
+SELECT run_started_at, screen, verdict, odbc_lag_min, compared, missing_tail, missing_hole,
+       status_diff, value_diff, odbc_extra, bq_missing, fetch_error, odbc_error
+FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20;
+```
+**Run it by hand:** `gcloud run jobs execute plex-live-screens --region=us-central1`
+(writes). A read-only pass: add `--args=scripts/screen_recon.py,--dry-run` (the container
+command is `python`). Locally on Apple Silicon the amd64 image is too slow for Plex's
+login; test in Cloud Run.
+
+**Cost** (Cloud Run, us-central1, 2 vCPU / 4 GiB, ~8 min a run, before the free tier):
+hourly 24/7 = 720 runs/month ≈ $12.40 CPU + $2.80 memory ≈ **$15/month**; weekdays
+06:00-18:00 only ≈ $6. The watchdog (30 s every 30 min) ≈ $1. BigQuery reads and the
+snapshot storage stay inside the free tier. A screens image per build adds ~1.5 GB to
+Artifact Registry (~$0.15/month each until old ones are cleaned).
+
+**Adding a screen** (OPEN_ITEMS D35): a fetcher in `plex_live_screens.py` (`SCREENS`),
+then in `screen_recon.py` its key and measures (`screen_records`), its ODBC query
+(`ODBC_SQL`, `odbc_records`), its raw table (`BQ_SQL`) and, if a report should switch,
+a group in `GROUPS` and in the `live_source` view.
 
 ## Why it exists
 

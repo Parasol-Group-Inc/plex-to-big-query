@@ -342,6 +342,28 @@ emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
 "Starting it". To tell our side from Plex's, run `scripts/plex_odbc_probe.py`
 (`docs/PLEX_ODBC_PROBE.md`).
 
+## Screens vs ODBC, hourly; watchdog every 30 min (since 2026-11-10)
+
+ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every run
+"succeeded"). So two Cloud Run jobs now watch from outside the ETL:
+- **`plex-live-screens`** (`scripts/screen_recon.py`, Dockerfile.screens, hourly at :20)
+  reads the four Plex screens, compares them with ODBC and the `raw_*` tables, and writes
+  a verdict per screen to `PlexOps.screen_recon` (diffs in `screen_recon_diff`).
+  `PlexOps.live_source` turns `use_live` on for a report group after one `behind` /
+  `diverged` / `odbc_unreachable` run and off after 3 clean ones; the job then loads or
+  empties `PlexProd.live_*`. Label Design, revenue and production read the screens only
+  while `use_live` **and** their live table is under 3 h old. Tolerance:
+  `RECON_LAG_TOLERANCE_MIN` (120) in Terraform. Don't load `live_*` by hand: the job
+  empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
+  "Reconciliation".
+- **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks dispatch, Label Design,
+  the screens job, raw freshness, MSL history, backups, manual data, the test cascade,
+  schedulers and image drift (`PlexOps.watchdog_log`). Google Monitoring (not SendGrid)
+  mails if its heartbeat or the recon heartbeat stops, if any email fails to send, or if
+  runs are killed by timeouts. `docs/OPERATIONS.md`, "Watchdog and screen reconciliation".
+- Cloud Build builds the screens image FROM the same commit's ETL image and updates
+  `plex-live-screens`; `plex-etl-watchdog` is in `_ALL_JOBS`.
+
 ## Customer Notes in Plex (2026-11-09)
 
 Plex's customer **Note** (Customer Details, NOTES section) is not in ODBC and the REST API ignores

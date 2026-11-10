@@ -580,9 +580,16 @@ odbc_lines AS (
 -- PlexTest never changes, and if the laptop task stops the view falls back to
 -- ODBC by itself within 3 hours; nobody has to remember to undo anything. The
 -- two are never mixed: one source per query. data_source says which.
+-- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
+-- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
+-- disagrees, and empties the live table after 3 clean hours. The 3-hour freshness
+-- check stays as a backstop: if the job stops, the view is back on ODBC within 3 h.
 live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
+      AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
+                  WHERE ls.report_group = 'label_design'), FALSE)
       AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
   FROM `{gcp_project}.PlexProd.live_order_releases`
 ),

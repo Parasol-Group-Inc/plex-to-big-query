@@ -35,24 +35,20 @@
 --   * Serial_No is blank on some screen rows (47 of 2,100 checked); no report
 --     uses it. Weights, Production_Value, Log_Key and the like are NULL.
 
+-- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
+-- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
+-- disagrees, and empties the live table after 3 clean hours. The 3-hour freshness
+-- check stays as a backstop: if the job stops, the view is back on ODBC within 3 h.
+-- In live mode the job loads only the days it re-reads (RECON_PRODUCTION_DAYS); every
+-- other record still comes from ODBC through the merge below.
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
-      AND EXISTS (SELECT 1 FROM `{gcp_project}.PlexProd.live_production`)
-      AND NOT (
-        IFNULL((SELECT hh.odbc_stable FROM `{gcp_project}.PlexOps.odbc_health` hh), FALSE)
-        AND NOT EXISTS (
-          SELECT 1
-          FROM `{gcp_project}.PlexProd.live_production` AS l
-          WHERE l.record_time < TIMESTAMP_SUB(
-                  (SELECT MAX(l2.loaded_at) FROM `{gcp_project}.PlexProd.live_production` AS l2),
-                  INTERVAL 3 HOUR)
-            AND l.production_no NOT IN (
-              SELECT SAFE_CAST(r.Production_No AS INT64)
-              FROM `{gcp_project}.{dataset}.raw_Part_v_Production` AS r
-              WHERE r.Production_No IS NOT NULL)
-        )
-      ) AS use_live
+      AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
+                  WHERE ls.report_group = 'production'), FALSE)
+      AND IFNULL((SELECT MAX(l.loaded_at) FROM `{gcp_project}.PlexProd.live_production` l)
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
 ),
 
 job_ops AS (

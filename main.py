@@ -908,6 +908,18 @@ _ODBC_BAD_SQL = """(outcome IN ('held-outage', 'lost')
 _ODBC_UP = ("success", "partial", "skipped", "succeeded-unrecorded")
 
 
+def _screens_in_use(bq) -> bool:
+    """Has the hourly screens job (plex-live-screens, 2026-11-10) switched any
+    report to the screens? Until 11-10 this was "live_order_releases loaded in the
+    last 2 h"; now that the job loads the live tables only when ODBC is behind,
+    PlexOps.live_source is the honest answer. False when it cannot tell."""
+    try:
+        return bool(list(bq.query(
+            f"SELECT LOGICAL_OR(use_live) AS u FROM `{GCP_PROJECT}.PlexOps.live_source`").result())[0].u)
+    except Exception:
+        return False
+
+
 def screens_alert_due(events, now, hours: int = SCREENS_ALERT_HOURS,
                       max_up_share: float = SCREENS_ALERT_MAX_UP_SHARE) -> Optional[dict]:
     """Whether ODBC has been failing long enough to start the Plex screens.
@@ -964,9 +976,9 @@ def maybe_send_screens_alert(detail: str) -> bool:
                 f"SELECT MAX(loaded_at) AS t FROM `{GCP_PROJECT}.PlexProd.live_order_releases`").result())[0].t
         except Exception:
             screens_at = None
-        if screens_at and now - screens_at < timedelta(hours=SCREENS_FRESH_HOURS):
-            log.info("ODBC failing for %d h, but the live screens loaded at %s; no alert.",
-                     SCREENS_ALERT_HOURS, screens_at.isoformat())
+        if _screens_in_use(bq):
+            log.info("ODBC failing for %d h, but the screens job already switched reports to the screens; no alert.",
+                     SCREENS_ALERT_HOURS)
             return False
         alert = {
             "hours": SCREENS_ALERT_HOURS, "downs": stats["downs"], "ups": stats["ups"],
@@ -1097,8 +1109,8 @@ def maybe_send_stale_alert(lag_min: Optional[float], newest: dict) -> bool:
                 f"SELECT MAX(loaded_at) AS t FROM `{GCP_PROJECT}.PlexProd.live_order_releases`").result())[0].t
         except Exception:
             screens_at = None
-        if screens_at and datetime.now(timezone.utc) - screens_at < timedelta(hours=SCREENS_FRESH_HOURS):
-            log.info("ODBC data stale, but the live screens loaded at %s; no alert.", screens_at.isoformat())
+        if _screens_in_use(bq):
+            log.info("ODBC data stale, but the screens job already switched reports to the screens; no alert.")
             return False
         alert = {
             "lag_minutes": lag_min, "newest": newest, "threshold": STALE_ALERT_MINUTES,

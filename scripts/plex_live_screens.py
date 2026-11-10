@@ -109,6 +109,18 @@ def months(start, end):
         d = nxt
 
 
+def half_months(start, end):
+    """1st-15th and 16th-end windows: a whole month reached the revenue screen's
+    500-row cap (two GL rows per line) in mid-November 2026."""
+    for beg, nxt in months(start, end):
+        mid = beg.replace(day=16) if beg.day < 16 else None
+        if mid and mid < nxt:
+            yield beg, mid
+            yield mid, nxt
+        else:
+            yield beg, nxt
+
+
 def schema(cols):
     return [bigquery.SchemaField(n, t) for n, t in cols]
 
@@ -141,9 +153,9 @@ PER_ACCOUNT = {"AccountNo", "Amount", "UniqueGroupIndex"}
 def fetch_revenue(pg, today, ctx):
     url = f"{BASE}/Shipping/ShippingRevenueByPartGroupReport/"
     pg.goto(url + "Index", wait_until="networkidle", timeout=90000)
-    out = []
-    for beg, end in months(START, today):
-        r = post_json(pg, url + "Search", ctx, f"Shipping Revenue {beg:%Y-%m}", {
+    out, seen_windows = [], {}
+    for beg, end in half_months(START, today):
+        r = post_json(pg, url + "Search", ctx, f"Shipping Revenue {beg:%Y-%m-%d}", {
             "Security": False, "ShowSubTotals": False, "CommissionReporting": True,
             "InvoiceDateBegin": utc_midnight(beg), "InvoiceDateEnd": utc_midnight(end),
             "PCN": 0, "SortBy": "5"})
@@ -153,6 +165,9 @@ def fetch_revenue(pg, today, ctx):
         lines = {}
         for x in rows:
             key = tuple(sorted((k, str(v)) for k, v in x.items() if k not in PER_ACCOUNT))
+            if seen_windows.get(key, beg) != beg:
+                continue  # an end date Plex treats as inclusive: already read in the previous window
+            seen_windows[key] = beg
             if key not in lines:
                 o = {col: x.get(k) for k, col in FIELDS.items()}
                 o["invoice_date"] = den_date(x["InvoiceDate"])
@@ -405,6 +420,8 @@ def fetch_production(pg, today, ctx):
     wc = workcenters(ctx)
     c = ctx["bq"]()
     kept, first_run = [], True
+    if ctx.get("production_begin"):  # screen_recon.py: a rolling window, independent of live_production
+        return _production_read(pg, today, ctx, wc, ctx["production_begin"], [])
     try:
         last = list(c.query(f"SELECT MAX(loaded_at) t FROM `{PRODUCTION_TABLE}`").result())[0].t
         first_run = last is None or last.astimezone(DEN).date() != today
@@ -420,6 +437,10 @@ def fetch_production(pg, today, ctx):
             kept.append({k: v.isoformat() if isinstance(v, (dt.date, dt.datetime)) else v
                          for k, v in dict(r).items()})
     print(f"  {'all days' if first_run else 'recent days'} from {begin}; keeping {len(kept)} older rows")
+    return _production_read(pg, today, ctx, wc, begin, kept)
+
+
+def _production_read(pg, today, ctx, wc, begin, kept):
 
     # Neither screen's day filter is the record date in Mountain time (6571 asked for
     # 11-01 returned 11-02's records: the DST change). So read every day from the day
@@ -613,8 +634,11 @@ def etl_reached_plex(status, detail):
     return status == "skipped" and not (detail or "").startswith("Held")
 
 
-def maybe_start_push(c):
-    """Start the Label Design push if every gate above passes. Returns what it did."""
+def maybe_start_push(c, live_mode=False):
+    """Start the Label Design push if every gate above passes. Returns what it did.
+    live_mode (screen_recon.py, 2026-11-10): the reconciliation found ODBC behind,
+    so a "successful" ETL run proves nothing (11-10: it ran on 08:10 data and the
+    push never saw order 675). Gate 2 is skipped; gates 1, 3 and 4 still apply."""
     now = dt.datetime.now(DEN)
     if now.weekday() >= 5 or not (PUSH_WINDOW[0] <= now.time() < PUSH_WINDOW[1]):
         return f"push not started: {now:%a %H:%M} MT is outside Mon-Fri 05:00-17:50 (the 6:05 PM sweep covers the day)"
@@ -623,7 +647,7 @@ def maybe_start_push(c):
         WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
           AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 40 MINUTE)
         ORDER BY started_at DESC LIMIT 1""").result())
-    if etl and etl_reached_plex(etl[0].status, etl[0].detail):
+    if etl and etl_reached_plex(etl[0].status, etl[0].detail) and not live_mode:
         return f"push not started: the ETL reached Plex at {etl[0].started_at:%H:%M} UTC and starts the push itself"
     src = list(c.query(f"SELECT ARRAY_AGG(DISTINCT data_source) s FROM `{PROJECT}.PlexProd.label_design_report`").result())[0].s
     if src != ["live"]:

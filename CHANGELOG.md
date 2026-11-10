@@ -34,6 +34,8 @@ don't need an entry.
 - **Standalone `loop`:** batches of 50 back to back, each verified through the API; transient
   errors retried (3 tries per customer with a fresh login, 4 for API reads); guards still stop at
   once. Started 2026-11-09 after the pilot, detached on the Mac.
+- **Result:** 1,542 notes written (1,532 new, 10 appended), 34 batches all verified; final check
+  of all 4,110 customers through the API and 13 on screen: exact. Flagged rows not written.
 - **Docs:** `docs/CUSTOMER_NOTES_BULK.md` (new). Not deployed; runs by hand on the Mac.
 
 ## 2026-11-09 (dev) - Write a customer's Note through the Plex screen

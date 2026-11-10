@@ -11,6 +11,16 @@ multi-line "Note". The Brief Note and the Contact Information note are left alon
 - Files: `etl-manual/customer_note/` in the primary folder (gitignored: customer data):
   `bulk_plan.csv`, `bulk_actions.jsonl`, `BULK_STOPPED.txt` when stopped, and the backups.
 
+> **Done 2026-11-09** (pilot 18:01 UTC, last batch 22:01 UTC): **1,542 notes written** (1,532
+> new, 10 appended) in 34 batches, every batch verified through the API. Final check
+> 2026-11-10 ~01:00 UTC: a fresh API read of all 4,110 customers matches the plan exactly (each
+> target holds its planned note, the appends keep the old note in full, no other customer's note
+> changed; customers with a Note 13 → 1,545), and a screen read of 13 sampled customers matched
+> 13/13. Two stops, both reviewed and logged: a false alarm at ADRI2 (title parsing, fixed) and
+> LUXU1 when the laptop lid closed mid-save (nothing half-written). 0 retries. **Not written,
+> for a later decision:** 927 inactive customers, 3 name mismatches, 690 codes not in Plex,
+> 1,395 comments with no code (hub tab filters).
+
 ## Contents
 
 - [Which Note field](#which-note-field)

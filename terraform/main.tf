@@ -6253,7 +6253,37 @@ resource "google_bigquery_data_transfer_config" "msl_demand_daily" {
 # month 13:30 UTC = after the 4 AM MT full prod run; records the PREVIOUS month. Creates
 # PlexProd.part_usage_monthly if missing and replaces that month's rows, so a re-run is safe.
 # Same service account as the backup query.
+# The measurement behind part_usage_monthly AND the month-to-date view (one definition, so
+# they always agree): usage per part for one month, days counted through yesterday.
+resource "google_bigquery_routine" "part_usage_for_month" {
+  dataset_id      = google_bigquery_dataset.plex.dataset_id
+  routine_id      = "part_usage_for_month"
+  routine_type    = "TABLE_VALUED_FUNCTION"
+  language        = "SQL"
+  description     = "Usage per part for one calendar month (MSL method), through yesterday. docs/reports/part_usage_monthly.md"
+  definition_body = file("${path.module}/part_usage_for_month.sql")
+  arguments {
+    name      = "target_month"
+    data_type = jsonencode({ typeKind = "DATE" })
+  }
+}
+
+# The current month so far (Jennilyn, 2026-11-10: "a version that updates throughout the
+# month"): the same function for this month, through yesterday, so it moves every day as the
+# ETL loads production. Empty on the 1st (no complete day yet). Same columns as the table.
+resource "google_bigquery_table" "part_usage_month_to_date" {
+  dataset_id          = google_bigquery_dataset.plex.dataset_id
+  table_id            = "part_usage_month_to_date"
+  deletion_protection = false
+  description         = "Usage per part for the current month so far (through yesterday), same method and columns as part_usage_monthly."
+  view {
+    use_legacy_sql = false
+    query          = "SELECT * FROM `${var.gcp_project}.${google_bigquery_dataset.plex.dataset_id}.${google_bigquery_routine.part_usage_for_month.routine_id}`(DATE_TRUNC(CURRENT_DATE('America/Denver'), MONTH))"
+  }
+}
+
 resource "google_bigquery_data_transfer_config" "part_usage_monthly" {
+  depends_on           = [google_bigquery_routine.part_usage_for_month]
   display_name         = "part_usage_monthly"
   location             = "US"
   data_source_id       = "scheduled_query"

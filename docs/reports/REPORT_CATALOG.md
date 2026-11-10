@@ -55,7 +55,7 @@ Business-facing documentation for every deployed report in this pipeline — one
 | Sales Order Allocation | Sales | ✅ Built | [sales_order_allocation_report.md](sales_order_allocation_report.md) |
 | Open Quotes | Sales | ✅ Built and deployed 2026-08-23 | [sales_quotes_open_report.md](sales_quotes_open_report.md) |
 | Open RMAs | Sales | ✅ Built and deployed 2026-08-23 | [sales_returns_open_report.md](sales_returns_open_report.md) |
-| Part Usage by Month (usage per part per month, daily average) | Supply Chain | ✅ Scheduled query, 2026-11-10 (October backfilled) | [part_usage_monthly.md](part_usage_monthly.md) |
+| Part Usage by Month (usage per part per month, daily average; plus `part_usage_month_to_date`) | Supply Chain | ✅ Scheduled query + month-to-date view, 2026-11-10 (October backfilled) | [part_usage_monthly.md](part_usage_monthly.md) |
 | Data Freshness (which source each report reads, how current) | Operations | ✅ Terraform view, 2026-11-10 | [data_freshness.md](data_freshness.md) |
 | Label Design Queue | Sales | ✅ Deployed; Monday push live in prod since the 2026-10-19 cutover (test push paused) | [label_design_report.md](label_design_report.md) |
 | Label Design Push Latency | Sales | 🛠 Built 2026-10-20, not deployed yet | [label_design_push_latency.md](label_design_push_latency.md) |

@@ -35,7 +35,15 @@ Checked on 2026-11-10: summed over the same days, this table equals the MSL repo
 - **If Plex's database feed was behind on the 1st**, the month may be short: check `source_tables_loaded_at`, then re-run that month. A month with no production records at all is refused (the query fails rather than record it empty), and the watchdog reports a month not recorded by the 2nd.
 - **Joining it in another report:** the table only has rows for parts that were used, so join on `(usage_month, part_no)` with a LEFT JOIN and treat a missing row as 0 (`COALESCE(qty_used, 0)`). Use `part_no`, not `part_key` (one row per part number, on its stocked key).
 - **Units:** `unit` is blank for most raw materials, which are kilos; other parts are in their stocked unit (often eaches).
-- **No month-to-date row:** the current month appears on the 1st of the next. Ask if a running month-to-date view would help.
+- **Current month so far:** `PlexProd.part_usage_month_to_date` (a view) gives the same columns for the month in progress, through yesterday, so it moves every day as production loads. It is empty on the 1st (no complete day yet); `is_partial_month` is true and `avg_daily_usage` is per day so far.
+
+## One definition for both
+
+Both the monthly table and the month-to-date view come from the table function `PlexProd.part_usage_for_month(month)` (`terraform/part_usage_for_month.sql`), so they are always measured the same way. Any month can be read straight from it:
+
+```sql
+SELECT * FROM `voxdatalake.PlexProd.part_usage_for_month`(DATE '2026-11-01');
+```
 
 ## Re-running or backfilling a month
 

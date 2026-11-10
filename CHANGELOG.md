@@ -16,6 +16,11 @@ don't need an entry.
 
 ## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
 
+- **Added: month-to-date usage** `PlexProd.part_usage_month_to_date` (view): the current month so far,
+  through yesterday. The measurement moved into one table function, `PlexProd.part_usage_for_month(month)`
+  (`terraform/part_usage_for_month.sql`), used by both the view and the monthly scheduled query, so they
+  cannot drift (checked: October from the function equals the stored month on all 265 parts).
+
 - **Audited (two Sonnet agents):** the monthly query now refuses to record a month with no production
   records (ASSERT; the watchdog's new 13th check, `usage_monthly`, reports a month not recorded by the
   2nd); join, unit and month-to-date notes in the doc; the table is last in the backup list.

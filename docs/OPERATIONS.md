@@ -764,7 +764,7 @@ Since 2026-11-10 two jobs watch the ETL from outside it:
 | `raw_freshness` | a `raw_*` table with rows not rewritten in 30 h | Plex returns 0 rows (the ETL keeps yesterday's, D3) or a pipeline stopped |
 | `msl_daily` | no `msl_demand_daily` row for today after 7:30 | the scheduled query failed |
 | `usage_monthly` | from the 2nd, no `part_usage_monthly` rows for last month | the scheduled query failed, or its guard refused a month with no production records; re-run the month (docs/reports/part_usage_monthly.md) |
-| `backups` | under 20 snapshots for the last Monday in `Backups` | `backup_snapshots_weekly` failed (it failed 10-27 to 11-09 for want of `deleteSnapshot`; fixed by the dataset grant) |
+| `backups` | no full snapshot set (20+ tables with one `_YYYYMMDD` stamp, `live_*` backups not counted) in the last 8 days | `backup_snapshots_weekly` failed (it failed 10-27 to 11-09 for want of `deleteSnapshot`; fixed by the dataset grant 11-10, then run by hand: 32 tables dated 20261110) |
 | `manual_data` | `scorecard_goals_app` / `safety_incidents` older than 3 h | the manual-data app's hourly `pushAll` trigger (Apps Script) stopped: OPEN_ITEMS D34 |
 | `test_cascade` | fewer than 12 test jobs logged since 7 PM yesterday | a test scheduler paused or failing |
 | `schedulers` | a Cloud Scheduler job is not ENABLED, or failed in the last 2 h | someone paused it, or its target is broken |

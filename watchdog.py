@@ -166,14 +166,21 @@ def check_usage_monthly(c, now_mt):
 
 
 def check_backups(c, now_mt):
-    monday = now_mt.date() - dt.timedelta(days=now_mt.weekday())
-    if now_mt.date() == monday and now_mt.hour < 2:
-        monday -= dt.timedelta(days=7)  # the Monday run is at 06:00 UTC (~midnight MT)
-    stamp = monday.strftime("%Y%m%d")
-    n = q(c, f"SELECT COUNT(*) n FROM `{PROJECT}.Backups.__TABLES__` WHERE ENDS_WITH(table_id, @s) AND NOT STARTS_WITH(table_id, 'PlexProd__live_')",
-          s=f"_{stamp}")[0].n
-    return [] if n >= 20 else [f"Weekly backup for {monday} has {n} snapshot(s) in Backups (expect ~32). "
-                               f"The scheduled query backup_snapshots_weekly failed."]
+    """A full weekly snapshot set (20+ tables with the same _YYYYMMDD stamp, live_* backups
+    not counted) dated within the last 8 days. A hand run on another day counts too."""
+    rows = q(c, f"""
+        SELECT REGEXP_EXTRACT(table_id, r'_(\\d{{8}})$') AS stamp, COUNT(*) AS n
+        FROM `{PROJECT}.Backups.__TABLES__`
+        WHERE REGEXP_CONTAINS(table_id, r'_\\d{{8}}$') AND NOT STARTS_WITH(table_id, 'PlexProd__live_')
+        GROUP BY stamp ORDER BY stamp DESC""")
+    since = (now_mt.date() - dt.timedelta(days=8)).strftime("%Y%m%d")
+    full = [r for r in rows if r.stamp and r.stamp >= since and r.n >= 20]
+    if full:
+        return []
+    last = rows[0] if rows else None
+    return [f"No full weekly backup in Backups in the last 8 days (newest set: "
+            f"{(last.stamp + ' with ' + str(last.n) + ' tables') if last else 'none'}; expect ~32). "
+            f"The scheduled query backup_snapshots_weekly failed."]
 
 
 def check_manual_data(c, now_mt):

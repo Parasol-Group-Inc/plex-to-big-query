@@ -16,6 +16,13 @@ don't need an entry.
 
 ## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
 
+- **Deployed 2026-11-10 22:24 UTC** (tag `deploy/2026-11-10T2224Z`): routine `part_usage_for_month`, view
+  `part_usage_month_to_date` (335 parts, Nov 1-9, checked), scheduled query `part_usage_monthly`.
+  `approaching_msl_report` rebuilt with `usage_min_days` 183 by a hand run of plex-etl-sales-orders
+  (22:26 UTC, success; view definition checked).
+- **Docs:** PLEX_SCREEN_EXTRACTION.md "What ODBC is behind is measured against": the screens job queries
+  ODBC live, so its verdict does not depend on our extraction schedule.
+
 - **Added: month-to-date usage** `PlexProd.part_usage_month_to_date` (view): the current month so far,
   through yesterday. The measurement moved into one table function, `PlexProd.part_usage_for_month(month)`
   (`terraform/part_usage_for_month.sql`), used by both the view and the monthly scheduled query, so they

@@ -38,8 +38,9 @@
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
 -- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
--- disagrees, and empties the live table after 3 clean hours. The 3-hour freshness
--- check stays as a backstop: if the job stops, the view is back on ODBC within 3 h.
+-- disagrees. Since 2026-11-10 (Emilio) production is NOT compared: live_source has no
+-- 'production' row, so this view stays on ODBC. Re-adding the production screen to
+-- screen_recon.py GROUPS and the live_source view turns the switch back on.
 -- In live mode the job loads only the days it re-reads (RECON_PRODUCTION_DAYS); every
 -- other record still comes from ODBC through the merge below.
 WITH live_switch AS (

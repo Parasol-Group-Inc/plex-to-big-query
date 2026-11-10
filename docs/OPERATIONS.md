@@ -744,8 +744,9 @@ ACTION NEEDED: Plex ODBC data is N h old — <date>`.
 
 Since 2026-11-10 two jobs watch the ETL from outside it:
 
-- **`plex-live-screens`** (hourly): Plex screens vs ODBC vs BigQuery, and the switch to
-  the screens while ODBC is behind. Full description:
+- **`plex-live-screens`** (every 4 h): Plex screens (Label Design, revenue, shipments) vs
+  ODBC vs BigQuery, and the switch to the screens while ODBC is behind. Every Plex login
+  is logged (`PlexOps.plex_login_log`) and screenshotted; a failed one mails Emilio alone. Full description:
   [PLEX_SCREEN_EXTRACTION.md, Reconciliation](PLEX_SCREEN_EXTRACTION.md#reconciliation-cloud-job).
 - **`plex-etl-watchdog`** (`watchdog.py`, every 30 min at :10/:40): checks that each part
   ran. Results in `PlexOps.watchdog_log`; one email lists the problems new in 24 h.
@@ -756,7 +757,7 @@ Since 2026-11-10 two jobs watch the ETL from outside it:
 | `dispatch_stuck` | a dispatch row still open after 150 min | the dispatcher is not ticking (it closes runs as lost at 120 min) |
 | `label_design_running` | weekdays 5:30-17:45, no Label Design log row for 40 min | runs killed by the timeout, or the scheduler stopped |
 | `label_design_pending` | lines in `label_design_report` not on Monday in two passes | the push failed; `gcloud run jobs execute plex-etl-label-design-push` |
-| `screens_job` | no `screen_recon` row for 150 min, or a screen failed 4 runs running | the screens job, its login or a screen changed |
+| `screens_job` | no `screen_recon` row for 5 h, or a screen failed 2 runs running | the screens job, its login or a screen changed |
 | `raw_freshness` | a `raw_*` table with rows not rewritten in 30 h | Plex returns 0 rows (the ETL keeps yesterday's, D3) or a pipeline stopped |
 | `msl_daily` | no `msl_demand_daily` row for today after 7:30 | the scheduled query failed |
 | `backups` | under 20 snapshots for the last Monday in `Backups` | `backup_snapshots_weekly` failed (it failed 10-27 to 11-09 for want of `deleteSnapshot`; fixed by the dataset grant) |
@@ -770,7 +771,7 @@ A check that errors reports `check broken: ...` and counts as a failure.
 **Who watches the watchdog:** Google Cloud Monitoring, which mails
 `local.ops_alert_email` (first of `report_to_emails`) directly, not through SendGrid:
 - no `watchdog heartbeat` log line for 90 min;
-- no `recon heartbeat` for 3 h;
+- no `recon heartbeat` for 9 h;
 - any email send failure in a Plex job (`Failed to send`, SendGrid config/key);
 - more than 3 runs killed by their task timeout in an hour.
 

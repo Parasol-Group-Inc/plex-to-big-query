@@ -116,8 +116,8 @@ def check_label_design_pending(c, now_mt, prev):
 
 def check_screens_job(c, now_mt):
     r = q(c, f"SELECT MAX(run_started_at) t FROM `{PROJECT}.PlexOps.screen_recon`")[0]
-    if r.t is None or r.t < dt.datetime.now(UTC) - dt.timedelta(minutes=150):
-        return [f"The hourly Plex screens job (plex-live-screens) has not recorded a run since "
+    if r.t is None or r.t < dt.datetime.now(UTC) - dt.timedelta(minutes=300):
+        return [f"The Plex screens job (every 4 h) (plex-live-screens) has not recorded a run since "
                 f"{r.t.astimezone(DEN):%m-%d %H:%M} MT. Without it nothing compares ODBC with the screens."
                 if r.t else "The Plex screens job has never recorded a run."]
     bad = q(c, f"""
@@ -125,7 +125,7 @@ def check_screens_job(c, now_mt):
           SELECT screen, fetch_ok, ROW_NUMBER() OVER (PARTITION BY screen ORDER BY run_started_at DESC) rn
           FROM `{PROJECT}.PlexOps.screen_recon`
           WHERE run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY))
-        WHERE rn <= 4 GROUP BY screen HAVING failed = n AND n >= 4""")
+        WHERE rn <= 2 GROUP BY screen HAVING failed = n AND n >= 2""")
     return [f"Plex screen '{b.screen}' failed in its last {b.n} runs." for b in bad]
 
 

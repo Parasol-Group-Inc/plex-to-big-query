@@ -6300,6 +6300,8 @@ resource "google_bigquery_table" "screen_recon" {
     { name = "fetch_ok", type = "BOOLEAN", mode = "NULLABLE" },
     { name = "fetch_error", type = "STRING", mode = "NULLABLE" },
     { name = "screen_rows", type = "INT64", mode = "NULLABLE" },
+    { name = "fetch_seconds", type = "FLOAT64", mode = "NULLABLE", description = "how long the screen read took" },
+    { name = "screenshots", type = "INT64", mode = "NULLABLE", description = "screenshots saved for this screen (bucket in plex_login_log docs)" },
     { name = "prev_screen_rows", type = "INT64", mode = "NULLABLE" },
     { name = "odbc_ok", type = "BOOLEAN", mode = "NULLABLE" },
     { name = "odbc_error", type = "STRING", mode = "NULLABLE" },
@@ -6356,8 +6358,9 @@ resource "google_bigquery_table" "screen_recon_diff" {
 # Which report groups read the Plex screens now. Read by label_design_report,
 # shipping_revenue_report and part_production_current (their live_switch), by
 # main.py (no ODBC alert while the screens are in use) and by screen_recon.py.
-# Live after ONE bad verdict among a screen's last 3 runs (failed reads ignored),
-# back to ODBC after 3 clean runs. 3 = RECON_CLEAN_RUNS in the job.
+# Live after ONE bad verdict among a screen's last 2 runs (failed reads ignored),
+# back to ODBC after 2 clean runs (8 h at the 4-hourly schedule). 2 = RECON_CLEAN_RUNS
+# in the job. Production is not compared (Emilio, 2026-11-10): no row, never live.
 resource "google_bigquery_table" "live_source" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "live_source"
@@ -6369,8 +6372,7 @@ resource "google_bigquery_table" "live_source" {
       WITH groups AS (
         SELECT 'label_design' AS report_group, 'releases' AS screen UNION ALL
         SELECT 'revenue', 'history' UNION ALL
-        SELECT 'revenue', 'revenue' UNION ALL
-        SELECT 'production', 'production'
+        SELECT 'revenue', 'revenue'
       ),
       runs AS (
         SELECT screen, run_started_at, verdict, odbc_lag_min,
@@ -6386,10 +6388,58 @@ resource "google_bigquery_table" "live_source" {
         MAX(IF(r.rn = 1, r.odbc_lag_min, NULL)) AS latest_lag_min,
         STRING_AGG(DISTINCT IF(r.rn = 1, CONCAT(r.screen, ': ', r.verdict), NULL)) AS latest_verdicts
       FROM groups g
-      LEFT JOIN runs r ON r.screen = g.screen AND r.rn <= 3
+      LEFT JOIN runs r ON r.screen = g.screen AND r.rn <= 2
       GROUP BY g.report_group
     SQL
   }
+}
+
+# Every Plex web login by the screens job (first and re-logins), success or not.
+resource "google_bigquery_table" "plex_login_log" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "plex_login_log"
+  deletion_protection = true
+  description         = "Plex web logins by plex-live-screens: time, user, ok, error, seconds, screenshot (gs://<project>-plex-screenshots)."
+  time_partitioning {
+    type  = "DAY"
+    field = "attempted_at"
+  }
+  schema = jsonencode([
+    { name = "run_id", type = "STRING", mode = "REQUIRED" },
+    { name = "attempted_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "reason", type = "STRING", mode = "NULLABLE", description = "first | re-login (session ended mid-screen)" },
+    { name = "user", type = "STRING", mode = "NULLABLE" },
+    { name = "ok", type = "BOOLEAN", mode = "REQUIRED" },
+    { name = "error", type = "STRING", mode = "NULLABLE" },
+    { name = "seconds", type = "FLOAT64", mode = "NULLABLE" },
+    { name = "final_url", type = "STRING", mode = "NULLABLE" },
+    { name = "screenshot", type = "STRING", mode = "NULLABLE" },
+    { name = "job", type = "STRING", mode = "NULLABLE" },
+    { name = "execution", type = "STRING", mode = "NULLABLE" },
+  ])
+}
+
+# Screenshots of every login and screen read by plex-live-screens, by Mountain date
+# and time: plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png. Kept 365 days.
+resource "google_storage_bucket" "plex_screenshots" {
+  name                        = "${var.gcp_project}-plex-screenshots"
+  location                    = "US"
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  lifecycle_rule {
+    condition {
+      age = 365
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
+resource "google_storage_bucket_iam_member" "etl_screenshots_writer" {
+  bucket = google_storage_bucket.plex_screenshots.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.etl.email}"
 }
 
 resource "google_bigquery_table" "watchdog_log" {
@@ -6510,6 +6560,19 @@ resource "google_cloud_run_v2_job" "live_screens" {
           value = "120"
         }
         env {
+          name  = "RECON_CLEAN_RUNS"
+          value = "2"
+        }
+        env {
+          name  = "SCREENSHOT_BUCKET"
+          value = google_storage_bucket.plex_screenshots.name
+        }
+        # Failed Plex logins are mailed on their own, to this address only.
+        env {
+          name  = "LOGIN_ALERT_EMAILS"
+          value = local.ops_alert_email
+        }
+        env {
           name  = "SENDGRID_ENABLED"
           value = var.sendgrid_enabled
         }
@@ -6542,8 +6605,8 @@ resource "google_cloud_run_v2_job" "live_screens" {
 
 resource "google_cloud_scheduler_job" "live_screens" {
   name        = "plex-live-screens-sync"
-  description = "Hourly: Plex screens vs ODBC reconciliation; switches reports to the screens while ODBC is behind (scripts/screen_recon.py)"
-  schedule    = "20 * * * *"
+  description = "Every 4 h: Plex screens (Label Design, revenue, shipments) vs ODBC; switches those reports to the screens while ODBC is behind (scripts/screen_recon.py)"
+  schedule    = "20 */4 * * *"
   time_zone   = "America/Denver"
   region      = var.gcp_region
   paused      = false
@@ -6695,13 +6758,13 @@ resource "google_monitoring_alert_policy" "recon_silent" {
   combiner              = "OR"
   notification_channels = [google_monitoring_notification_channel.ops_email.id]
   documentation {
-    content = "No heartbeat from plex-live-screens for 3 h: nothing compares ODBC with the Plex screens. docs/PLEX_SCREEN_EXTRACTION.md, Reconciliation."
+    content = "No heartbeat from plex-live-screens for 9 h (it runs every 4 h): nothing compares ODBC with the Plex screens. docs/PLEX_SCREEN_EXTRACTION.md, Reconciliation."
   }
   conditions {
-    display_name = "no recon heartbeat in 3 h"
+    display_name = "no recon heartbeat in 9 h"
     condition_absent {
       filter   = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.recon_heartbeat.name}\" AND resource.type=\"cloud_run_job\""
-      duration = "10800s"
+      duration = "32400s"
       aggregations {
         alignment_period   = "600s"
         per_series_aligner = "ALIGN_SUM"

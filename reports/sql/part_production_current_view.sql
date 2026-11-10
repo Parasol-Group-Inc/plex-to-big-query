@@ -36,20 +36,29 @@
 --     uses it. Weights, Production_Value, Log_Key and the like are NULL.
 
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
 -- disagrees. Since 2026-11-10 (Emilio) production is NOT compared: live_source has no
 -- 'production' row, so this view stays on ODBC. Re-adding the production screen to
 -- screen_recon.py GROUPS and the live_source view turns the switch back on.
 -- In live mode the job loads only the days it re-reads (RECON_PRODUCTION_DAYS); every
 -- other record still comes from ODBC through the merge below.
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- from PlexOps.data_freshness, report group 'production': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
+
+SELECT __b.*, __src.data_as_of, __src.data_label
+FROM (
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
       AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
                   WHERE ls.report_group = 'production'), FALSE)
       AND IFNULL((SELECT MAX(l.loaded_at) FROM `{gcp_project}.PlexProd.live_production` l)
-                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live
+                 > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS use_live
 ),
 
 job_ops AS (
@@ -182,3 +191,9 @@ SELECT v.*
 FROM live_rows AS v
 CROSS JOIN live_switch AS sw
 WHERE sw.use_live
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'production'
+) AS __src ON TRUE

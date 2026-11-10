@@ -160,3 +160,18 @@ def test_failed_login_mails_only_the_login_address(monkeypatch):
 def test_screenshot_paths_are_dated_in_mountain_time():
     audit = r.Audit("abc", FETCH, dry_run=True)
     assert audit.prefix == "plex-screens/2026/11/10/1315-MT_abc"
+
+
+def test_screens_digest_renders(monkeypatch):
+    import email_utils
+    got = []
+    monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: got.append(alert) or True)
+    ok = email_utils.send_screens_digest({
+        "run_id": "r1", "took": 300, "problems": 0,
+        "groups": [{"name": "Label Design", "label": "ODBC, data to 11-10 13:02 MT", "lag": 12.0}],
+        "screens": [{"screen": "releases", "verdict": "current", "rows": 461, "seconds": 170.2,
+                     "compared": 455, "missing": 0, "differ": 0, "error": None}],
+        "logins_ok": 1, "logins_failed": 0, "screenshots": "gs://b/plex-screens/2026/11/10/1320-MT_r1/"})
+    assert ok and got[0]["headline"] == "Screens Digest: all current" and got[0]["severity"] == "info"
+    subject, html_content, text = email_utils.render_ops_alert(got[0])
+    assert subject.startswith("[Plex ETL] - Screens Digest") and "461 rows" in text and "{{" not in html_content

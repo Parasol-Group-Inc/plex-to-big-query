@@ -698,6 +698,20 @@ def _digest_health(health: Dict[str, object], zone: ZoneInfo):
         when = _local_time(r.get("finished_at"), zone)
         msg = f"{name} ({r.get('reason') or 'run'}, {when}): {_DISPATCH_NOTES.get(outcome, outcome)}"
         items.append((html.escape(msg), msg))
+    # Report groups reading the Plex screens, or on old ODBC data in work hours
+    # (PlexOps.data_freshness, 2026-11-10).
+    for r in health.get("sources") or []:
+        group = str(r.get("report_group", "")).replace("_", " ")
+        age = r.get("age_min")
+        if r.get("data_source") == "live":
+            msg = f"{group}: reading the Plex screens because ODBC is behind ({r.get('data_label')})"
+        elif age is not None and age >= int(health.get("stale_minutes") or 120):
+            # measured by the screens check (ODBC vs the screens), not by record age:
+            # a quiet hour in Plex is not a stale feed
+            msg = f"{group}: ODBC was {age / 60:.1f} h behind Plex's screens at the last check ({r.get('data_label')})"
+        else:
+            continue
+        items.append((html.escape(msg), msg))
     for err in health.get("errors") or []:
         msg = f"Health check could not run: {err}"[:300]
         items.append((html.escape(msg), msg))
@@ -1126,3 +1140,38 @@ def send_ops_alert(alert: Dict[str, object], to: Optional[List[str]] = None) -> 
     subject, html_content, text_content = render_ops_alert(alert)
     _send(config, subject, html_content, text_content)
     return True
+
+
+# ── Screens digest (2026-11-10) ───────────────────────────────────────────────
+# scripts/screen_recon.py, after a cycle: what the screens job found, for the
+# same people as the ETL digest (REPORT_TO_EMAILS). Same Vox card as ops_alert.
+def send_screens_digest(d: Dict[str, object]) -> bool:
+    problems = int(d.get("problems") or 0)
+    facts = []
+    for g in d.get("groups") or []:
+        facts.append((f"{g['name']}", f"{g['label']}" + (f" | lag {g['lag']:.0f} min" if g.get("lag") is not None else "")))
+    for s in d.get("screens") or []:
+        facts.append((f"Screen: {s['screen']}",
+                      f"{s['verdict']} | {s['rows']} rows in {s['seconds'] or '?'} s"
+                      + (f" | compared {s['compared']}, ODBC missing {s['missing']}, differ {s['differ']}"
+                         if s.get("compared") is not None else "")
+                      + (f" | {s['error']}" if s.get("error") else "")))
+    facts.append(("Plex logins", f"{d.get('logins_ok', 0)} ok, {d.get('logins_failed', 0)} failed"))
+    if d.get("screenshots"):
+        facts.append(("Screenshots", str(d["screenshots"])))
+    facts.append(("Run", f"{d.get('run_id')} ({d.get('took', 0):.0f} s)"))
+    summary = ("Every 4 hours the screens job reads Plex's Label Design, revenue and shipment screens and "
+               "checks that ODBC (what the reports read) has the same records. "
+               + ("Everything matched within the tolerance; the reports read ODBC." if not problems else
+                  f"{problems} item(s) need a look: see the lines below. Reports switch to the screens by "
+                  "themselves while ODBC is behind."))
+    return send_ops_alert({
+        "headline": f"Screens Digest: {'all current' if not problems else f'{problems} to check'}",
+        "severity": "info" if not problems else "action",
+        "summary": summary, "facts": facts,
+        "steps": [] if not problems else [
+            "SELECT * FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 12"],
+        "source": "plex-live-screens",
+        "runbook_url": ("https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/"
+                        "docs/PLEX_SCREEN_EXTRACTION.md#reconciliation-cloud-job"),
+    })

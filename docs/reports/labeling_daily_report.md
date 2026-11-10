@@ -36,3 +36,16 @@ Pulls from the same production-log data already extracted for Work Orders, then 
 ## More detail
 
 [`spreadsheets/labeling_daily_report.md`](../../spreadsheets/labeling_daily_report.md) has the full column-by-column mapping and research history.
+
+## Where the data came from
+
+*Added 2026-11-10.* Every row carries three columns that say where its data came from and how current it was:
+
+| Column | Meaning |
+|---|---|
+| `data_source` | `odbc` (Plex's database feed, the normal case) or `live` (read from Plex's own screens because the database feed was behind) |
+| `data_as_of` | for `odbc`, the newest change the feed had delivered; for `live`, when the screens were read |
+| `data_label` | the two in words, e.g. "ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT" |
+
+They come from `PlexOps.data_freshness`, group **production**. Production always reads ODBC: the hourly screens check covers Label Design, revenue and shipments only. An old `data_as_of` on a working day means the feed has stopped, even if every run succeeded (as on 2026-11-10). See [data_freshness.md](data_freshness.md).
+

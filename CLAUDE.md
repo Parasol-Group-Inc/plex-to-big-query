@@ -366,6 +366,17 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
 - Cloud Build builds the screens image FROM the same commit's ETL image and updates
   `plex-live-screens`; `plex-etl-watchdog` is in `_ALL_JOBS`.
 
+## Every report says where its data came from (since 2026-11-10)
+
+`PlexOps.data_freshness` (Terraform view) gives, per dataset and report group, `data_source`
+(odbc | live), `data_as_of` and `data_label`. The 17 views built on `label_design_report`,
+`shipping_revenue_report` or `part_production_current` end with those columns: each SQL file wraps
+its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness ON TRUE`), marked
+"DATA SOURCE LABEL (2026-11-10)". **A new view built on one of them needs the same wrapper**, unless
+it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).
+Monday's "Data Source" text column (both boards) gets `data_label` from the push. The screens job
+sends a digest at 8:20/12:20/16:20 MT to REPORT_TO_EMAILS.
+
 ## Customer Notes in Plex (2026-11-09)
 
 Plex's customer **Note** (Customer Details, NOTES section) is not in ODBC and the REST API ignores

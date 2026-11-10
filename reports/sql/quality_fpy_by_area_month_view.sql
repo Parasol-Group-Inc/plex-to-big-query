@@ -42,7 +42,15 @@
 -- Daily Reports.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per (Workcenter_Group, month).
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_source, data_as_of and data_label
+-- from PlexOps.data_freshness, report group 'production': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
 
+SELECT __b.*, __src.data_source, __src.data_as_of, __src.data_label
+FROM (
 WITH
 
 prod AS (
@@ -88,3 +96,9 @@ SELECT
 
 FROM by_area_month
 ORDER BY fpy_month DESC, area
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'production'
+) AS __src ON TRUE

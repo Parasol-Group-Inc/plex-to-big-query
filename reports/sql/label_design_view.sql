@@ -53,7 +53,15 @@
 --
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- from PlexOps.data_freshness, report group 'label_design': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
 
+SELECT __b.*, __src.data_as_of, __src.data_label
+FROM (
 WITH rep_outside AS (
   SELECT
     SAFE_CAST(sp.PO_Key AS INT64) AS PO_Key,
@@ -581,7 +589,7 @@ odbc_lines AS (
 -- ODBC by itself within 3 hours; nobody has to remember to undo anything. The
 -- two are never mixed: one source per query. data_source says which.
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
 -- disagrees, and empties the live table after 2 clean runs. It runs every 4 h, so the
 -- freshness backstop is 5 h: if the job stops, the view is back on ODBC within 5 h.
@@ -816,3 +824,9 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1
 
 ORDER BY order_date DESC, order_number, customer_part_no
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'label_design'
+) AS __src ON TRUE

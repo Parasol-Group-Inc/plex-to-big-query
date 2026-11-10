@@ -69,12 +69,21 @@
 -- line. One row per (Shipper_Line_Key, Invoice_Link) is now kept.
 
 -- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every hour it reads the screens, compares them with ODBC and
+-- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
 -- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
 -- disagrees, and empties the live table after 2 clean runs. It runs every 4 h, so the
 -- freshness backstop is 5 h: if the job stops, the view is back on ODBC within 5 h.
 -- (Until 2026-11-10 this used odbc_health plus "every screen shipper is in ODBC",
 -- which a shipper deleted in Plex could never satisfy: D30.)
+--
+-- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- from PlexOps.data_freshness, report group 'revenue': 'odbc' or 'live' (Plex screens), and
+-- how current that data is (ODBC: newest change delivered; live: when the screens were
+-- read). Terraform defines that view. The query below is the report itself, unchanged;
+-- its ORDER BY no longer guarantees row order (sort in the reader).
+
+SELECT __b.*, __src.data_as_of, __src.data_label
+FROM (
 WITH live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
@@ -195,3 +204,9 @@ SELECT * EXCEPT (data_source), data_source FROM (
   SELECT v.* FROM live_lines AS v CROSS JOIN live_switch AS sw WHERE sw.use_live
 )
 ORDER BY invoice_date DESC
+) AS __b
+LEFT JOIN (
+  SELECT f.data_source, f.data_as_of, f.data_label
+  FROM `{gcp_project}.PlexOps.data_freshness` AS f
+  WHERE f.dataset = '{dataset}' AND f.report_group = 'revenue'
+) AS __src ON TRUE

@@ -25,3 +25,16 @@ Every report that counts production reads this instead of the raw table: the Ble
 - **Checked 2026-11-06:** on the 2,100 records both held (11-02, 11-03), the screens matched ODBC on every job operation, part, workcenter, employee, rejected flag, quantity and time.
 - **Gap: jobs created after ODBC froze.** Their records have no job operation key (232 of 4,828 on 11-06), so reports that look up the job operation (the daily reports, FPY, weekly, job schedule metrics) don't count them. Production by Work Center Group and Approaching MSL do.
 - Weights, production value and a few internal fields are blank on screen records; serial number is blank on a few. No report uses them.
+
+## Where the data came from
+
+*Added 2026-11-10.* Every row carries three columns that say where its data came from and how current it was:
+
+| Column | Meaning |
+|---|---|
+| `data_source` | `odbc` (Plex's database feed, the normal case) or `live` (read from Plex's own screens because the database feed was behind) |
+| `data_as_of` | for `odbc`, the newest change the feed had delivered; for `live`, when the screens were read |
+| `data_label` | the two in words, e.g. "ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT" |
+
+They come from `PlexOps.data_freshness`, group **production**. Production always reads ODBC: the hourly screens check covers Label Design, revenue and shipments only. An old `data_as_of` on a working day means the feed has stopped, even if every run succeeded (as on 2026-11-10). See [data_freshness.md](data_freshness.md).
+

@@ -16,6 +16,15 @@ don't need an entry.
 
 ## 2026-11-10 - Every report says where its data came from; screens digest
 
+- **Fixed before deploy (two audits, Opus and Sonnet):** `live_source` used the reserved word `groups`
+  (the apply would have failed); `Dockerfile.screens` did not copy `screen_recon.py`; the portal secrets
+  are now read at run time (a secret with no version blocked job creation); `data_freshness` casts via
+  STRING (a TIMESTAMP-typed raw table could not stop every report compiling) and its label shows both
+  "loaded" and "newest change"; a release/revenue record first seen that ODBC lacks counts at once when
+  ODBC's newest change is already 2 h+ old; the "ODBC has it, screen lacks it twice" check now looks back
+  9 h; switch alerts deduped 8 h; login URLs stored without query strings; Monday items keep their order
+  (the push sorts); `approaching_msl_report` left unlabeled; Cloud Build timeout 1800 s.
+
 - **Added: `PlexOps.data_freshness`** (Terraform view): per dataset and report group, `data_source`
   (odbc | live), `data_as_of` (ODBC: newest change delivered; live: when the screens were read) and
   `data_label` ("ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT"). Same rule as the views' switch.

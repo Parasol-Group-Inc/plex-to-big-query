@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Hourly: read Plex's live screens, compare them with ODBC and BigQuery, and
+"""Every 4 hours: read Plex's live screens, compare them with ODBC and BigQuery, and
 switch reports to the screens only while ODBC is behind or disagrees.
 
     python scripts/screen_recon.py                 # full cycle (the Cloud Run job)
     python scripts/screen_recon.py --dry-run       # read and compare; write nothing, mail nothing
     python scripts/screen_recon.py --only releases
 
-Runs as the Cloud Run job `plex-live-screens` (Dockerfile.screens), hourly. Runbook:
+Runs as the Cloud Run job `plex-live-screens` (Dockerfile.screens), every 4 hours. Runbook:
 docs/PLEX_SCREEN_EXTRACTION.md, "Reconciliation (cloud job)". Design: 2026-11-10,
 after Plex ODBC served data frozen 08:10-12:50 MT while every run succeeded.
 
@@ -185,6 +185,20 @@ def screen_since(screen, today):
     return pls.START
 
 
+def load_portal_secrets():
+    """PLEX_PORTAL_USERNAME / _PASSWORD from Secret Manager when not in the
+    environment (the job names the secrets; a job pointing Cloud Run at a secret
+    with no version yet could not even be created). Never printed."""
+    for env, default in (("PLEX_PORTAL_USERNAME", "plex-portal-username"),
+                         ("PLEX_PORTAL_PASSWORD", "plex-portal-password")):
+        if not os.environ.get(env):
+            try:
+                import main as etl
+                os.environ[env] = etl.get_secret(os.environ.get("SECRET_" + env, default)).strip()
+            except Exception as e:
+                print(f"{env}: not in the environment and Secret Manager failed ({type(e).__name__})")
+
+
 def odbc_connect():
     """The ETL's own connection code and credentials (main.py)."""
     import main as etl
@@ -237,6 +251,14 @@ def odbc_records(conn, screen, since):
     return out, (max(nums) if nums else None), (max(evs) if evs else None)
 
 
+def newest_change(odbc):
+    """The newest update or event time ODBC holds for a screen (None if none)."""
+    ts = [t for o in odbc.values() for t in (o["updated"], o["event"]) if t is not None]
+    now = dt.datetime.now(UTC) + dt.timedelta(minutes=10)
+    ts = [t for t in ts if t <= now]
+    return max(ts) if ts else None
+
+
 # ── BigQuery raw tables (is our extraction current?) ──────────────────────────
 
 BQ_SQL = {
@@ -268,7 +290,7 @@ def bq_keys(c, screen, since):
 
 def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_at,
             prev_extra=frozenset(), raw=None, raw_modified=None, grace_min=GRACE_MIN,
-            tolerance_min=LAG_TOLERANCE_MIN):
+            tolerance_min=LAG_TOLERANCE_MIN, odbc_newest_change=None):
     """Pure: returns (counts, diffs, verdict, lag_min). See the module docstring."""
     cut = fetch_at - dt.timedelta(minutes=grace_min)
     counts = {k: 0 for k in ("compared", "excluded_recent", "missing_tail", "missing_hole", "odbc_extra",
@@ -281,8 +303,15 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
     for key, s in scr.items():
         ref = s["event"] or first_seen.get(key) or fetch_at
         if ref > cut:
-            counts["excluded_recent"] += 1
-            continue
+            # A record first seen now (releases and revenue have no time of their own)
+            # that ODBC lacks while ODBC's newest change is already older than the
+            # tolerance: ODBC is stale now, not in 4 h (the 11-10 order-675 case).
+            stale_at = odbc_newest_change if (odbc_newest_change and key not in odbc and s["event"] is None
+                       and odbc_newest_change < fetch_at - dt.timedelta(minutes=tolerance_min)) else None
+            if stale_at is None:
+                counts["excluded_recent"] += 1
+                continue
+            ref = stale_at
         counts["compared"] += 1
         o = odbc.get(key)
         if o is None:
@@ -383,7 +412,7 @@ def previous_extras(c, screen):
         WHERE d.screen = @s AND d.kind = 'odbc_extra'
           AND d.run_id = (SELECT ARRAY_AGG(r.run_id ORDER BY r.run_started_at DESC LIMIT 1)[OFFSET(0)]
                           FROM `{RECON_TABLE}` r WHERE r.screen = @s AND r.odbc_ok
-                            AND r.run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR))""",
+                            AND r.run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 9 HOUR))""",
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("s", "STRING", screen)])).result()
     return frozenset(r.record_key for r in rows)
@@ -423,10 +452,10 @@ def empty_live(c, screen, today):
     return f"{table}: backed up to {backup} and emptied ({t.num_rows} rows)"
 
 
-def alert_sent_recently(c, kind):
+def alert_sent_recently(c, kind, hours=ALERT_REPEAT_HOURS):
     rows = list(c.query(f"""
         SELECT COUNT(*) n FROM `{RECON_TABLE}`
-        WHERE alert = @k AND run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {ALERT_REPEAT_HOURS} HOUR)""",
+        WHERE @k IN UNNEST(SPLIT(IFNULL(alert, ''), ',')) AND run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {int(hours)} HOUR)""",
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("k", "STRING", kind)])).result())
     return rows[0].n > 0
@@ -470,7 +499,7 @@ class Audit:
             if self.bucket is None:
                 return ""
             blob = self.bucket.blob(name)
-            blob.metadata = {"run_id": self.run_id, "what": what, "url": (pg.url or "")[:500]}
+            blob.metadata = {"run_id": self.run_id, "what": what, "url": (pg.url or "").split("?")[0][:500]}
             blob.upload_from_string(png, content_type="image/png")
             path = f"gs://{SCREENSHOT_BUCKET}/{name}"
             self.shots.append(path)
@@ -498,7 +527,7 @@ class Audit:
                        seconds=round((dt.datetime.now(UTC) - t0).total_seconds(), 1),
                        job=os.environ.get("CLOUD_RUN_JOB", "local"),
                        execution=os.environ.get("CLOUD_RUN_EXECUTION", ""),
-                       final_url=(pg.url or "")[:500])
+                       final_url=(pg.url or "").split("?")[0][:500])
             rec["screenshot"] = self.shot(pg, f"login_{'ok' if rec['ok'] else 'FAILED'}")
             self.logins.append(rec)
             if raise_it is not None:
@@ -551,6 +580,7 @@ def run(args):
     today = dt.datetime.now(DEN).date()
     names = args.only.split(",") if args.only else SCREEN_ORDER
     c = bigquery.Client(project=PROJECT)
+    load_portal_secrets()
     audit = Audit(run_id, started, args.dry_run)
     pls.login = audit.wrap_login(pls.login)  # _relogin() inside the fetchers uses it too
     ctx = {"creds": pls.creds(), "bq": lambda: c, "production_begin": screen_since("production", today)}
@@ -633,7 +663,8 @@ def run(args):
             raw, raw_mod = None, None
             print(f"  {n}: BigQuery comparison skipped ({str(e).splitlines()[0][:150]})")
         counts, diffs, verdict, lag, why = compare(n, scr, odbc, max_num, max_ev, first_seen, fetch_at[n],
-                                                   prev_extra, raw, raw_mod)
+                                                   prev_extra, raw, raw_mod,
+                                                   odbc_newest_change=newest_change(odbc))
         rec.update(counts)
         rec.update(verdict=verdict, odbc_lag_min=lag, bq_modified_at=raw_mod,
                    detail=json.dumps({"why": why[:5], "examples": [
@@ -696,12 +727,23 @@ def run(args):
                     actions.append(f"{LIVE_TABLE[s]}: could not empty: {str(e).splitlines()[0][:200]}")
     for a in actions + ([push_note] if push_note else []):
         print(a)
+    for group, screens in GROUPS.items():
+        act = "load" if after.get(group, {}).get("use_live") else "empty"
+        try:
+            c.query(f"UPDATE `{RECON_TABLE}` SET live_action = @a WHERE run_id = @r AND screen IN UNNEST(@s)",
+                    job_config=bigquery.QueryJobConfig(query_parameters=[
+                        bigquery.ScalarQueryParameter("a", "STRING", act),
+                        bigquery.ScalarQueryParameter("r", "STRING", run_id),
+                        bigquery.ArrayQueryParameter("s", "STRING", screens)])).result()
+        except Exception as e:
+            print(f"live_action not recorded: {str(e).splitlines()[0][:150]}")
 
     alerts = decide_alerts(c, before, after, summary)
     for kind, alert in alerts:
         sent = send(alert)
         print(f"alert {kind}: {'sent' if sent else 'not sent (email off or failed)'}")
-        c.query(f"UPDATE `{RECON_TABLE}` SET alert = @k WHERE run_id = @r AND screen = @s",
+        c.query(f"UPDATE `{RECON_TABLE}` SET alert = IF(alert IS NULL, @k, CONCAT(alert, ',', @k)) "
+                f"WHERE run_id = @r AND screen = @s",
                 job_config=bigquery.QueryJobConfig(query_parameters=[
                     bigquery.ScalarQueryParameter("k", "STRING", kind),
                     bigquery.ScalarQueryParameter("r", "STRING", run_id),
@@ -764,13 +806,15 @@ def decide_alerts(c, before, after, summary):
                 why += json.loads(r.get("detail") or "{}").get("why", [])
             except ValueError:
                 pass
+        if now != was and alert_sent_recently(c, f"live-{'on' if now else 'off'}:{group}", hours=8):
+            continue  # flapping: one mail per direction per 8 h
         if now and not was:
             out.append((f"live-on:{group}", {
                 "_screen": recs[0]["screen"],
                 "headline": f"Plex ODBC is behind the screens: {group.replace('_', ' ')} now reads the screens",
-                "summary": (f"The hourly comparison found ODBC {lag / 60:.1f} h behind Plex's screens, or "
+                "summary": (f"The screens check found ODBC {lag / 60:.1f} h behind Plex's screens, or "
                             f"disagreeing with them ({verdicts}). The {group.replace('_', ' ')} report now reads "
-                            f"the screens and goes back to ODBC by itself after {CLEAN_RUNS} clean hours. "
+                            f"the screens and goes back to ODBC by itself after {CLEAN_RUNS} clean checks (4 h apart). "
                             f"Nothing to start by hand."),
                 "facts": [("Verdicts", verdicts), ("ODBC lag", f"{lag:.0f} min")] + [("Why", w) for w in why[:5]],
                 "steps": ["Tell Plex support (customercare@plex.com) that ODBC data is behind the screens, "
@@ -795,9 +839,9 @@ def decide_alerts(c, before, after, summary):
             if failed_before and not alert_sent_recently(c, kind):
                 out.append((kind, {
                     "_screen": n, "headline": f"Plex screen '{n}' could not be read twice running",
-                    "summary": ("The hourly screens job could not read this Plex screen in its last two runs, so "
+                    "summary": ("The screens job (every 4 h) could not read this Plex screen in its last two runs, so "
                                 "it cannot check ODBC against it, and a report already on the screens keeps its "
-                                "last load (it falls back to ODBC after 3 h)."),
+                                "last load (it falls back to ODBC after 5 h)."),
                     "facts": [("Error", r.get("fetch_error") or "?")],
                     "steps": ["Open the screen in Plex as the portal user; a changed password, a locked user "
                               "or a changed screen are the usual causes.",

@@ -175,3 +175,17 @@ def test_screens_digest_renders(monkeypatch):
     assert ok and got[0]["headline"] == "Screens Digest: all current" and got[0]["severity"] == "info"
     subject, html_content, text = email_utils.render_ops_alert(got[0])
     assert subject.startswith("[Plex ETL] - Screens Digest") and "461 rows" in text and "{{" not in html_content
+
+
+def test_new_release_counts_at_once_when_odbc_is_already_stale():
+    # 11-10: order 675's release first seen on the screen; ODBC's newest change 08:08 MT,
+    # screen read 10:20 MT: behind now, not 4 h later.
+    scr = {"9": {"num": 9, "event": None, "m": {"status_key": 1, "quantity": 500.0, "order_status": "Pending Fulfillment"}}}
+    od = {"1": odbc({"num": 1, "event": None, "m": {"status_key": 1, "quantity": 1.0, "order_status": "Pending Fulfillment"}},
+                    updated=FETCH - dt.timedelta(minutes=10))}
+    stale = FETCH - dt.timedelta(minutes=132)
+    _, _, v, lag, _ = r.compare("releases", scr, od, 1, None, {}, FETCH, odbc_newest_change=stale)
+    assert v == "behind" and lag == 132
+    _, _, v2, _, _ = r.compare("releases", scr, od, 1, None, {}, FETCH,
+                               odbc_newest_change=FETCH - dt.timedelta(minutes=20))
+    assert v2 == "current"

@@ -158,7 +158,7 @@ def check_backups(c, now_mt):
     if now_mt.date() == monday and now_mt.hour < 2:
         monday -= dt.timedelta(days=7)  # the Monday run is at 06:00 UTC (~midnight MT)
     stamp = monday.strftime("%Y%m%d")
-    n = q(c, f"SELECT COUNT(*) n FROM `{PROJECT}.Backups.__TABLES__` WHERE ENDS_WITH(table_id, @s)",
+    n = q(c, f"SELECT COUNT(*) n FROM `{PROJECT}.Backups.__TABLES__` WHERE ENDS_WITH(table_id, @s) AND NOT STARTS_WITH(table_id, 'PlexProd__live_')",
           s=f"_{stamp}")[0].n
     return [] if n >= 20 else [f"Weekly backup for {monday} has {n} snapshot(s) in Backups (expect ~32). "
                                f"The scheduled query backup_snapshots_weekly failed."]

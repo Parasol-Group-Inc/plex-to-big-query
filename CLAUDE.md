@@ -342,7 +342,7 @@ emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
 "Starting it". To tell our side from Plex's, run `scripts/plex_odbc_probe.py`
 (`docs/PLEX_ODBC_PROBE.md`).
 
-## Screens vs ODBC, hourly; watchdog every 30 min (since 2026-11-10)
+## Screens vs ODBC every 4 h; watchdog every 30 min (since 2026-11-10)
 
 ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every run
 "succeeded"). So two Cloud Run jobs now watch from outside the ETL:

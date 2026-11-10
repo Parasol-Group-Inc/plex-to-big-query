@@ -185,4 +185,4 @@ images:
 # ── Build timeout ─────────────────────────────────────────────────────────────
 # 20 minutes — ODBC driver copy + Docker build can be slow on first run
 # with no layer cache available.
-timeout: "1200s"
+timeout: "1800s"  # 2026-11-10: the screens image installs Chromium

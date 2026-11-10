@@ -134,6 +134,21 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    `data_as_of` and `data_label`, carried by every report built on the three base views
    and written to Monday's "Data Source" column (`docs/reports/data_freshness.md`).
 
+**What "ODBC is behind" is measured against (2026-11-10).** Three different clocks, so it
+is worth being exact:
+
+| Comparison | ODBC side | How fresh that side is |
+|---|---|---|
+| Screen vs ODBC (`behind`, `diverged`, `odbc_lag_min`) | **queried live** by the screens job itself (`odbc_connect()` + `odbc_records()`), one connection per run, minutes after the screen read | as fresh as Plex's ODBC is at that moment: it does **not** depend on when our ETL last extracted |
+| ODBC vs BigQuery (`pipeline_behind`, `bq_missing`) | the `raw_*` tables our ETL wrote | as old as the last extraction (Label Design: a 15-min check on weekdays 5 AM-5:45 PM, extracting only on change; Sales Orders: full at 4 AM, change checks at 1 PM, 6 PM and 11 PM) |
+| `main.py` stale-data alert (`check_odbc_freshness`) | three live ODBC reads at the start of every prod ETL run | live, every run (Label Design's every 15 min gives the most frequent reading) |
+
+So a quiet ETL never makes ODBC look behind: the screens job asks ODBC directly every 4 h, and
+a lag there is Plex's. Only `pipeline_behind` uses our extracted copy, and it allows for the
+extraction schedule (a record must predate our last load by more than the 120-min tolerance).
+The flip side: between screens runs (4 h) the only live reading is the stale-data alert, which
+measures the newest change ODBC holds, not a comparison with the screens.
+
 **Check it:**
 ```sql
 SELECT * FROM `voxdatalake.PlexOps.live_source`;

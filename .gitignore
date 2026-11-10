@@ -79,3 +79,6 @@ docs/hub/screens/
 # Plex SQL Developer CSV exports for scripts/load_plex_csv_dump.py: customer data, never commit
 manual-dumps/
 etl-manual/
+
+# Customer data handed over for one-off jobs (e.g. CustomerNotesResults9.csv), never committed
+docs/reference/

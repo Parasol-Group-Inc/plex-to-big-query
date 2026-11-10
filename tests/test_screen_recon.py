@@ -101,8 +101,8 @@ def test_ineligible_odbc_rows_are_not_extra():
 
 
 def test_pipeline_behind_when_bigquery_lacks_odbc_rows():
-    scr = {"1": prod(1, 100)}
-    od = {"1": odbc(prod(1, 100))}
+    scr = {"1": prod(1, 200)}
+    od = {"1": odbc(prod(1, 200))}
     _, _, verdict, _, _ = r.compare("production", scr, od, 1, od["1"]["event"], {}, FETCH,
                                     raw=set(), raw_modified=FETCH - dt.timedelta(minutes=10))
     assert verdict == "pipeline_behind"
@@ -189,3 +189,12 @@ def test_new_release_counts_at_once_when_odbc_is_already_stale():
     _, _, v2, _, _ = r.compare("releases", scr, od, 1, None, {}, FETCH,
                                odbc_newest_change=FETCH - dt.timedelta(minutes=20))
     assert v2 == "current"
+
+
+def test_pipeline_not_behind_during_normal_odbc_lag():
+    # created 100 min ago, our load 10 min ago: ODBC may have delivered it after the load
+    scr = {"1": prod(1, 100)}
+    od = {"1": odbc(prod(1, 100))}
+    _, _, verdict, _, _ = r.compare("production", scr, od, 1, od["1"]["event"], {}, FETCH,
+                                    raw=set(), raw_modified=FETCH - dt.timedelta(minutes=10))
+    assert verdict == "current"

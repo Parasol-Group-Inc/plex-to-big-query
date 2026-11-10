@@ -14,10 +14,10 @@
 --   * While live_switch.use_live: every live record, plus every ODBC record
 --     the screens do not have (everything before November). Live wins on a
 --     Production_No both hold.
---   * use_live goes FALSE by itself when BOTH hold: PlexOps.odbc_health says
---     ODBC has been stable 6+ h, and ODBC holds every live record more than
---     3 h older than the last load (a frozen copy connects and "succeeds", so
---     connection health alone cannot prove fresh data). Then it is ODBC only.
+--   * use_live: since 2026-11-10 PlexOps.live_source decides (see live_switch
+--     below; production is not compared now, so this view stays on ODBC).
+--     Until then it was odbc_health + "ODBC holds every live record", which a
+--     record deleted in Plex could never satisfy (D30).
 --     PlexTest and the sandbox never read the screens.
 --   * Keys resolve against the raw master tables: Job_Op_Key and
 --     Part_Operation_Key by job no + op no, Part_Key by part no + revision,

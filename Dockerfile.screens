@@ -5,7 +5,7 @@
 # Kept separate so the 31 ETL jobs do not carry a ~500 MB browser.
 # Built by deploy/cloudbuild.yaml right after the ETL image, FROM that same SHA:
 #   docker build -f Dockerfile.screens --build-arg BASE=<etl image:sha> .
-# Runbook: docs/PLEX_SCREEN_EXTRACTION.md, "Cloud job".
+# Runbook: docs/PLEX_SCREEN_EXTRACTION.md, "Reconciliation (cloud job)".
 ARG BASE
 FROM ${BASE}
 

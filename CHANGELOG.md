@@ -14,6 +14,18 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - Fourth pass after deploy (two Sonnet audits)
+
+- **Fixed:** `pipeline_behind` fired during normal ODBC lag (a record ODBC delivered after our load);
+  it now needs the record to predate our load by more than the lag tolerance. A screen whose row count
+  drops for real no longer fails "short read" for 3 days: a second short read of the same size is
+  accepted. The digest's failure line matches the "emails failing" Google alert. `docs/reference/`
+  is now in `.gitignore` (it was only excluded locally).
+- **Docs:** leftover "hourly / four screens / 3 h" wording from the first design corrected (report
+  docs, OPEN_ITEMS D35, OPERATIONS screens-alert rule, runbook dry-run command, Terraform comments,
+  part_production_current header); the first reconciliation entry below is marked superseded.
+- **Seen live:** the stale-data alert fired at 14:16 MT (ODBC frozen again since ~12:09 MT).
+
 ## 2026-11-10 - Every report says where its data came from; screens digest
 
 - **Fixed before deploy (two audits, Opus and Sonnet):** `live_source` used the reserved word `groups`
@@ -40,9 +52,13 @@ don't need an entry.
   Jennilyn, marketing) at its 8:20 / 12:20 / 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
   problem. The ETL batch digest's health section now lists a report group on the screens, or on ODBC
   data 2 h+ old in work hours.
-- Docs: each of the 18 reports' docs ("Where the data came from"), `docs/reports/data_freshness.md`.
+- Docs: each of the 17 reports' docs ("Where the data came from"), `docs/reports/data_freshness.md`.
 
 ## 2026-11-10 - Screens vs ODBC reconciliation (cloud job) and a watchdog
+
+> Superseded in part the same day: every 4 h (not hourly), three screens (production dropped), back
+> to ODBC after 2 clean runs, 5-hour view backstop. See the "Scope and cadence" bullet below and the
+> entries above.
 
 - **Added: `plex-live-screens`** (Cloud Run, hourly, `scripts/screen_recon.py`, `Dockerfile.screens`).
   Reads the four Plex screens, compares them with ODBC and the raw tables, records a verdict per

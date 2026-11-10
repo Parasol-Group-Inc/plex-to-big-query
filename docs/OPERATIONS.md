@@ -715,8 +715,9 @@ screens — <date>`, with the PowerShell to start the task
 - At most once per 24 h (`SCREENS_ALERT_REPEAT_HOURS`): the email is logged here
   as `reason = 'screens-alert'`, `outcome = 'alert'`, which nothing else reads
   (no Plex evidence, no follow-up, never busy).
-- Not sent while the screens already load (`live_order_releases` under 2 h old),
-  from test, or for failures of another kind.
+- Not sent while the screens job has already switched a report to the screens
+  (`PlexOps.live_source.use_live`, since 2026-11-10), from test, or for failures of
+  another kind.
 - Backtest on this log (10-20 → 11-09): it would have fired 10-25 18:05 MT and
   11-04 17:20 MT (then 11-05 18:40 MT), and on no normal day.
 

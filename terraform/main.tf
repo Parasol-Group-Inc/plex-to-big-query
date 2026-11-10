@@ -6260,12 +6260,12 @@ locals {
   ops_alert_email = trimspace(split(",", var.report_to_emails)[0])
 }
 
-# Every screen record read by scripts/screen_recon.py, every hour (30 days).
+# Every screen record read by scripts/screen_recon.py, every 4 hours (30 days).
 resource "google_bigquery_table" "screen_snapshot" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "screen_snapshot"
   deletion_protection = false
-  description         = "Plex screen records read hourly by plex-live-screens (scripts/screen_recon.py). 30-day partitions."
+  description         = "Plex screen records read every 4 h by plex-live-screens (scripts/screen_recon.py). 30-day partitions."
   time_partitioning {
     type          = "DAY"
     field         = "fetch_started_at"
@@ -6282,7 +6282,7 @@ resource "google_bigquery_table" "screen_snapshot" {
   ])
 }
 
-# One row per screen per hourly run: the verdict on ODBC.
+# One row per screen per run (every 4 h): the verdict on ODBC.
 resource "google_bigquery_table" "screen_recon" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "screen_recon"

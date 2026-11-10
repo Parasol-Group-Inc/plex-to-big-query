@@ -369,8 +369,8 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
 ## Every report says where its data came from (since 2026-11-10)
 
 `PlexOps.data_freshness` (Terraform view) gives, per dataset and report group, `data_source`
-(odbc | live), `data_as_of` and `data_label`. The 17 views built on `label_design_report`,
-`shipping_revenue_report` or `part_production_current` end with those columns: each SQL file wraps
+(odbc | live), `data_as_of` and `data_label`. 17 reports built on `label_design_report`,
+`shipping_revenue_report` or `part_production_current` end with those columns: 16 SQL files wrap
 its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness ON TRUE`), marked
 "DATA SOURCE LABEL (2026-11-10)". **A new view built on one of them needs the same wrapper**, unless
 it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).

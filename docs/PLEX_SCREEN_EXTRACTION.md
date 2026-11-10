@@ -130,8 +130,8 @@ SELECT run_started_at, screen, verdict, odbc_lag_min, compared, missing_tail, mi
 FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20;
 ```
 **Run it by hand:** `gcloud run jobs execute plex-live-screens --region=us-central1`
-(writes). A read-only pass: add `--args=scripts/screen_recon.py,--dry-run` (the container
-command is `python`). Locally on Apple Silicon the amd64 image is too slow for Plex's
+(writes). A read-only pass: use `--args=python,scripts/screen_recon.py,--dry-run` (the job's
+args replace the whole command). Locally on Apple Silicon the amd64 image is too slow for Plex's
 login; test in Cloud Run.
 
 **Cost** (Cloud Run, us-central1, 2 vCPU / 4 GiB, ~5 min a run, before the free tier):

@@ -11,8 +11,8 @@ docs/PLEX_SCREEN_EXTRACTION.md, "Reconciliation (cloud job)". Design: 2026-11-10
 after Plex ODBC served data frozen 08:10-12:50 MT while every run succeeded.
 
 One cycle:
-  1. Read the four screens (plex_live_screens.py fetchers). Production: only the
-     last RECON_PRODUCTION_DAYS days.
+  1. Read the screens in SCREEN_ORDER (releases, history, revenue since 2026-11-10;
+     `--only production` reads the last RECON_PRODUCTION_DAYS days of production).
   2. Append every row to PlexOps.screen_snapshot (key, row hash, fetch time).
   3. Read the same records from ODBC (one connection, cheap filtered queries) and
      from the raw_* tables in BigQuery.
@@ -364,7 +364,8 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
     if raw is not None and raw_modified is not None:
         for key, o in odbc.items():
             t = o["event"] or o["updated"]
-            if o["eligible"] and key not in raw and t and t < raw_modified - dt.timedelta(minutes=grace_min):
+            # older than our last load by more than the lag tolerance: ODBC had it in time
+            if o["eligible"] and key not in raw and t and t < raw_modified - dt.timedelta(minutes=tolerance_min):
                 counts["bq_missing"] += 1
                 if counts["bq_missing"] <= 20:
                     diffs.append({"key": key, "kind": "bq_missing", "field": None, "screen_value": None,
@@ -389,6 +390,21 @@ def previous_counts(c):
         FROM `{RECON_TABLE}` WHERE fetch_ok AND run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
         GROUP BY screen""").result()
     return {r.screen: r.n for r in rows}
+
+
+def short_twice(c, screen, n):
+    """The previous run of this screen was also short with a similar count: accept
+    it as the new normal (a real drop must not wedge the screen for 3 days)."""
+    try:
+        rows = list(c.query(f"""
+            SELECT fetch_error FROM `{RECON_TABLE}` WHERE screen = @s
+            ORDER BY run_started_at DESC LIMIT 1""", job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("s", "STRING", screen)])).result())
+        err = (rows[0].fetch_error or "") if rows else ""
+        m = __import__("re").match(r"short read: (\d+) rows", err)
+        return bool(m) and abs(int(m.group(1)) - n) <= max(5, 0.1 * n)
+    except Exception:
+        return False
 
 
 def first_seen_map(c, screen, recs):
@@ -603,7 +619,7 @@ def run(args):
             fetch_at[n] = dt.datetime.now(UTC)
             try:
                 rows = pls.SCREENS[n][1](pg, today, ctx)
-                if prev.get(n) and len(rows) < SHORT_READ[n] * prev[n]:
+                if prev.get(n) and len(rows) < SHORT_READ[n] * prev[n] and not short_twice(c, n, len(rows)):
                     raise RuntimeError(f"short read: {len(rows)} rows against {prev[n]} last run")
                 fetched[n] = rows
                 audit.shot(pg, f"{n}_ok_{len(rows)}rows")
@@ -788,7 +804,7 @@ def send_digest(c, run_id, started, took, summary, audit, after):
                                   "logins_failed": sum(not r["ok"] for r in audit.logins), "screenshots": folder})
         print(f"screens digest: {'sent' if ok else 'not sent (email off)'}")
     except Exception:
-        print("screens digest failed:\n" + traceback.format_exc())
+        print("screens digest email failed:\n" + traceback.format_exc())
 
 
 def decide_alerts(c, before, after, summary):

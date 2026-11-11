@@ -14,6 +14,41 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - Label Design: screens and ODBC work together; revenue stays on ODBC
+
+The switch between ODBC and the screens is replaced with a combination
+(docs/ODBC_VS_SCREENS.md, the rules in one page).
+
+### Changed
+- **`label_design_report`**: ODBC's Label Design lines **plus** the lines only the releases
+  screen has, while a screen read is under 3 h old (PlexProd only). Each row says its source:
+  `data_source` `live` with `data_label` "Plex screens, read ...", or the ODBC label. Checked
+  against the live view: identical 64 rows today. A simulated screen-only line resolved its
+  customer, BDM, email, label part, bottle and priority from the ODBC copy.
+- **`plex-live-screens`** reads the releases screen hourly on weekdays 6:20 AM-5:20 PM MT. The
+  new scheduler is `plex-live-screens-releases-sync` with `RECON_ONLY=releases`; the 4-hourly
+  run of all three screens stays. Every read loads `live_order_releases`. The job starts the
+  push when the view has a screen line.
+- **Label Design push**: items created from a screen line get their empty cells filled once
+  ODBC has the line: Customer Name, Description, Customer PO, Email, Phone, Sales Rep, Inside
+  Sales Rep, Priority, Bottle Material, plus the label fields as before. Their Data Source
+  becomes "...; confirmed by ODBC <time> MT". The rules:
+  - empty cells only, once per item and field, never over the team's values;
+  - one write per cell;
+  - a column Monday refuses for our account is logged as refused and settled, not retried
+    every run.
+- **Revenue and shipments never switch** (Jennilyn: not time critical, the data comes daily).
+  `live_source.use_live` is FALSE for revenue, and its live tables are kept empty.
+  `live_source` gains `odbc_behind`, the old switch, which main.py's alert silencer now reads.
+- **Emails**: "Plex ODBC is behind or disagrees with the screens" per group, once a day. It
+  fires when releases are over 6 h behind, shipments/revenue over 12 h (new
+  `RECON_REVENUE_ALERT_LAG_MIN`: ODBC missed its overnight catch-up), or a verdict is not a
+  delay. "Caught up" goes once, only after such a mail; this replaces the live-on/live-off
+  mails. Problem digests outside 8:20/12:20/16:20 go out at most once per 4 h. The digest
+  lists the Label Design lines only the screens have.
+- `data_freshness`: Label Design is `odbc`, with "; new lines from Plex screens, read ..."
+  while such a read exists (`screens_fill_in`).
+
 ## 2026-11-11 - Screens alerts: a delay under 6 h switches quietly
 
 Measured on 11-10/11: ODBC ran 2.5 to 5.5 h behind the screens all afternoon and was

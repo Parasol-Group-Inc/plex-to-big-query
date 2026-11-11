@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Every 4 hours: read Plex's live screens, compare them with ODBC and BigQuery, and
-switch reports to the screens only while ODBC is behind or disagrees.
+"""Read Plex's live screens, compare them with ODBC and BigQuery, feed Label Design
+the lines ODBC does not have yet, and email only what needs a person.
 
     python scripts/screen_recon.py                 # full cycle (the Cloud Run job)
     python scripts/screen_recon.py --dry-run       # read and compare; write nothing, mail nothing
     python scripts/screen_recon.py --only releases
 
-Runs as the Cloud Run job `plex-live-screens` (Dockerfile.screens), every 4 hours. Runbook:
-docs/PLEX_SCREEN_EXTRACTION.md, "Reconciliation (cloud job)". Design: 2026-11-10,
+Runs as the Cloud Run job `plex-live-screens` (Dockerfile.screens): all three screens every
+4 hours, and the releases screen alone hourly on weekdays 6:20 AM-5:20 PM MT
+(RECON_ONLY=releases from the second scheduler). All the rules: docs/ODBC_VS_SCREENS.md.
+Runbook: docs/PLEX_SCREEN_EXTRACTION.md, "Reconciliation (cloud job)". Design: 2026-11-10,
 after Plex ODBC served data frozen 08:10-12:50 MT while every run succeeded.
 
 One cycle:
@@ -23,11 +25,15 @@ One cycle:
      picked up). Over RECON_LAG_TOLERANCE_MIN (default 120) it is "behind".
   5. Write PlexOps.screen_recon (one row per screen) and screen_recon_diff.
   6. PlexOps.live_source (a view over screen_recon) says, per report group, whether
-     to read the screens: yes after one bad run, no after RECON_CLEAN_RUNS clean
-     runs. When yes, load that group's PlexProd.live_* tables (and start the Label
-     Design push); when no, back up and empty them (the D30 lesson).
-  7. Email a change of state (a group going live or back to ODBC), and a screen
-     that failed twice running. Each at most once per 24 h per kind.
+     ODBC is behind (odbc_behind) and whether the report takes screen rows (use_live).
+     Since 2026-11-11: Label Design always does (the releases screen is loaded on
+     every read and label_design_view.sql adds the lines ODBC lacks; the push is
+     started when there are any); revenue never does (not time critical), so its
+     live_* tables are backed up and emptied.
+  7. Email only what needs a person, at most once per 24 h per kind: ODBC behind by
+     more than RECON_ALERT_LAG_MIN (releases, 6 h) or RECON_REVENUE_ALERT_LAG_MIN
+     (shipments/revenue, 12 h: ODBC missed its overnight catch-up), a non-delay
+     verdict, a screen that failed twice running; and "caught up" after such a mail.
 Exit: 0 when every screen got a verdict, 1 when a screen failed or the cycle broke.
 """
 import argparse
@@ -69,6 +75,12 @@ CLEAN_RUNS = int(os.environ.get("RECON_CLEAN_RUNS", "2"))
 # a lag over ALERT_LAG_MIN, or a verdict that is not a delay, mails or makes the digest
 # say ACTION NEEDED.
 ALERT_LAG_MIN = int(os.environ.get("RECON_ALERT_LAG_MIN", "360"))
+# 2026-11-11 (Jennilyn): shipments and revenue are not time critical; the data comes
+# every day either way. Their reports stay on ODBC, and only a lag that survives the
+# overnight catch-up (12 h) mails.
+REVENUE_ALERT_LAG_MIN = int(os.environ.get("RECON_REVENUE_ALERT_LAG_MIN", "720"))
+ALERT_LAG_BY_SCREEN = {"releases": ALERT_LAG_MIN, "history": REVENUE_ALERT_LAG_MIN,
+                       "revenue": REVENUE_ALERT_LAG_MIN}
 PRODUCTION_DAYS = int(os.environ.get("RECON_PRODUCTION_DAYS", "2"))
 ALERT_REPEAT_HOURS = 24
 SHORT_READ = {"releases": 0.5, "production": 0.5, "history": 0.9, "revenue": 0.9}
@@ -756,7 +768,8 @@ def run(args):
     run_id = uuid.uuid4().hex[:12]
     started = dt.datetime.now(UTC)
     today = dt.datetime.now(DEN).date()
-    names = args.only.split(",") if args.only else SCREEN_ORDER
+    only = args.only or os.environ.get("RECON_ONLY", "").strip()
+    names = only.split(",") if only else SCREEN_ORDER
     c = bigquery.Client(project=PROJECT)
     load_portal_secrets()
     audit = Audit(run_id, started, args.dry_run)
@@ -905,6 +918,8 @@ def run(args):
 
     actions, push_note = [], ""
     for group, screens in GROUPS.items():
+        if not any(s in names for s in screens):
+            continue   # not read this run (the hourly releases-only run)
         use = bool(after.get(group, {}).get("use_live"))
         if use:
             if all(s in fetched for s in screens):
@@ -931,6 +946,8 @@ def run(args):
     for a in actions + ([push_note] if push_note else []):
         print(a)
     for group, screens in GROUPS.items():
+        if not any(s in names for s in screens):
+            continue
         act = "load" if after.get(group, {}).get("use_live") else "empty"
         try:
             c.query(f"UPDATE `{RECON_TABLE}` SET live_action = @a WHERE run_id = @r AND screen IN UNNEST(@s)",
@@ -969,20 +986,25 @@ def needs_action(r):
     if v == "current":
         return False
     if v == "behind":
-        return (r.get("odbc_lag_min") or 0) > ALERT_LAG_MIN
+        return (r.get("odbc_lag_min") or 0) > ALERT_LAG_BY_SCREEN.get(r.get("screen"), ALERT_LAG_MIN)
     return True
 
 
 def send_digest(c, run_id, started, took, summary, audit, after):
     """The screens digest to REPORT_TO_EMAILS: on the RECON_DIGEST_HOURS runs (MT),
-    and on any run with a problem (a verdict other than current, a failed login).
-    Never raises."""
+    and on another run with a problem (needs_action, a failed login), at most once per
+    4 h for those (the hourly releases runs must not mail every hour). Never raises."""
     try:
         problems = sum(1 for r in summary.values() if needs_action(r)) \
             + sum(1 for r in audit.logins if not r["ok"])
         quiet_behind = sum(1 for r in summary.values() if r["verdict"] == "behind" and not needs_action(r))
-        if started.astimezone(DEN).hour not in DIGEST_HOURS and not problems:
-            return
+        scheduled = started.astimezone(DEN).hour in DIGEST_HOURS and len(summary) > 1
+        if not scheduled:
+            if not problems:
+                return
+            if alert_sent_recently(c, "digest-problem", hours=4):
+                print("screens digest: a problem digest went out in the last 4 h; not repeated")
+                return
         try:
             fresh = {r.report_group: dict(r) for r in c.query(
                 f"SELECT * FROM `{OPS}.data_freshness` WHERE dataset = 'PlexProd'").result()}
@@ -996,23 +1018,55 @@ def send_digest(c, run_id, started, took, summary, audit, after):
                     "differ": (r.get("status_diff") or 0) + (r.get("value_diff") or 0),
                     "error": r.get("fetch_error") or r.get("odbc_error")} for n, r in summary.items()]
         folder = f"gs://{SCREENSHOT_BUCKET}/{audit.prefix}/" if audit.shots else ""
+        # Label Design lines on Monday's way that only the screens have so far
+        try:
+            lines = [dict(r) for r in c.query(f"""
+                SELECT order_number, COUNT(*) n FROM `{PROJECT}.PlexProd.label_design_report`
+                WHERE data_source = 'live' GROUP BY 1 ORDER BY 1""").result()]
+            screen_lines = (f"{sum(r['n'] for r in lines)} line(s) not in ODBC yet, orders "
+                            + ", ".join(str(r["order_number"]) for r in lines[:15])) if lines else "none: ODBC has every line"
+        except Exception as e:
+            screen_lines = f"? ({str(e).splitlines()[0][:100]})"
         from email_utils import send_screens_digest
         ok = send_screens_digest({"run_id": run_id, "took": took, "problems": problems, "groups": groups,
                                   "quiet_behind": quiet_behind, "alert_lag_min": ALERT_LAG_MIN,
+                                  "revenue_alert_lag_min": REVENUE_ALERT_LAG_MIN, "screen_lines": screen_lines,
                                   "screens": screens, "logins_ok": sum(r["ok"] for r in audit.logins),
                                   "logins_failed": sum(not r["ok"] for r in audit.logins), "screenshots": folder})
         print(f"screens digest: {'sent' if ok else 'not sent (email off)'}")
+        if ok and not scheduled:
+            try:
+                c.query(f"UPDATE `{RECON_TABLE}` SET alert = IF(alert IS NULL, 'digest-problem', "
+                        f"CONCAT(alert, ',digest-problem')) WHERE run_id = @r",
+                        job_config=bigquery.QueryJobConfig(query_parameters=[
+                            bigquery.ScalarQueryParameter("r", "STRING", run_id)])).result()
+            except Exception as e:
+                print(f"digest-problem not recorded: {str(e).splitlines()[0][:150]}")
     except Exception:
         print("screens digest email failed:\n" + traceback.format_exc())
 
 
+GROUP_TEXT = {
+    "label_design": ("Label Design",
+                     "Monday keeps getting new lines from the Plex screens within the hour; their reps, "
+                     "contact and label details fill in by themselves once ODBC has them."),
+    "revenue": ("shipments and revenue",
+                "These reports stay on ODBC (not time critical). ODBC normally catches up overnight; "
+                "this lag survived that, so the shipping and revenue figures are out of date."),
+}
+
+
 def decide_alerts(c, before, after, summary):
+    """Since 2026-11-11 a delay is not news: ODBC runs hours behind most afternoons and
+    catches up overnight. Mail when a group needs a person (needs_action: a lag over its
+    threshold or a verdict that is not a delay), once a day, and say "caught up" once
+    after such a mail. Kinds: odbc-behind:<group>, odbc-caught-up:<group>."""
     out = []
     for group, screens in GROUPS.items():
-        was, now = bool(before.get(group, {}).get("use_live")), bool(after.get(group, {}).get("use_live"))
         recs = [summary[s] for s in screens if s in summary]
         if not recs:
             continue
+        name, effect = GROUP_TEXT[group]
         lag = max((r.get("odbc_lag_min") or 0) for r in recs)
         verdicts = ", ".join(f"{r['screen']} {r['verdict']}" for r in recs)
         why = []
@@ -1021,26 +1075,28 @@ def decide_alerts(c, before, after, summary):
                 why += json.loads(r.get("detail") or "{}").get("why", [])
             except ValueError:
                 pass
-        serious = any(needs_action(r) for r in recs)
-        if now and serious and not alert_sent_recently(c, f"live-on:{group}", hours=ALERT_REPEAT_HOURS):
-            out.append((f"live-on:{group}", {
-                "_screen": recs[0]["screen"],
-                "headline": f"Plex ODBC is behind the screens: {group.replace('_', ' ')} now reads the screens",
-                "summary": (f"The screens check found ODBC {lag / 60:.1f} h behind Plex's screens, or "
-                            f"disagreeing with them ({verdicts}). The {group.replace('_', ' ')} report now reads "
-                            f"the screens and goes back to ODBC by itself after {CLEAN_RUNS} clean checks (4 h apart). "
-                            f"Nothing to start by hand."),
-                "facts": [("Verdicts", verdicts), ("ODBC lag", f"{lag:.0f} min")] + [("Why", w) for w in why[:5]],
-                "steps": ["Tell Plex support (customercare@plex.com) that ODBC data is behind the screens, "
-                          "with the time above, if it lasts more than a few hours.",
-                          "Check: SELECT * FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20"],
-                "source": "plex-live-screens"}))
-        elif was and not now and alert_sent_recently(c, f"live-on:{group}", hours=72) \
-                and not alert_sent_recently(c, f"live-off:{group}", hours=8):
-            out.append((f"live-off:{group}", {
+        serious = [r for r in recs if needs_action(r) and r["verdict"] not in ("screens_failed", "pipeline_behind")]
+        threshold = max(ALERT_LAG_BY_SCREEN.get(r["screen"], ALERT_LAG_MIN) for r in recs)
+        if serious:
+            if not alert_sent_recently(c, f"odbc-behind:{group}", hours=ALERT_REPEAT_HOURS):
+                out.append((f"odbc-behind:{group}", {
+                    "_screen": serious[0]["screen"],
+                    "headline": f"Plex ODBC is behind or disagrees with the screens: {name}",
+                    "summary": (f"The screens check found ODBC {lag / 60:.1f} h behind Plex's screens, past the "
+                                f"{threshold / 60:.0f} h line, or disagreeing with them in a way a delay does not "
+                                f"explain ({verdicts}). {effect}"),
+                    "facts": [("Verdicts", verdicts), ("ODBC lag", f"{lag:.0f} min")] + [("Why", w) for w in why[:5]],
+                    "steps": ["If it lasts into tomorrow, tell Plex support (customercare@plex.com) that ODBC "
+                              "data is behind the screens, with the times above.",
+                              "Check: SELECT * FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20"],
+                    "source": "plex-live-screens"}))
+        elif all(r["verdict"] == "current" for r in recs) \
+                and alert_sent_recently(c, f"odbc-behind:{group}", hours=72) \
+                and not alert_sent_recently(c, f"odbc-caught-up:{group}", hours=72):
+            out.append((f"odbc-caught-up:{group}", {
                 "_screen": recs[0]["screen"], "severity": "info",
-                "headline": f"Plex ODBC caught up: {group.replace('_', ' ')} is back on ODBC",
-                "summary": f"{CLEAN_RUNS} clean comparisons in a row. The live table was backed up and emptied.",
+                "headline": f"Plex ODBC caught up: {name}",
+                "summary": "The screens and ODBC agree again. Nothing to do.",
                 "facts": [("Verdicts", verdicts)], "source": "plex-live-screens"}))
     for n, r in summary.items():
         if r["verdict"] == "screens_failed":
@@ -1062,7 +1118,7 @@ def decide_alerts(c, before, after, summary):
                               "or a changed screen are the usual causes.",
                               "gcloud run jobs executions list --job=plex-live-screens --region=us-central1"],
                     "source": "plex-live-screens"}))
-        elif r["verdict"] in ("diverged", "pipeline_behind"):
+        elif r["verdict"] == "pipeline_behind":   # our ETL, not Plex (diverged: the group mail above)
             kind = f"{r['verdict']}:{n}"
             if not alert_sent_recently(c, kind):
                 out.append((kind, {

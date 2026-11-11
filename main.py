@@ -912,10 +912,13 @@ def _screens_in_use(bq) -> bool:
     """Has the hourly screens job (plex-live-screens, 2026-11-10) switched any
     report to the screens? Until 11-10 this was "live_order_releases loaded in the
     last 2 h"; now that the job loads the live tables only when ODBC is behind,
-    PlexOps.live_source is the honest answer. False when it cannot tell."""
+    PlexOps.live_source is the honest answer. Since 2026-11-11 Label Design always
+    takes the lines ODBC lacks from the screens (use_live is always TRUE for it), so
+    "in use" means a group whose report takes screen rows AND whose ODBC is behind
+    (odbc_behind). False when it cannot tell."""
     try:
         return bool(list(bq.query(
-            f"SELECT LOGICAL_OR(use_live) AS u FROM `{GCP_PROJECT}.PlexOps.live_source`").result())[0].u)
+            f"SELECT LOGICAL_OR(use_live AND odbc_behind) AS u FROM `{GCP_PROJECT}.PlexOps.live_source`").result())[0].u)
     except Exception:
         return False
 

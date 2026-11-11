@@ -352,22 +352,35 @@ def test_needs_action_only_past_the_alert_lag():
         assert r.needs_action({"verdict": v})
 
 
-def test_quiet_switch_mails_nothing_and_its_return_neither(monkeypatch):
+def test_alerts_by_group_threshold_and_caught_up_once(monkeypatch):
     sent = set()
     monkeypatch.setattr(r, "alert_sent_recently", lambda c, kind, hours=24: kind in sent)
-    behind = {"history": {"screen": "history", "verdict": "behind", "odbc_lag_min": 254, "detail": None},
-              "revenue": {"screen": "revenue", "verdict": "behind", "odbc_lag_min": 240, "detail": None}}
-    on = r.decide_alerts(None, {"revenue": {"use_live": False}}, {"revenue": {"use_live": True}}, behind)
-    assert not [k for k, _ in on if k.startswith("live-")]
-    clean = {n: dict(v, verdict="current", odbc_lag_min=0) for n, v in behind.items()}
-    off = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": False}}, clean)
-    assert not off
-    long = {n: dict(v, odbc_lag_min=r.ALERT_LAG_MIN + 30) for n, v in behind.items()}
-    on2 = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": True}}, long)
-    assert [k for k, _ in on2] == ["live-on:revenue"]
-    sent.add("live-on:revenue")
-    off2 = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": False}}, clean)
-    assert [k for k, _ in off2] == ["live-off:revenue"]
+    rev = lambda lag, v="behind": {"history": {"screen": "history", "verdict": v, "odbc_lag_min": lag, "detail": None},
+                                   "revenue": {"screen": "revenue", "verdict": v, "odbc_lag_min": lag, "detail": None}}
+    # shipments/revenue: 6 h behind is quiet (not time critical), past 12 h mails
+    assert r.decide_alerts(None, {}, {}, rev(400)) == []
+    assert [k for k, _ in r.decide_alerts(None, {}, {}, rev(r.REVENUE_ALERT_LAG_MIN + 10))] == ["odbc-behind:revenue"]
+    # releases: past 6 h mails
+    rel = {"releases": {"screen": "releases", "verdict": "behind", "odbc_lag_min": r.ALERT_LAG_MIN + 5, "detail": None}}
+    assert [k for k, _ in r.decide_alerts(None, {}, {}, rel)] == ["odbc-behind:label_design"]
+    # caught up: only after a behind mail, once
+    clean = rev(0, "current")
+    assert r.decide_alerts(None, {}, {}, clean) == []
+    sent.add("odbc-behind:revenue")
+    assert [k for k, _ in r.decide_alerts(None, {}, {}, clean)] == ["odbc-caught-up:revenue"]
+    sent.add("odbc-caught-up:revenue")
+    assert r.decide_alerts(None, {}, {}, clean) == []
+
+
+def test_pipeline_behind_is_its_own_mail_not_odbc_behind(monkeypatch):
+    monkeypatch.setattr(r, "alert_sent_recently", lambda c, kind, hours=24: False)
+    s = {"releases": {"screen": "releases", "verdict": "pipeline_behind", "odbc_lag_min": 0, "detail": "", "run_id": "x"}}
+    assert [k for k, _ in r.decide_alerts(None, {}, {}, s)] == ["pipeline_behind:releases"]
+
+
+def test_revenue_threshold_is_twelve_hours():
+    assert not r.needs_action({"screen": "revenue", "verdict": "behind", "odbc_lag_min": 600})
+    assert r.needs_action({"screen": "releases", "verdict": "behind", "odbc_lag_min": 600})
 
 
 def test_screens_digest_quiet_lag_is_info(monkeypatch):
@@ -377,4 +390,4 @@ def test_screens_digest_quiet_lag_is_info(monkeypatch):
     email_utils.send_screens_digest({"run_id": "r2", "took": 180, "problems": 0, "quiet_behind": 2,
                                      "alert_lag_min": 360, "groups": [], "screens": []})
     assert got[0]["severity"] == "info" and got[0]["headline"] == "Screens Digest: ODBC catching up"
-    assert "under 6 h" in got[0]["summary"] and not got[0]["steps"]
+    assert "6 h Label Design" in got[0]["summary"] and "12 h shipments" in got[0]["summary"] and not got[0]["steps"]

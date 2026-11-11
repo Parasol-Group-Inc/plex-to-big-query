@@ -112,7 +112,19 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    | `pipeline_behind` | ODBC is fine but BigQuery lacks records ODBC had before our last load |
    | `screens_failed` | a screen could not be read, or read under 90% (50% releases/production) of last run |
 
-6. **Switching.** `PlexOps.live_source` (a view) sets `use_live` per report group
+6. **Since 2026-11-11 there is no switching** (`docs/ODBC_VS_SCREENS.md`):
+   - **Label Design always combines.** The releases screen is loaded into
+     `live_order_releases` on every read: hourly on weekdays from 6:20 AM to 5:20 PM
+     (`plex-live-screens-releases-sync`, `RECON_ONLY=releases`), and every 4 h.
+     `label_design_view.sql` adds the lines ODBC lacks. The job starts the push when there
+     are any. Later push runs fill those items' blank cells from ODBC and mark Data Source
+     "confirmed by ODBC".
+   - **Revenue never switches** (`use_live` FALSE), and its live tables are kept empty.
+
+   `live_source` also has `odbc_behind`, which is what main.py's alerts read.
+   The text below is the 11-10 design, kept for history.
+
+   **(11-10 design) Switching.** `PlexOps.live_source` (a view) sets `use_live` per report group
    (`label_design` ← releases, `revenue` ← history + revenue) when any of the screen's
    last 2 good runs was `behind`, `diverged` or
    `odbc_unreachable`. While `use_live`, the job reloads that group's `PlexProd.live_*`
@@ -121,8 +133,16 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The two views read
    the screens only when `use_live` is true **and** their live table is under 5 h old,
    so if the job stops they are back on ODBC within 5 hours.
-7. **Emails** (SendGrid, `[Plex ETL] - ACTION NEEDED: ...`). **Since 2026-11-11 a delay alone
-   switches quietly:** `behind` up to `RECON_ALERT_LAG_MIN` (360, 6 h) moves the reports to
+7. **Emails** (SendGrid). **Since 2026-11-11 (afternoon), mails go out only when a person is
+   needed:**
+   - "Plex ODBC is behind or disagrees with the screens", per group, once a day. It fires
+     when releases are over 6 h behind, shipments/revenue over 12 h
+     (`RECON_REVENUE_ALERT_LAG_MIN` = 720, a missed overnight catch-up), or a verdict is not
+     a delay.
+   - "caught up", once, only after such a mail.
+
+   The paragraph below is the 11-11 morning version. **Earlier the same day a delay alone
+   switched quietly:** `behind` up to `RECON_ALERT_LAG_MIN` (360, 6 h) moves the reports to
    the screens with no email and no ACTION NEEDED. On 11-10 ODBC ran 2.5 to 5.5 h behind all
    afternoon and was current again at the 00:20 and 04:20 checks (after the 4 AM full run).
    Mailed: a group on the screens with a lag over 6 h or a non-delay verdict (once a day),
@@ -130,9 +150,13 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    screen that failed twice running (daily). Google Monitoring separately mails if the
    job's `recon heartbeat` log line is missing for 9 h.
 
+   The whole rule set in one page: `docs/ODBC_VS_SCREENS.md`.
+
 8. **Digest** (`send_screens_digest`), to REPORT_TO_EMAILS (Emilio, Jennilyn, marketing):
-   at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
-   problem (a lag over 6 h, a non-delay verdict, a failed login). A lag under 6 h shows as
+   at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`). Another run with a problem
+   (needs_action, a failed login) sends one too, at most once per 4 h, so the hourly
+   releases runs do not mail every hour. The digest also lists the Label Design lines
+   that only the screens have so far. A lag under 6 h shows as
    "Screens Digest: ODBC catching up" (info) and does not add a mail of its own. One line per report group (its `data_label`), one per screen (verdict, rows,
    seconds, compared / missing / differing), logins and the screenshot folder.
 9. **Labels.** `PlexOps.data_freshness` turns the same rule into `data_source`,

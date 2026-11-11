@@ -6411,7 +6411,7 @@ resource "google_bigquery_table" "live_source" {
   dataset_id          = google_bigquery_dataset.ops.dataset_id
   table_id            = "live_source"
   deletion_protection = false
-  description         = "Per report group: read the Plex screens (use_live) because ODBC is behind or disagrees? From screen_recon."
+  description         = "Per report group: is ODBC behind the Plex screens (odbc_behind), and does the report take rows from the screens (use_live)? From screen_recon. Since 2026-11-11 Label Design always combines (use_live TRUE), revenue never switches."
   view {
     use_legacy_sql = false
     query          = <<-SQL
@@ -6429,7 +6429,10 @@ resource "google_bigquery_table" "live_source" {
       )
       SELECT
         g.report_group,
-        IFNULL(LOGICAL_OR(r.verdict IN ('behind', 'diverged', 'odbc_unreachable')), FALSE) AS use_live,
+        IFNULL(LOGICAL_OR(r.verdict IN ('behind', 'diverged', 'odbc_unreachable')), FALSE) AS odbc_behind,
+        -- 2026-11-11: label_design always takes the lines ODBC lacks from the screens
+        -- (label_design_view.sql); revenue is not time critical (Jennilyn), never switches.
+        g.report_group = 'label_design' AS use_live,
         MAX(r.run_started_at) AS last_run_at,
         MAX(IF(r.rn = 1, r.odbc_lag_min, NULL)) AS latest_lag_min,
         STRING_AGG(DISTINCT IF(r.rn = 1, CONCAT(r.screen, ': ', r.verdict), NULL)) AS latest_verdicts
@@ -6602,6 +6605,10 @@ resource "google_cloud_run_v2_job" "live_screens" {
           value = "360"
         }
         env {
+          name  = "RECON_REVENUE_ALERT_LAG_MIN"
+          value = "720"
+        }
+        env {
           name  = "RECON_CLEAN_RUNS"
           value = "2"
         }
@@ -6647,7 +6654,7 @@ resource "google_cloud_run_v2_job" "live_screens" {
 
 resource "google_cloud_scheduler_job" "live_screens" {
   name        = "plex-live-screens-sync"
-  description = "Every 4 h: Plex screens (Label Design, revenue, shipments) vs ODBC; switches those reports to the screens while ODBC is behind (scripts/screen_recon.py)"
+  description = "Every 4 h: Plex screens (Label Design, revenue, shipments) vs ODBC; Label Design takes lines ODBC lacks from the screens (scripts/screen_recon.py)"
   schedule    = "20 */4 * * *"
   time_zone   = "America/Denver"
   region      = var.gcp_region
@@ -6657,6 +6664,33 @@ resource "google_cloud_scheduler_job" "live_screens" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.live_screens.name}:run"
     body        = base64encode("{}")
+    oauth_token {
+      service_account_email = google_service_account.etl.email
+    }
+  }
+}
+
+# 2026-11-11: the Label Design releases screen hourly on weekday working hours, so a
+# new order reaches Monday within the hour (label_design_view.sql takes the lines ODBC
+# lacks from it). Skips 8, 12 and 16, when the 4-hourly run reads all three screens.
+resource "google_cloud_scheduler_job" "live_screens_releases" {
+  name        = "plex-live-screens-releases-sync"
+  description = "Weekdays hourly 6:20 AM-5:20 PM MT: the Label Design releases screen only (RECON_ONLY=releases)"
+  schedule    = "20 6,7,9,10,11,13,14,15,17 * * 1-5"
+  time_zone   = "America/Denver"
+  region      = var.gcp_region
+  paused      = false
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.live_screens.name}:run"
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          env = [{ name = "RECON_ONLY", value = "releases" }]
+        }]
+      }
+    }))
     oauth_token {
       service_account_email = google_service_account.etl.email
     }
@@ -6932,9 +6966,14 @@ resource "google_bigquery_table" "data_freshness" {
                              TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)), NULL) AS odbc_data_as_of,
           ld.loaded_at AS odbc_loaded_at,
           IF(o.dataset = 'PlexProd', lv.read_at, NULL) AS screens_read_at,
-          o.dataset = 'PlexProd'
+          -- whole group on the screens: dormant since 11-11 (revenue never switches;
+          -- Label Design combines, see screens_fill_in)
+          o.dataset = 'PlexProd' AND o.report_group != 'label_design'
             AND IFNULL(ls.use_live, FALSE)
             AND IFNULL(lv.read_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS on_screens,
+          -- Label Design: ODBC lines plus the lines only the screens have (read < 3 h ago)
+          o.dataset = 'PlexProd' AND o.report_group = 'label_design'
+            AND IFNULL(lv.read_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS screens_fill_in,
           IF(o.dataset = 'PlexProd', ls.latest_lag_min, NULL) AS odbc_lag_min,
           IF(o.dataset = 'PlexProd', ls.latest_verdicts, NULL) AS latest_verdicts,
           IF(o.dataset = 'PlexProd', ls.last_run_at, NULL) AS last_check_at
@@ -6951,15 +6990,19 @@ resource "google_bigquery_table" "data_freshness" {
         IF(on_screens, screens_read_at, odbc_data_as_of) AS data_as_of,
         IF(on_screens,
            CONCAT('Plex screens, read ', FORMAT_TIMESTAMP('%m-%d %H:%M MT', screens_read_at, 'America/Denver')),
-           COALESCE(CONCAT('ODBC, loaded ', FORMAT_TIMESTAMP('%m-%d %H:%M', odbc_loaded_at, 'America/Denver'),
-                           ', newest change ', FORMAT_TIMESTAMP('%m-%d %H:%M MT', odbc_data_as_of, 'America/Denver')),
-                    'ODBC, no data')) AS data_label,
+           CONCAT(COALESCE(CONCAT('ODBC, loaded ', FORMAT_TIMESTAMP('%m-%d %H:%M', odbc_loaded_at, 'America/Denver'),
+                                  ', newest change ', FORMAT_TIMESTAMP('%m-%d %H:%M MT', odbc_data_as_of, 'America/Denver')),
+                           'ODBC, no data'),
+                  IF(screens_fill_in,
+                     CONCAT('; new lines from Plex screens, read ',
+                            FORMAT_TIMESTAMP('%m-%d %H:%M MT', screens_read_at, 'America/Denver')), ''))) AS data_label,
         odbc_data_as_of,
         odbc_loaded_at,
         screens_read_at,
         odbc_lag_min,
         latest_verdicts,
-        last_check_at
+        last_check_at,
+        screens_fill_in
       FROM joined
     SQL
   }

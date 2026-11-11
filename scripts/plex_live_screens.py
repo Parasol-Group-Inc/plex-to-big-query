@@ -650,8 +650,11 @@ def maybe_start_push(c, live_mode=False):
     if etl and etl_reached_plex(etl[0].status, etl[0].detail) and not live_mode:
         return f"push not started: the ETL reached Plex at {etl[0].started_at:%H:%M} UTC and starts the push itself"
     src = list(c.query(f"SELECT ARRAY_AGG(DISTINCT data_source) s FROM `{PROJECT}.PlexProd.label_design_report`").result())[0].s
-    if src != ["live"]:
-        return f"push not started: label_design_report is not reading the live screens (data_source {src})"
+    # Since 2026-11-11 the view mixes: ODBC lines plus the lines only the screens have.
+    # Start the push only when there is a screen line (the push's own gate then skips
+    # anything already on Monday); ODBC lines are pushed by the ETL's own runs.
+    if "live" not in (src or []):
+        return f"push not started: no Label Design line comes from the screens only (data_source {src})"
     import google.auth
     from google.auth.transport.requests import AuthorizedSession
     cred, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])

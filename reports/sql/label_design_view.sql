@@ -54,13 +54,19 @@
 -- Every join uses SAFE_CAST on both sides — the repo rule, earned by an empty
 -- raw table being autodetected as all-STRING and breaking view creation.
 --
--- DATA SOURCE LABEL (2026-11-10): every row also carries data_as_of and data_label (data_source is set per row above)
+-- DATA SOURCE LABEL (2026-11-10; per row since 11-11): every row also carries data_as_of and data_label (data_source is set per row above)
 -- from PlexOps.data_freshness, report group 'label_design': 'odbc' or 'live' (Plex screens), and
 -- how current that data is (ODBC: newest change delivered; live: when the screens were
 -- read). Terraform defines that view. The query below is the report itself, unchanged;
 -- its ORDER BY no longer guarantees row order (sort in the reader).
 
-SELECT __b.*, __src.data_as_of, __src.data_label
+SELECT __b.*,
+  -- per row: a screen line says when the screens were read; an ODBC line carries
+  -- the group's ODBC label from PlexOps.data_freshness
+  IF(__b.data_source = 'live', __scr.screens_read_at, __src.data_as_of) AS data_as_of,
+  IF(__b.data_source = 'live',
+     CONCAT('Plex screens, read ', FORMAT_TIMESTAMP('%m-%d %H:%M MT', __scr.screens_read_at, 'America/Denver')),
+     __src.data_label) AS data_label
 FROM (
 WITH rep_outside AS (
   SELECT
@@ -583,22 +589,21 @@ odbc_lines AS (
 -- the freeze has no Sales_v_Order_Salesperson row, so its BDM is NULL until
 -- ODBC returns.
 --
--- WHICH SOURCE WINS (live_switch): live, when this is PlexProd AND the screen
--- table was loaded in the last 3 hours. Otherwise ODBC, exactly as before. So
--- PlexTest never changes, and if the laptop task stops the view falls back to
--- ODBC by itself within 3 hours; nobody has to remember to undo anything. The
--- two are never mixed: one source per query. data_source says which.
--- SINCE 2026-11-10 the cloud job plex-live-screens decides (docs/PLEX_SCREEN_EXTRACTION.md,
--- "Reconciliation"): every 4 hours it reads the screens, compares them with ODBC and
--- sets PlexOps.live_source.use_live for this report's group when ODBC is behind or
--- disagrees, and empties the live table after 2 clean runs. It runs every 4 h, so the
--- freshness backstop is 5 h: if the job stops, the view is back on ODBC within 5 h.
+-- SCREENS + ODBC TOGETHER (2026-11-11, replaces the 11-10 switch). ODBC is the base:
+-- every line ODBC has comes from ODBC, with all its details. A line the screens show
+-- in Label Design that ODBC does not have there yet is added from the screens
+-- (data_source = 'live'), so a new order reaches Monday within the hour instead of
+-- after ODBC's delay (1 to 5 h, measured 10-27 to 11-10). When ODBC catches up, the
+-- same po_line_key comes from ODBC and the push fills the item's blank cells
+-- (label_design_service/fill.py). Screen lines are used only on PlexProd and while
+-- the screen table is under 3 h old (plex-live-screens reads it hourly on weekday
+-- working hours, every 4 h otherwise); if the job stops, the view is pure ODBC.
+-- Rules in one page: docs/ODBC_VS_SCREENS.md.
 live_switch AS (
   SELECT
     '{dataset}' = 'PlexProd'
-      AND IFNULL((SELECT ls.use_live FROM `{gcp_project}.PlexOps.live_source` ls
-                  WHERE ls.report_group = 'label_design'), FALSE)
-      AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR), FALSE) AS use_live
+      AND IFNULL(MAX(loaded_at) > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR), FALSE) AS use_live,
+    MAX(loaded_at) AS screens_read_at
   FROM `{gcp_project}.PlexProd.live_order_releases`
 ),
 
@@ -678,9 +683,12 @@ live_lines AS (
 ),
 
 release_lines AS (
-  SELECT o.* FROM odbc_lines AS o CROSS JOIN live_switch AS sw WHERE NOT sw.use_live
+  SELECT o.* FROM odbc_lines AS o
   UNION ALL
-  SELECT v.* FROM live_lines AS v CROSS JOIN live_switch AS sw WHERE sw.use_live
+  -- a screen line only where ODBC has no Label Design line with that key yet
+  SELECT v.* FROM live_lines AS v CROSS JOIN live_switch AS sw
+  WHERE sw.use_live
+    AND NOT EXISTS (SELECT 1 FROM odbc_lines AS o2 WHERE o2.po_line_key = v.po_line_key)
 )
 
 -- ── Collapse to one row per order + customer part ───────────────────────────
@@ -830,3 +838,6 @@ LEFT JOIN (
   FROM `{gcp_project}.PlexOps.data_freshness` AS f
   WHERE f.dataset = '{dataset}' AND f.report_group = 'label_design'
 ) AS __src ON TRUE
+LEFT JOIN (
+  SELECT MAX(loaded_at) AS screens_read_at FROM `{gcp_project}.PlexProd.live_order_releases`
+) AS __scr ON TRUE

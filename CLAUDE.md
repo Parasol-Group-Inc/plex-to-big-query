@@ -352,6 +352,9 @@ emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
 
 ## Screens vs ODBC every 4 h; watchdog every 30 min (since 2026-11-10)
 
+All the rules in one page (which source each report reads, when it switches, when we email):
+`docs/ODBC_VS_SCREENS.md`.
+
 ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every run
 "succeeded"). So two Cloud Run jobs now watch from outside the ETL:
 - **`plex-live-screens`** (`scripts/screen_recon.py`, Dockerfile.screens, every 4 h at :20)

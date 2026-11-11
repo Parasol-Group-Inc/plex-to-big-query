@@ -34,19 +34,19 @@ def code(s):
 
 VERDICTS = [
     ("current", "ODBC has every screen record older than 2 h", "reports read ODBC"),
-    ("behind", "the oldest record or edit ODBC lacks is older than 2 h (RECON_LAG_TOLERANCE_MIN)", "the group switches to the screens"),
-    ("diverged", "a gap ODBC never fills, ODBC changed a value after the screen showed another, or ODBC has records the screen lacks twice running", "the group switches to the screens; email"),
-    ("odbc_unreachable", "ODBC connect or query failed, or a query hit its TOP", "the group switches to the screens"),
+    ("behind", "the oldest record or edit ODBC lacks is older than 2 h (RECON_LAG_TOLERANCE_MIN)", "the group switches to the screens; quietly up to 6 h, email over 6 h (RECON_ALERT_LAG_MIN)"),
+    ("diverged", "ODBC changed a value after the screen showed another, a record missing below a later ODBC record for 2 h+, or ODBC has records the screen lacks twice running while ODBC itself is fresh", "the group switches to the screens; email"),
+    ("odbc_unreachable", "ODBC connect or query failed, or a query hit its TOP", "the group switches to the screens; email"),
     ("pipeline_behind", "ODBC is fine but BigQuery lacks records ODBC had before our last load", "email; no switch"),
     ("screens_failed", "a screen could not be read, or returned far fewer rows than last time", "ignored for switching; email after 2 in a row"),
 ]
 
 EMAILS = [
-    ("Screens digest", "Emilio, Jennilyn, marketing", "8:20, 12:20, 4:20 PM MT runs, and any run with a problem", "each group's source label, each screen's verdict, rows and timing, logins, screenshot folder"),
+    ("Screens digest", "Emilio, Jennilyn, marketing", "8:20, 12:20, 4:20 PM MT runs, and any run needing action (lag over 6 h, a non-delay verdict, a failed login); a lag under 6 h reads \"ODBC catching up\" (info)", "each group's source label, each screen's verdict, rows and timing, logins, screenshot folder"),
     ("Plex login failed", "Emilio only", "once a day per cause (a new cause mails at once), after one retry for causes that can pass on their own", "the cause (wrong password, password change, MFA, locked, Plex down, network, timeout), what Plex showed, the fix, the streak and last good login, the screenshot"),
-    ("Reports switched to the screens / back on ODBC", "Emilio, Jennilyn, marketing", "when a group switches", "lag, verdicts, why"),
+    ("ODBC is behind the screens / back on ODBC", "Emilio, Jennilyn, marketing", "a group on the screens with a lag over 6 h or a non-delay verdict, once a day; back on ODBC only after that first email", "lag, verdicts, why"),
     ("ODBC disagrees / BigQuery missing records", "Emilio, Jennilyn, marketing", "once a day while it lasts", "examples; details in screen_recon_diff"),
-    ("ODBC data is N h old", "Emilio, Jennilyn, marketing", "weekdays 9-5, newest ODBC change 2 h+ old, once a day", "from every prod ETL run (check_odbc_freshness)"),
+    ("ODBC data is N h old", "Emilio, Jennilyn, marketing", "weekdays 9-5, newest ODBC change 2 h+ old, once a day; quiet while a group is on the screens", "from every prod ETL run (check_odbc_freshness); kept at 2 h so a freeze like 11-10 is caught"),
     ("Watchdog", "Emilio, Jennilyn, marketing", "a check newly failing, once a day per check", "which part stopped and the usual fix"),
     ("ETL digest health line", "Emilio, Jennilyn, marketing", "every batch digest", "a group on the screens, or on ODBC data 2 h+ old in work hours"),
     ("Google Cloud Monitoring", "Emilio (sent by Google, not SendGrid)", "watchdog silent 90 min, screens job silent 9 h, any email failing, 3+ timeout kills an hour", "so an alert arrives even if our code or SendGrid is down"),
@@ -65,6 +65,16 @@ CHECKS = [
     ("test_cascade", "fewer than 12 test jobs ran overnight"),
     ("schedulers", "a Cloud Scheduler job paused or failing"),
     ("image_drift", "a job on a different build"),
+]
+
+GROUP_RULES = [
+    ("Screen", "Label Design order releases", "Shipper History + Shipping Revenue by Part Group"),
+    ("Goes to the screens", "ODBC over 2 h behind on a release, or a new release missing while ODBC's newest change is 2 h+ old", "ODBC over 2 h behind on a shipment or revenue line"),
+    ("Back to ODBC", "after 2 clean checks (8 h); in practice after the overnight catch-up", "the same"),
+    ("What the screens replace", "the order lines (order, release, part, quantity, due date, status)", "the shipped lines and their revenue"),
+    ("Still from ODBC while on the screens", "order header and sales reps, customer, part, bottle/label attributes (last extracted copy)", "customer and part details (last extracted copy)"),
+    ("Monday", "while on the screens, the screens job starts the push itself", "n/a"),
+    ("Email", "lag over 6 h, or a real disagreement", "the same"),
 ]
 
 QUERIES = """-- which source each report reads now, and how current
@@ -112,7 +122,7 @@ DIAGRAM = """flowchart LR
 def render_tab() -> str:
     stats = [("3", "Plex screens checked every 4 h"), ("17", "reports labeled with their source"),
              ("12", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
-             ("2 h", "ODBC lag tolerated before switching")]
+             ("2 h", "ODBC lag before reports switch to the screens"), ("6 h", "ODBC lag before an email")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     verdicts = table(["Verdict", "When", "What happens"], [(code(v), esc(w), esc(h)) for v, w, h in VERDICTS])
     emails = table(["Email", "To", "When", "What it says"], [tuple(esc(x) for x in r) for r in EMAILS])
@@ -122,6 +132,13 @@ def render_tab() -> str:
         (code("data_as_of"), "odbc: the newest change the feed had delivered; live: when the screens were read"),
         (code("data_label"), 'the two in words, e.g. "ODBC, loaded 11-10 13:01, newest change 11-10 11:56 MT" or "Plex screens, read 11-10 13:20 MT"'),
     ])
+    rules = (f'<div class="block"><h2>How late ODBC runs, and what we do about it (2026-11-11)</h2>'
+             f'<p class="lede">Measured 11-10/11: ODBC ran 2.5 to 5.5 hours behind Plex\'s screens all afternoon and was '
+             f'current again at the 00:20 and 04:20 checks, after the 4 AM full run. So a few hours of delay in the '
+             f'afternoon is normal now: the reports quietly read the screens until ODBC catches up, and nobody is emailed '
+             f'unless the delay passes 6 hours or the two disagree in a way a delay cannot explain. Full rules: '
+             f'{code("docs/ODBC_VS_SCREENS.md")}.</p>' + table(["", "Label Design", "Revenue and shipments"], [
+                 (esc(a), esc(b), esc(c)) for a, b, c in GROUP_RULES]) + '</div>')
     return f"""{START}<section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref">
 <div class="block"><h2>How we know the data is right</h2>
 <p class="lede">On 2026-11-10 Plex's database feed (ODBC) kept answering but served data frozen at 08:10 MT for 4.5 hours, and every
@@ -135,9 +152,10 @@ screens only while the feed is behind, every report says where its data came fro
 <li>Reads three screens: Label Design order releases, Shipper History and Shipping Revenue by Part Group, and screenshots each.</li>
 <li>Reads the same records from ODBC <b>live</b> (its own connection, minutes after the screen read, not our extracted copy) and from our BigQuery tables, and compares them record by record (records under 15 minutes old are skipped). So "ODBC is behind" is Plex's lag, never a sign that our ETL hasn't extracted lately; only the BigQuery comparison depends on our extraction schedule.</li>
 <li>Gives each screen a verdict and records every difference.</li>
-<li>Switches Label Design or revenue to the screens after one bad check, and back to ODBC after two clean ones (8 hours), emptying the screen tables (with a backup).</li>
+<li>Switches Label Design or revenue to the screens after one bad check, and back to ODBC after two clean ones (8 hours), emptying the screen tables (with a backup). A lag of 2 to 6 hours switches quietly; only a lag over 6 hours or a real disagreement emails (since 11-11).</li>
 <li>Sends the digest and any alert.</li></ol></div>
 <div class="panel"><h3>Verdicts</h3>{verdicts}</div></div>
+{rules}
 <div class="block"><h2>Where the data came from: on every report</h2>
 <p class="lede">Every report built on the Label Design queue, the shipping revenue report or production records ends with three columns
 from {code("PlexOps.data_freshness")}. Production always reads ODBC. On Monday, the push writes {code("data_label")} into the new
@@ -148,7 +166,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <div class="panel"><h3>Where things are</h3><ul class="plain">
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
-<li>Settings: lag tolerance 120 min, 2 clean runs to switch back, digest hours 8/12/16 (Terraform, job plex-live-screens).</li>
+<li>Settings: switch at 120 min lag, email at 360 min, 2 clean runs to switch back, digest hours 8/12/16 (Terraform, job plex-live-screens).</li>
 <li>Cost: about $2.40 a month for the screens job, $1 for the watchdog.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>

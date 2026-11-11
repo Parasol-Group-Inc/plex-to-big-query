@@ -130,6 +130,8 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    screen that failed twice running (daily). Google Monitoring separately mails if the
    job's `recon heartbeat` log line is missing for 9 h.
 
+   The whole rule set in one page: `docs/ODBC_VS_SCREENS.md`.
+
 8. **Digest** (`send_screens_digest`), to REPORT_TO_EMAILS (Emilio, Jennilyn, marketing):
    at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
    problem (a lag over 6 h, a non-delay verdict, a failed login). A lag under 6 h shows as

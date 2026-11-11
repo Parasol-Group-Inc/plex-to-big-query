@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-10 - The live manual-data app is v2; D34 was a false alarm
+
+- **Found:** the deployed manual-data app is v2 ("Vox Goals", database-direct): saves write to BigQuery
+  directly, append-only, with an access list (`PlexProd.manual_data_access`) and no hourly push. Its
+  `Code.gs` is now in `deploy/manual_data_app_v2/` (with the 183-day MSL rule applied);
+  `deploy/manual_data_app/` is marked superseded. OPEN_ITEMS D36 tracks Index.html, the `v2_*` views
+  and `manual_data_access` DDL, and a wording question for Jennilyn.
+- **Fixed:** D34 ("hourly push broken") was wrong: v2 has no hourly push, and its tables change only on
+  saves. The watchdog's `manual_data` check is removed (12 checks), D34 closed, hub corrected.
+
 ## 2026-11-10 - MSL: NetSuite usage held for 6 months; monthly usage table (Jennilyn)
 
 - **Fixed (watchdog `backups`):** it looked only for last Monday's stamp, so the hand-run backup of 11-10

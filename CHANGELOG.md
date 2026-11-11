@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - `scripts/ops_snapshot.py`: one read-only snapshot of the ETL and the screens
+
+### Added
+- `python scripts/ops_snapshot.py [--log DIR]` prints the big picture and the details in one place.
+  - **Prod and ODBC:** today's prod runs; failed runs and outage holds in the last 2 h; the Label
+    Design ETL's last 3 h (ODBC health); each report group's source label.
+  - **Screens:** the screens checks of the last 5 h; `live_source`; Plex web logins in 24 h.
+  - **Label Design:** the queue by source and what is not on Monday yet.
+  - **Watchdog:** the latest run.
+
+  It ends with a FLAGS line. BigQuery reads only. Claude runs it hourly in a session, logging to
+  `~/plex-monitor/YYYY-MM-DD.log`.
+
 ## 2026-11-11 - Label Design: screens and ODBC work together; revenue stays on ODBC
 
 The switch between ODBC and the screens is replaced with a combination

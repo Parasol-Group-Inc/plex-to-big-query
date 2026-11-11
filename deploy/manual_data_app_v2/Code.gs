@@ -196,7 +196,7 @@ function getGoals(area, year) {
   var rows = q_(
     'SELECT IFNULL(scope, "") scope, EXTRACT(MONTH FROM period_month) m, CAST(goal_value AS STRING) v, ' +
     '  updated_by, FORMAT_TIMESTAMP("%Y-%m-%d %H:%M", updated_at, "America/Denver") ts ' +
-    'FROM ' + t_('v2_scorecard_goals_resolved') + ' ' +
+    'FROM ' + t_('scorecard_goals_resolved') + ' ' +
     'WHERE LOWER(metric) = @metric AND EXTRACT(YEAR FROM period_month) = CAST(@y AS INT64)',
     [P('metric', a.metric), P('y', year)]);
 
@@ -388,7 +388,7 @@ function removeUsage(nsItemId) {
  */
 function uploadUsage(csvText) {
   var email = require_('part_usage');
-  var table = Utilities.parseCsv(String(csvText || '').replace(/^/, ''));
+  var table = Utilities.parseCsv(String(csvText || '').replace(/^﻿/, ''));
   if (table.length < 2) throw new Error('The file has no data rows.');
   var h = table[0].map(function (x) { return String(x).trim().toLowerCase(); });
   if (h.indexOf('part_no') === -1 && h.indexOf('ns_item_id') === -1) throw new Error('Need a part_no or ns_item_id column.');

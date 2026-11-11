@@ -394,7 +394,8 @@ sends a digest at 8:20/12:20/16:20 MT to REPORT_TO_EMAILS.
 The deployed app ("Vox Goals", database-direct) is **not** `deploy/manual_data_app/` (the older
 sheet-based version with `pushAll`). v2 writes to BigQuery on every save, append-only, with an access
 list (`PlexProd.manual_data_access`); there is no hourly push, so an old table only means no saves.
-Its code is in `deploy/manual_data_app_v2/Code.gs` (Index.html still to add, D36). **Never paste
+Its code is in `deploy/manual_data_app_v2/` (Code.gs + Index.html; reads `scorecard_goals_resolved`, the
+live copy still reads the orphan `v2_scorecard_goals_resolved` until redeployed, D36). **Never paste
 `deploy/manual_data_app/` into the live project.** Update v2 by editing only what changed, then
 Deploy > Manage deployments > edit > New version.
 

@@ -16,6 +16,12 @@ don't need an entry.
 
 ## 2026-11-10 - The live manual-data app is v2; D34 was a false alarm
 
+- **Audit of the live app (Code.gs + Index.html from the editor):** every table it writes has the columns
+  its INSERTs use. It read `v2_scorecard_goals_resolved`, an orphan of the 09-22 rename that still exists
+  in BigQuery (with three `v2_*_vs_goal_report` views); its rows equal `scorecard_goals_resolved` (0
+  differences). The repo copy now reads `scorecard_goals_resolved`, so the orphans can be dropped after
+  the app is redeployed. `manual_data_access` (26 rows, BigQuery-only) added to the weekly backup.
+
 - **Found:** the deployed manual-data app is v2 ("Vox Goals", database-direct): saves write to BigQuery
   directly, append-only, with an access list (`PlexProd.manual_data_access`) and no hourly push. Its
   `Code.gs` is now in `deploy/manual_data_app_v2/` (with the 183-day MSL rule applied);

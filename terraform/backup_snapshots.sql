@@ -17,7 +17,8 @@ DECLARE src_tables ARRAY<STRING> DEFAULT [
   'VoxScorecardsLive.shipping_revenue_shipped_daily', 'VoxScorecardsLive.stalled_win_lost_18409621334',
   'VoxScorecardsLive.stalled_won_lost_18409621334',
   -- last: a table missing here stops the loop, so newer tables go at the end
-  'PlexProd.part_usage_monthly'
+  'PlexProd.part_usage_monthly',
+  'PlexProd.manual_data_access'
 ];
 
 FOR t IN (SELECT x FROM UNNEST(src_tables) AS x) DO

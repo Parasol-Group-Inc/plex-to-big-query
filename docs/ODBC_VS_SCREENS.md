@@ -21,6 +21,22 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
   The screens check them every 4 hours as an audit. Only a lag that survives the overnight
   catch-up (12 h) emails.
 
+## ODBC is a copy refreshed about every 4 hours (11-11)
+
+Plex's champion (Amber) told Jennilyn that ODBC runs up to 4 hours behind. Our logs agree: ODBC's
+newest data moves forward only in jumps, seen at about 09:00, 13:00 and 17:00 MT. Each jump brings
+data about an hour old, and nothing moves in between (11-10 16:47→17:02, 11-11 08:46→09:21,
+12:46→13:01). So a lag of 1 to 5 hours is normal: about 1 h right after a refresh, about 5 h just
+before the next one.
+
+The alerts and timings follow from that:
+- **6 h means a refresh was missed.** That is the line for the stale-data email, the watchdog's
+  `odbc_vs_plex`, and the Label Design screens email.
+- **`behind` starts at 5 h** (`RECON_LAG_TOLERANCE_MIN` = 300): a normal pre-refresh lag is no
+  longer a "behind" verdict.
+- **Full screen checks run at :20 just after each refresh:** 01, 05, 09, 13, 17 and 21. The
+  digests ride the 09:20, 13:20 and 17:20 runs.
+
 ## Why
 
 | | ODBC (`vox.odbc.plex.com`) | Plex screens (web, Playwright) |
@@ -34,7 +50,7 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
 1. **Read.** `plex-live-screens` reads the releases screen:
    - hourly on weekdays at :20, from 6:20 AM to 5:20 PM MT, with
      `plex-live-screens-releases-sync` setting `RECON_ONLY=releases`;
-   - with all three screens every 4 h (00:20, 04:20, 08:20, 12:20, 16:20, 20:20).
+   - with all three screens every 4 h, just after ODBC's refreshes (01:20, 05:20, 09:20, 13:20, 17:20, 21:20; since 11-11).
 
    Each read replaces `PlexProd.live_order_releases`.
 2. **Combine** (`label_design_report`):
@@ -84,8 +100,8 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
 
 | Verdict | When |
 |---|---|
-| `current` | lag up to 2 h (`RECON_LAG_TOLERANCE_MIN` = 120) |
-| `behind` | lag over 2 h. Lag = age of the oldest record or edit the screen shows and ODBC lacks |
+| `current` | lag up to 5 h (`RECON_LAG_TOLERANCE_MIN` = 300 since 11-11; was 120) |
+| `behind` | lag over 5 h. Lag = age of the oldest record or edit the screen shows and ODBC lacks |
 | `diverged` | not a delay: ODBC changed a value after the screen showed another; a record missing below a later ODBC record for 2 h+; or records ODBC has and the screen lacks in two reads, while ODBC itself is fresh |
 | `odbc_unreachable` | ODBC connect or query failed |
 | `pipeline_behind` | ODBC has it, our `raw_*` table (loaded after it) does not: our ETL, not Plex |
@@ -104,11 +120,11 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
 | "Plex ODBC caught up: ..." | all current again, only after one of the above. Once | REPORT_TO_EMAILS |
 | BigQuery missing records (pipeline_behind) | once a day per screen | REPORT_TO_EMAILS |
 | Screen failed twice running | once a day per screen | REPORT_TO_EMAILS |
-| Screens digest | 8:20, 12:20, 4:20 PM. Also another run that needs action, at most once per 4 h | Emilio, Jennilyn, marketing |
+| Screens digest | 9:20, 13:20, 17:20 MT (just after ODBC refreshes). Also another run that needs action, at most once per 4 h | Emilio, Jennilyn, marketing |
 | Plex login failed | once a day per cause | Emilio only |
-| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, newest ODBC record 2 h+ old, once a day (no longer silenced by Label Design's screens, since 11-11) | REPORT_TO_EMAILS |
+| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, newest ODBC record 6 h+ old (a missed refresh; 2 h until 11-11), once a day (no longer silenced by Label Design's screens, since 11-11) | REPORT_TO_EMAILS |
 | Watchdog `odbc_connect` | weekdays, 3 of the last 4 Label Design runs could not connect to ODBC | REPORT_TO_EMAILS, once a day |
-| Watchdog `odbc_vs_plex` | Plex's REST API shows order changes our ODBC copy lacks for over 2 h, any hour (Plex is quiet at night, so it fires only when work happened) | REPORT_TO_EMAILS, once a day |
+| Watchdog `odbc_vs_plex` | Plex's REST API shows order changes our ODBC copy lacks for over 6 h (a missed refresh), any hour (Plex is quiet at night, so it fires only when work happened) | REPORT_TO_EMAILS, once a day |
 
 A lag under the lines above shows in the digest as "ODBC catching up" (info) and sends nothing of its own.
 
@@ -127,7 +143,7 @@ label, and later "confirmed by ODBC".
 
 | Setting | Value | Meaning |
 |---|---|---|
-| `RECON_LAG_TOLERANCE_MIN` | 120 | lag that counts as `behind` |
+| `RECON_LAG_TOLERANCE_MIN` | 300 | lag that counts as `behind` (was 120 until 11-11) |
 | `RECON_ALERT_LAG_MIN` | 360 | releases lag that emails |
 | `RECON_REVENUE_ALERT_LAG_MIN` | 720 | shipments/revenue lag that emails |
 | `RECON_CLEAN_RUNS` | 2 | clean reads before `odbc_behind` clears |

@@ -6598,7 +6598,7 @@ resource "google_cloud_run_v2_job" "live_screens" {
         }
         env {
           name  = "RECON_LAG_TOLERANCE_MIN"
-          value = "120"
+          value = "300"
         }
         env {
           name  = "RECON_ALERT_LAG_MIN"
@@ -6655,7 +6655,7 @@ resource "google_cloud_run_v2_job" "live_screens" {
 resource "google_cloud_scheduler_job" "live_screens" {
   name        = "plex-live-screens-sync"
   description = "Every 4 h: Plex screens (Label Design, revenue, shipments) vs ODBC; Label Design takes lines ODBC lacks from the screens (scripts/screen_recon.py)"
-  schedule    = "20 */4 * * *"
+  schedule    = "20 1,5,9,13,17,21 * * *" # just after ODBC's ~4-hourly refreshes (11-11)
   time_zone   = "America/Denver"
   region      = var.gcp_region
   paused      = false
@@ -6672,11 +6672,11 @@ resource "google_cloud_scheduler_job" "live_screens" {
 
 # 2026-11-11: the Label Design releases screen hourly on weekday working hours, so a
 # new order reaches Monday within the hour (label_design_view.sql takes the lines ODBC
-# lacks from it). Skips 8, 12 and 16, when the 4-hourly run reads all three screens.
+# lacks from it). Skips 9, 13 and 17, when the 4-hourly run (just after ODBC's refreshes) reads all three screens.
 resource "google_cloud_scheduler_job" "live_screens_releases" {
   name        = "plex-live-screens-releases-sync"
   description = "Weekdays hourly 6:20 AM-5:20 PM MT: the Label Design releases screen only (RECON_ONLY=releases)"
-  schedule    = "20 6,7,9,10,11,13,14,15,17 * * 1-5"
+  schedule    = "20 6,7,8,10,11,12,14,15,16 * * 1-5"
   time_zone   = "America/Denver"
   region      = var.gcp_region
   paused      = false

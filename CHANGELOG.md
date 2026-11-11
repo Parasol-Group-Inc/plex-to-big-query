@@ -14,6 +14,37 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - ODBC refreshes about every 4 h: alert lines and screen times follow
+
+Plex's champion told Jennilyn that ODBC runs up to 4 h behind. Our 114 prod-run freshness lines
+show its newest data jumping forward at about 09:00, 13:00 and 17:00 MT, each time to data about
+1 h old, and not moving in between. A 1-5 h lag is therefore normal.
+
+### Changed
+- **Stale-data email (`main.py` `STALE_ALERT_MINUTES`):** 120 → 360. The threshold is now passed
+  at call time.
+- **Watchdog `odbc_vs_plex` (`ODBC_PLEX_LAG_MIN`):** 120 → 360. 6 h means a missed refresh.
+- **Screens `RECON_LAG_TOLERANCE_MIN`:** 120 → 300 (Terraform). A normal pre-refresh lag is no
+  longer `behind`.
+- **Full screens check:** `20 1,5,9,13,17,21`, just after each refresh (was `20 */4`, just before
+  one). The weekday hourly releases read moves to `20 6,7,8,10,11,12,14,15,16`.
+- **Screens digest hours:** 9, 13, 17 (were 8, 12, 16).
+
+## 2026-11-11 - Test MSL tables get prod's schema; OPEN_ITEMS cleanup
+
+### Fixed
+- **`PlexTest.msl_rules` and `PlexTest.msl_item_inputs`:** both existed since 10-27 with no columns,
+  so the nightly `approaching_msl_report` in the test sales-orders run failed ("does not have a
+  schema") and every night ended PARTIAL (D29). Both now carry prod's schema (6 and 11 columns),
+  empty. A dry run of the view against PlexTest passes.
+
+### Closed (OPEN_ITEMS)
+- **D12 and D16:** deployed long ago. Batch digests have run since 10-22 (107 batches). The probe
+  retry is in the image, and the dispatcher is covered by the watchdog's `dispatch_missed` and
+  `dispatch_stuck` checks.
+- **D23:** the Mac's operator access is used daily (builds, job runs, BigQuery writes).
+- **D29:** fixed above.
+
 ## 2026-11-11 - ODBC alerts that would have caught this morning
 
 Evidence (11-11): ODBC served data frozen at 11-10 16:10 MT from 05:01 until ~10:00. Every Label

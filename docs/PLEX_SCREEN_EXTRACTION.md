@@ -153,7 +153,7 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    The whole rule set in one page: `docs/ODBC_VS_SCREENS.md`.
 
 8. **Digest** (`send_screens_digest`), to REPORT_TO_EMAILS (Emilio, Jennilyn, marketing):
-   at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`). Another run with a problem
+   at the 9:20, 13:20 and 17:20 MT runs (`RECON_DIGEST_HOURS`, just after ODBC's refreshes; 8/12/16 until 11-11). Another run with a problem
    (needs_action, a failed login) sends one too, at most once per 4 h, so the hourly
    releases runs do not mail every hour. The digest also lists the Label Design lines
    that only the screens have so far. A lag under 6 h shows as

@@ -977,7 +977,8 @@ def run(args):
     return 1 if fetch_err else 0
 
 
-DIGEST_HOURS = {int(h) for h in os.environ.get("RECON_DIGEST_HOURS", "8,12,16").split(",") if h.strip()}
+# Digests ride the full reads just after ODBC refreshes (~09:00, 13:00, 17:00 MT), since 11-11.
+DIGEST_HOURS = {int(h) for h in os.environ.get("RECON_DIGEST_HOURS", "9,13,17").split(",") if h.strip()}
 
 
 def needs_action(r):

@@ -38,6 +38,21 @@ REPEAT_HOURS = 24
 # (No manual-data check: the live app, deploy/manual_data_app_v2, writes to BigQuery only
 # when someone saves, so an old table is not a fault. Removed 2026-11-10, see D34.)
 STALE_RAW_ALLOW = {"raw_materials_parts"}
+
+# ODBC health (2026-11-11). That morning ODBC served data frozen at 11-10 16:10 MT until
+# ~10:00 and refused 6 sessions, and nobody was mailed: the stale-data alert only looks
+# 9-5 inside a run that connected, and the outage alert waits for 6 h of failures. These
+# two checks measure from outside the ETL:
+#   odbc_connect  - 3 of the last 4 Label Design runs (every 15 min, weekdays) could not
+#                   connect ("ODBC connection failed").
+#   odbc_vs_plex  - Plex's own REST API (connect.plex.com, read-only, ~1 s) has order
+#                   changes our copy of ODBC lacks, the oldest over ODBC_PLEX_LAG_MIN old.
+#                   Plex is quiet overnight, so this only fires when work happened and
+#                   ODBC did not deliver it. Docs: docs/ODBC_VS_SCREENS.md.
+ODBC_PLEX_LAG_MIN = int(os.environ.get("ODBC_PLEX_LAG_MIN", "120"))
+PLEX_API_BASE = os.environ.get("PLEX_API_BASE", "https://connect.plex.com")
+PLEX_API_SECRETS = (os.environ.get("SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
+                    os.environ.get("SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))
 # Schedulers that are paused on purpose (none of the plex-* ones today).
 PAUSED_OK = {"monday-daily-sync"}
 
@@ -127,6 +142,83 @@ def check_screens_job(c, now_mt):
           WHERE run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY))
         WHERE rn <= 2 GROUP BY screen HAVING failed = n AND n >= 2""")
     return [f"Plex screen '{b.screen}' failed in its last {b.n} runs." for b in bad]
+
+
+def connect_failures(rows):
+    """rows: the last Label Design runs, newest first, each (status, detail, started_at).
+    Returns (failed, looked_at, first_failed_at, error) for the newest 4."""
+    last = rows[:4]
+    bad = [r for r in last if r[0] == "failed" and (r[1] or "").startswith("ODBC connection failed")]
+    first = min((r[2] for r in bad), default=None)
+    return len(bad), len(last), first, (bad[0][1] if bad else "")
+
+
+def check_odbc_connect(c, now_mt):
+    if not work_hours(now_mt):
+        return []
+    rows = [(r.status, r.detail, r.started_at) for r in q(c, f"""
+        SELECT status, detail, started_at FROM `{PROJECT}.PlexProd.job_run_log`
+        WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
+          AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 MINUTE)
+        ORDER BY started_at DESC LIMIT 4""")]
+    n, of, first, err = connect_failures(rows)
+    if of >= 4 and n >= 3:
+        return [f"Plex ODBC refused {n} of the last {of} Label Design runs (since "
+                f"{first.astimezone(DEN):%H:%M} MT): {err[:160]}. The ETL cannot read Plex; Label Design "
+                f"still gets new lines from the Plex screens. If it lasts, tell Plex support (OPEN_ITEMS D33)."]
+    return []
+
+
+def odbc_plex_lag(changes, odbc_newest, now, slack_min=5):
+    """changes: Plex REST modification times (UTC). odbc_newest: newest change in our ODBC
+    copy. Returns (lag_min, unseen_count, oldest_unseen): how long the oldest Plex change
+    our copy lacks has been waiting. Pure."""
+    if odbc_newest is None:
+        return None, 0, None
+    unseen = sorted(t for t in changes if t > odbc_newest + dt.timedelta(minutes=slack_min))
+    if not unseen:
+        return 0.0, 0, None
+    return round((now - unseen[0]).total_seconds() / 60, 1), len(unseen), unseen[0]
+
+
+def _plex_api_orders():
+    import json
+    import urllib.request
+    from google.cloud import secretmanager
+    sm = secretmanager.SecretManagerServiceClient()
+    key, sec = (sm.access_secret_version(request={"name": f"projects/{PROJECT}/secrets/{n}/versions/latest"})
+                .payload.data.decode("utf-8").strip() for n in PLEX_API_SECRETS)
+    req = urllib.request.Request(f"{PLEX_API_BASE}/sales/v1/orders", method="GET", headers={
+        "X-Plex-Connect-Api-Key": key, "X-Plex-Connect-Api-Secret": sec, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def check_odbc_vs_plex(c, now_mt):
+    r = q(c, f"""SELECT odbc_data_as_of t, odbc_loaded_at l FROM `{PROJECT}.PlexOps.data_freshness`
+                 WHERE dataset = 'PlexProd' AND report_group = 'label_design'""")
+    odbc_newest = r[0].t if r else None
+    try:
+        orders = _plex_api_orders()
+    except Exception as e:   # the API being down is not an ODBC problem; say so, do not fail
+        print(f"  odbc_vs_plex: Plex REST API unreachable ({type(e).__name__}: {str(e)[:150]}); skipped")
+        return []
+    changes = []
+    for o in orders:
+        m = o.get("modifiedDate")
+        if m:
+            try:
+                changes.append(dt.datetime.fromisoformat(m.replace("Z", "+00:00")))
+            except ValueError:
+                pass
+    lag, n, oldest = odbc_plex_lag(changes, odbc_newest, dt.datetime.now(UTC))
+    if lag is not None and lag > ODBC_PLEX_LAG_MIN:
+        return [f"Our Plex order data is {lag / 60:.1f} h behind Plex: Plex's API shows {n} order change(s) "
+                f"since {oldest.astimezone(DEN):%m-%d %H:%M} MT that ODBC has not delivered (our newest is "
+                f"{odbc_newest.astimezone(DEN):%m-%d %H:%M} MT, loaded {r[0].l.astimezone(DEN):%m-%d %H:%M}). "
+                f"Every report built on ODBC is that far behind; Label Design takes new lines from the screens. "
+                f"If ODBC also connects fine, it is serving frozen data: tell Plex support (OPEN_ITEMS D33)."]
+    return []
 
 
 def check_raw_freshness(c, now_mt):
@@ -238,6 +330,8 @@ CHECKS = [
     ("label_design_running", check_label_design_running),
     ("label_design_pending", None),  # needs the previous pass
     ("screens_job", check_screens_job),
+    ("odbc_connect", check_odbc_connect),
+    ("odbc_vs_plex", check_odbc_vs_plex),
     ("raw_freshness", check_raw_freshness),
     ("msl_daily", check_msl_daily),
     ("usage_monthly", check_usage_monthly),

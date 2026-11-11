@@ -14,6 +14,42 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - ODBC alerts that would have caught this morning
+
+Evidence (11-11): ODBC served data frozen at 11-10 16:10 MT from 05:01 until ~10:00. Every Label
+Design run logged "lag 760-985 min", but those runs were before 9 AM. From 06:46 to 10:16 ODBC
+also refused 7 sessions ("Session refused by service"). Meanwhile Plex's REST API showed 7 order
+changes at 06:xx and more every hour. **No email went out:**
+- the stale-data alert only looks 9-5, inside a run that connected;
+- the outage alert waits for 6 h of failures;
+- since this morning, Label Design's always-on screens also silenced both.
+
+### Added
+- **Watchdog `odbc_connect`:** on weekdays, 3 of the last 4 Label Design runs could not connect.
+  On today's runs it would have mailed at about 9:40.
+- **Watchdog `odbc_vs_plex`:** Plex's REST API (`GET connect.plex.com/sales/v1/orders`, ~1 s,
+  read-only, the existing `plex-api-consumer-*` secrets) shows order changes our ODBC copy lacks,
+  the oldest over 2 h (`ODBC_PLEX_LAG_MIN`). It runs at any hour; Plex is quiet at night, so it
+  fires only when work happened. On today's data it would have mailed at about 8:30. An API
+  outage skips the check instead of failing it.
+
+### Fixed
+- `main.py` `_screens_in_use`: Label Design's screens no longer silence the stale-data and
+  outage alerts, since every other report still reads ODBC.
+
+## 2026-11-11 - `scripts/ops_snapshot.py`: one read-only snapshot of the ETL and the screens
+
+### Added
+- `python scripts/ops_snapshot.py [--log DIR]` prints the big picture and the details in one place.
+  - **Prod and ODBC:** today's prod runs; failed runs and outage holds in the last 2 h; the Label
+    Design ETL's last 3 h (ODBC health); each report group's source label.
+  - **Screens:** the screens checks of the last 5 h; `live_source`; Plex web logins in 24 h.
+  - **Label Design:** the queue by source and what is not on Monday yet.
+  - **Watchdog:** the latest run.
+
+  It ends with a FLAGS line. BigQuery reads only. Claude runs it hourly in a session, logging to
+  `~/plex-monitor/YYYY-MM-DD.log`.
+
 ## 2026-11-11 - Label Design: screens and ODBC work together; revenue stays on ODBC
 
 The switch between ODBC and the screens is replaced with a combination

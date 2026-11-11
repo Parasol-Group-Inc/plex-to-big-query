@@ -386,7 +386,7 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   `pipeline_behind` uses the raw tables. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".
-- **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks dispatch, Label Design,
+- **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks ODBC itself (`odbc_connect`: 3 of 4 Label Design runs refused; `odbc_vs_plex`: Plex's REST API has order changes our copy lacks for 2 h+, since 11-11), dispatch, Label Design,
   the screens job, raw freshness, MSL history, monthly usage, backups, the test cascade,
   schedulers and image drift (`PlexOps.watchdog_log`). Google Monitoring (not SendGrid)
   mails if its heartbeat or the recon heartbeat stops, if any email fails to send, or if

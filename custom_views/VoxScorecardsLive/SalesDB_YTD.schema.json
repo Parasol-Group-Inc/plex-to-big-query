@@ -1,0 +1,46 @@
+[
+ {
+  "name": "date",
+  "type": "STRING"
+ },
+ {
+  "name": "date_approved",
+  "type": "STRING"
+ },
+ {
+  "name": "type",
+  "type": "STRING"
+ },
+ {
+  "name": "document_number",
+  "type": "STRING"
+ },
+ {
+  "name": "status",
+  "type": "STRING"
+ },
+ {
+  "name": "name",
+  "type": "STRING"
+ },
+ {
+  "name": "sales_rep",
+  "type": "STRING"
+ },
+ {
+  "name": "sales_rep_2",
+  "type": "STRING"
+ },
+ {
+  "name": "amount",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "source",
+  "type": "STRING"
+ },
+ {
+  "name": "po",
+  "type": "STRING"
+ }
+]

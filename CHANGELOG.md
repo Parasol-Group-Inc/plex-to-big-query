@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - Jennilyn's VoxScorecardsLive views backed up into the repo
+
+### Added
+- **`custom_views/VoxScorecardsLive/`:** all 85 objects of Jennilyn's hand-built dataset, which
+  was never in git before.
+  - 60 views: their SQL exactly as BigQuery stores it.
+  - 14 tables: the statement that last built each one, from job history.
+  - 11 tables: columns only (`.schema.json`), because another process loads them or they predate
+    the 180 days of job history.
+
+  The README lists every object with its rows, last change, author, the tables it reads and its
+  columns. Re-run with `scripts/backup_custom_views.py <dataset>`. The 25 tables' data is copied to
+  `Backups.VoxScorecardsLive__<table>_20261111`, with no expiry.
+
+### Fixed
+- **`deploy/manual_data_app_v2/Code.gs`:** the CSV upload strips a byte-order mark written as
+  `\uFEFF`, not as the invisible character. The copy of the live editor code taken on 11-11 had
+  lost that character, which turns CSVs saved by Excel into "Need a part_no column".
+
 ## 2026-11-11 - ODBC refreshes about every 4 h: alert lines and screen times follow
 
 Plex's champion told Jennilyn that ODBC runs up to 4 h behind. Our 114 prod-run freshness lines
@@ -29,6 +48,10 @@ show its newest data jumping forward at about 09:00, 13:00 and 17:00 MT, each ti
 - **Full screens check:** `20 1,5,9,13,17,21`, just after each refresh (was `20 */4`, just before
   one). The weekday hourly releases read moves to `20 6,7,8,10,11,12,14,15,16`.
 - **Screens digest hours:** 9, 13, 17 (were 8, 12, 16).
+- **False `diverged` from hourly reads (fixed):** records ODBC has and the screen lacks now count
+  as disagreement only if an earlier run at least `RECON_LAG_TOLERANCE_MIN` ago had them too. It
+  used to be the previous run, which is one hour back since the hourly reads (11-11 14:21: two
+  releases ODBC still showed in Label Design were a normal pre-refresh lag).
 
 ## 2026-11-11 - Test MSL tables get prod's schema; OPEN_ITEMS cleanup
 

@@ -1,0 +1,30 @@
+[
+ {
+  "name": "name",
+  "type": "STRING"
+ },
+ {
+  "name": "display_name",
+  "type": "STRING"
+ },
+ {
+  "name": "on_hand",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "average_monthly_usage",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "average_daily_usage",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "average_cost",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "item_stock_type",
+  "type": "STRING"
+ }
+]

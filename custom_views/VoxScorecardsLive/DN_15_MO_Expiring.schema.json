@@ -1,0 +1,94 @@
+[
+ {
+  "name": "inventory",
+  "type": "FLOAT64"
+ },
+ {
+  "name": "reorderpoint",
+  "type": "INT64"
+ },
+ {
+  "name": "stocking_unit",
+  "type": "STRING"
+ },
+ {
+  "name": "part_number",
+  "type": "STRING"
+ },
+ {
+  "name": "name",
+  "type": "STRING"
+ },
+ {
+  "name": "part_class",
+  "type": "STRING"
+ },
+ {
+  "name": "purchasing_class",
+  "type": "STRING"
+ },
+ {
+  "name": "sales_class",
+  "type": "STRING"
+ },
+ {
+  "name": "part_type",
+  "type": "STRING"
+ },
+ {
+  "name": "shelf_life_remaining",
+  "type": "STRING"
+ },
+ {
+  "name": "percent_expired",
+  "type": "STRING"
+ },
+ {
+  "name": "created_date",
+  "type": "TIMESTAMP"
+ },
+ {
+  "name": "date_of_expiration",
+  "type": "TIMESTAMP"
+ },
+ {
+  "name": "location",
+  "type": "STRING"
+ },
+ {
+  "name": "warehouse",
+  "type": "STRING"
+ },
+ {
+  "name": "create_type",
+  "type": "STRING"
+ },
+ {
+  "name": "lpn",
+  "type": "STRING"
+ },
+ {
+  "name": "display_identifier",
+  "type": "STRING"
+ },
+ {
+  "name": "barcode",
+  "type": "STRING"
+ },
+ {
+  "name": "vendor_lot_number",
+  "type": "STRING"
+ },
+ {
+  "name": "assigned_to",
+  "type": "STRING"
+ },
+ {
+  "name": "mfg_note",
+  "type": "STRING"
+ },
+ {
+  "name": "bom_name_version",
+  "type": "STRING"
+ }
+]

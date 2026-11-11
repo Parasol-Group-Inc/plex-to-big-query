@@ -1,0 +1,154 @@
+[
+ {
+  "name": "board_id",
+  "type": "STRING"
+ },
+ {
+  "name": "board_name",
+  "type": "STRING"
+ },
+ {
+  "name": "item_id",
+  "type": "STRING"
+ },
+ {
+  "name": "item_name",
+  "type": "STRING"
+ },
+ {
+  "name": "person",
+  "type": "STRING"
+ },
+ {
+  "name": "status",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1zhv48",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1z67ja",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1zz7tw",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm1z3me9",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm3zms4q",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1r7nzs",
+  "type": "STRING"
+ },
+ {
+  "name": "lookup_mm1racqv",
+  "type": "STRING"
+ },
+ {
+  "name": "board_relation_mm1q7qrc",
+  "type": "STRING"
+ },
+ {
+  "name": "board_relation_mm1q86ea",
+  "type": "STRING"
+ },
+ {
+  "name": "numeric_mm1ry7gm",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm1z196v",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm1zejs3",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1rb9g0",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1rd44d",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1rdw7v",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1rczba",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1rz1n8",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1r965q",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1rteed",
+  "type": "STRING"
+ },
+ {
+  "name": "board_relation_mm1qte58",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1r7mhn",
+  "type": "STRING"
+ },
+ {
+  "name": "date4",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1qdtds",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm1q55jm",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm1r2awn",
+  "type": "STRING"
+ },
+ {
+  "name": "text_mm1qkehx",
+  "type": "STRING"
+ },
+ {
+  "name": "board_relation_mm1r6v66",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1r3v74",
+  "type": "STRING"
+ },
+ {
+  "name": "subtasks_mm1zfzxp",
+  "type": "STRING"
+ },
+ {
+  "name": "text_mm3g3e45",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm3g4j23",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm3g23yk",
+  "type": "STRING"
+ }
+]

@@ -88,8 +88,8 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
 
    | Kind | Meaning |
    |---|---|
-   | `missing_tail` | the screen has it, ODBC does not, and it is newer than anything ODBC has: lag |
-   | `missing_hole` | ODBC lacks it although ODBC has newer records |
+   | `missing_tail` | the screen has it, ODBC does not, and it is at least as new as anything ODBC has: lag |
+   | `missing_hole` | ODBC lacks it although ODBC has strictly newer records (same minute counts as tail since 11-11) |
    | `status_diff` / `value_diff` | in both, a compared value differs |
    | `odbc_extra` | ODBC has it, the screen does not (deleted in Plex?) |
    | `odbc_newer` | ODBC changed after the screen was read: ignored |
@@ -105,9 +105,9 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
 
    | Verdict | Rule |
    |---|---|
-   | `current` | lag at most `RECON_LAG_TOLERANCE_MIN` (120, Terraform env; Plex's nominal ODBC lag was "up to 4 h", so it may be raised to 240) |
+   | `current` | lag at most `RECON_LAG_TOLERANCE_MIN` (120, Terraform env) |
    | `behind` | the oldest missing record or unseen edit is older than the tolerance |
-   | `diverged` | a hole older than the tolerance, ODBC changed a value after the screen showed a different one, or ODBC has records the screen lacks in two runs running |
+   | `diverged` | a hole older than the tolerance, ODBC changed a value after the screen showed a different one, or ODBC has records the screen lacks in two runs running while ODBC's own newest change is within the tolerance (extras while ODBC is stale are lag: 11-10's five "open" releases cleared overnight) |
    | `odbc_unreachable` | ODBC connect or query failed, or a query hit its `TOP` |
    | `pipeline_behind` | ODBC is fine but BigQuery lacks records ODBC had before our last load |
    | `screens_failed` | a screen could not be read, or read under 90% (50% releases/production) of last run |
@@ -121,14 +121,19 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
    `Backups.PlexProd__live_*_<stamp>` (7 days) and empties them. The two views read
    the screens only when `use_live` is true **and** their live table is under 5 h old,
    so if the job stops they are back on ODBC within 5 hours.
-7. **Emails** (SendGrid, `[Plex ETL] - ACTION NEEDED: ...`): a group going to the screens,
-   a group back on ODBC (for information), `diverged` / `pipeline_behind` (daily), and a
+7. **Emails** (SendGrid, `[Plex ETL] - ACTION NEEDED: ...`). **Since 2026-11-11 a delay alone
+   switches quietly:** `behind` up to `RECON_ALERT_LAG_MIN` (360, 6 h) moves the reports to
+   the screens with no email and no ACTION NEEDED. On 11-10 ODBC ran 2.5 to 5.5 h behind all
+   afternoon and was current again at the 00:20 and 04:20 checks (after the 4 AM full run).
+   Mailed: a group on the screens with a lag over 6 h or a non-delay verdict (once a day),
+   that group back on ODBC (for information, only if the first was mailed), `diverged` / `pipeline_behind` (daily), and a
    screen that failed twice running (daily). Google Monitoring separately mails if the
    job's `recon heartbeat` log line is missing for 9 h.
 
 8. **Digest** (`send_screens_digest`), to REPORT_TO_EMAILS (Emilio, Jennilyn, marketing):
    at the 8:20, 12:20 and 16:20 MT runs (`RECON_DIGEST_HOURS`) and on any run with a
-   problem. One line per report group (its `data_label`), one per screen (verdict, rows,
+   problem (a lag over 6 h, a non-delay verdict, a failed login). A lag under 6 h shows as
+   "Screens Digest: ODBC catching up" (info) and does not add a mail of its own. One line per report group (its `data_label`), one per screen (verdict, rows,
    seconds, compared / missing / differing), logins and the screenshot folder.
 9. **Labels.** `PlexOps.data_freshness` turns the same rule into `data_source`,
    `data_as_of` and `data_label`, carried by every report built on the three base views

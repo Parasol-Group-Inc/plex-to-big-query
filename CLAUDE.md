@@ -365,7 +365,9 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`), diagnosed (cause + fix, one mail
   per cause per 24 h via `login-alert` rows). A rejected/unclear login is not retried and suspends
   logins for 24 h (no lockout by repetition); after fixing, run the job with `--force-login`. Tolerance:
-  `RECON_LAG_TOLERANCE_MIN` (120) in Terraform. The screens job queries ODBC **live** for its comparison
+  `RECON_LAG_TOLERANCE_MIN` (120) switches to the screens; only a lag over `RECON_ALERT_LAG_MIN`
+  (360) or a non-delay verdict mails or says ACTION NEEDED (since 11-11: ODBC runs hours behind
+  in the afternoon and catches up overnight). The screens job queries ODBC **live** for its comparison
   (not our `raw_*` copy), so "ODBC behind" never reflects our extraction schedule; only
   `pipeline_behind` uses the raw tables. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,

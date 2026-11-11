@@ -319,3 +319,62 @@ def test_pipeline_not_behind_during_normal_odbc_lag():
     _, _, verdict, _, _ = r.compare("production", scr, od, 1, od["1"]["event"], {}, FETCH,
                                     raw=set(), raw_modified=FETCH - dt.timedelta(minutes=10))
     assert verdict == "current"
+
+
+# ── 2026-11-11: easing the alerts after the 11-10 afternoon ─────────────────────
+
+def test_missing_record_at_odbcs_newest_minute_is_lag_not_hole():
+    # 11-10 20:21 MT: five shipment lines at 16:10, ODBC's newest also 16:10 (same minute,
+    # lower key): ODBC stopped there; that is a delay, not a hole.
+    t = FETCH - dt.timedelta(minutes=250)
+    scr = {"5": {"num": 5, "event": t, "m": {"quantity": 1.0}}, "9": {"num": 9, "event": t, "m": {"quantity": 1.0}}}
+    od = {"9": odbc(scr["9"])}
+    counts, _, verdict, lag, why = r.compare("history", scr, od, 9, t, {}, FETCH)
+    assert counts["missing_tail"] == 1 and not counts["missing_hole"] and verdict == "behind" and not why
+
+
+def test_odbc_extras_while_odbc_is_stale_are_not_diverged():
+    # 11-10: five releases ODBC still showed open, twice, while ODBC's newest change was 4 h old
+    scr = {"1": prod(1, 100)}
+    od = {"1": odbc(prod(1, 100)), "2": odbc(prod(2, 90))}
+    _, _, stale, _, _ = r.compare("releases", scr, od, 2, None, {}, FETCH, prev_extra=frozenset({"2"}),
+                                  odbc_newest_change=FETCH - dt.timedelta(minutes=250))
+    _, _, fresh, _, _ = r.compare("releases", scr, od, 2, None, {}, FETCH, prev_extra=frozenset({"2"}),
+                                  odbc_newest_change=FETCH - dt.timedelta(minutes=20))
+    assert stale == "current" and fresh == "diverged"
+
+
+def test_needs_action_only_past_the_alert_lag():
+    assert not r.needs_action({"verdict": "current"})
+    assert not r.needs_action({"verdict": "behind", "odbc_lag_min": 337})
+    assert r.needs_action({"verdict": "behind", "odbc_lag_min": r.ALERT_LAG_MIN + 1})
+    for v in ("diverged", "odbc_unreachable", "pipeline_behind", "screens_failed"):
+        assert r.needs_action({"verdict": v})
+
+
+def test_quiet_switch_mails_nothing_and_its_return_neither(monkeypatch):
+    sent = set()
+    monkeypatch.setattr(r, "alert_sent_recently", lambda c, kind, hours=24: kind in sent)
+    behind = {"history": {"screen": "history", "verdict": "behind", "odbc_lag_min": 254, "detail": None},
+              "revenue": {"screen": "revenue", "verdict": "behind", "odbc_lag_min": 240, "detail": None}}
+    on = r.decide_alerts(None, {"revenue": {"use_live": False}}, {"revenue": {"use_live": True}}, behind)
+    assert not [k for k, _ in on if k.startswith("live-")]
+    clean = {n: dict(v, verdict="current", odbc_lag_min=0) for n, v in behind.items()}
+    off = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": False}}, clean)
+    assert not off
+    long = {n: dict(v, odbc_lag_min=r.ALERT_LAG_MIN + 30) for n, v in behind.items()}
+    on2 = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": True}}, long)
+    assert [k for k, _ in on2] == ["live-on:revenue"]
+    sent.add("live-on:revenue")
+    off2 = r.decide_alerts(None, {"revenue": {"use_live": True}}, {"revenue": {"use_live": False}}, clean)
+    assert [k for k, _ in off2] == ["live-off:revenue"]
+
+
+def test_screens_digest_quiet_lag_is_info(monkeypatch):
+    import email_utils
+    got = []
+    monkeypatch.setattr(email_utils, "send_ops_alert", lambda alert, to=None: got.append(alert) or True)
+    email_utils.send_screens_digest({"run_id": "r2", "took": 180, "problems": 0, "quiet_behind": 2,
+                                     "alert_lag_min": 360, "groups": [], "screens": []})
+    assert got[0]["severity"] == "info" and got[0]["headline"] == "Screens Digest: ODBC catching up"
+    assert "under 6 h" in got[0]["summary"] and not got[0]["steps"]

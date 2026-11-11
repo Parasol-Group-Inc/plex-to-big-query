@@ -29,6 +29,10 @@ show its newest data jumping forward at about 09:00, 13:00 and 17:00 MT, each ti
 - **Full screens check:** `20 1,5,9,13,17,21`, just after each refresh (was `20 */4`, just before
   one). The weekday hourly releases read moves to `20 6,7,8,10,11,12,14,15,16`.
 - **Screens digest hours:** 9, 13, 17 (were 8, 12, 16).
+- **False `diverged` from hourly reads (fixed):** records ODBC has and the screen lacks now count
+  as disagreement only if an earlier run at least `RECON_LAG_TOLERANCE_MIN` ago had them too. It
+  used to be the previous run, which is one hour back since the hourly reads (11-11 14:21: two
+  releases ODBC still showed in Label Design were a normal pre-refresh lag).
 
 ## 2026-11-11 - Test MSL tables get prod's schema; OPEN_ITEMS cleanup
 

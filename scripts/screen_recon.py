@@ -467,12 +467,17 @@ def first_seen_map(c, screen, recs):
 
 
 def previous_extras(c, screen):
+    """Records ODBC had but the screen lacked in an earlier run at least LAG_TOLERANCE_MIN
+    ago. By time, not by run count: since 11-11 releases are read hourly, and ODBC refreshes
+    only every ~4 h, so "two runs running" was one hour of normal lag (a false diverged on
+    11-11 14:21)."""
     rows = c.query(f"""
         SELECT d.record_key FROM `{DIFF_TABLE}` d
         WHERE d.screen = @s AND d.kind = 'odbc_extra'
           AND d.run_id = (SELECT ARRAY_AGG(r.run_id ORDER BY r.run_started_at DESC LIMIT 1)[OFFSET(0)]
                           FROM `{RECON_TABLE}` r WHERE r.screen = @s AND r.odbc_ok
-                            AND r.run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 9 HOUR))""",
+                            AND r.run_started_at <= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {int(LAG_TOLERANCE_MIN)} MINUTE)
+                            AND r.run_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {int(LAG_TOLERANCE_MIN) + 480} MINUTE))""",
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("s", "STRING", screen)])).result()
     return frozenset(r.record_key for r in rows)

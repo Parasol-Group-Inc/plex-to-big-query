@@ -6598,6 +6598,10 @@ resource "google_cloud_run_v2_job" "live_screens" {
           value = "120"
         }
         env {
+          name  = "RECON_ALERT_LAG_MIN"
+          value = "360"
+        }
+        env {
           name  = "RECON_CLEAN_RUNS"
           value = "2"
         }

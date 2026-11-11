@@ -1147,6 +1147,8 @@ def send_ops_alert(alert: Dict[str, object], to: Optional[List[str]] = None) -> 
 # same people as the ETL digest (REPORT_TO_EMAILS). Same Vox card as ops_alert.
 def send_screens_digest(d: Dict[str, object]) -> bool:
     problems = int(d.get("problems") or 0)
+    quiet = int(d.get("quiet_behind") or 0)
+    alert_h = int(d.get("alert_lag_min") or 360) / 60
     facts = []
     for g in d.get("groups") or []:
         facts.append((f"{g['name']}", f"{g['label']}" + (f" | lag {g['lag']:.0f} min" if g.get("lag") is not None else "")))
@@ -1162,11 +1164,14 @@ def send_screens_digest(d: Dict[str, object]) -> bool:
     facts.append(("Run", f"{d.get('run_id')} ({d.get('took', 0):.0f} s)"))
     summary = ("Every 4 hours the screens job reads Plex's Label Design, revenue and shipment screens and "
                "checks that ODBC (what the reports read) has the same records. "
-               + ("Everything matched within the tolerance; the reports read ODBC." if not problems else
+               + ((f"ODBC is behind on {quiet} screen(s), under {alert_h:g} h: the reports read the screens "
+                   "until it catches up (normally by the 4 AM run). Nothing to do."
+                   if quiet else "Everything matched within the tolerance; the reports read ODBC.")
+                  if not problems else
                   f"{problems} item(s) need a look: see the lines below. Reports switch to the screens by "
                   "themselves while ODBC is behind."))
     return send_ops_alert({
-        "headline": f"Screens Digest: {'all current' if not problems else f'{problems} to check'}",
+        "headline": f"Screens Digest: {(f'ODBC catching up' if quiet else 'all current') if not problems else f'{problems} to check'}",
         "severity": "info" if not problems else "action",
         "summary": summary, "facts": facts,
         "steps": [] if not problems else [

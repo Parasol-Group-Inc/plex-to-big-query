@@ -14,6 +14,28 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - Screens alerts: a delay under 6 h switches quietly
+
+Measured on 11-10/11: ODBC ran 2.5 to 5.5 h behind the screens all afternoon and was
+current again at the 00:20 and 04:20 MT checks (after the 4 AM full run), so the 20:21
+"ACTION NEEDED: 3 to check" digest was a normal delay plus two false "diverged" verdicts.
+
+### Changed
+- **`plex-live-screens`**: a lag over `RECON_LAG_TOLERANCE_MIN` (120) still switches the
+  reports to the screens, but mails nothing. Only a lag over the new `RECON_ALERT_LAG_MIN`
+  (360, Terraform env) or a non-delay verdict (diverged, odbc_unreachable, pipeline_behind,
+  screens_failed) sends the live-on mail, makes the digest say ACTION NEEDED, or sends a
+  digest outside 8:20/12:20/16:20. The "back on ODBC" mail goes only after a live-on mail.
+  A quiet lag shows in the digest as "ODBC catching up" (info).
+
+### Fixed
+- **False `diverged` (history):** a screen record at the same minute as ODBC's newest was a
+  "hole"; it is lag (ODBC stopped there). Same-minute now counts as `missing_tail`.
+- **False `diverged` (releases):** records ODBC has and the screen lacks in two runs no
+  longer count while ODBC's own newest change is older than the tolerance (11-10's five
+  "Pending Fulfillment" releases were ODBC lagging, and cleared overnight).
+- The daytime stale-data alert (`STALE_ALERT_MINUTES`, newest record age) is unchanged.
+
 ## 2026-11-10 - The live manual-data app is v2; D34 was a false alarm
 
 - **Audit of the live app (Code.gs + Index.html from the editor):** every table it writes has the columns

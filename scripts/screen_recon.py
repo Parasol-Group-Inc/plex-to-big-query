@@ -63,6 +63,12 @@ UTC = dt.timezone.utc
 LAG_TOLERANCE_MIN = int(os.environ.get("RECON_LAG_TOLERANCE_MIN", "120"))
 GRACE_MIN = int(os.environ.get("RECON_GRACE_MIN", "15"))
 CLEAN_RUNS = int(os.environ.get("RECON_CLEAN_RUNS", "2"))
+# 2026-11-11 (Emilio: ease the alerts). On 11-10 ODBC ran 2.5-5.5 h behind the screens
+# all afternoon and was current again by the 00:20 and 04:20 checks, after the 4 AM run.
+# A lag over LAG_TOLERANCE_MIN still switches the reports to the screens (quietly); only
+# a lag over ALERT_LAG_MIN, or a verdict that is not a delay, mails or makes the digest
+# say ACTION NEEDED.
+ALERT_LAG_MIN = int(os.environ.get("RECON_ALERT_LAG_MIN", "360"))
 PRODUCTION_DAYS = int(os.environ.get("RECON_PRODUCTION_DAYS", "2"))
 ALERT_REPEAT_HOURS = 24
 SHORT_READ = {"releases": 0.5, "production": 0.5, "history": 0.9, "revenue": 0.9}
@@ -318,7 +324,7 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
         o = odbc.get(key)
         if o is None:
             tail = ((s["num"] is not None and odbc_max_num is not None and s["num"] > odbc_max_num)
-                    or (s["event"] is not None and odbc_max_event is not None and s["event"] > odbc_max_event)
+                    or (s["event"] is not None and odbc_max_event is not None and s["event"] >= odbc_max_event)
                     or odbc_max_num is None)
             kind = "missing_tail" if tail else "missing_hole"
             counts[kind] += 1
@@ -361,7 +367,11 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
                       "odbc_updated_at": o["updated"], "age_min": None})
     lag = max(lag_ages, default=0.0)
     persistent = [k for k in extras if k in prev_extra]
-    if persistent and lag <= tolerance_min:
+    # Extras are a lag sign too while ODBC is stale: on 11-10 five releases ODBC still
+    # showed as open (Plex had moved on) stayed "extra" through two runs and cleared when
+    # ODBC caught up overnight. Only extras while ODBC is fresh mean disagreement.
+    odbc_fresh = odbc_newest_change is None or odbc_newest_change >= fetch_at - dt.timedelta(minutes=tolerance_min)
+    if persistent and lag <= tolerance_min and odbc_fresh:
         diverged.append(f"{len(persistent)} record(s) in ODBC but not on the screen in two runs, e.g. {persistent[0]}")
     if raw is not None and raw_modified is not None:
         for key, o in odbc.items():
@@ -953,13 +963,24 @@ def run(args):
 DIGEST_HOURS = {int(h) for h in os.environ.get("RECON_DIGEST_HOURS", "8,12,16").split(",") if h.strip()}
 
 
+def needs_action(r):
+    """A verdict worth a person's look: not a delay under ALERT_LAG_MIN."""
+    v = r.get("verdict")
+    if v == "current":
+        return False
+    if v == "behind":
+        return (r.get("odbc_lag_min") or 0) > ALERT_LAG_MIN
+    return True
+
+
 def send_digest(c, run_id, started, took, summary, audit, after):
     """The screens digest to REPORT_TO_EMAILS: on the RECON_DIGEST_HOURS runs (MT),
     and on any run with a problem (a verdict other than current, a failed login).
     Never raises."""
     try:
-        problems = sum(1 for r in summary.values() if r["verdict"] != "current") \
+        problems = sum(1 for r in summary.values() if needs_action(r)) \
             + sum(1 for r in audit.logins if not r["ok"])
+        quiet_behind = sum(1 for r in summary.values() if r["verdict"] == "behind" and not needs_action(r))
         if started.astimezone(DEN).hour not in DIGEST_HOURS and not problems:
             return
         try:
@@ -977,6 +998,7 @@ def send_digest(c, run_id, started, took, summary, audit, after):
         folder = f"gs://{SCREENSHOT_BUCKET}/{audit.prefix}/" if audit.shots else ""
         from email_utils import send_screens_digest
         ok = send_screens_digest({"run_id": run_id, "took": took, "problems": problems, "groups": groups,
+                                  "quiet_behind": quiet_behind, "alert_lag_min": ALERT_LAG_MIN,
                                   "screens": screens, "logins_ok": sum(r["ok"] for r in audit.logins),
                                   "logins_failed": sum(not r["ok"] for r in audit.logins), "screenshots": folder})
         print(f"screens digest: {'sent' if ok else 'not sent (email off)'}")
@@ -999,9 +1021,8 @@ def decide_alerts(c, before, after, summary):
                 why += json.loads(r.get("detail") or "{}").get("why", [])
             except ValueError:
                 pass
-        if now != was and alert_sent_recently(c, f"live-{'on' if now else 'off'}:{group}", hours=8):
-            continue  # flapping: one mail per direction per 8 h
-        if now and not was:
+        serious = any(needs_action(r) for r in recs)
+        if now and serious and not alert_sent_recently(c, f"live-on:{group}", hours=ALERT_REPEAT_HOURS):
             out.append((f"live-on:{group}", {
                 "_screen": recs[0]["screen"],
                 "headline": f"Plex ODBC is behind the screens: {group.replace('_', ' ')} now reads the screens",
@@ -1014,7 +1035,8 @@ def decide_alerts(c, before, after, summary):
                           "with the time above, if it lasts more than a few hours.",
                           "Check: SELECT * FROM `voxdatalake.PlexOps.screen_recon` ORDER BY run_started_at DESC LIMIT 20"],
                 "source": "plex-live-screens"}))
-        elif was and not now:
+        elif was and not now and alert_sent_recently(c, f"live-on:{group}", hours=72) \
+                and not alert_sent_recently(c, f"live-off:{group}", hours=8):
             out.append((f"live-off:{group}", {
                 "_screen": recs[0]["screen"], "severity": "info",
                 "headline": f"Plex ODBC caught up: {group.replace('_', ' ')} is back on ODBC",

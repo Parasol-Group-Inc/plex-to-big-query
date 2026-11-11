@@ -46,10 +46,11 @@ STALE_RAW_ALLOW = {"raw_materials_parts"}
 #   odbc_connect  - 3 of the last 4 Label Design runs (every 15 min, weekdays) could not
 #                   connect ("ODBC connection failed").
 #   odbc_vs_plex  - Plex's own REST API (connect.plex.com, read-only, ~1 s) has order
-#                   changes our copy of ODBC lacks, the oldest over ODBC_PLEX_LAG_MIN old.
+#                   changes our copy of ODBC lacks, the oldest over ODBC_PLEX_LAG_MIN (6 h) old.
 #                   Plex is quiet overnight, so this only fires when work happened and
 #                   ODBC did not deliver it. Docs: docs/ODBC_VS_SCREENS.md.
-ODBC_PLEX_LAG_MIN = int(os.environ.get("ODBC_PLEX_LAG_MIN", "120"))
+# 360 since 11-11 PM: ODBC refreshes about every 4 h, so up to ~5 h is normal; 6 h = a missed refresh.
+ODBC_PLEX_LAG_MIN = int(os.environ.get("ODBC_PLEX_LAG_MIN", "360"))
 PLEX_API_BASE = os.environ.get("PLEX_API_BASE", "https://connect.plex.com")
 PLEX_API_SECRETS = (os.environ.get("SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
                     os.environ.get("SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))

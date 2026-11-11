@@ -386,7 +386,7 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   `pipeline_behind` uses the raw tables. Don't load `live_*` by hand: the job
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".
-- **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks ODBC itself (`odbc_connect`: 3 of 4 Label Design runs refused; `odbc_vs_plex`: Plex's REST API has order changes our copy lacks for 2 h+, since 11-11), dispatch, Label Design,
+- **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks ODBC itself (`odbc_connect`: 3 of 4 Label Design runs refused; `odbc_vs_plex`: Plex's REST API has order changes our copy lacks for 6 h+, since 11-11), dispatch, Label Design,
   the screens job, raw freshness, MSL history, monthly usage, backups, the test cascade,
   schedulers and image drift (`PlexOps.watchdog_log`). Google Monitoring (not SendGrid)
   mails if its heartbeat or the recon heartbeat stops, if any email fails to send, or if
@@ -403,7 +403,12 @@ its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness 
 "DATA SOURCE LABEL (2026-11-10)". **A new view built on one of them needs the same wrapper**, unless
 it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).
 Monday's "Data Source" text column (both boards) gets `data_label` from the push. The screens job
-sends a digest at 8:20/12:20/16:20 MT to REPORT_TO_EMAILS.
+sends a digest at 9:20/13:20/17:20 MT to REPORT_TO_EMAILS.
+
+**ODBC is a copy refreshed about every 4 h** (Plex's champion, via Jennilyn; our logs show jumps at
+~09:00, 13:00, 17:00 MT to data ~1 h old). A lag of 1-5 h is normal, so every ODBC alert line is 6 h
+(a missed refresh) and the full screens checks run at :20 just after each refresh (01, 05 ... 21).
+`docs/ODBC_VS_SCREENS.md`.
 
 ## The manual-data app that is live is v2 (found 2026-11-10)
 

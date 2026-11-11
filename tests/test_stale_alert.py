@@ -39,12 +39,16 @@ def test_no_values_is_none():
     assert m.odbc_data_lag({"order update": None}, TUE_1246) is None
 
 
-def test_due_on_11_10():
-    assert m.stale_alert_due(277.0, TUE_1246)
+def test_11_10_is_within_a_normal_refresh_gap():
+    # 277 min was alerted on 11-10; since 11-11 ODBC is known to refresh every ~4 h, so it is normal
+    assert not m.stale_alert_due(277.0, TUE_1246)
+    assert m.stale_alert_due(277.0, TUE_1246, threshold=120)
 
 
-def test_due_from_two_hours():
-    assert m.stale_alert_due(120, TUE_1246) and not m.stale_alert_due(119, TUE_1246)
+def test_due_from_six_hours():
+    # 11-11: ODBC refreshes about every 4 h, so up to ~5 h is normal; 6 h = a missed refresh
+    assert m.stale_alert_due(360, TUE_1246) and not m.stale_alert_due(359, TUE_1246)
+    assert not m.stale_alert_due(277.0, TUE_1246)
 
 
 def test_not_due_outside_working_hours_or_at_weekends():
@@ -85,6 +89,7 @@ def test_check_alerts_on_frozen_data(monkeypatch):
     monkeypatch.setattr(m, "BQ_DATASET", "PlexProd")
     calls = []
     monkeypatch.setattr(m, "maybe_send_stale_alert", lambda lag, newest: calls.append(lag))
+    monkeypatch.setattr(m, "STALE_ALERT_MINUTES", 120)   # the check passes its threshold through
     conn = FakeConn(FROZEN.values())
     assert m.check_odbc_freshness(conn, TUE_1246) == 277.0
     assert calls == [277.0]

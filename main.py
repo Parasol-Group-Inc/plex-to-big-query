@@ -1026,7 +1026,11 @@ def maybe_send_screens_alert(detail: str) -> bool:
 # longest weekday gap between 08:00 and 17:00 in the real data is 48 min, so
 # 120 min never fires on a normal working day (a holiday can, once). Fails open:
 # any error here is logged and the run carries on.
-STALE_ALERT_MINUTES = int(os.environ.get("STALE_ALERT_MINUTES", "120"))
+# 2026-11-11: raised to 360. Plex's ODBC is a copy refreshed about every 4 h (seen
+# at ~09:00, 13:00, 17:00 MT, each time to data ~1 h old; Plex's champion told
+# Jennilyn ODBC runs up to 4 h behind), so a normal lag reaches ~5 h before each
+# refresh. 6 h means a refresh was missed. docs/ODBC_VS_SCREENS.md.
+STALE_ALERT_MINUTES = int(os.environ.get("STALE_ALERT_MINUTES", "360"))
 STALE_CHECK_HOURS = (9, 17)              # MT, weekdays, [start, end)
 PLEX_TIME_ZONE = ZoneInfo("America/Denver")   # Plex returns naive MT datetimes
 _FRESHNESS_SQL = (
@@ -1082,7 +1086,7 @@ def check_odbc_freshness(conn, now_local: Optional[datetime] = None) -> Optional
                           for k, v in newest.items())
         log.info("ODBC data freshness (MT): %s; lag %s min.", shown,
                  "n/a" if lag is None else lag)
-        if stale_alert_due(lag, now_local):
+        if stale_alert_due(lag, now_local, STALE_ALERT_MINUTES):
             log.warning("Plex ODBC data looks stale: newest change %s min old.", lag)
             maybe_send_stale_alert(lag, newest)
         return lag

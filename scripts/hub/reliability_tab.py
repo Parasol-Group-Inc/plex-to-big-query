@@ -33,8 +33,8 @@ def code(s):
 
 
 VERDICTS = [
-    ("current", "ODBC has every screen record older than 2 h", "nothing"),
-    ("behind", "the oldest record or edit ODBC lacks is older than 2 h (RECON_LAG_TOLERANCE_MIN)", "quiet; email past 6 h (releases) or 12 h (shipments, revenue)"),
+    ("current", "ODBC has every screen record older than 5 h (ODBC refreshes about every 4 h)", "nothing"),
+    ("behind", "the oldest record or edit ODBC lacks is older than 5 h (RECON_LAG_TOLERANCE_MIN = 300)", "quiet; email past 6 h (releases) or 12 h (shipments, revenue)"),
     ("diverged", "ODBC changed a value after the screen showed another, a record missing below a later ODBC record for 2 h+, or ODBC has records the screen lacks twice running while ODBC itself is fresh", "email once a day"),
     ("odbc_unreachable", "ODBC connect or query failed, or a query hit its TOP", "email once a day; Label Design keeps taking new lines from the screens"),
     ("pipeline_behind", "ODBC is fine but BigQuery lacks records ODBC had before our last load", "email once a day (our ETL, not Plex)"),
@@ -42,13 +42,13 @@ VERDICTS = [
 ]
 
 EMAILS = [
-    ("Screens digest", "Emilio, Jennilyn, marketing", "8:20, 12:20, 4:20 PM MT, plus another run needing action at most once per 4 h; a lag under the lines reads \"ODBC catching up\" (info)", "each group's source label, the Label Design lines only the screens have, each screen's verdict, logins, screenshot folder"),
+    ("Screens digest", "Emilio, Jennilyn, marketing", "9:20, 13:20, 17:20 MT (just after ODBC refreshes), plus another run needing action at most once per 4 h; a lag under the lines reads \"ODBC catching up\" (info)", "each group's source label, the Label Design lines only the screens have, each screen's verdict, logins, screenshot folder"),
     ("Plex login failed", "Emilio only", "once a day per cause (a new cause mails at once), after one retry for causes that can pass on their own", "the cause (wrong password, password change, MFA, locked, Plex down, network, timeout), what Plex showed, the fix, the streak and last good login, the screenshot"),
     ("ODBC is behind or disagrees / caught up", "Emilio, Jennilyn, marketing", "releases over 6 h behind, shipments or revenue over 12 h (missed the overnight catch-up), or a verdict that is not a delay; once a day per group; caught up once after that", "lag, verdicts, why"),
     ("BigQuery missing records", "Emilio, Jennilyn, marketing", "pipeline_behind, once a day per screen", "examples; details in screen_recon_diff"),
-    ("ODBC data is N h old", "Emilio, Jennilyn, marketing", "weekdays 9-5, newest ODBC change 2 h+ old, once a day; quiet while ODBC is behind the screens for Label Design", "from every prod ETL run (check_odbc_freshness); kept at 2 h so a freeze like 11-10 is caught"),
+    ("ODBC data is N h old", "Emilio, Jennilyn, marketing", "weekdays 9-5, newest ODBC change 6 h+ old (a missed refresh), once a day", "from every prod ETL run (check_odbc_freshness); kept at 2 h so a freeze like 11-10 is caught"),
     ("Watchdog", "Emilio, Jennilyn, marketing", "a check newly failing, once a day per check", "which part stopped and the usual fix"),
-    ("ETL digest health line", "Emilio, Jennilyn, marketing", "every batch digest", "ODBC data 2 h+ old in work hours"),
+    ("ETL digest health line", "Emilio, Jennilyn, marketing", "every batch digest", "ODBC data 6 h+ old in work hours"),
     ("Google Cloud Monitoring", "Emilio (sent by Google, not SendGrid)", "watchdog silent 90 min, screens job silent 9 h, any email failing, 3+ timeout kills an hour", "so an alert arrives even if our code or SendGrid is down"),
 ]
 
@@ -66,11 +66,11 @@ CHECKS = [
     ("schedulers", "a Cloud Scheduler job paused or failing"),
     ("image_drift", "a job on a different build"),
     ("odbc_connect", "weekdays, 3 of the last 4 Label Design runs could not connect to ODBC"),
-    ("odbc_vs_plex", "Plex's REST API shows order changes our ODBC copy lacks for over 2 h"),
+    ("odbc_vs_plex", "Plex's REST API shows order changes our ODBC copy lacks for over 6 h (a missed refresh)"),
 ]
 
 GROUP_RULES = [
-    ("Screen read", "hourly on weekdays 6:20 AM-5:20 PM, every 4 h otherwise", "every 4 h, as an audit"),
+    ("Screen read", "hourly on weekdays 6:20 AM-5:20 PM, and with all screens at 01/05/09/13/17/21:20 (just after ODBC refreshes)", "every 4 h, as an audit"),
     ("What the report reads", "ODBC's lines plus the lines only the screen has (screen read under 3 h old)", "ODBC only (Jennilyn: not time critical, the data comes every day)"),
     ("A new order", "reaches Monday within the hour from the screen, Data Source \"Plex screens, read ...\"", "appears when ODBC delivers it, normally the same day or overnight"),
     ("When ODBC catches up", "the push fills the item's empty cells (reps, email, phone, priority, bottle, label fields) and marks Data Source \"confirmed by ODBC\"; never over the team's values", "nothing to do"),
@@ -167,7 +167,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <div class="panel"><h3>Where things are</h3><ul class="plain">
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
-<li>Settings: behind at 120 min, email at 360 min (Label Design) / 720 min (shipments, revenue), digest hours 8/12/16 (Terraform, job plex-live-screens; hourly scheduler plex-live-screens-releases-sync).</li>
+<li>Settings: behind at 300 min, email at 360 min (Label Design and ODBC alerts) / 720 min (shipments, revenue), digest hours 9/13/17; ODBC refreshes about every 4 h (Terraform, job plex-live-screens; hourly scheduler plex-live-screens-releases-sync).</li>
 <li>Cost: about $6 a month for the screens job (4-hourly plus weekday hourly), $1 for the watchdog.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>

@@ -14,6 +14,22 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - ODBC refreshes about every 4 h: alert lines and screen times follow
+
+Plex's champion told Jennilyn that ODBC runs up to 4 h behind. Our 114 prod-run freshness lines
+show its newest data jumping forward at about 09:00, 13:00 and 17:00 MT, each time to data about
+1 h old, and not moving in between. A 1-5 h lag is therefore normal.
+
+### Changed
+- **Stale-data email (`main.py` `STALE_ALERT_MINUTES`):** 120 → 360. The threshold is now passed
+  at call time.
+- **Watchdog `odbc_vs_plex` (`ODBC_PLEX_LAG_MIN`):** 120 → 360. 6 h means a missed refresh.
+- **Screens `RECON_LAG_TOLERANCE_MIN`:** 120 → 300 (Terraform). A normal pre-refresh lag is no
+  longer `behind`.
+- **Full screens check:** `20 1,5,9,13,17,21`, just after each refresh (was `20 */4`, just before
+  one). The weekday hourly releases read moves to `20 6,7,8,10,11,12,14,15,16`.
+- **Screens digest hours:** 9, 13, 17 (were 8, 12, 16).
+
 ## 2026-11-11 - Test MSL tables get prod's schema; OPEN_ITEMS cleanup
 
 ### Fixed

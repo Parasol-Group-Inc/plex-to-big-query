@@ -1,0 +1,50 @@
+[
+ {
+  "name": "board_id",
+  "type": "STRING"
+ },
+ {
+  "name": "board_name",
+  "type": "STRING"
+ },
+ {
+  "name": "item_id",
+  "type": "STRING"
+ },
+ {
+  "name": "item_name",
+  "type": "STRING"
+ },
+ {
+  "name": "subtasks_mm3zthme",
+  "type": "STRING"
+ },
+ {
+  "name": "date4",
+  "type": "STRING"
+ },
+ {
+  "name": "numeric_mm3ry8p5",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm3rcye8",
+  "type": "STRING"
+ },
+ {
+  "name": "person",
+  "type": "STRING"
+ },
+ {
+  "name": "status",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm3rakvr",
+  "type": "STRING"
+ },
+ {
+  "name": "formula_mm3w7cgm",
+  "type": "STRING"
+ }
+]

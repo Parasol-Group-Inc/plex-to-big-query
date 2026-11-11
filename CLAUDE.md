@@ -410,6 +410,14 @@ sends a digest at 9:20/13:20/17:20 MT to REPORT_TO_EMAILS.
 (a missed refresh) and the full screens checks run at :20 just after each refresh (01, 05 ... 21).
 `docs/ODBC_VS_SCREENS.md`.
 
+## Hand-built datasets are backed up in `custom_views/` (since 2026-11-11)
+
+Jennilyn's `VoxScorecardsLive` has 60 views and 25 tables, built in the console and not by the
+ETL. Its SQL and docs are in `custom_views/VoxScorecardsLive/`, and its table data is in
+`Backups.VoxScorecardsLive__*_20261111`.
+- **Refresh:** `python scripts/backup_custom_views.py VoxScorecardsLive`, then read the git diff.
+- **Not backed up yet:** `plex_mirror` (also hers).
+
 ## The manual-data app that is live is v2 (found 2026-11-10)
 
 The deployed app ("Vox Goals", database-direct) is **not** `deploy/manual_data_app/` (the older

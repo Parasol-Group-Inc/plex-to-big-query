@@ -389,7 +389,7 @@ function removeUsage(nsItemId) {
  */
 function uploadUsage(csvText) {
   var email = require_('part_usage');
-  var table = Utilities.parseCsv(String(csvText || '').replace(/^﻿/, ''));
+  var table = Utilities.parseCsv(String(csvText || '').replace(/^\uFEFF/, ''));  // strip a byte-order mark; written as an escape so copy and paste cannot lose it
   if (table.length < 2) throw new Error('The file has no data rows.');
   var h = table[0].map(function (x) { return String(x).trim().toLowerCase(); });
   if (h.indexOf('part_no') === -1 && h.indexOf('ns_item_id') === -1) throw new Error('Need a part_no or ns_item_id column.');

@@ -1,0 +1,50 @@
+[
+ {
+  "name": "board_id",
+  "type": "STRING"
+ },
+ {
+  "name": "board_name",
+  "type": "STRING"
+ },
+ {
+  "name": "item_id",
+  "type": "STRING"
+ },
+ {
+  "name": "item_name",
+  "type": "STRING"
+ },
+ {
+  "name": "person",
+  "type": "STRING"
+ },
+ {
+  "name": "color_mm1qbw8h",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1qsr4r",
+  "type": "STRING"
+ },
+ {
+  "name": "date_mm1qs3j9",
+  "type": "STRING"
+ },
+ {
+  "name": "long_text_mm1q919n",
+  "type": "STRING"
+ },
+ {
+  "name": "board_relation_mm1q24ak",
+  "type": "STRING"
+ },
+ {
+  "name": "lookup_mm1qat8c",
+  "type": "STRING"
+ },
+ {
+  "name": "pulse_log_mm2p4yzr",
+  "type": "STRING"
+ }
+]

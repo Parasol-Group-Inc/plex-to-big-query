@@ -1,0 +1,14 @@
+[
+ {
+  "name": "month",
+  "type": "DATE"
+ },
+ {
+  "name": "sales_rep",
+  "type": "STRING"
+ },
+ {
+  "name": "goal",
+  "type": "INT64"
+ }
+]

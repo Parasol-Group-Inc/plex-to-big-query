@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - Jennilyn's VoxScorecardsLive views backed up into the repo
+
+### Added
+- **`custom_views/VoxScorecardsLive/`:** all 85 objects of Jennilyn's hand-built dataset, which
+  was never in git before.
+  - 60 views: their SQL exactly as BigQuery stores it.
+  - 14 tables: the statement that last built each one, from job history.
+  - 11 tables: columns only (`.schema.json`), because another process loads them or they predate
+    the 180 days of job history.
+
+  The README lists every object with its rows, last change, author, the tables it reads and its
+  columns. Re-run with `scripts/backup_custom_views.py <dataset>`. The 25 tables' data is copied to
+  `Backups.VoxScorecardsLive__<table>_20261111`, with no expiry.
+
+### Fixed
+- **`deploy/manual_data_app_v2/Code.gs`:** the CSV upload strips a byte-order mark written as
+  `\uFEFF`, not as the invisible character. The copy of the live editor code taken on 11-11 had
+  lost that character, which turns CSVs saved by Excel into "Need a part_no column".
+
 ## 2026-11-11 - ODBC refreshes about every 4 h: alert lines and screen times follow
 
 Plex's champion told Jennilyn that ODBC runs up to 4 h behind. Our 114 prod-run freshness lines

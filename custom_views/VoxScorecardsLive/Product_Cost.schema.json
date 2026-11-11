@@ -1,0 +1,10 @@
+[
+ {
+  "name": "part",
+  "type": "STRING"
+ },
+ {
+  "name": "cost_ea",
+  "type": "FLOAT64"
+ }
+]

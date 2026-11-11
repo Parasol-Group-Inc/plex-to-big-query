@@ -62,7 +62,6 @@ CHECKS = [
     ("msl_daily", "no MSL demand history row for today after 7:30 AM"),
     ("usage_monthly", "last month's part usage not recorded by the 2nd"),
     ("backups", "no full weekly BigQuery snapshot set in the last 8 days (they had failed 10-27 to 11-09; fixed 11-10)"),
-    ("manual_data", "goals or safety incidents not loaded in 3 h (D34)"),
     ("test_cascade", "fewer than 12 test jobs ran overnight"),
     ("schedulers", "a Cloud Scheduler job paused or failing"),
     ("image_drift", "a job on a different build"),
@@ -93,7 +92,7 @@ DIAGRAM = """flowchart LR
   DF["data_freshness&lt;br/&gt;source + as-of per group"]
   Reports["17 reports&lt;br/&gt;data_source, data_as_of, data_label"]
   Monday["Monday: Data Source column&lt;br/&gt;Plex Import Test, Design &amp; QA"]
-  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 13 checks"]
+  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 12 checks"]
   GM["Google Monitoring&lt;br/&gt;heartbeats, email failures"]
   Screens --&gt; Job
   ODBC --&gt; Job
@@ -112,7 +111,7 @@ DIAGRAM = """flowchart LR
 
 def render_tab() -> str:
     stats = [("3", "Plex screens checked every 4 h"), ("17", "reports labeled with their source"),
-             ("13", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
+             ("12", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
              ("2 h", "ODBC lag tolerated before switching")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     verdicts = table(["Verdict", "When", "What happens"], [(code(v), esc(w), esc(h)) for v, w, h in VERDICTS])
@@ -149,7 +148,6 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <div class="panel"><h3>Where things are</h3><ul class="plain">
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
-<li><b>Broken now (D34):</b> the manual-data app's hourly push trigger is not running (no table refreshed since its last form save). Saves still push at once, so typed data arrives; only the hourly retry of a failed push is missing. The watchdog mails it daily.</li>
 <li>Settings: lag tolerance 120 min, 2 clean runs to switch back, digest hours 8/12/16 (Terraform, job plex-live-screens).</li>
 <li>Cost: about $2.40 a month for the screens job, $1 for the watchdog.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>

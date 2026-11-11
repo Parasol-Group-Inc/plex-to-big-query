@@ -1,3 +1,6 @@
+> **SUPERSEDED (2026-11-10): the live app is v2, in `deploy/manual_data_app_v2/`.** This folder is the
+> older sheet-based version (Code.gs + Push.gs + hourly `pushAll`). Do not paste it into the live project.
+
 # Manual Data — Apps Script web app
 
 One form for every number that has to be **typed by a human** rather than

@@ -371,7 +371,7 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   empties them on its next clean pass. Runbook: `docs/PLEX_SCREEN_EXTRACTION.md`,
   "Reconciliation".
 - **`plex-etl-watchdog`** (`watchdog.py`, every 30 min) checks dispatch, Label Design,
-  the screens job, raw freshness, MSL history, backups, manual data, the test cascade,
+  the screens job, raw freshness, MSL history, monthly usage, backups, the test cascade,
   schedulers and image drift (`PlexOps.watchdog_log`). Google Monitoring (not SendGrid)
   mails if its heartbeat or the recon heartbeat stops, if any email fails to send, or if
   runs are killed by timeouts. `docs/OPERATIONS.md`, "Watchdog and screen reconciliation".
@@ -388,6 +388,16 @@ its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness 
 it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).
 Monday's "Data Source" text column (both boards) gets `data_label` from the push. The screens job
 sends a digest at 8:20/12:20/16:20 MT to REPORT_TO_EMAILS.
+
+## The manual-data app that is live is v2 (found 2026-11-10)
+
+The deployed app ("Vox Goals", database-direct) is **not** `deploy/manual_data_app/` (the older
+sheet-based version with `pushAll`). v2 writes to BigQuery on every save, append-only, with an access
+list (`PlexProd.manual_data_access`); there is no hourly push, so an old table only means no saves.
+Its code is in `deploy/manual_data_app_v2/` (Code.gs + Index.html; reads `scorecard_goals_resolved`, the
+live copy still reads the orphan `v2_scorecard_goals_resolved` until redeployed, D36). **Never paste
+`deploy/manual_data_app/` into the live project.** Update v2 by editing only what changed, then
+Deploy > Manage deployments > edit > New version.
 
 ## Customer Notes in Plex (2026-11-09)
 

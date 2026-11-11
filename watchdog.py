@@ -34,10 +34,10 @@ DEN = ZoneInfo("America/Denver")
 UTC = dt.timezone.utc
 REPEAT_HOURS = 24
 
-# Raw tables that legitimately stop changing (orphans), and the BigQuery-only
-# tables the manual-data app writes every hour (deploy/manual_data_app/Push.gs).
+# Raw tables that legitimately stop changing (orphans).
+# (No manual-data check: the live app, deploy/manual_data_app_v2, writes to BigQuery only
+# when someone saves, so an old table is not a fault. Removed 2026-11-10, see D34.)
 STALE_RAW_ALLOW = {"raw_materials_parts"}
-MANUAL_TABLES = ["scorecard_goals_app", "safety_incidents"]
 # Schedulers that are paused on purpose (none of the plex-* ones today).
 PAUSED_OK = {"monday-daily-sync"}
 
@@ -183,16 +183,6 @@ def check_backups(c, now_mt):
             f"The scheduled query backup_snapshots_weekly failed."]
 
 
-def check_manual_data(c, now_mt):
-    rows = q(c, f"""
-        SELECT table_id, TIMESTAMP_MILLIS(last_modified_time) m FROM `{PROJECT}.PlexProd.__TABLES__`
-        WHERE table_id IN UNNEST(@t)
-          AND TIMESTAMP_MILLIS(last_modified_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR)"""
-             .replace("@t", "[" + ",".join(f"'{t}'" for t in MANUAL_TABLES) + "]"))
-    return [f"Manual data not reaching BigQuery: {r.table_id} last loaded {r.m.astimezone(DEN):%m-%d %H:%M} MT "
-            f"(the app's hourly pushAll trigger should reload it every hour)." for r in rows]
-
-
 def check_test_cascade(c, now_mt):
     if now_mt.hour < 7:
         return []
@@ -252,7 +242,6 @@ CHECKS = [
     ("msl_daily", check_msl_daily),
     ("usage_monthly", check_usage_monthly),
     ("backups", check_backups),
-    ("manual_data", check_manual_data),
     ("test_cascade", check_test_cascade),
     ("schedulers", check_schedulers),
     ("image_drift", check_image_drift),

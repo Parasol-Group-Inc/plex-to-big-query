@@ -1,0 +1,389 @@
+<!-- Vox Goals v2 (database-direct). Talks to Code.gs; no Google Sheet. -->
+<style>
+  :root{--paper:#F5F6F8;--card:#fff;--sunk:#EDEFF3;--ink:#16202B;--muted:#5B6672;--faint:#8C96A2;
+    --hair:#DCE1E7;--hair2:#C2CAD3;--navy:#0B3C6B;--navybg:#E4EEF8;--good:#1C6647;--goodbg:#E0EFE8;
+    --warn:#8A4B0A;--warnbg:#FBEEDA;--bad:#96301F;--badbg:#F9E7E3;--chg:#FFF4CC}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 18px 60px}
+  header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:16px}
+  h1{font-size:23px;margin:0}
+  .who{font-size:13px;color:var(--muted)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:3px;background:var(--goodbg);color:var(--good);margin-left:6px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .tabs button{font:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);border:1px solid var(--hair);border-radius:3px;padding:8px 14px}
+  .tabs button[aria-selected=true]{background:var(--navy);border-color:var(--navy);color:#fff}
+  .card{background:var(--card);border:1px solid var(--hair);border-radius:4px;padding:18px 20px;margin-bottom:16px}
+  .intro{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+  h2{font-size:16px;margin:0 0 10px} h3{font-size:14px;margin:18px 0 8px}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+  input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--hair2);border-radius:3px;background:#fff;color:var(--ink);width:100%}
+  textarea{min-height:64px}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+  .help{font-size:12.5px;color:var(--faint);margin-top:3px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .bar input,.bar select{width:auto}
+  button.primary{font:inherit;font-weight:700;cursor:pointer;background:var(--navy);color:#fff;border:none;border-radius:3px;padding:10px 20px}
+  button.primary[disabled]{opacity:.5;cursor:default}
+  button.ghost{font:inherit;cursor:pointer;background:#fff;color:var(--navy);border:1px solid var(--hair2);border-radius:3px;padding:8px 14px}
+  button.link{font:inherit;font-size:13px;cursor:pointer;background:none;border:none;color:var(--navy);text-decoration:underline;padding:0}
+  .msg{border-radius:3px;padding:10px 13px;font-size:14px;margin:10px 0;border:1px solid}
+  .ok{background:var(--goodbg);border-color:var(--good);color:var(--good)}
+  .warn{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
+  .bad{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+  .info{background:var(--sunk);border-color:var(--hair);color:var(--muted)}
+  .tbl{overflow-x:auto;border:1px solid var(--hair);border-radius:4px;background:#fff}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--hair);white-space:nowrap}
+  th{background:var(--sunk);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);position:sticky;top:0}
+  td.scope{font-weight:600;position:sticky;left:0;background:#fff}
+  td input.cell{width:110px;padding:5px 7px;text-align:right}
+  td input.cell.changed{background:var(--chg);border-color:var(--warn)}
+  tr.dead td{color:var(--faint);text-decoration:line-through}
+  .big{font-size:40px;font-weight:800;color:var(--good);line-height:1}
+  .muted{color:var(--muted)} .center{text-align:center}
+  .loading{color:var(--muted);padding:30px 0;text-align:center}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Vox Goals<span class="badge" id="ds"></span></h1>
+    <div class="who" id="who"></div>
+  </header>
+  <div id="boot" class="loading">Loading…</div>
+  <div id="app" hidden>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div id="msg"></div>
+    <div id="panel"></div>
+  </div>
+</div>
+
+<script>
+var B = null, active = null;
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt(n, unit){ if (n === '' || n == null || isNaN(n)) return ''; return (unit === 'USD' ? '$' : '') + Number(n).toLocaleString(undefined,{maximumFractionDigits:2}); }
+function say(cls, text){ $('msg').innerHTML = text ? '<div class="msg ' + cls + '">' + text + '</div>' : ''; }
+function errText(e){ return esc(String(e && e.message || e).replace(/^(Script)?Error:\s*/, '')); }
+
+/** google.script.run with promise-ish callbacks and a standard error message. */
+function call(fn){
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function(resolve, reject){
+    google.script.run.withSuccessHandler(resolve)
+      .withFailureHandler(function(e){ say('bad', errText(e)); reject(e); })[fn].apply(null, args);
+  });
+}
+
+function boot(){
+  call('getBoot').then(function(b){
+    B = b;
+    $('boot').hidden = true; $('app').hidden = false;
+    $('ds').textContent = b.dataset;
+    $('who').textContent = 'Signed in as ' + b.me + (b.isAdmin ? ' (admin)' : '');
+    if (!b.order.length){
+      $('panel').innerHTML = '<div class="card"><h2>No access yet</h2><p class="intro">You are not on the list for any area. Ask an admin to add ' + esc(b.me) + '.</p></div>';
+      return;
+    }
+    var bar = $('tabs');
+    b.order.forEach(function(k){
+      var btn = document.createElement('button');
+      btn.textContent = b.areas[k].label; btn.setAttribute('role','tab'); btn.dataset.key = k;
+      btn.onclick = function(){ open(k); };
+      bar.appendChild(btn);
+    });
+    open(b.order[0]);
+  }).catch(function(e){ $('boot').innerHTML = '<div class="msg bad">Could not load: ' + errText(e) + '</div>'; });
+}
+
+function open(k){
+  active = k; say('', '');
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){ b.setAttribute('aria-selected', String(b.dataset.key === k)); });
+  var kind = B.areas[k].kind;
+  $('panel').innerHTML = '<div class="loading">Loading…</div>';
+  ({ goals: goalsPanel, safety: safetyPanel, part_usage: usagePanel, msl_rules: rulesPanel, admin: adminPanel })[kind](k);
+}
+
+// ── Goals ──────────────────────────────────────────────────────────────────
+var G = null;   // current grid
+
+function goalsPanel(area){
+  var y = B.year;
+  $('panel').innerHTML =
+    '<div class="card"><h2>' + esc(B.areas[area].label) + '</h2>' +
+    '<p class="intro">These are the goals in effect now. Change any cell (changed cells turn yellow), add a note if useful, then Save. ' +
+    'Each save is kept as history. To clear a goal, empty the cell. If an older goal from the original spreadsheet exists, it will show again, so type 0 to make it zero.</p>' +
+    '<div class="bar"><label style="margin:0">Year</label><select id="gy">' +
+      [y - 1, y, y + 1].map(function(v){ return '<option' + (v === y ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+    '</select><button class="ghost" id="fillBtn" title="Copy the first filled month of each row into the empty months after it">Fill empty months →</button></div>' +
+    '<div id="grid" class="loading">Loading…</div>' +
+    '<div class="row" style="margin-top:12px"><div><label>Note (optional)</label><input id="gnote" maxlength="500" placeholder="e.g. Approved by CFO 11/5"></div></div>' +
+    '<div class="bar"><button class="primary" id="gsave" disabled>Save changes</button><span id="gcount" class="muted"></span></div></div>' +
+    '<div class="card"><h3 style="margin-top:0">Recent changes</h3><div id="ghist" class="loading">Loading…</div></div>';
+  $('gy').onchange = function(){ loadGoals(area); };
+  $('gsave').onclick = function(){ saveGoalsNow(area); };
+  $('fillBtn').onclick = fillEmpty;
+  loadGoals(area);
+  loadGoalHistory(area);
+}
+
+function loadGoals(area){
+  $('grid').innerHTML = '<div class="loading">Loading…</div>';
+  call('getGoals', area, Number($('gy').value)).then(function(g){
+    G = g;
+    var h = '<div class="tbl"><table><thead><tr><th>' + (g.scopes.length > 1 ? 'Applies to' : '') + '</th>' +
+            MONTHS.map(function(m){ return '<th>' + m + '</th>'; }).join('') + '</tr></thead><tbody>';
+    g.scopes.forEach(function(s, si){
+      h += '<tr><td class="scope">' + esc(s) + '</td>';
+      for (var m = 1; m <= 12; m++){
+        var c = (g.grid[s] || {})[m];
+        var v = c ? c.value : '';
+        var tip = c ? 'Last changed by ' + c.by + ' at ' + c.at : 'No goal set';
+        h += '<td><input class="cell" inputmode="decimal" data-s="' + si + '" data-m="' + m + '" data-orig="' + esc(v) + '" value="' + esc(v) + '" title="' + esc(tip) + '"></td>';
+      }
+      h += '</tr>';
+    });
+    $('grid').innerHTML = h + '</tbody></table></div><div class="help">Hover a cell to see who last changed it. Units: ' + (g.unit === 'USD' ? 'dollars' : 'units') + '.</div>';
+    Array.prototype.forEach.call(document.querySelectorAll('input.cell'), function(inp){ inp.oninput = markChanged; });
+    markChanged();
+  });
+}
+
+function clean(v){ return String(v).replace(/[$,\s]/g, ''); }
+
+function markChanged(){
+  var n = 0;
+  Array.prototype.forEach.call(document.querySelectorAll('input.cell'), function(inp){
+    var ch = clean(inp.value) !== clean(inp.dataset.orig);
+    inp.classList.toggle('changed', ch);
+    if (ch) n++;
+  });
+  $('gsave').disabled = !n;
+  $('gcount').textContent = n ? n + ' change' + (n > 1 ? 's' : '') + ' not saved yet' : '';
+}
+
+function fillEmpty(){
+  var rows = {};
+  Array.prototype.forEach.call(document.querySelectorAll('input.cell'), function(inp){ (rows[inp.dataset.s] = rows[inp.dataset.s] || []).push(inp); });
+  Object.keys(rows).forEach(function(k){
+    var last = '';
+    rows[k].forEach(function(inp){ if (clean(inp.value) !== '') last = inp.value; else if (last !== '') inp.value = last; });
+  });
+  markChanged();
+}
+
+function saveGoalsNow(area){
+  var changes = [];
+  Array.prototype.forEach.call(document.querySelectorAll('input.cell.changed'), function(inp){
+    changes.push({ scope: G.scopes[Number(inp.dataset.s)], month: Number(inp.dataset.m), value: clean(inp.value) });
+  });
+  var removing = changes.filter(function(c){ return c.value === ''; }).length;
+  if (removing && !confirm(removing + ' goal(s) will be cleared. Continue?')) return;
+  $('gsave').disabled = true;
+  say('info', 'Saving…');
+  call('saveGoals', area, Number($('gy').value), changes, $('gnote').value).then(function(r){
+    say('ok', esc(r.message)); $('gnote').value = '';
+    loadGoals(area); loadGoalHistory(area);
+  }).catch(function(){ markChanged(); });
+}
+
+function loadGoalHistory(area){
+  call('getGoalHistory', area).then(function(rows){
+    if (!rows.length){ $('ghist').innerHTML = '<div class="muted">No changes yet.</div>'; return; }
+    $('ghist').innerHTML = '<div class="tbl"><table><thead><tr><th>Month</th><th>Applies to</th><th>Goal</th><th>Note</th><th>By</th><th>When</th></tr></thead><tbody>' +
+      rows.map(function(r){
+        var removed = String(r.removed) === 'true';
+        return '<tr' + (removed ? ' class="dead"' : '') + '><td>' + esc(r.month) + '</td><td>' + esc(r.scope) + '</td><td>' +
+               (removed ? 'cleared' : esc(fmt(r.value, B.areas[area].unit))) + '</td><td>' + esc(r.note) + '</td><td>' +
+               esc(r.updated_by) + '</td><td>' + esc(r.ts) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  });
+}
+
+// ── Safety ─────────────────────────────────────────────────────────────────
+function safetyPanel(){
+  call('getSafety').then(function(s){
+    var today = new Date().toISOString().slice(0, 10);
+    var areas = (B.workcenterGroups || []).concat(['Warehouse','Shipping','Office','Other']);
+    $('panel').innerHTML =
+      '<div class="card center"><div class="big">' + s.safeDays + '</div><div class="muted">days since the last OSHA-recordable incident (' + esc(s.lastRecordable) + ')</div></div>' +
+      '<div class="card"><h2>Log an incident</h2><p class="intro">Marking it OSHA recordable resets the safe-days count on the scorecard. Near misses can be logged as not recordable.</p>' +
+      '<div class="row">' +
+        '<div><label>Date of incident *</label><input type="date" id="si_date" max="' + today + '"></div>' +
+        '<div><label>Area *</label><select id="si_area"><option value="">— choose —</option>' + areas.map(function(a){ return '<option>' + esc(a) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Type *</label><select id="si_type"><option value="">— choose —</option>' + B.incidentTypes.map(function(a){ return '<option>' + esc(a) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>OSHA recordable? *</label><select id="si_rec"><option value="">— choose —</option><option value="true">Yes</option><option value="false">No</option></select></div>' +
+        '<div><label>Days lost</label><input type="number" min="0" step="any" id="si_days"></div>' +
+      '</div><div><label>What happened *</label><textarea id="si_desc" maxlength="1000"></textarea></div>' +
+      '<div class="bar"><button class="primary" id="si_save">Log incident</button></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Incidents on record</h3>' + incidentTable(s.incidents) + '</div>';
+    $('si_save').onclick = function(){
+      if (!$('si_rec').value){ say('bad', 'Choose whether it is OSHA recordable.'); return; }
+      this.disabled = true;
+      call('addIncident', { incident_date: $('si_date').value, area: $('si_area').value, incident_type: $('si_type').value,
+                            recordable: $('si_rec').value, days_lost: $('si_days').value, description: $('si_desc').value })
+        .then(function(r){ say('ok', esc(r.message)); safetyPanel(); })
+        .catch(function(){ $('si_save').disabled = false; });
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-retract]'), function(b){
+      b.onclick = function(){
+        var k = s.incidents[Number(b.dataset.retract)];
+        if (!confirm('Remove the ' + k.incident_type + ' on ' + k.incident_date + '? It stays in history.')) return;
+        call('retractIncident', k).then(function(r){ say('ok', esc(r.message)); safetyPanel(); });
+      };
+    });
+  });
+}
+
+function incidentTable(rows){
+  if (!rows.length) return '<div class="muted">No incidents logged. Safe days count from the baseline date.</div>';
+  return '<div class="tbl"><table><thead><tr><th>Date</th><th>Area</th><th>Type</th><th>Recordable</th><th>Days lost</th><th>What happened</th><th>Logged by</th><th></th></tr></thead><tbody>' +
+    rows.map(function(r, i){
+      return '<tr><td>' + esc(r.incident_date) + '</td><td>' + esc(r.area) + '</td><td>' + esc(r.incident_type) + '</td><td>' +
+             (String(r.recordable) === 'true' ? 'Yes' : 'No') + '</td><td>' + esc(r.days_lost) + '</td><td style="white-space:normal">' +
+             esc(r.description) + '</td><td>' + esc(r.updated_by) + '</td><td><button class="link" data-retract="' + i + '">Remove</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+// ── Part usage ─────────────────────────────────────────────────────────────
+var UROWS = [];
+function usagePanel(){
+  $('panel').innerHTML =
+    '<div class="card"><h2>Part usage</h2><p class="intro">Average daily usage per part. The usage saved here is what the Approaching MSL report uses for that part. ' +
+    'The minimum inventory quantity (MSL) is set in Plex, not here.</p><div id="usum" class="msg info">Loading summary…</div>' +
+    '<div class="bar"><input id="uq" placeholder="Search part number, NetSuite id or description" style="flex:1;min-width:260px"><button class="ghost" id="ugo">Search</button></div>' +
+    '<div id="ures"></div></div>' +
+    '<div class="card"><h2 id="uform_h">Add or change usage</h2>' +
+    '<div class="row">' +
+      '<div><label>Plex part number</label><input id="u_part" placeholder="33041-00VOXNU-0"></div>' +
+      '<div><label>NetSuite item (optional)</label><input id="u_ns" placeholder="13041"></div>' +
+      '<div><label>Avg daily usage *</label><input id="u_usage" type="number" min="0" step="any"></div>' +
+      '<div><label>As of</label><input id="u_asof" type="date"><div class="help">Defaults to today.</div></div>' +
+    '</div><div class="row"><div><label>Description</label><input id="u_desc"></div><div><label>Note</label><input id="u_note" maxlength="500" placeholder="e.g. based on Q3 run rate"></div></div>' +
+    '<div class="bar"><button class="primary" id="usave">Save</button><button class="link" id="uclear">Clear</button></div></div>' +
+    '<div class="card"><details><summary style="cursor:pointer;font-weight:600">Upload a CSV instead</summary>' +
+    '<p class="intro" style="margin-top:8px">Columns: <b>part_no, ns_item_id, description, usage, as_of_date, note</b>. ' +
+    'Each row needs usage plus part_no or ns_item_id. Every row is checked first; if any fail, nothing is saved.</p>' +
+    '<input type="file" id="ufile" accept=".csv,text/csv"> <button class="ghost" id="utpl">Download template</button><br><br>' +
+    '<button class="primary" id="uup">Upload</button><div id="uupmsg"></div></details></div>';
+
+  call('getUsageSummary').then(function(s){
+    $('usum').innerHTML = esc(s.n || 0) + ' parts have usage entered (' + esc(s.mapped || 0) + ' matched to a Plex part number). Newest figures dated ' + esc(s.newest || 'n/a') + '.';
+  });
+  $('ugo').onclick = searchUsageNow;
+  $('uq').onkeydown = function(e){ if (e.key === 'Enter') searchUsageNow(); };
+  $('usave').onclick = function(){
+    this.disabled = true;
+    call('saveUsage', { part_no: $('u_part').value, ns_item_id: $('u_ns').value, usage: $('u_usage').value,
+                        as_of_date: $('u_asof').value, description: $('u_desc').value, note: $('u_note').value })
+      .then(function(r){ say('ok', esc(r.message)); $('usave').disabled = false; if ($('uq').value) searchUsageNow(); })
+      .catch(function(){ $('usave').disabled = false; });
+  };
+  $('uclear').onclick = function(){ fillUsage({}); };
+  $('utpl').onclick = function(){
+    var a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('part_no,ns_item_id,description,usage,as_of_date,note\n');
+    a.download = 'part_usage_template.csv'; document.body.appendChild(a); a.click(); a.remove();
+  };
+  $('uup').onclick = function(){
+    var f = $('ufile').files[0];
+    if (!f){ $('uupmsg').innerHTML = '<div class="msg warn">Choose a file first.</div>'; return; }
+    var rd = new FileReader();
+    rd.onload = function(){
+      $('uupmsg').innerHTML = '<div class="msg info">Checking and saving…</div>';
+      call('uploadUsage', rd.result).then(function(r){
+        $('uupmsg').innerHTML = r.ok ? '<div class="msg ok">' + esc(r.message) + '</div>'
+          : '<div class="msg bad"><b>Nothing was saved.</b> ' + r.errorCount + ' problem(s):<br>' + r.errors.map(esc).join('<br>') + '</div>';
+      });
+    };
+    rd.readAsText(f);
+  };
+}
+
+function searchUsageNow(){
+  $('ures').innerHTML = '<div class="loading">Searching…</div>';
+  call('searchUsage', $('uq').value).then(function(rows){
+    UROWS = rows;
+    if (!rows.length){ $('ures').innerHTML = '<div class="muted">No matches. Use the form below to add a part.</div>'; return; }
+    $('ures').innerHTML = '<div class="tbl"><table><thead><tr><th>Plex part</th><th>NetSuite</th><th>Description</th><th>Usage/day</th><th>As of</th><th>Changed by</th><th></th></tr></thead><tbody>' +
+      rows.map(function(r, i){
+        var has = !!r.ns_item_id;
+        return '<tr><td>' + esc(r.part_no) + '</td><td>' + esc(has && r.ns_item_id.indexOf('PLEX:') !== 0 ? r.ns_item_id : '') +
+          '</td><td style="white-space:normal;max-width:340px">' + esc(r.description) + '</td><td>' + (r.usage == null ? '<span class="muted">none</span>' : esc(fmt(r.usage))) +
+          '</td><td>' + esc(r.as_of_date) + '</td><td>' + esc(r.updated_by) + '</td><td><button class="link" data-edit="' + i + '">' + (has ? 'Edit' : 'Add') + '</button>' +
+          (has ? ' · <button class="link" data-del="' + i + '">Remove</button>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function(b){ b.onclick = function(){ fillUsage(UROWS[Number(b.dataset.edit)]); }; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-del]'), function(b){
+      b.onclick = function(){
+        var r = UROWS[Number(b.dataset.del)];
+        if (!confirm('Remove the usage for ' + (r.part_no || r.ns_item_id) + '? The report falls back to Plex usage.')) return;
+        call('removeUsage', r.ns_item_id).then(function(x){ say('ok', esc(x.message)); searchUsageNow(); });
+      };
+    });
+  });
+}
+
+function fillUsage(r){
+  $('u_part').value = r.part_no || ''; $('u_ns').value = (r.ns_item_id && r.ns_item_id.indexOf('PLEX:') !== 0) ? r.ns_item_id : '';
+  $('u_usage').value = r.usage || ''; $('u_asof').value = '';
+  $('u_desc').value = r.description || ''; $('u_note').value = r.note || '';
+  $('uform_h').textContent = (r.part_no || r.ns_item_id) ? 'Change usage: ' + (r.part_no || r.ns_item_id) + (r.usage ? ' (now ' + fmt(r.usage) + '/day)' : '') : 'Add or change usage';
+  $('u_usage').focus(); $('uform_h').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── MSL rules ──────────────────────────────────────────────────────────────
+function rulesPanel(){
+  call('getRules').then(function(rules){
+    $('panel').innerHTML = '<div class="card"><h2>MSL rules</h2><p class="intro">Thresholds behind the Approaching MSL report. Only the ones you change are saved.</p>' +
+      rules.map(function(r){
+        return '<div style="margin-bottom:12px;max-width:420px"><label>' + esc(r.label) + '</label><input type="number" min="0" step="any" id="r_' + r.name + '" value="' + esc(r.value) + '">' +
+               '<div class="help">' + esc(r.help) + ' Default ' + esc(r.def) + '.</div></div>';
+      }).join('') + '<button class="primary" id="rsave">Save</button></div>';
+    $('rsave').onclick = function(){
+      var f = {}; rules.forEach(function(r){ f[r.name] = $('r_' + r.name).value; });
+      call('saveRules', f).then(function(x){ say('ok', esc(x.message)); });
+    };
+  });
+}
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+function adminPanel(){
+  call('getAccess').then(function(a){
+    var head = '<tr><th>User</th>' + a.areas.map(function(x){ return '<th class="center">' + esc(x.label) + '</th>'; }).join('') + '<th></th></tr>';
+    var body = a.users.map(function(u){
+      return '<tr><td>' + esc(u.email) + '</td>' + a.areas.map(function(x){
+        return '<td class="center"><input type="checkbox" style="width:auto" data-e="' + esc(u.email) + '" data-a="' + x.key + '"' +
+               (u.areas.indexOf(x.key) !== -1 ? ' checked' : '') + '></td>';
+      }).join('') + '<td><button class="link" data-rm="' + esc(u.email) + '">Remove user</button></td></tr>';
+    }).join('');
+    $('panel').innerHTML = '<div class="card"><h2>User access</h2><p class="intro">Tick a box to let someone edit that area. Changes save immediately. ' +
+      'Admins can edit every area and manage this list. There must always be at least one admin, and you cannot remove your own admin access.</p>' +
+      '<div class="tbl"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' +
+      '<h3>Add a user</h3><div class="bar"><input id="nu" placeholder="name@parasolgroupinc.com or @voxnutrition.com" style="min-width:280px">' +
+      '<select id="na">' + a.areas.map(function(x){ return '<option value="' + x.key + '">' + esc(x.label) + '</option>'; }).join('') + '</select>' +
+      '<button class="primary" id="nadd">Add</button></div><div class="help">Add them to one area here, then tick any others in the table.</div></div>';
+    Array.prototype.forEach.call(document.querySelectorAll('input[data-a]'), function(cb){
+      cb.onchange = function(){
+        cb.disabled = true;
+        call('setAccess', cb.dataset.e, cb.dataset.a, cb.checked)
+          .then(function(r){ say('ok', esc(r.message)); cb.disabled = false; })
+          .catch(function(){ cb.checked = !cb.checked; cb.disabled = false; });
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function(b){
+      b.onclick = function(){
+        if (!confirm('Remove all access for ' + b.dataset.rm + '?')) return;
+        call('removeUser', b.dataset.rm).then(function(r){ say('ok', esc(r.message)); adminPanel(); });
+      };
+    });
+    $('nadd').onclick = function(){
+      call('setAccess', $('nu').value, $('na').value, true).then(function(r){ say('ok', esc(r.message)); adminPanel(); });
+    };
+  });
+}
+
+boot();
+</script>

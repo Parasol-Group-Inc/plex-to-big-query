@@ -314,7 +314,8 @@ function retractIncident(k) {
 // Average daily usage per part (PlexProd.msl_item_inputs, a table we built and
 // fill by hand). The minimum inventory quantity (MSL / reorder point) lives in
 // Plex and is NOT edited here. Whatever usage is entered here is the usage the
-// Approaching MSL report uses for that part, ahead of Plex's own figure.
+// Approaching MSL report uses for that part until Plex has usage_min_days (183, about 6 months)
+// of production history; after that, Plex's own average takes over (Jennilyn, 2026-11-10).
 
 var LIVE_USAGE_ =
   'WITH live AS (SELECT * EXCEPT(rn) FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY ns_item_id ORDER BY updated_at DESC) rn ' +

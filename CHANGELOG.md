@@ -20,7 +20,9 @@ don't need an entry.
   its INSERTs use. It read `v2_scorecard_goals_resolved`, an orphan of the 09-22 rename that still exists
   in BigQuery (with three `v2_*_vs_goal_report` views); its rows equal `scorecard_goals_resolved` (0
   differences). The repo copy now reads `scorecard_goals_resolved`, so the orphans can be dropped after
-  the app is redeployed. `manual_data_access` (26 rows, BigQuery-only) added to the weekly backup.
+  the app is redeployed. `manual_data_access` (26 rows, BigQuery-only) added to the weekly backup. The Part
+  usage tab's text now says entered usage holds until Plex has 6 months of history (it said "ahead of Plex"
+  for ever; Jennilyn's own description of the rule is the hand-off the report does).
 
 - **Found:** the deployed manual-data app is v2 ("Vox Goals", database-direct): saves write to BigQuery
   directly, append-only, with an access list (`PlexProd.manual_data_access`) and no hourly push. Its

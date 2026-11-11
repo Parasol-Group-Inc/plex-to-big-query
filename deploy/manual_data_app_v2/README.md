@@ -40,6 +40,10 @@ Terraform or the ETL.
    nothing visible. After the app is redeployed, the orphan views `v2_scorecard_goals_resolved`,
    `v2_revenue_vs_goal_report`, `v2_production_vs_goal_report`, `v2_sales_vs_goal_report` can be dropped
    once no Looker data source uses them (OPEN_ITEMS D36).
+3. The Part usage tab (Index.html) and the matching Code.gs comment said entered usage is used "ahead of
+   Plex's own figure", i.e. for ever. Jennilyn's own description of the rule (2026-11-10: "using the
+   manual usage until [N] days have passed, and then it will transition to the plex usage") is what
+   the report does, so the text now says entered usage holds until Plex has 6 months of history.
 
 ## Changing it
 

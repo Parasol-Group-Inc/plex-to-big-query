@@ -21,6 +21,27 @@ multi-line "Note". The Brief Note and the Contact Information note are left alon
 > for a later decision:** 927 inactive customers, 3 name mismatches, 690 codes not in Plex,
 > 1,395 comments with no code (hub tab filters).
 
+## Where the note shows (checked 2026-11-11)
+
+Ashley asked whether the note pops up on customer orders or only on the profile. It is on the profile only.
+The check was read-only in Plex, with L&M Supplements (note starting "ACH Signed Prop 65") and its open
+order 681.
+
+| Screen | Shows the customer note? |
+| --- | --- |
+| Customer Details (the profile), Note field | **yes** |
+| Sales order form (order 681) | no. Its NOTES section holds the order's own Internal Note, Printed Note, Special Instructions and Shipper Note |
+| The order's Notes tab (order notes) | no ("No Records Were Found") |
+| Order Line Rapid Entry | no |
+| Sales Orders search list | no |
+| The info icon beside Customer on the order | no (field help only) |
+
+Not checked: creating a new order, which would write to Plex, and printed documents such as the packing
+list. A note that must travel with an order belongs in one of the order's own notes.
+
+Screenshots are in `etl-manual/customer_note/ashley_check/` (gitignored: customer data) and on the hub's
+**Customer notes** tab.
+
 **Backups:** everything in `etl-manual/customer_note/` (the customer backups taken before the
 update, the plan, the action log, `loop.out`, screenshots) is in
 `gs://voxdatalake-terraform-state/plex-to-big-query/backups/customer-notes/2026-11-10T032245Z/customer_note.zip`,

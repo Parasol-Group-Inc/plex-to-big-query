@@ -74,13 +74,20 @@ What to expect:
 - **Some values are newer than the database copy.** For example, a customer
   PO typed in after 4 Nov ("N/A" became "438"), or a job note edited since.
   Items already on Monday are not changed: the push only creates new items.
-- **Since 2026-11-10 a cloud job decides, every 4 hours.** It compares Plex's screens with
-  ODBC and switches this report to the screens only while ODBC is behind (more than 2
-  hours) or disagrees, then back after 2 clean checks (8 hours). Nobody has to start anything.
-- **It switches back by itself.** If the laptop program stops for 3 hours,
-  the queue goes back to the database copy. When the feed returns, the
-  regular 15-minute checks start pushing again, and the laptop program stops
-  starting the push.
+- **Since 2026-11-11 the screens and the database work together** (no more switching).
+  A cloud job reads the Label Design screen every hour on weekdays (6:20 AM to 5:20 PM),
+  and every 4 hours otherwise. The queue is everything the database has, **plus** any line
+  the screen shows that the database doesn't have yet. That line goes to Monday within the
+  hour. Its Data Source says "Plex screens, read ...".
+- **The database fills in the rest.** When the database catches up, usually 1 to 5 hours
+  later, the push fills that item's empty cells:
+  - reps, email and phone, priority, bottle material;
+  - label part, size, printing material and allergen.
+
+  It also marks Data Source "confirmed by ODBC". It never overwrites a value the push sent
+  or the team typed.
+- **If the screens stop, nothing is lost.** Lines just arrive at the database's speed again.
+  All the rules: `docs/ODBC_VS_SCREENS.md`.
 
 PlexTest is not affected. How it works, what can go wrong and how to retire
 it: `docs/PLEX_SCREEN_EXTRACTION.md`.

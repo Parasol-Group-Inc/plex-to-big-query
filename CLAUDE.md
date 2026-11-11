@@ -352,8 +352,19 @@ emails "ACTION NEEDED: Plex ODBC data is N h old" (`check_odbc_freshness`,
 
 ## Screens vs ODBC every 4 h; watchdog every 30 min (since 2026-11-10)
 
-All the rules in one page (which source each report reads, when it switches, when we email):
-`docs/ODBC_VS_SCREENS.md`.
+All the rules in one page: `docs/ODBC_VS_SCREENS.md`.
+
+**Since 2026-11-11 Label Design combines, it does not switch.** The releases screen is read:
+- hourly on weekdays (`plex-live-screens-releases-sync`, `RECON_ONLY=releases`);
+- every 4 h with the other two screens.
+
+`label_design_view.sql` takes ODBC's lines **plus** the lines only the screens have. Those
+rows have `data_source = 'live'` and a per-row `data_label`. The push later fills their items'
+blank cells from ODBC (`fill.SCREEN_FIELDS`, empty cells only, once each). It rewrites Data
+Source to "...; confirmed by ODBC". Revenue never switches (Jennilyn: not time critical) and
+mails only past 12 h (`RECON_REVENUE_ALERT_LAG_MIN`). `live_source.use_live` means "takes
+screen rows" (always label_design). `odbc_behind` is the old switch, which main.py's alert
+silencer reads.
 
 ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every run
 "succeeded"). So two Cloud Run jobs now watch from outside the ETL:

@@ -49,6 +49,11 @@ is on Monday. Every run also writes Label Part #, Label Size, Printing
 Material and Allergen into the EMPTY cells of items it created that are still
 in the view, once per (item, field), never over a value already there. Logged
 as `outcome = 'filled'`. See fill.py.
+Since 2026-11-11 an item created from a Plex SCREENS row (Data Source "Plex screens,
+read ...") also gets its reps, contact, priority, bottle material, description and
+Customer PO filled the same way once ODBC has the line, and its Data Source becomes
+"...; confirmed by ODBC <time> MT". One write per cell; a column Monday refuses for our
+account is logged as refused and settled (docs/ODBC_VS_SCREENS.md).
 
 EMAIL. A run that ends badly (label check failed, Design & QA refused a label,
 items failed or partial, the alarm, a crash) or that ADDED labels to Design &
@@ -347,13 +352,22 @@ def fill_candidates(bq, rows):
     """View rows whose pushed item may be missing a label field (fill.plan)."""
     q = (f"SELECT lcr, monday_item_id, outcome, column_values FROM `{GCP_PROJECT}.{BQ_DATASET}.{AUDIT_TABLE}` "
          f"WHERE outcome IN ('created', 'partial', 'filled') AND monday_item_id IS NOT NULL ORDER BY pushed_at")
-    pushed, settled = {}, {}
+    pushed, settled, from_screens = {}, {}, set()
     for a in bq.query(q).result():
+        try:
+            cv = json.loads(a.column_values or "{}")
+        except ValueError:
+            cv = {}
         if a.outcome == "filled":
-            settled.setdefault(a.lcr, set()).update(json.loads(a.column_values or "{}"))
+            settled.setdefault(a.lcr, set()).update(cv)
         else:   # the latest creation wins
             pushed[a.lcr] = a.monday_item_id
-    return fill.plan(rows, pushed, settled)
+            # created from a Plex screens row: its Data Source said so (fill.SCREEN_FIELDS)
+            if any(isinstance(v, str) and v.startswith(fill.SCREENS_PREFIX) for v in cv.values()):
+                from_screens.add(a.lcr)
+            else:
+                from_screens.discard(a.lcr)
+    return fill.plan(rows, pushed, settled, from_screens)
 
 
 def fill_blanks(api, bq, ctx, candidates):
@@ -368,7 +382,8 @@ def fill_blanks(api, bq, ctx, candidates):
             log.warning(f"Label colours (fill){' (BLOCKING)' if blocking else ''}: {p}")
         return not any(b for b, _ in problems)
     try:
-        results = fill.fill(api, candidates, align_status, apply=not DRY_RUN, log=log.info)
+        now_label = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("America/Denver")).strftime("%m-%d %H:%M MT")
+        results = fill.fill(api, candidates, align_status, apply=not DRY_RUN, log=log.info, now_label=now_label)
     except Exception as e:
         log.warning(f"Filling label fields stopped ({type(e).__name__}: {str(e)[:300]}); the next run tries again")
         return
@@ -376,17 +391,20 @@ def fill_blanks(api, bq, ctx, candidates):
     for res in results:
         for e in res["errors"]:
             log.warning(f"  fill item {res['item_id']}: {e}")
-        if DRY_RUN or not (res["written"] or res["already_set"]):
+        if DRY_RUN or not (res["written"] or res["already_set"] or res["denied"]):
             continue
         r = res["row"]
-        detail = "; ".join([f"{t} = {v['label'] if isinstance(v, dict) else v}" for t, v in res["written"].items()]
-                           + [f"{t} already set on the board" for t in res["already_set"]])
+        detail = "; ".join([f"{t} = {v.get('label') or v.get('text') if isinstance(v, dict) else v}"
+                            for t, v in res["written"].items()]
+                           + [f"{t} already set on the board" for t in res["already_set"]]
+                           + [f"{t} refused by Monday for our account (left for the team)" for t in res["denied"]])
         audit.append({"run_id": ctx["run_id"], "pushed_at": dt.datetime.now(dt.timezone.utc), "board_id": BOARD_ID,
                       "dedupe_key": r["dedupe_key"], "lcr": r["_lcr"], "order_number": r.get("order_number"),
                       "customer_part_no": r.get("customer_part_no"), "monday_item_id": str(res["item_id"]),
                       "outcome": "filled", "detail": detail[:1000],
                       # Title -> value written, or null when the cell was already set: both are settled.
-                      "column_values": json.dumps({**res["written"], **{t: None for t in res["already_set"]}})})
+                      "column_values": json.dumps({**res["written"],
+                                                   **{t: None for t in res["already_set"] + res["denied"]}})})
     write_audit(bq, audit)
     log.info(f"Label fields: {sum(1 for a in results if a['written'])} item(s) filled, "
              f"{sum(len(a['already_set']) for a in results)} field(s) already set")

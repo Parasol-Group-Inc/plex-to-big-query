@@ -498,6 +498,16 @@ Terraform. Details: `docs/OPERATIONS.md` § "Batch emails".
 
 ## Convention
 
+**Every answer also goes into the work log (Emilio, 2026-11-11).** Emilio finds the chat hard
+to keep up with, so each answer, finding, change and decision is also appended to the Claude Doc
+"Plex ETL work log" (https://claude.ai/artifact/2Shqehydk8GV7a9m4Fy4w2).
+- **Log:** add a row on top of its Log table (When MT · What · Detail and evidence · Next).
+- **Keep current:** "Waiting on you" and "Current state".
+- **Plain-words findings:** add an "Explained:" section.
+- **Full conversation:** the page https://claude.ai/artifact/G3WN5k2TEH1KTvvpxQrrk6, rebuilt by
+  `~/plex-monitor/build_transcript.py`.
+- **Daily check:** a scan confirms nothing is missing.
+
 Every commit that changes behavior, infrastructure, or a deployed report
 gets a matching `CHANGELOG.md` entry, added in the same commit, plus a
 status-line update in whichever `reports-list/`/`spreadsheets/` doc tracks

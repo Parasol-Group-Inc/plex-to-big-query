@@ -169,6 +169,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
 <li>Settings: behind at 300 min, email at 360 min (Label Design and ODBC alerts) / 720 min (shipments, revenue), digest hours 9/13/17; ODBC refreshes about every 4 h (Terraform, job plex-live-screens; hourly scheduler plex-live-screens-releases-sync).</li>
 <li>Cost: about $6 a month for the screens job (4-hourly plus weekday hourly), $1 for the watchdog.</li>
+<li>Hand-built datasets: Jennilyn's VoxScorecardsLive (60 views, 25 tables) is backed up in the repo under custom_views/ with a README per object, and its tables are copied to Backups.VoxScorecardsLive__*_20261111 (11-11). Refresh with scripts/backup_custom_views.py.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>
 <div class="two">

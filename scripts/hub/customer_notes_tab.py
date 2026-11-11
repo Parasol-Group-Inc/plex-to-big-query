@@ -26,6 +26,37 @@ START, END = "<!--custnotes-tab-start-->", "<!--custnotes-tab-end-->"
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT.parent / "plex-to-big-query" / "etl-manual" / "customer_note"
 PLAN, LOG, STOP = DIR / "bulk_plan.csv", DIR / "bulk_actions.jsonl", DIR / "BULK_STOPPED.txt"
+# 2026-11-11 (Ashley: "will this pop up on the customer orders, or just the profile?"): screenshots
+# of a read-only check in Plex, kept with the notes data (gitignored: they show customer data).
+SHOTS = DIR / "ashley_check"
+WHERE_SHOWN = [
+    ("1_customer_details.png", "Customer Details (the profile): the Note field holds the note.", "yes"),
+    ("6_order_form_681.png", "Order 681's form: its NOTES section is the order's own Internal Note, Printed Note, Special Instructions and Shipper Note; the customer note is not there.", "no"),
+    ("7_tab_Notes.png", "Order 681's Notes tab (order notes): \"No Records Were Found\".", "no"),
+    ("2_order_rapid_entry.png", "Order Line Rapid Entry for order 681: no customer note.", "no"),
+]
+
+
+def where_shown() -> str:
+    """The 11-11 check of where a customer Note appears, with its screenshots inlined."""
+    import base64
+    if not SHOTS.exists():
+        return ""
+    figs = []
+    for f, cap, shown in WHERE_SHOWN:
+        fp = SHOTS / f
+        if not fp.exists():
+            continue
+        b64 = base64.b64encode(fp.read_bytes()).decode()
+        figs.append(f'<figure class="cn-fig"><img alt="{esc(cap)}" src="data:image/png;base64,{b64}" loading="lazy">'
+                    f'<figcaption><b>{"Shows the note" if shown == "yes" else "Does not show it"}.</b> {esc(cap)}</figcaption></figure>')
+    return ('<div class="block"><h2>Where the note shows in Plex</h2><p class="lede">Checked 2026-11-11 for Ashley, read-only, '
+            'with L&amp;M Supplements (note starting "ACH Signed Prop 65") and its open order 681. The note is on the customer\'s '
+            'profile only. It is not copied onto orders and none of the order screens show it: the sales order form, the order\'s '
+            'Notes tab, Order Line Rapid Entry, the Sales Orders list, and the info icon beside Customer (field help only). '
+            'Not checked: creating a new order (that would write to Plex) and printed documents such as the packing list. '
+            'If a note must travel with an order, it belongs in one of the order\'s own notes.</p>'
+            '<div class="cn-figs">' + "".join(figs) + '</div></div>')
 NAV = '["platform", "Schedules & probe", ""]'
 STATS = '  $("#q").disabled = '
 MT = ZoneInfo("America/Denver")
@@ -130,6 +161,10 @@ def render_tab(d: dict) -> str:
     # and the artifact service refuses a page with a raw replacement character.
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/").replace("\ufffd", "\\ufffd")
     css = """
+.cn-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}
+.cn-fig{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.cn-fig img{width:100%;height:auto;border-radius:4px;border:1px solid var(--line)}
+.cn-fig figcaption{font-size:13px;color:var(--muted);margin-top:6px}
 #s-custnotes .cn-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; align-items: center; }
 #s-custnotes .cn-f { border: 1px solid var(--line); background: none; color: inherit; border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
 #s-custnotes .cn-f.on { border-color: currentColor; font-weight: 600; }
@@ -177,6 +212,7 @@ def render_tab(d: dict) -> str:
         f'Status as of {esc(d["taken"])}.</p>{stopped}<div class="stats" style="margin:0">{stats_html}</div></div>'
         f'<div class="two"><div class="block"><h2>What gets written</h2><dl class="kv">{rules}</dl></div>'
         f'<div class="block"><h2>Four checks</h2><dl class="kv">{checks}</dl></div></div>'
+        f'{where_shown()}'
         f'<div class="block"><h2>Every row</h2><div class="cn-bar">{filters}<input id="cn-q" type="search" placeholder="Search code, customer or note"> '
         f'<span id="cn-shown" class="cn-sub"></span></div><div class="cn-scroll"><table class="cn-t"><thead><tr><th>Code</th><th>Customer</th>'
         f'<th>State</th><th>Note</th><th>Log history (MT)</th></tr></thead><tbody id="cn-body"></tbody></table></div></div>'

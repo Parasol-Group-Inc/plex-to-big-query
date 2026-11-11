@@ -14,6 +14,20 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-11 - Wrap-up: record page, hub tabs, meeting notes, where customer notes show
+
+### Added
+- **`scripts/build_record.py`** builds "Plex ETL Record", one page for every CHANGELOG entry since
+  2026-05-15. It has a calendar of active days and a searchable list, and is published as a private
+  artifact.
+- **Hub "Label Design API" tab:** `scripts/hub/label_api_tab.py` and `docs/hub/label_api_survey.json`, a
+  GET-only survey with contact examples hidden. It covers the architecture, the three sources, every
+  Monday column against the API, the measured calls, and fields by endpoint.
+- **Hub "Customer notes" tab: "Where the note shows in Plex",** with screenshots. The note is on the
+  customer profile only, not on any order screen (`docs/CUSTOMER_NOTES_BULK.md`).
+- **`meetings-reference/nov-11/`:** the Otter and Gemini transcripts, a Whisper transcript of the audio,
+  and `analysis.md`.
+
 ## 2026-11-11 - Jennilyn's VoxScorecardsLive views backed up into the repo
 
 ### Added

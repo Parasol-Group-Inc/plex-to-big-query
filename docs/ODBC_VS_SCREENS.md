@@ -106,7 +106,9 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
 | Screen failed twice running | once a day per screen | REPORT_TO_EMAILS |
 | Screens digest | 8:20, 12:20, 4:20 PM. Also another run that needs action, at most once per 4 h | Emilio, Jennilyn, marketing |
 | Plex login failed | once a day per cause | Emilio only |
-| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, newest ODBC record 2 h+ old, once a day; quiet while ODBC is behind the screens for Label Design | REPORT_TO_EMAILS |
+| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, newest ODBC record 2 h+ old, once a day (no longer silenced by Label Design's screens, since 11-11) | REPORT_TO_EMAILS |
+| Watchdog `odbc_connect` | weekdays, 3 of the last 4 Label Design runs could not connect to ODBC | REPORT_TO_EMAILS, once a day |
+| Watchdog `odbc_vs_plex` | Plex's REST API shows order changes our ODBC copy lacks for over 2 h, any hour (Plex is quiet at night, so it fires only when work happened) | REPORT_TO_EMAILS, once a day |
 
 A lag under the lines above shows in the digest as "ODBC catching up" (info) and sends nothing of its own.
 

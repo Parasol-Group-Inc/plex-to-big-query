@@ -65,6 +65,8 @@ CHECKS = [
     ("test_cascade", "fewer than 12 test jobs ran overnight"),
     ("schedulers", "a Cloud Scheduler job paused or failing"),
     ("image_drift", "a job on a different build"),
+    ("odbc_connect", "weekdays, 3 of the last 4 Label Design runs could not connect to ODBC"),
+    ("odbc_vs_plex", "Plex's REST API shows order changes our ODBC copy lacks for over 2 h"),
 ]
 
 GROUP_RULES = [
@@ -101,7 +103,7 @@ DIAGRAM = """flowchart LR
   DF["data_freshness&lt;br/&gt;source + as-of per group"]
   Reports["17 reports&lt;br/&gt;data_source, data_as_of, data_label"]
   Monday["Monday: Data Source column&lt;br/&gt;Plex Import Test, Design &amp; QA"]
-  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 12 checks"]
+  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 14 checks"]
   GM["Google Monitoring&lt;br/&gt;heartbeats, email failures"]
   Screens --&gt; Job
   ODBC --&gt; Job
@@ -120,7 +122,7 @@ DIAGRAM = """flowchart LR
 
 def render_tab() -> str:
     stats = [("3", "Plex screens checked"), ("17", "reports labeled with their source"),
-             ("12", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
+             ("14", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
              ("1 h", "a new Label Design order to Monday"), ("6 h / 12 h", "ODBC lag before an email")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     verdicts = table(["Verdict", "When", "What happens"], [(code(v), esc(w), esc(h)) for v, w, h in VERDICTS])

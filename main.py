@@ -913,12 +913,14 @@ def _screens_in_use(bq) -> bool:
     report to the screens? Until 11-10 this was "live_order_releases loaded in the
     last 2 h"; now that the job loads the live tables only when ODBC is behind,
     PlexOps.live_source is the honest answer. Since 2026-11-11 Label Design always
-    takes the lines ODBC lacks from the screens (use_live is always TRUE for it), so
-    "in use" means a group whose report takes screen rows AND whose ODBC is behind
-    (odbc_behind). False when it cannot tell."""
+    takes the lines ODBC lacks from the screens, but every other report still reads
+    ODBC, so Label Design never silences the ODBC alerts (11-11: it silenced the stale
+    alert while ODBC was 17 h frozen). Only a whole group on the screens does, and none
+    is since revenue stopped switching. False when it cannot tell."""
     try:
         return bool(list(bq.query(
-            f"SELECT LOGICAL_OR(use_live AND odbc_behind) AS u FROM `{GCP_PROJECT}.PlexOps.live_source`").result())[0].u)
+            f"SELECT LOGICAL_OR(use_live AND odbc_behind AND report_group != 'label_design') AS u "
+            f"FROM `{GCP_PROJECT}.PlexOps.live_source`").result())[0].u)
     except Exception:
         return False
 

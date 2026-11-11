@@ -1,0 +1,71 @@
+Emilio _ Jennilyn
+November 11, 2026
+Attendees: Emilio Dominguez, jennilyn.tockstein@parasolgroupinc.com
+
+Overview
+
+Emilio Dominguez and Jennilyn Tockstein discussed updates on the Plex Data Hub, including new tabs for customer notes and label design. Emilio highlighted the use of ODBC for data extraction, noting its reliability but occasional delays. Jennilyn mentioned creating views in BigQuery for better data access and plans to transfer billing ownership to Parasol BizOps. They also discussed the need for service accounts to manage Google Cloud resources more securely. Emilio will provide a list of web services under his name for transfer. Both agreed on the importance of documenting and backing up custom views and data apps to ensure project continuity.
+
+Action Items
+
+- Back up and document Jennilyn's custom Vox scorecard views in the Plex Data Hub for future reference and recovery. (Emilio Dominguez)
+- Review the Google Cloud accounts and project inventory, identify what is under Emilio's ownership, and clean up the account structure. (Emilio Dominguez)
+- Add Jennilyn to the GitHub repository for the Plex ETL project to provide shared access. (Emilio Dominguez)
+- Tell Kelly about the updated label-design data process and explain that missing columns may result from live-screen extraction. (Emilio Dominguez)
+- Monitor ODBC behavior through today and assess tomorrow whether label-design processing can switch fully to live-screen portal data. (Emilio Dominguez)
+- Email Jennilyn a list of web services and other services currently set up under Emilio's name so replacement accounts can be created. (Emilio Dominguez)
+- Transfer Google Cloud organization, project ownership, and billing out of Jennilyn's personal account into company-managed ownership; separate major company projects, remove inactive projects, and organize billing by company. (Jennilyn Tockstein)
+- Create replacement accounts and open the necessary support cases for services currently set up under Emilio's name, coordinating the ownership changes with him. (Jennilyn Tockstein)
+
+Outline
+
+Label Design Work and API Integration
+
+- Emilio Dominguez explains the work done on the Plex Data Hub, including new tabs for customer notes and label design.
+- Emilio discusses the use of the API for label design work, noting that initially, he was using live screens but now has another angle for API integration.
+- Emilio outlines three angles for label design: ODBC lag, live capture on the portal, and new orders that are not fully captured.
+- Emilio mentions that ODBC is good at full extraction in the early morning but sometimes fails to deliver data due to computing power issues.
+
+Customer Notes and Data Extraction
+
+- Emilio Dominguez details the work done on customer notes, noting that existing notes were appended rather than erased.
+- Emilio explains that inactive customers were not written but could be useful if they become active again.
+- Jennilyn Tockstein confirms that most customers are inactive and it's fine if they are not included.
+- Emilio discusses the screen extraction process and the audits he runs for data, mentioning help from Justin and Kaya.
+
+Label Design and Workflow Updates
+
+- Emilio Dominguez talks about the history work on label design and the polishing done each day.
+- Jennilyn Tockstein mentions that Hallie missed some information yesterday due to stale data from live screens and frozen ODBC.
+- Emilio explains the fixes made to ensure multiple angles for checking order statuses and updates.
+- Emilio notes that the interface on Monday has changed, and he will inform Kelly about the new process.
+
+Data Management and Views
+
+- Jennilyn Tockstein discusses the views she created based on Plex prod data, which helps answer questions about inventory and orders.
+- Emilio Dominguez plans to back up Jennilyn's views to have a reference for the project.
+- Jennilyn mentions the need to transfer Google Cloud billing ownership and projects to Parasol BizOps.
+- Emilio and Jennilyn discuss the importance of separating projects and billing accounts to avoid security issues.
+
+Project Separation and Billing Management
+
+- Jennilyn Tockstein plans to transfer billing ownership and projects to Parasol BizOps, ensuring each company has its own billing.
+- Emilio Dominguez suggests using service accounts for extraction and publishing to avoid having all credentials in one place.
+- Jennilyn discusses the need to clean up old views and data that are no longer relevant.
+- Emilio and Jennilyn agree on the importance of having multiple Google accounts for better security and project management.
+
+Repository and Credentials Management
+
+- Emilio Dominguez suggests using Soho Vault for storing credentials and tracking project repositories.
+- Jennilyn Tockstein considers the idea of having paid seats for each company and Parasol BizOps to manage projects better.
+- Emilio mentions the importance of having a repository for code changes and tracking project progress.
+- Jennilyn agrees to add Emilio to the GitHub repository for the Plex ETL project to ensure better collaboration and access.
+
+Final Steps and Coordination
+
+- Emilio Dominguez plans to monitor ODBC performance and decide if live screens data can replace it for label design.
+- Jennilyn Tockstein requests an email from Emilio with the web services set up under his name for transfer.
+- Emilio agrees to provide the necessary information for the transfer process.
+- Jennilyn emphasizes the importance of doing the transfer now before the project grows larger and becomes more complex.
+
+Generated by https://otter.ai

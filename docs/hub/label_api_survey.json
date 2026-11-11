@@ -1,0 +1,677 @@
+{
+ "calls": [
+  {
+   "label": "Releases in Label Design",
+   "path": "/sales/v1/releases",
+   "params": {
+    "status": "Label Design"
+   },
+   "status": 200,
+   "seconds": 1.39,
+   "rows": 207
+  },
+  {
+   "label": "Label Design releases changed in the last 24 h",
+   "path": "/sales/v1/releases",
+   "params": {
+    "status": "Label Design",
+    "modifiedDateBegin": "2026-11-10T21:08:53Z"
+   },
+   "status": 200,
+   "seconds": 0.67,
+   "rows": 15
+  },
+  {
+   "label": "Pending Fulfillment orders since 10-18",
+   "path": "/sales/v1/orders",
+   "params": {
+    "status": "Pending Fulfillment",
+    "orderDateBegin": "2026-10-18T00:00:00Z"
+   },
+   "status": 200,
+   "seconds": 0.89,
+   "rows": 191
+  },
+  {
+   "label": "All orders (no filter)",
+   "path": "/sales/v1/orders",
+   "params": {},
+   "status": 200,
+   "seconds": 1.08,
+   "rows": 648
+  },
+  {
+   "label": "Lines of every Pending Fulfillment order (191 calls)",
+   "path": "/sales/v1/orders/{id}/lines",
+   "params": {},
+   "status": 200,
+   "seconds": 172.4,
+   "rows": 466
+  },
+  {
+   "label": "One release by id",
+   "path": "/sales/v1/releases/{id}",
+   "params": {},
+   "status": 200,
+   "seconds": 0.55,
+   "rows": 1
+  },
+  {
+   "label": "One customer by id",
+   "path": "/mdm/v1/customers/{id}",
+   "params": {},
+   "status": 200,
+   "seconds": 0.58,
+   "rows": 1
+  },
+  {
+   "label": "One part by id",
+   "path": "/mdm/v2/parts/{id}",
+   "params": {},
+   "status": 200,
+   "seconds": 0.64,
+   "rows": 1
+  }
+ ],
+ "fields": {
+  "releases": {
+   "id": {
+    "type": "str",
+    "example": "08a9e834-1e1a-4474-969c-99ae48df0cf3"
+   },
+   "releaseNumber": {
+    "type": "str",
+    "example": "1"
+   },
+   "orderLineId": {
+    "type": "str",
+    "example": "005295ea-3669-484b-bed7-55f2b844e1fc"
+   },
+   "type": {
+    "type": "str",
+    "example": "Label Design"
+   },
+   "shipToAddressId": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "shipDate": {
+    "type": "str",
+    "example": "2027-01-08T07:00:00Z"
+   },
+   "dueDate": {
+    "type": "str",
+    "example": "2027-01-08T07:00:00Z"
+   },
+   "quantity": {
+    "type": "float",
+    "example": 500.0
+   },
+   "status": {
+    "type": "str",
+    "example": "Label Design"
+   },
+   "source": {
+    "type": "str",
+    "example": "Email"
+   },
+   "note": {
+    "type": "str",
+    "example": ""
+   },
+   "scheduleNo": {
+    "type": "str",
+    "example": ""
+   },
+   "scheduleDate": {
+    "type": "null",
+    "example": null
+   },
+   "quantityShipped": {
+    "type": "int",
+    "example": 0
+   },
+   "orderQuantity": {
+    "type": "float",
+    "example": 0.0
+   },
+   "createdById": {
+    "type": "str",
+    "example": "ff4ee6c8-cc23-42c6-816e-955844594411"
+   },
+   "createdDate": {
+    "type": "str",
+    "example": "2026-10-14T17:55:37.127Z"
+   },
+   "modifiedById": {
+    "type": "str",
+    "example": "57a02f0f-f6de-4c3b-ad73-8c1de778858c"
+   },
+   "modifiedDate": {
+    "type": "str",
+    "example": "2026-10-28T16:43:49.007Z"
+   },
+   "forecastDate": {
+    "type": "null",
+    "example": null
+   },
+   "shipFrom": {
+    "type": "str",
+    "example": ""
+   },
+   "fabAuthorizationNo": {
+    "type": "str",
+    "example": ""
+   },
+   "rawAuthorizationNo": {
+    "type": "str",
+    "example": ""
+   },
+   "partNumber": {
+    "type": "str",
+    "example": "93040-00BLUE6-0"
+   },
+   "productionStartDate": {
+    "type": "null",
+    "example": null
+   },
+   "modelName": {
+    "type": "str",
+    "example": ""
+   },
+   "poLineDefaultOrderUnit": {
+    "type": "str",
+    "example": ""
+   },
+   "packagingNote": {
+    "type": "str",
+    "example": ""
+   }
+  },
+  "orders": {
+   "id": {
+    "type": "str",
+    "example": "7eec7f38-ecd6-441d-9cd7-078f7bef7506"
+   },
+   "customerId": {
+    "type": "str",
+    "example": "9dbc1747-19b9-403a-9f63-bc0fcc9e1748"
+   },
+   "orderNumber": {
+    "type": "str",
+    "example": "338"
+   },
+   "poNumber": {
+    "type": "str",
+    "example": "NA"
+   },
+   "status": {
+    "type": "str",
+    "example": "Pending Fulfillment"
+   },
+   "type": {
+    "type": "str",
+    "example": "Spot Buy"
+   },
+   "category": {
+    "type": "null",
+    "example": null
+   },
+   "terms": {
+    "type": "str",
+    "example": "100% Prepayment"
+   },
+   "incoTerms": {
+    "type": "null",
+    "example": null
+   },
+   "fob": {
+    "type": "str",
+    "example": "Origin"
+   },
+   "freightTerms": {
+    "type": "str",
+    "example": "Vox Sets Up Shipping"
+   },
+   "insideSalesId": {
+    "type": "str",
+    "example": "09b0a63e-f7e9-4251-bac3-bc4c5921a618"
+   },
+   "createdById": {
+    "type": "str",
+    "example": "70561335-b474-4304-834c-24ded05e9405"
+   },
+   "modifiedById": {
+    "type": "str",
+    "example": "ed3c0104-38e3-46c2-a68d-afc26096f688"
+   },
+   "poNumberRevision": {
+    "type": "str",
+    "example": ""
+   },
+   "poNumberRevisionDate": {
+    "type": "null",
+    "example": null
+   },
+   "orderDate": {
+    "type": "str",
+    "example": "2026-10-19T06:00:00Z"
+   },
+   "expirationDate": {
+    "type": "null",
+    "example": null
+   },
+   "billToAddressId": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "shipToAddressId": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "contactId": {
+    "type": "null",
+    "example": null
+   },
+   "carrierId": {
+    "type": "null",
+    "example": null
+   },
+   "carrier": {
+    "type": "null",
+    "example": null
+   },
+   "note": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "invoiceInternalNote": {
+    "type": "str",
+    "example": ""
+   },
+   "invoicePrintedNote": {
+    "type": "str",
+    "example": ""
+   },
+   "outsideSalesIds": {
+    "type": "list",
+    "example": "[\"2ab8ed06-3c81-4e40-ae42-c617aaecd45c\"]"
+   },
+   "buildingId": {
+    "type": "null",
+    "example": null
+   },
+   "commissionable": {
+    "type": "bool",
+    "example": false
+   },
+   "region": {
+    "type": "null",
+    "example": null
+   },
+   "accountingJobNo": {
+    "type": "null",
+    "example": null
+   },
+   "createdDate": {
+    "type": "str",
+    "example": "2026-10-19T15:29:00Z"
+   },
+   "modifiedDate": {
+    "type": "str",
+    "example": "2026-11-09T17:55:53.543Z"
+   },
+   "multipleDocksPerShipper": {
+    "type": "bool",
+    "example": false
+   },
+   "multiplePOPerShipper": {
+    "type": "bool",
+    "example": false
+   }
+  },
+  "lines": {
+   "id": {
+    "type": "str",
+    "example": "192ec36b-a5c9-48a5-97df-212f5b410122"
+   },
+   "orderId": {
+    "type": "str",
+    "example": "7eec7f38-ecd6-441d-9cd7-078f7bef7506"
+   },
+   "partId": {
+    "type": "str",
+    "example": "c0de81c4-bfce-431e-9289-8de0ff079330"
+   },
+   "customerPartId": {
+    "type": "str",
+    "example": "994b18b0-f0dc-4e86-96c0-349aa03a7ba2"
+   },
+   "note": {
+    "type": "str",
+    "example": ""
+   },
+   "lineNumber": {
+    "type": "str",
+    "example": ""
+   },
+   "containerType": {
+    "type": "str",
+    "example": ""
+   },
+   "standardPackQuantity": {
+    "type": "float",
+    "example": 0.0
+   },
+   "accountingJobNumber": {
+    "type": "null",
+    "example": null
+   },
+   "active": {
+    "type": "bool",
+    "example": true
+   },
+   "createdById": {
+    "type": "str",
+    "example": "70561335-b474-4304-834c-24ded05e9405"
+   },
+   "createdDate": {
+    "type": "str",
+    "example": "2026-10-19T15:32:51.333Z"
+   },
+   "modifiedById": {
+    "type": "str",
+    "example": "936842d9-54b6-415b-901f-472f62deaf5b"
+   },
+   "modifiedDate": {
+    "type": "str",
+    "example": "2026-11-06T16:58:13.497Z"
+   },
+   "transportationAdjustmentDays": {
+    "type": "int",
+    "example": 0
+   }
+  },
+  "customer": {
+   "id": {
+    "type": "str",
+    "example": "9dbc1747-19b9-403a-9f63-bc0fcc9e1748"
+   },
+   "code": {
+    "type": "str",
+    "example": "INDE1"
+   },
+   "name": {
+    "type": "str",
+    "example": "Independent Vital Life LLC"
+   },
+   "status": {
+    "type": "str",
+    "example": "Active"
+   },
+   "type": {
+    "type": "str",
+    "example": "E-Commerce"
+   },
+   "note": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "supplierCode": {
+    "type": "str",
+    "example": ""
+   },
+   "otherCustomerCode": {
+    "type": "str",
+    "example": ""
+   },
+   "rating": {
+    "type": "null",
+    "example": null
+   },
+   "industries": {
+    "type": "list",
+    "example": "[]"
+   },
+   "defaultCarrierIds": {
+    "type": "list",
+    "example": "[]"
+   },
+   "region": {
+    "type": "null",
+    "example": null
+   },
+   "businessType": {
+    "type": "str",
+    "example": "Private Label"
+   },
+   "category": {
+    "type": "null",
+    "example": null
+   },
+   "class": {
+    "type": "str",
+    "example": "10k Bottles"
+   },
+   "catalog": {
+    "type": "null",
+    "example": null
+   },
+   "assignedToId": {
+    "type": "null",
+    "example": null
+   },
+   "assignedTo2Id": {
+    "type": "str",
+    "example": "2ab8ed06-3c81-4e40-ae42-c617aaecd45c"
+   },
+   "assignedTo3Id": {
+    "type": "null",
+    "example": null
+   },
+   "assignedToGroup": {
+    "type": "null",
+    "example": null
+   },
+   "contactResourceId": {
+    "type": "null",
+    "example": null
+   },
+   "annualSalesMillions": {
+    "type": "null",
+    "example": null
+   },
+   "estimatedEmployees": {
+    "type": "str",
+    "example": ""
+   },
+   "phone": {
+    "type": "str",
+    "example": ""
+   },
+   "fax": {
+    "type": "str",
+    "example": ""
+   },
+   "email": {
+    "type": "str",
+    "example": "(hidden)"
+   },
+   "trackingNoOnWeighScaleRequired": {
+    "type": "bool",
+    "example": false
+   },
+   "multipleOrdersPerShipper": {
+    "type": "bool",
+    "example": false
+   },
+   "estimatedAnnualSales": {
+    "type": "str",
+    "example": ""
+   },
+   "newShipperPerReleaseNo": {
+    "type": "bool",
+    "example": false
+   },
+   "defaultBackOrder": {
+    "type": "null",
+    "example": null
+   },
+   "createdById": {
+    "type": "str",
+    "example": "57a65002-bd55-4001-8c7e-df687d3dc7d6"
+   },
+   "createdDate": {
+    "type": "str",
+    "example": "2026-10-10T22:37:00Z"
+   },
+   "modifiedById": {
+    "type": "str",
+    "example": "d9ce731c-923f-45dd-865f-7383a665d5fd"
+   },
+   "modifiedDate": {
+    "type": "str",
+    "example": "2026-11-09T19:09:00Z"
+   }
+  },
+  "part": {
+   "id": {
+    "type": "str",
+    "example": "c0de81c4-bfce-431e-9289-8de0ff079330"
+   },
+   "number": {
+    "type": "str",
+    "example": "93066-00INDE1-0"
+   },
+   "name": {
+    "type": "str",
+    "example": "FG | Ashwagandha 60ct 175cc White Bottle/White Lid +Standard Label (s0197)"
+   },
+   "revision": {
+    "type": "str",
+    "example": "Rev 00"
+   },
+   "description": {
+    "type": "str",
+    "example": "Ashwagandha 60ct 175cc White Bottle/White Lid +Standard Label (s0197)"
+   },
+   "type": {
+    "type": "str",
+    "example": "Finished Goods"
+   },
+   "group": {
+    "type": "str",
+    "example": "Capsule"
+   },
+   "source": {
+    "type": "str",
+    "example": "Manufactured"
+   },
+   "productType": {
+    "type": "str",
+    "example": "Stock Labeled Bottle"
+   },
+   "status": {
+    "type": "str",
+    "example": "Active"
+   },
+   "note": {
+    "type": "str",
+    "example": ""
+   },
+   "leadTimeDays": {
+    "type": "float",
+    "example": 0.0
+   },
+   "buildingCode": {
+    "type": "null",
+    "example": null
+   },
+   "createdById": {
+    "type": "str",
+    "example": "57a65002-bd55-4001-8c7e-df687d3dc7d6"
+   },
+   "createdDateTime": {
+    "type": "str",
+    "example": "2026-10-04T17:00:00Z"
+   },
+   "modifiedById": {
+    "type": "null",
+    "example": null
+   },
+   "modifiedDateTime": {
+    "type": "null",
+    "example": null
+   },
+   "allergens": {
+    "type": "list",
+    "example": "[]"
+   },
+   "storageConditions": {
+    "type": "list",
+    "example": "[]"
+   },
+   "refurbishable": {
+    "type": "bool",
+    "example": false
+   },
+   "corePartId": {
+    "type": "null",
+    "example": null
+   },
+   "serialize": {
+    "type": "bool",
+    "example": false
+   },
+   "lotRequired": {
+    "type": "bool",
+    "example": true
+   },
+   "lotFormat": {
+    "type": "str",
+    "example": "ASHYYMMDD"
+   },
+   "bomSubstitutionAllow": {
+    "type": "bool",
+    "example": true
+   },
+   "eunRequired": {
+    "type": "null",
+    "example": null
+   }
+  },
+  "employee": {}
+ },
+ "queue_size": 64,
+ "queue_orders": 47,
+ "ld_releases": 207,
+ "ld_changed_24h": 15,
+ "pf_orders": 191,
+ "order_status_counts": [
+  [
+   "Pending Fulfillment",
+   353
+  ],
+  [
+   "Closed",
+   164
+  ],
+  [
+   "Quote",
+   52
+  ],
+  [
+   "Deposit Review (Initiate Payment Request)",
+   46
+  ],
+  [
+   "Pending Sales Approval",
+   21
+  ],
+  [
+   "Cancelled",
+   12
+  ]
+ ],
+ "surveyed_at": "2026-11-11 ~14:10 MT"
+}

@@ -251,7 +251,7 @@ function incidentTable(rows){
 var UROWS = [];
 function usagePanel(){
   $('panel').innerHTML =
-    '<div class="card"><h2>Part usage</h2><p class="intro">Average daily usage per part. The usage saved here is what the Approaching MSL report uses for that part. ' +
+    '<div class="card"><h2>Part usage</h2><p class="intro">Average daily usage per part. The usage saved here is what the Approaching MSL report uses for that part until Plex has 6 months of production history (around April 18, 2027); after that, Plex\'s own average takes over. ' +
     'The minimum inventory quantity (MSL) is set in Plex, not here.</p><div id="usum" class="msg info">Loading summary…</div>' +
     '<div class="bar"><input id="uq" placeholder="Search part number, NetSuite id or description" style="flex:1;min-width:260px"><button class="ghost" id="ugo">Search</button></div>' +
     '<div id="ures"></div></div>' +

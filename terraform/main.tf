@@ -6118,6 +6118,7 @@ resource "google_bigquery_table" "etl_schedule" {
     { name = "note", type = "STRING", mode = "NULLABLE" },
     { name = "updated_by", type = "STRING", mode = "NULLABLE" },
     { name = "updated_at", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "days", type = "STRING", mode = "NULLABLE", description = "all | weekdays | weekends (America/Denver); NULL = all. Since 2026-11-12 weekends run only a 04:xx probe and the 23:xx probe." },
   ])
 }
 

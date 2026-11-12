@@ -588,7 +588,7 @@ starts whatever is due. Test jobs keep their own nightly schedulers.
 
 **See the schedule:**
 ```sql
-SELECT job_name, run_time, mode, enabled FROM `voxdatalake.PlexOps.etl_schedule`
+SELECT job_name, run_time, mode, days, enabled FROM `voxdatalake.PlexOps.etl_schedule`
 ORDER BY run_time, job_name;
 ```
 
@@ -608,7 +608,15 @@ WHERE job_name = 'plex-etl-sales-orders';
   extracts. Keep one `full` time a day per job: it catches edits the probe
   can't see.
 - **`run_time`:** America/Denver wall clock (`HH:MM`).
-- **A typo is reported, not ignored.** A bad `run_time` or `mode` appears in
+- **`days` (since 2026-11-12):** `all`, `weekdays` or `weekends`, America/Denver
+  dates; NULL means `all`. To save money, Saturday and Sunday run only two
+  probes per job: the 04:xx `weekends` probe rows and the 23:xx `all` rows.
+  The 13:xx and 18:xx probes and the 04:xx `full` run are `weekdays`, so
+  Monday 04:xx is a full run again and the full run comes back within 72 h.
+  Set up by `deploy/etl_dispatcher/weekend_schedule.sql`. Batch email roles
+  are counted among the rows that run that day, so the weekend 4 AM probe
+  batch has its own first and last job.
+- **A typo is reported, not ignored.** A bad `run_time`, `mode` or `days` appears in
   the dispatcher's `errors` (Cloud Logging, `etl-dispatcher`).
 
 **What happened today:**

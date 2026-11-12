@@ -4,7 +4,7 @@
     python scripts/hub/screens_tab.py --refresh   # write docs/hub/screens/status.json from BigQuery + the task log
 
 Since 2026-11-04 ~18:56 MT Plex's ODBC feed (and SQL Development) returns a frozen copy, while
-Plex's own screens stay live. scripts/plex_live_screens.py, run hourly by a Windows task, reads
+Plex's own screens stay live. scripts/plex_live_screens.py (run hourly by a Windows task during the 11-04 to 11-08 outage; that task is disabled and the Cloud Run job plex-live-screens does the reading now) reads
 three screens into PlexProd.live_*; docs/PLEX_SCREEN_EXTRACTION.md is the runbook. This tab
 explains it for the team, with a screenshot of each screen and the latest status.
 
@@ -133,7 +133,7 @@ SCREENS = [
 ]
 
 FLOW = [
-    ("Every hour, 5 AM-7 PM MT", "A Windows task on Emilio's laptop starts <code>plex_live_screens.py --load</code> from the main folder."),
+    ("Since 11-10: Cloud Run", "The job <code>plex-live-screens</code> reads the screens every 4 h on weekdays (Label Design hourly 6:20-16:20) and 3 times a day on weekends. The laptop task used during the 11-04 to 11-08 outage is disabled."),
     ("Log in like a person", "Headless Chromium (Playwright) signs in to Plex with the integration login kept in <code>.env</code>."),
     ("Ask the screens", "It sends the exact requests each screen makes when you click Search, month by month, and checks every answer."),
     ("Load BigQuery", "Each screen replaces its own <code>PlexProd.live_*</code> table, after a daily backup copy and a size check."),
@@ -232,7 +232,7 @@ def render_tab(st: dict) -> str:
         f'{START}<style>{css}</style><section id="s-screens" data-tab="screens" hidden><div class="ref">'
         f'<div class="block"><h2>Automated extraction: Plex screens instead of ODBC</h2>'
         f'<p class="lede">Since 4 Nov 2026 about 6:56 PM MT, Plex\'s database feed (ODBC, and SQL Development with it) '
-        f'answers from a copy that stopped updating. Plex\'s own screens kept working. So, until Plex fixes the feed, a '
+        f'answers from a copy that stopped updating. Plex\'s own screens kept working. So, while the feed was down (11-04 to 11-08), a '
         f'program reads three screens the way a person would and loads what they show into BigQuery. Label Design '
         f'runs on it and new Label Design orders reach Monday again.</p>'
         f'<p class="lede">Status as of {esc(st.get("taken_at", "?"))} UTC. {task_line}</p>'

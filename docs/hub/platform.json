@@ -84,7 +84,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/sales_orders.yaml",
       "trigger": "scheduler plex-sales-orders-sync-test",
-      "schedule": "nightly 7:10 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 7:10 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-work-orders",
@@ -100,7 +100,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/work_orders.yaml",
       "trigger": "scheduler plex-work-orders-sync-test",
-      "schedule": "nightly 7:30 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 7:30 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-purchasing-open-orders",
@@ -116,7 +116,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/purchasing_open_orders.yaml",
       "trigger": "scheduler plex-purchasing-open-orders-sync-test",
-      "schedule": "nightly 7:50 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 7:50 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-part-obsolescence",
@@ -132,7 +132,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/part_obsolescence.yaml",
       "trigger": "scheduler plex-part-obsolescence-sync-test",
-      "schedule": "nightly 8:10 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 8:10 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-inventory-activity",
@@ -148,7 +148,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/inventory_activity.yaml",
       "trigger": "scheduler plex-inventory-activity-sync-test",
-      "schedule": "nightly 8:30 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 8:30 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-inventory-snapshot",
@@ -164,7 +164,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/inventory_snapshot.yaml",
       "trigger": "scheduler plex-inventory-snapshot-sync-test",
-      "schedule": "nightly 8:50 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 8:50 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-quality-nonconformance",
@@ -180,7 +180,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/quality_nonconformance.yaml",
       "trigger": "scheduler plex-quality-nonconformance-sync-test",
-      "schedule": "nightly 9:10 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 9:10 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-part-on-hand-inventory",
@@ -196,7 +196,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/part_on_hand_inventory.yaml",
       "trigger": "scheduler plex-part-on-hand-inventory-sync-test",
-      "schedule": "nightly 9:30 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 9:30 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-purchasing-pending-requisitions",
@@ -212,7 +212,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/purchasing_pending_requisitions.yaml",
       "trigger": "scheduler plex-purchasing-pending-requisitions-sync-test",
-      "schedule": "nightly 9:50 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 9:50 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-sales-quotes",
@@ -228,7 +228,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/sales_quotes.yaml",
       "trigger": "scheduler plex-sales-quotes-sync-test",
-      "schedule": "nightly 10:10 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 10:10 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-sales-returns",
@@ -244,7 +244,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/sales_returns.yaml",
       "trigger": "scheduler plex-sales-returns-sync-test",
-      "schedule": "nightly 10:30 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 10:30 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-quality-supplier-returns",
@@ -260,7 +260,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/quality_supplier_returns.yaml",
       "trigger": "scheduler plex-quality-supplier-returns-sync-test",
-      "schedule": "nightly 10:50 PM Mountain; plus a -retry scheduler at 9:45 PM Mountain; max_retries 1"
+      "schedule": "Mon-Fri 10:50 PM Mountain (since 2026-11-12); no -retry scheduler (removed 11-12); max_retries 1"
     },
     {
       "job": "plex-etl-part-routing",
@@ -276,7 +276,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/part_routing.yaml",
       "trigger": "scheduler plex-part-routing-sync-test",
-      "schedule": "nightly 11:10 PM Mountain; no -retry scheduler"
+      "schedule": "Mon-Fri 11:10 PM Mountain (since 2026-11-12); no -retry scheduler"
     },
     {
       "job": "plex-etl-part-lot",
@@ -292,7 +292,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/part_lot.yaml",
       "trigger": "scheduler plex-part-lot-sync-test",
-      "schedule": "nightly 11:20 PM Mountain; no -retry scheduler"
+      "schedule": "Mon-Fri 11:20 PM Mountain (since 2026-11-12); no -retry scheduler"
     },
     {
       "job": "plex-etl-label-design",
@@ -308,7 +308,7 @@
       "env": "test",
       "config": "gs://voxdatalake-report-configs/test/label_design.yaml",
       "trigger": "scheduler plex-label-design-sync-test",
-      "schedule": "hourly at :05, 5 AM-5 PM Mountain, Mon-Fri (5 5-17 * * 1-5); max_retries 1"
+      "schedule": "PAUSED since 2026-11-12 (cost); run by hand. Was hourly at :05, 5 AM-5 PM Mountain, Mon-Fri; max_retries 1"
     },
     {
       "job": "plex-etl-label-design-push",
@@ -337,7 +337,7 @@
       "notes": "Daily safety net, never skips. First live round (2026-10-20): all 13 ran."
     },
     {
-      "time": "hourly :00, 5 AM-5 PM, Mon-Fri",
+      "time": "every 15 min, 5:00-5:45 PM, Mon-Fri",
       "timezone": "Mountain (var.scheduler_time_zone)",
       "mode": "probe",
       "notes": "Label Design prod ETL is NOT on the dispatcher: scheduler plex-label-design-sync runs it behind its own explicit probe. The push to Monday follows at :35."
@@ -456,7 +456,7 @@
       "mode": "explicit probe, may skip"
     },
     {
-      "scheduler": "<pipeline>-sync-test-retry (12 of them: every test pipeline except part_routing, part_lot and label_design)",
+      "scheduler": "<pipeline>-sync-test-retry (REMOVED 2026-11-12: they never actually retried; test runs are Mon-Fri)",
       "cron": "var.retry_scheduler_cron; live value is 9:45 PM per EMAIL_SCHEDULE.md (variables.tf default 0 6 * * * is wrong)",
       "timezone": "var.retry_time_zone, America/Denver",
       "target_job": "the matching -test job, POST with RUN_MODE=retry override (needs role plexEtlRunWithOverrides)",
@@ -586,11 +586,11 @@
     ]
   },
   "mermaid": {
-    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"13 prod jobs plex-etl-pipeline<br/>RUN_MODE probe 1, 6, 11 PM / full 4 AM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>every 15 min, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push<br/>started by each changed run + 6:05 PM sweep\"]\n    Monday[\"Monday board Plex Import Test\"]\n    QA[\"Monday board Design & QA<br/>items moved by hand\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>7:10 to 11:10 PM + 9:45 PM retry\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  LDJob -->|\"POST_RUN_JOB\"| Push\n  Prod --> Push --> Monday\n  Monday -->|\"moved by the team\"| QA\n  Apps -->|\"goals and safety incidents\"| Prod",
+    "architecture": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC\"]\n  GCS[\"GCS voxdatalake-report-configs<br/>reports/ and test/ YAML, sql/\"]\n  AR[\"Artifact Registry<br/>one etl image for every job\"]\n  Mail[\"SendGrid report emails<br/>prod and test thread together\"]\n  subgraph PROD[\"PROD: dispatcher, probe can skip\"]\n    direction TB\n    Sch[\"Cloud Scheduler<br/>plex-etl-dispatcher every 5 min\"]\n    Disp[\"Cloud Function<br/>etl-dispatcher\"]\n    Ops[(\"PlexOps<br/>etl_schedule, etl_dispatch_log\")]\n    ProdJobs[\"14 prod jobs plex-etl-pipeline<br/>weekdays probe 1, 6, 11 PM / full 4 AM<br/>weekends probe 4 AM, 11 PM\"]\n    LDSch[\"Scheduler plex-label-design-sync<br/>every 15 min, explicit probe\"]\n    LDJob[\"plex-etl-label-design\"]\n    Prod[(\"PlexProd<br/>raw tables, views, probe_log\")]\n    Push[\"plex-etl-label-design-push<br/>started by each changed run + 6:05 PM sweep\"]\n    Monday[\"Monday board Plex Import Test\"]\n    QA[\"Monday board Design & QA<br/>items moved by hand\"]\n    Apps[\"Apps Script manual data app\"]\n  end\n  subgraph TEST[\"TEST: nightly schedulers, always full\"]\n    direction TB\n    TestSch[\"13 Cloud Schedulers plex-pipeline-sync-test<br/>Mon-Fri 7:10 to 11:10 PM\"]\n    TestJobs[\"14 test jobs plex-etl-pipeline-test<br/>RUN_MODE scheduled: probe logged, never skips\"]\n    Test[(\"PlexTest<br/>raw tables, views, probe_log\")]\n  end\n  Plex -->|\"prod host: probe, then extract if changed\"| ProdJobs\n  Plex -->|\"prod host\"| LDJob\n  Plex -->|\"test host: full extract nightly\"| TestJobs\n  Sch --> Disp\n  Disp -->|\"reads schedule, writes log\"| Ops\n  Disp -->|\"run with RUN_MODE override\"| ProdJobs\n  ProdJobs -->|\"writes outcome\"| Ops\n  LDSch --> LDJob\n  TestSch --> TestJobs\n  GCS -->|\"reports/\"| ProdJobs\n  GCS -->|\"test/\"| TestJobs\n  AR --> ProdJobs\n  AR --> TestJobs\n  ProdJobs --> Prod\n  LDJob --> Prod\n  TestJobs --> Test\n  ProdJobs --> Mail\n  TestJobs --> Mail\n  LDJob -->|\"POST_RUN_JOB\"| Push\n  Prod --> Push --> Monday\n  Monday -->|\"moved by the team\"| QA\n  Apps -->|\"goals and safety incidents\"| Prod",
     "probe_flow": "flowchart TD\n  Start[\"Job starts<br/>RUN_MODE probe, full, scheduled or retry\"]\n  Load[\"Load YAML from GCS<br/>open Plex ODBC connection\"]\n  Kind{\"probe_kind<br/>auto, explicit or none\"}\n  Full[\"Full extraction<br/>WRITE_TRUNCATE every raw table\"]\n  Ref[\"Read last applied fingerprint<br/>from probe_log\"]\n  Run[\"run_probe<br/>COUNT and MAX or SUM per table<br/>plus YAML and SQL hash\"]\n  Inc[\"Inconclusive<br/>log inconclusive row, fail open\"]\n  Same{\"May skip and<br/>fingerprint unchanged\"}\n  Skip[\"Log skipped<br/>short Probe ran email<br/>outcome skipped\"]\n  Views[\"Create or replace bq_views<br/>retry a failed view once\"]\n  Ok{\"Clean run\"}\n  Applied[\"probe_log applied<br/>fingerprint is new reference\"]\n  Failed[\"probe_log failed<br/>reference unchanged\"]\n  Disp[\"record_dispatch_outcome<br/>full email\"]\n  Follow[\"Dispatcher follow-up probe<br/>15 min later, once\"]\n  Start --> Load --> Kind\n  Kind -->|\"none\"| Full\n  Kind -->|\"auto or explicit\"| Ref\n  Ref -->|\"unreadable\"| Inc\n  Ref --> Run\n  Run -->|\"error\"| Inc\n  Run --> Same\n  Inc --> Full\n  Same -->|\"yes\"| Skip\n  Same -->|\"no, or full run\"| Full\n  Full --> Views --> Ok\n  Ok -->|\"yes\"| Applied --> Disp\n  Ok -->|\"no\"| Failed --> Disp\n  Disp -->|\"failed, partial or lost\"| Follow",
     "dispatch_sequence": "sequenceDiagram\n  participant CS as Cloud Scheduler\n  participant D as etl-dispatcher\n  participant BQ as PlexOps in BigQuery\n  participant CR as Cloud Run job\n  participant PX as Plex ODBC\n  CS->>D: HTTP tick every 5 minutes\n  D->>BQ: read etl_schedule and open etl_dispatch_log rows\n  D->>CR: reconcile open runs from execution status\n  D->>BQ: record failed, succeeded-unrecorded or lost\n  D->>BQ: insert dispatch row for each due slot first\n  D->>CR: run job with RUN_MODE, DISPATCH_ID, DISPATCH_LOG_TABLE\n  CR->>PX: probe aggregates\n  alt fingerprint unchanged and mode is probe\n    CR->>BQ: probe_log skipped, outcome skipped\n  else changed or full mode\n    CR->>PX: full extraction\n    CR->>BQ: write raw tables and views, probe_log applied\n    CR->>BQ: outcome success, partial or failed\n  end\n  D->>BQ: next tick finds failed, partial or lost run\n  D->>CR: one follow-up probe 15 minutes after it finished",
     "deploy_flow": "flowchart LR\n  Dev[\"dev branch worktree<br/>ptbq-dev and project folders\"]\n  Hook[\"pre-commit and pre-push hooks\"]\n  PR[\"Pull request into main\"]\n  Main[\"primary folder<br/>clean main equals origin main\"]\n  Deploy[\"scripts/deploy.sh\"]\n  Guard[\"tf_guard.py<br/>runs inside every plan\"]\n  Review[\"plan_review.py<br/>type the change count\"]\n  TF[\"terraform apply<br/>of the reviewed plan\"]\n  GCS[\"GCS configs and SQL<br/>jobs and schedulers\"]\n  Tag[\"git tag deploy timestamp\"]\n  CB[\"gcloud builds submit<br/>deploy/cloudbuild.yaml\"]\n  Img[\"image to Artifact Registry<br/>deploy-all then smoke test on test job\"]\n  GF[\"gcloud functions deploy<br/>dispatcher and plex api\"]\n  Dev --> Hook --> PR --> Main\n  Main --> Deploy --> Guard --> Review --> TF --> GCS\n  TF --> Tag\n  Main -->|\"code changes\"| CB --> Img\n  Main -->|\"function changes\"| GF",
-    "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"1 PM, 6 PM, 11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  T0r[\"TEST: 9:45 PM -retry fire\"] --> T2{\"today's scheduled run<br/>success or partial?\"}\n  T2 -->|\"yes\"| T3[\"no-op, exits clean\"]\n  T2 -->|\"no\"| T4[\"RUN_MODE=retry<br/>full run\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X",
+    "env_paths": "flowchart TD\n  P0[\"PROD: dispatcher tick finds a due slot\"] --> P1{\"slot mode\"}\n  P1 -->|\"weekdays 1/6/11 PM, weekends 4 AM/11 PM, follow-up\"| P2[\"RUN_MODE=probe<br/>may_skip = true\"]\n  P1 -->|\"weekdays 4 AM\"| P3[\"RUN_MODE=full<br/>may_skip = false\"]\n  T0[\"TEST: Cloud Scheduler nightly fire\"] --> T1[\"RUN_MODE=scheduled<br/>auto probe: may_skip = false\"]\n  P2 --> F[\"run_probe: fingerprint Plex + YAML + SQL\"]\n  P3 --> F\n  T1 --> F\n  F --> S{\"may_skip and<br/>fingerprint unchanged?\"}\n  S -->|\"yes: only prod probe runs get here\"| K[\"SKIP extraction and views<br/>probe_log skipped\"]\n  S -->|\"no\"| X[\"Full extraction + views<br/>probe_log applied after a clean run\"]\n  T4 --> X",
     "label_design_flow": "flowchart LR\n  Plex[\"Plex ERP<br/>ODBC, about 50 min behind\"] -->|\"probe every 15 min<br/>weekdays 5:00 AM-5:45 PM MT\"| ETL[\"plex-etl-label-design\"]\n  ETL -->|\"raw tables + view\"| View[\"PlexProd.label_design_report<br/>one row per order line\"]\n  ETL -->|\"a run that extracted<br/>starts the push\"| Push[\"plex-etl-label-design-push\"]\n  Sweep[\"plex-label-design-push-sync<br/>6:05 PM sweep\"] --> Push\n  View --> Push\n  Push -->|\"first: align status label colours\"| QA\n  Push -->|\"then: create one item per new line<br/>LCR dedupe\"| PIT[\"Monday: Plex Import Test\"]\n  Push -->|\"every attempt\"| Log[\"label_design_push_log\"]\n  Push -->|\"problems, once a day each\"| Mail[\"Email: Label Design push\"]\n  PIT -->|\"team moves items by hand<br/>status values follow label COLOUR\"| QA[\"Monday: Design & QA\"]"
   },
   "changelog_recent": [
@@ -1113,13 +1113,13 @@
     },
     {
       "aspect": "When",
-      "prod": "1 PM, 6 PM, 11 PM probe + 4 AM full, America/Denver, 4 min apart per job",
-      "test": "Once a night, 7:10 PM to 11:10 PM Mountain, 20 min apart, + a 9:45 PM -retry fire"
+      "prod": "Weekdays: 1 PM, 6 PM, 11 PM probe + 4 AM full; weekends: 4 AM and 11 PM probe only (etl_schedule.days, since 2026-11-12). America/Denver, 4 min apart per job. A probe run re-extracts only the tables that changed (since 2026-11-12).",
+      "test": "Mon-Fri nights, 7:10 PM to 11:10 PM Mountain, 20 min apart (no retry fire since 2026-11-12)"
     },
     {
       "aspect": "RUN_MODE",
-      "prod": "probe (1 PM, 6 PM, 11 PM, follow-ups) or full (4 AM)",
-      "test": "scheduled (the default; Cloud Scheduler sends no override); retry on the -retry fire"
+      "prod": "probe (weekdays 1/6/11 PM, weekends 4 AM/11 PM, follow-ups) or full (weekdays 4 AM)",
+      "test": "scheduled (the default; Cloud Scheduler sends no override)"
     },
     {
       "aspect": "Probe",
@@ -1129,7 +1129,7 @@
     {
       "aspect": "Failures",
       "prod": "max_retries 0, no -retry scheduler; ONE dispatcher follow-up probe 15 min after a failed, partial or lost run",
-      "test": "max_retries 1, plus the -retry scheduler (does work only if today's scheduled run failed, per job_run_log)"
+      "test": "max_retries 1; no -retry scheduler since 2026-11-12 (a failed test run waits for the next weekday night; the watchdog reports it)"
     },
     {
       "aspect": "Run record",
@@ -1143,7 +1143,7 @@
     },
     {
       "aspect": "Label Design (exception)",
-      "prod": "Own scheduler hourly :00, 5 AM-5 PM Mon-Fri; explicit probe skips on scheduled runs; push to Monday at :35",
+      "prod": "Own scheduler every 15 min, 5:00 AM-5:45 PM Mon-Fri; explicit probe skips on scheduled runs; push to Monday at :35",
       "test": "Own scheduler hourly :05; the explicit probe DOES skip here too; push job paused since the 2026-10-19 cutover"
     },
     {
@@ -1175,7 +1175,7 @@
         "name": "plex-etl-label-design-test",
         "kind": "Cloud Run job (test)",
         "what": "Same ETL against PlexTest. No push.",
-        "where": "scheduler plex-label-design-sync-test, hourly at :05"
+        "where": "scheduler plex-label-design-sync-test, PAUSED since 2026-11-12; run by hand"
       },
       {
         "name": "label_design_report",

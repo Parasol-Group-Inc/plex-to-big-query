@@ -57,7 +57,7 @@ CHECKS = [
     ("dispatch_stuck", "a started run still open after 150 min"),
     ("label_design_running", "weekdays 5:30-5:45 PM, no Label Design run for 40 min"),
     ("label_design_pending", "lines in the report but not on Monday for 30+ min"),
-    ("screens_job", "no screens check for 5 h, or a screen failing twice running"),
+    ("screens_job", "no screens check for 5 h (9 h on weekends), or a screen failing twice running"),
     ("raw_freshness", "a raw table with rows not refreshed in 30 h"),
     ("msl_daily", "no MSL demand history row for today after 7:30 AM"),
     ("usage_monthly", "last month's part usage not recorded by the 2nd"),
@@ -70,7 +70,7 @@ CHECKS = [
 ]
 
 GROUP_RULES = [
-    ("Screen read", "hourly on weekdays 6:20 AM-5:20 PM, and with all screens at 01/05/09/13/17/21:20 (just after ODBC refreshes)", "every 4 h, as an audit"),
+    ("Screen read", "hourly on weekdays 6:20 AM-5:20 PM, and with all screens at 01/05/09/13/17/21:20 (just after ODBC refreshes)", "every 4 h on weekdays, 3 times a day on weekends, as an audit"),
     ("What the report reads", "ODBC's lines plus the lines only the screen has (screen read under 3 h old)", "ODBC only (Jennilyn: not time critical, the data comes every day)"),
     ("A new order", "reaches Monday within the hour from the screen, Data Source \"Plex screens, read ...\"", "appears when ODBC delivers it, normally the same day or overnight"),
     ("When ODBC catches up", "the push fills the item's empty cells (reps, email, phone, priority, bottle, label fields) and marks Data Source \"confirmed by ODBC\"; never over the team's values", "nothing to do"),
@@ -94,7 +94,7 @@ WHERE NOT ok ORDER BY checked_at DESC LIMIT 50;"""
 DIAGRAM = """flowchart LR
   Screens["Plex screens&lt;br/&gt;Label Design releases, shipments, revenue"]
   ODBC["Plex ODBC"]
-  Job["plex-live-screens&lt;br/&gt;every 4 h, Cloud Run"]
+  Job["plex-live-screens&lt;br/&gt;every 4 h weekdays, 3x weekends, Cloud Run"]
   Shots[("screenshots bucket&lt;br/&gt;by date and time")]
   Logins[("plex_login_log")]
   Recon[("screen_recon + diffs")]
@@ -103,7 +103,7 @@ DIAGRAM = """flowchart LR
   DF["data_freshness&lt;br/&gt;source + as-of per group"]
   Reports["17 reports&lt;br/&gt;data_source, data_as_of, data_label"]
   Monday["Monday: Data Source column&lt;br/&gt;Plex Import Test, Design &amp; QA"]
-  WD["plex-etl-watchdog&lt;br/&gt;every 30 min, 14 checks"]
+  WD["plex-etl-watchdog&lt;br/&gt;every 30 min (hourly weekends), 14 checks"]
   GM["Google Monitoring&lt;br/&gt;heartbeats, email failures"]
   Screens --&gt; Job
   ODBC --&gt; Job
@@ -155,10 +155,11 @@ def render_tab() -> str:
                'Limits by design: it watches sales orders only, and a freeze under the 6 h line (like the real 4.5 h one on 11-10) is not mailed; '
                'Label Design is covered by the screens either way.</p></div>')
     weekend = ('<div class="block"><h2>Weekends and cost (2026-11-12)</h2>'
-               '<p class="lede">The project costs about $18-24 a month (estimate: usage x list price; no billing export). About 55% of '
+               '<p class="lede">The project cost about $18-24 a month before the 11-12 cuts and about $10-16 now (estimate: usage x list price; no billing export; see the Budget tab). About 55% of '
                'Cloud Run time is start-up overhead. Cut on 11-12, about $7 a month:</p>' + table(["Change", "About $/month"], [
                    (esc("Weekends: prod probes only, 04:xx and 23:xx (etl_schedule.days); Monday 04:xx is a full run again"), "0.5"),
-                   (esc("Test cascade Monday-Friday; the 12 nightly no-op test retry schedulers removed"), "2.35"),
+                   (esc("Test cascade Monday-Friday"), "0.6"),
+                   (esc("The 12 nightly no-op test retry schedulers removed"), "1.75"),
                    (esc("Label Design test scheduler paused"), "0.6"),
                    (esc("Cloud Build on the default machine (free minutes)"), "3.1"),
                    (esc("Screens 3 times a day on weekends (05:20, 13:20, 21:20); watchdog hourly on weekends"), "0.75"),
@@ -194,7 +195,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
 <li>Settings: behind at 300 min, email at 360 min (Label Design and ODBC alerts) / 720 min (shipments, revenue), digest hours 9/13/17; ODBC refreshes about every 4 h (Terraform, job plex-live-screens; hourly scheduler plex-live-screens-releases-sync).</li>
-<li>Cost: about $5 a month for the screens job, $1 for the watchdog; the whole project about $18-24 (docs/COST_ANALYSIS.md).</li>
+<li>Cost: about $5 a month for the screens job, $1 for the watchdog; the whole project about $18-24 before the 11-12 cuts, about $10-16 now (Budget tab, docs/COST_ANALYSIS.md).</li>
 <li>Hand-built datasets: Jennilyn's VoxScorecardsLive (60 views, 25 tables) is backed up in the repo under custom_views/ with a README per object, and its tables are copied to Backups.VoxScorecardsLive__*_20261111 (11-11). Refresh with scripts/backup_custom_views.py.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>

@@ -26,6 +26,10 @@ production with it.
 | **Monday:** a seat on the "Plex Import Test" board (the push target since 2026-10-27) | see what the Label Design push creates | Monday admin |
 | **Plex test** web login (`vox.test.on.plex.com`) | enter test orders, check the links the push writes | Plex admin |
 
+**Watch out for the account.** Your own login reads and writes as you; Claude Code uses
+read-only `claude-readonly` and writes only by naming `claude-operator`
+(`docs/CLAUDE_CODE_IAM.md`).
+
 **Deploying is a separate grant,** given once you know the flow:
 - rights to run `terraform apply` and Cloud Build;
 - write access to the buckets;
@@ -141,7 +145,7 @@ Only the Claude Code session should carry `CLOUDSDK_ACTIVE_CONFIG_NAME=claude`.
 
 ## 4. Folders and branches: read this before your first edit
 
-One repo, **five folders**, each bound to its own branch (git worktrees):
+One repo, **six folders**, each bound to its own branch (git worktrees):
 
 | Folder | Branch | Use it for |
 |---|---|---|
@@ -149,6 +153,7 @@ One repo, **five folders**, each bound to its own branch (git worktrees):
 | `ptbq-scorecard` | `dev-scorecard` | Vox Scorecard |
 | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
 | `ptbq-label-design` | `dev-label-design` | Label Design |
+| `ptbq-part-lot` | `dev-part-lot` | Part Lot Attributes and inheritance |
 | `ptbq-dev` | `dev` | shared tooling: `main.py`, Terraform, hooks, scripts |
 
 **The branches hold different files.** Work sits on a project branch until it
@@ -182,6 +187,12 @@ edit in the project folder ─► commit (hooks check it) ─► PR into main �
   `reports/test/<name>.yaml`. Change both (a hook checks they list the same
   number of extractions).
 - **A green job run is not proof.** Query the view itself afterwards.
+- **Prod times are data.** Run times are rows in `PlexOps.etl_schedule` (change with SQL, not
+  Terraform). The dispatcher is a Cloud Function deployed with `gcloud functions deploy`
+  (command in `terraform/main.tf`), not with Terraform or Cloud Build.
+- **Check drift** from the primary folder on clean, pushed `main`:
+  `cd terraform && terraform plan -var-file=terraform.tfvars`. Anything listed is GCS drifting from
+  `main`; fix it with `deploy.sh`.
 - **Code in the image** (`main.py`, `label_design_service/`) needs a Cloud
   Build after the deploy (`docs/OPERATIONS.md`).
 
@@ -199,6 +210,7 @@ command on one page: [docs/CHEATSHEET.md](CHEATSHEET.md).
 | [label-design/STATUS.md](../label-design/STATUS.md) | Label Design, newest update first |
 | [docs/reports/REPORT_CATALOG.md](reports/REPORT_CATALOG.md) | one business doc per deployed view |
 | [reports-list/](../reports-list/) and [spreadsheets/](../spreadsheets/) | company reports mapped to Plex |
+| [docs/OPERATIONS.md](OPERATIONS.md) | runbooks: watchdog, probe, backups, batch emails |
 | [docs/DISASTER_RECOVERY.md](DISASTER_RECOVERY.md) | what is backed up where, and how to rebuild |
 | [CLAUDE.md](../CLAUDE.md) | the hard-won rules, written for Claude Code but true for everyone |
 
@@ -230,3 +242,11 @@ command on one page: [docs/CHEATSHEET.md](CHEATSHEET.md).
 - `git commit --no-verify`, or an override variable nobody asked for.
 - Commit `.env`, `terraform.tfvars`, `driver/`, `zipfiles/` or a customer
   export.
+
+## 9. First tasks
+
+1. Read `docs/OPEN_ITEMS.md` and the top three `CHANGELOG.md` entries.
+2. Run the health check above and read one job's log in Cloud Run.
+3. Query one view in BigQuery (for example `PlexProd.inventory_available_to_sell_report`).
+4. Read `docs/DISASTER_RECOVERY.md` so you know where the backups are.
+5. Make a doc-only change on `dev`, open a PR, and watch the hooks run. Do not deploy yet.

@@ -14,6 +14,39 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Milestone trigger (backups + docs to-do on every merge), hub refresh, DR and onboarding tabs
+
+### Added
+- **`.githooks/post-merge` + `scripts/milestone_sync.sh`.** When main moves in a folder (`git pull`
+  of a merged PR), a background task:
+  - makes a verified git bundle of every branch in `~/plex-monitor/backups/` (keeps 10);
+  - takes dated BigQuery copies of the hand-edited ops tables (`etl_schedule`,
+    `manual_data_access`) once a day;
+  - writes a docs/deploy to-do for the range to `~/plex-monitor/milestones/<sha>.md` and
+    `milestones.log`.
+  It never deploys, merges or emails, and it never blocks the pull. Skip once with
+  `SKIP_MILESTONE=1`.
+- **`scripts/hub/refresh_live_data.py`:** splices fresh repo data and the BigQuery snapshot into the
+  published hub page and leaves the hand-built tabs byte-identical.
+- **Hub tabs "Disaster recovery" (`dr_tab.py`) and "New developer" (`onboarding_tab.py`),** built
+  from `docs/DISASTER_RECOVERY.md` and `docs/ONBOARDING.md`. Both docs were reviewed and corrected on
+  11-12 (backups table, Terraform state versioning, git bundles, the dispatcher, `etl_schedule.days`,
+  six worktrees, first tasks).
+- **Budget tab:** what a billing admin must enable or grant for actual costs. The Cloud Billing API
+  is disabled and there is no export.
+- **ODBC_VS_SCREENS.md:** the Order Line Manager cross-check (11-12).
+
+### Changed
+- **Hub text corrected after a fact-check** (Sonnet). `platform.json`, `reliability_tab.py`,
+  `budget_tab.py` and `screens_tab.py` now reflect:
+  - test runs Monday-Friday with no retry schedulers;
+  - weekend probes;
+  - Label Design every 15 min, with the test paused;
+  - screens and watchdog weekend cadences;
+  - costs before and after;
+  - the laptop screens task disabled.
+- **Hub data refreshed:** snapshot 11-05 to 11-12, 78 reports.
+
 ## 2026-11-12 - Probe runs re-extract only the tables that changed; Flat_BOM probe watches content
 
 ### Changed

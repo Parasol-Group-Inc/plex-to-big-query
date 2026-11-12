@@ -1104,6 +1104,9 @@ def check_odbc_freshness(conn, now_local: Optional[datetime] = None) -> Optional
                  "n/a" if lag is None else lag)
         # Since 11-12 the alert asks Plex's API, not the age above: a quiet Plex (a
         # Monday morning after the weekend) makes that age large without ODBC being behind.
+        # Ask the API only inside the alert window (weekdays 9-5): elsewhere the answer is unused.
+        if not stale_alert_due(STALE_ALERT_MINUTES, now_local, STALE_ALERT_MINUTES):
+            return lag
         decision, how = plex_lag_or_age(newest.get("order update"), lag, now_local)
         log.info("ODBC vs Plex API (alert measure): %s min (%s).",
                  "n/a" if decision is None else decision, how)

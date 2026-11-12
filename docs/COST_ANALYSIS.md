@@ -44,6 +44,20 @@ to BigQuery is free and would make this exact.
 | Screens 3 runs a day on weekends (was 6) | 0.35 |
 | **Total** | **~7.3** |
 
+## Projected, by service (hub tab "Budget", `scripts/hub/budget_tab.py`)
+
+| Service | Before 11-12 | Now (projected) |
+|---|---|---|
+| Cloud Run jobs | 10.4 | 7.4 |
+| Cloud Build | 3.2 | 0.1 |
+| Cloud Scheduler (33 jobs to 23) | 3.0 | 2.0 |
+| Artifact Registry | 1.2 | 1.2 |
+| Secret Manager | 0.75 | 0.8 |
+| Everything else | 0 | 0 |
+| **Total (midpoints)** | **~19 (range 18-24)** | **~12 (range 11-17)** |
+
+With the four cuts below, about $6-10 a month. Keep this table and `budget_tab.py` in step.
+
 ## Not done yet, ranked
 
 1. **Decide "skip" before starting a container** (~$2-5). The dispatcher, or a Plex API check, would

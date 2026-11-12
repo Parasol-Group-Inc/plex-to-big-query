@@ -259,7 +259,7 @@ complete single-view pipeline — and rename them. A pipeline is nine resources:
 |---|---|---|
 | `google_storage_bucket_object` × 3 | `sales_quotes_config_prod`, `sales_quotes_config_test`, `sales_quotes_open_view_sql` | object `name` and `source` — one per YAML, plus **one per SQL file** the YAML lists (Terraform doesn't infer SQL files from `bq_view`; a missing one means that view's SQL never reaches GCS) |
 | `google_cloud_run_v2_job` × 2 | `etl_sales_quotes`, `etl_sales_quotes_test` | `name` (`plex-etl-<pipeline>` / `plex-etl-<pipeline>-test`) and the `REPORT_CONFIG_GCS_PATH` value (`reports/…` vs `test/…`) |
-| `google_cloud_scheduler_job` × 2 | `etl_sales_quotes_test`, `etl_sales_quotes_test_retry` | `name` (`plex-<pipeline>-sync-test[-retry]`), the job reference in `uri`, and the test `schedule` cron (Mountain time, `var.scheduler_time_zone`) — pick a free 10-minute slot from [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). The retry keeps `var.retry_scheduler_cron`. **Prod has no scheduler:** add the new prod job's rows to `PlexOps.etl_schedule` instead (see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule)). |
+| `google_cloud_scheduler_job` × 2 | `etl_sales_quotes_test`, `etl_sales_quotes_test_retry` | `name` (`plex-<pipeline>-sync-test[-retry]`), the job reference in `uri`, and the test `schedule` cron (Mountain time, `var.scheduler_time_zone`) — pick a free 10-minute slot from [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md). (No `-retry` scheduler since 2026-11-12; the test cron runs Monday-Friday via `local.test_cron_weekdays` or a `1-5` day-of-week.) **Prod has no scheduler:** add the new prod job's rows to `PlexOps.etl_schedule` instead (see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule)). |
 
 Keep the `lifecycle { ignore_changes = [...image...] }` block on both jobs.
 
@@ -344,7 +344,7 @@ never in the subject — check the body for those.
 | Cloud Run jobs (15 pipelines) | `plex-etl-<pipeline>` — e.g. `plex-etl-sales-orders` (1 PM / 6 PM / 11 PM probe + 4 AM full) | `plex-etl-<pipeline>-test` — e.g. `plex-etl-sales-orders-test` (7:10 PM Mountain) |
 | Schedulers | None per job (since 2026-10-19): the ETL dispatcher starts jobs from `PlexOps.etl_schedule` — see [ETL schedule](#etl-schedule-prod--plexopsetl_schedule). Exception: Label Design keeps `plex-label-design-sync` (every 15 min) and `plex-label-design-push-sync` (6:05 PM sweep; each run that extracts starts the push itself) | `plex-<pipeline>-sync-test` |
 | Every job's time | [EMAIL_SCHEDULE.md](EMAIL_SCHEDULE.md) | |
-| Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | 9:45 PM Mountain daily (`plex-<pipeline>-sync-test-retry`, 12 jobs) — see [Failure Retry](#failure-retry-945-pm-mountain) below |
+| Failure retry | One follow-up probe 15 min later from the dispatcher; no `-retry` scheduler | none since 2026-11-12 (the 12 `-test-retry` schedulers were removed; test runs are Monday-Friday) |
 | Plex ODBC Host | `vox.odbc.plex.com` ✅ | `vox.test.odbc.plex.com` ✅ |
 | BigQuery Dataset | `PlexProd` | `PlexTest` |
 | Report config (YAML) | `gs://voxdatalake-report-configs/reports/` | `gs://voxdatalake-report-configs/test/` |
@@ -582,7 +582,7 @@ and test YAML. Review the dry run first.
 
 Since **stage B of probe phase 2 (2026-10-19)**, prod ETL run times live in a
 **table**, not in Cloud Scheduler. There are no per-job prod schedulers and no
-prod retry. Test jobs keep their nightly scheduler and the 9:45 PM retry
+prod retry. Test jobs keep their nightly scheduler (Monday-Friday since 2026-11-12; the 9:45 PM retry was removed then)
 below. The dispatcher (`etl-dispatcher`, called every 5 minutes)
 starts whatever is due. Test jobs keep their own nightly schedulers.
 
@@ -821,7 +821,13 @@ curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ---
 
-## Failure Retry (9:45 PM Mountain) — TEST jobs only since 2026-10-19
+## Failure Retry (9:45 PM Mountain) — REMOVED 2026-11-12
+
+> **Removed 2026-11-12 (cost cuts, PR #147).** The 12 `plex-<pipeline>-sync-test-retry` schedulers
+> are gone: they started a container every night and, as the caution below found, never actually
+> retried anything. A failed test run now stays failed until the next weekday night; the watchdog's
+> `test_cascade` check reports it. The section below is kept as history.
+
 
 > **Prod no longer has this.** Since probe phase 2 stage B, prod jobs have no
 > `-retry` scheduler and `max_retries = 0`. A failed prod run gets one

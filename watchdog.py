@@ -197,17 +197,28 @@ def check_odbc_vs_plex(c, now_mt):
                  LEFT JOIN (SELECT MAX(started_at) asked FROM `{PROJECT}.PlexProd.job_run_log`
                             WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
                               AND status IN ('success', 'skipped')
+                              AND NOT STARTS_WITH(IFNULL(detail, ''), 'Held')   -- breaker-held: ODBC not read
                               AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)) j ON TRUE
                  WHERE f.dataset = 'PlexProd' AND f.report_group = 'label_design'""")
     odbc_newest, loaded = (r[0].t, r[0].l) if r else (None, None)
     try:
         changes = plex_api_lag.plex_order_changes()
-    except Exception as e:   # the API being down is not an ODBC problem; say so, do not fail
-        print(f"  odbc_vs_plex: Plex REST API unreachable ({type(e).__name__}: {str(e)[:150]}); skipped")
-        return []
+    except Exception as e:
+        # The API being down is not an ODBC problem, but it blinds this check: say so on the first
+        # failure (pending) and mail on the second in a row, once a day (review 11-12).
+        msg = (f"Plex's REST API could not be read ({type(e).__name__}: {str(e)[:150]}), so the "
+               f"ODBC-vs-Plex check is blind; ODBC itself may be fine. Check the plex-api-consumer-key/secret "
+               f"secrets and connect.plex.com.")
+        print(f"  odbc_vs_plex: {msg}")
+        return [msg] if previous_failed(c, "odbc_vs_plex") else [f"pending: {msg}"]
     lag, n, oldest = odbc_plex_lag(changes, odbc_newest, loaded)
     if lag is None or lag <= ODBC_PLEX_LAG_MIN:
         return []
+    # Mail only in working hours (weekdays 06:00-18:00 MT, review 11-12): overnight, ODBC's refresh
+    # times are known from one night only, and nobody acts before morning. A freeze that lasts into
+    # the morning is caught from 06:00, when the Label Design probes start reading ODBC again.
+    if not (now_mt.weekday() < 5 and 6 <= now_mt.hour < 18):
+        return [f"pending: outside working hours, {lag / 60:.1f} h at {loaded.astimezone(DEN):%m-%d %H:%M} MT"]
     msg = (f"Our Plex order data was {lag / 60:.1f} h behind Plex when we last read ODBC "
            f"({loaded.astimezone(DEN):%m-%d %H:%M} MT): Plex's API shows {n} order change(s) since "
            f"{oldest.astimezone(DEN):%m-%d %H:%M} MT that ODBC did not have (its newest is "
@@ -287,7 +298,7 @@ def check_test_cascade(c, now_mt):
     rows = q(c, f"""
         SELECT COUNT(DISTINCT job_name) n FROM `{PROJECT}.PlexTest.job_run_log`
         WHERE job_name LIKE '%-test' AND logged_at >= TIMESTAMP(@s)""", s=since.isoformat())
-    return [] if rows[0].n >= 12 else [f"Only {rows[0].n} test job(s) logged a run since 7 PM yesterday (expect 15)."]
+    return [] if rows[0].n >= 12 else [f"Only {rows[0].n} test job(s) logged a run since 7 PM yesterday (expect 14)."]
 
 
 def _run_api(path):

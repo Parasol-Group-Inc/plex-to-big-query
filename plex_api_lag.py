@@ -7,6 +7,11 @@ in Plex (nights, weekends), so it raised false alarms on 11-12 02:11 (watchdog, 
 question every check now asks is: "is there a change in Plex, older than X, that ODBC does
 not have?" A quiet night gives 0; a frozen ODBC (11-10) grows minute by minute.
 
+Limits: it watches sales orders only (Sales_v_PO.Update_Date vs the API's modifiedDate). A freeze
+on a day with production and shipping but no order edits shows only through the other checks
+(the screens' revenue/shipments comparison, raw freshness). An API that cannot be read makes the
+watchdog say so (pending, then mailed); main.py and the screens job fall back to the old age.
+
 Used by watchdog.py (odbc_vs_plex), main.py (the stale-data email) and
 scripts/screen_recon.py (the "behind" verdict). Docs: docs/ODBC_VS_SCREENS.md.
 """
@@ -25,6 +30,7 @@ PLEX_API_BASE = os.environ.get("PLEX_API_BASE", "https://connect.plex.com")
 PLEX_API_SECRETS = (os.environ.get("SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
                     os.environ.get("SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))
 SLACK_MIN = 5   # clock skew and same-minute saves between Plex's API and its ODBC copy
+MIN_ORDERS = int(os.environ.get("PLEX_API_MIN_ORDERS", "100"))
 
 
 def plex_order_changes(timeout: int = 60) -> list[dt.datetime]:
@@ -37,6 +43,11 @@ def plex_order_changes(timeout: int = 60) -> list[dt.datetime]:
         "X-Plex-Connect-Api-Key": key, "X-Plex-Connect-Api-Secret": sec, "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         orders = json.loads(r.read())
+    # The endpoint returns every order in one list (paging parameters are ignored; 640 on 11-12).
+    # A short or odd answer would read as "nothing missing", so treat it as unreadable instead.
+    if not isinstance(orders, list) or len(orders) < MIN_ORDERS:
+        raise ValueError(f"Plex API returned {len(orders) if isinstance(orders, list) else type(orders).__name__} "
+                         f"orders (expected {MIN_ORDERS}+)")
     out = []
     for o in orders:
         m = o.get("modifiedDate")

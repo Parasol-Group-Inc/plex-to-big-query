@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Probe runs re-extract only the tables that changed; Flat_BOM probe watches content
+
+### Changed
+- **Auto-probed pipelines re-extract only the tables whose probe value changed;** the rest are kept
+  and the views rebuilt (`tables_to_extract` in `main.py`).
+  - Full runs (04:xx weekdays), a changed config, a first run and the run after a failed or partial
+    one still extract everything.
+  - The run email marks kept tables "unchanged, kept".
+  - Switch: job env `PROBE_PER_TABLE=0`.
+  - Why: part_routing re-extracted 18 tables 28 times a week while its big tables changed ~0.1% a
+    day (BigQuery time-travel comparison, 11-12).
+- **sales_orders' `raw_Part_v_Flat_BOM` probe watches content** (`Component_Part_Key`, `BOM_Level`,
+  `sum:Quantity`, `sum:Lead_Time_Days`) instead of `Flat_BOM_Key`, which Plex regenerates daily. Both
+  YAMLs. The config change makes the next probe run of sales_orders a full run once.
+- Tests: `tests/test_probe.py` (5 new). Docs: OPERATIONS.md and PROBE_BUILD_PLAN.md, "Change Probe";
+  CLAUDE.md.
+- Backups: `Backups.PlexOps__etl_schedule_before_weekend_20261112` (56 rows),
+  `Backups.PlexOps__etl_schedule_20261112` (70) and `Backups.PlexProd__probe_log_20261112` (2,006).
+
 ## 2026-11-12 - Review fixes (two independent reviews) and the hub "Budget" tab
 
 ### Fixed

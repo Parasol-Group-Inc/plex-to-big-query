@@ -335,7 +335,7 @@ extractions:
     bq_table: raw_Part_v_Flat_BOM
     filter: ""
     date_col: ""
-    probe: [Flat_BOM_Key]
+    probe: [Component_Part_Key, BOM_Level, sum:Quantity, sum:Lead_Time_Days]  # content, not the key Plex regenerates daily (11-12)
     page_key: Flat_BOM_Key
     page_size: 25000
 

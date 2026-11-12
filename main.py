@@ -575,6 +575,28 @@ def run_probe(conn, config: dict) -> tuple:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32], snapshot
 
 
+# 2026-11-12 (Emilio: big tables should not re-extract when they did not change). With an
+# auto probe, a probe run that finds changes now re-extracts ONLY the tables whose probe value
+# changed and keeps the rest as they are in BigQuery; the views are rebuilt as before. Measured
+# 11-12: part_routing re-extracted all 18 tables 28 times in a week (~8.5 min each) while its
+# big tables changed ~0.1% a day, because one small table (Part_v_Part) changes daily. Full
+# runs (04:xx weekdays), a changed config, a first run and a run after a failed/partial one
+# still extract everything, so anything a probe column cannot see is refreshed daily (Monday
+# 04:xx after a weekend). PROBE_PER_TABLE=0 turns it off.
+PROBE_PER_TABLE = os.environ.get("PROBE_PER_TABLE", "1") != "0"
+
+
+def tables_to_extract(kind: str, may_skip: bool, previous_snapshot: Optional[dict],
+                      changed: list) -> Optional[set]:
+    """The bq_tables a probe run must re-extract, or None for all of them. Pure."""
+    if not PROBE_PER_TABLE or kind != "auto" or not may_skip or not previous_snapshot:
+        return None
+    if _CONFIG_SNAPSHOT_KEY in changed:
+        return None
+    tables = {c for c in changed if c != _CONFIG_SNAPSHOT_KEY}
+    return tables or None
+
+
 def changed_sources(previous: Optional[dict], current: dict) -> list:
     """Names whose probe value differs from the last clean run, sorted.
     No previous snapshot (first run, or a row from before snapshots existed)
@@ -2079,6 +2101,7 @@ def main():
     rows_written   = 0
     probe_fingerprint = ""   # set by the change probe, stored by run_and_report
     probe_snapshot    = None # per-source probe values, stored with the fingerprint
+    only_tables       = None # a probe run that found changes: just these bq_tables (None = all)
     probe_info        = {}   # what the probe saw, for the run email
     extraction_rows   = []   # one dict per extraction, for the run email
     report_name      = _default_report_name()
@@ -2298,6 +2321,12 @@ def main():
                     if probe_info.get("no_new_data"):
                         log.warning(probe_info["no_new_data_note"] + ".")
                         events.append(probe_info["no_new_data_note"])
+                only_tables = tables_to_extract(kind, may_skip, previous_snapshot, probe_info["changed"])
+                if only_tables is not None:
+                    probe_info["per_table"] = sorted(only_tables)
+                    log.info(f"Probe: re-extracting only the {len(only_tables)} changed table(s): "
+                             f"{', '.join(sorted(only_tables))}; the others are unchanged and kept.")
+                    events.append(f"Changed tables only: {', '.join(sorted(only_tables))}")
                 if not may_skip:
                     log.info(f"RUN_MODE={RUN_MODE}: full run; probe recorded as the next reference "
                              f"({probe_fingerprint}).")
@@ -2347,6 +2376,10 @@ def main():
                 table    = extraction["bq_table"]
                 filt     = extraction.get("filter", "")
                 date_col = extraction.get("date_col", "")
+                if only_tables is not None and table not in only_tables:
+                    log.info(f"--- {view} → {table}: unchanged since the last clean run, kept ---")
+                    extraction_rows.append({"table": table, "rows": None, "ok": True, "kept": True})
+                    continue
 
                 log.info(f"--- Extracting {view} → {table} ---")
 

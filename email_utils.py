@@ -277,7 +277,7 @@ def _extractions_to_html(items: List[Dict[str, object]]) -> str:
     cells = []
     for e in items:
         rows = e.get("rows")
-        value = f"{rows:,}" if isinstance(rows, int) else "failed"
+        value = f"{rows:,}" if isinstance(rows, int) else ("unchanged, kept" if e.get("kept") else "failed")
         style = "" if e.get("ok", True) else ' style="color:#991b1b;font-weight:bold;"'
         cells.append(f'<tr><td class="x-name">{html.escape(str(e.get("table", "?")))}</td>'
                      f'<td class="x-rows"{style}>{value}</td></tr>')
@@ -557,7 +557,7 @@ def send_report(report: Dict[str, object]) -> bool:
     html_content = _render_template(html_template, context)
     environment_line = f"Environment: {environment}\n" if environment else ""
     extraction_text = "".join(
-        f"  {e.get('table', '?')}: {e['rows'] if isinstance(e.get('rows'), int) else 'failed'}\n"
+        f"  {e.get('table', '?')}: {e['rows'] if isinstance(e.get('rows'), int) else ('unchanged, kept' if e.get('kept') else 'failed')}\n"
         for e in extractions)
     text_content = (
         f"Status: {context['status']}\n"

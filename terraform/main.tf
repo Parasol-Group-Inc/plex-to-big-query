@@ -4791,7 +4791,7 @@ resource "google_cloud_scheduler_job" "etl_label_design" {
 # a failed or partial run leaves the reference where it was and the next hourly
 # probe sees a difference and runs again — within the hour, instead of at 9:45
 # PM. (The retry trigger had never produced a single run anyway — OPEN_ITEMS
-# D2.) Every other pipeline keeps its `-retry` scheduler and RUN_MODE=retry.
+# D2.) The test pipelines' `-retry` schedulers were removed 2026-11-12 (cost cuts).
 
 # ── Label Design queue — test (PlexTest, 9:40 AM & 1:40 PM Mountain, daily) ─
 

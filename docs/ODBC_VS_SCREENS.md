@@ -68,6 +68,17 @@ Also since 11-12:
 - **One owner per incident.** The watchdog owns "ODBC is behind". The stale-data email is not sent
   when the watchdog mailed `odbc_vs_plex` in the last 24 h (on 11-11 one afternoon lag mailed three
   ways).
+- **Working hours only for the watchdog's mail** (weekdays 06:00-18:00 MT). Outside them a breach is
+  logged `pending:`; a freeze that lasts into the morning mails at about 06:10.
+- **A Plex API that cannot be read** (or answers with under 100 orders) makes the watchdog report
+  that the check is blind: pending first, then mailed once a day. The stale email and the screens job
+  fall back to the old age.
+- **Limits, by design:**
+  - The measure covers sales orders only (`Sales_v_PO.Update_Date` against the API's `modifiedDate`).
+    A production-only or shipments-only lag shows through the screens' revenue and shipments
+    comparison (12 h line) and raw freshness, not through this measure.
+  - A freeze under the 6 h line is not mailed, because ODBC's normal lag is 1-5 h. The real 11-10
+    freeze (4.5 h) would be quiet today. Label Design is covered by the screens either way.
 - **Replay tests** from the real days: `tests/test_plex_api_lag.py` (11-10 freeze must alert;
   11-11 afternoon, 11-12 overnight, 11-12 07:21 and a quiet weekend must stay quiet).
 

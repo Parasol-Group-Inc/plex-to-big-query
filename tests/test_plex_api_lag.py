@@ -23,11 +23,21 @@ def mt(d, h, mi=0):
 
 # ── watchdog measure: at our last load ─────────────────────────────────────────
 
-def test_1110_freeze_alerts():
-    # ODBC froze at 08:10; Plex kept working; our Label Design loads ran every 15 min.
+def test_freeze_past_a_missed_refresh_alerts():
+    # A freeze like 11-10's that lasts past the 6 h line (a missed refresh): ODBC stuck at 08:10,
+    # Plex kept working, our Label Design probes kept asking every 15 min.
     changes = [mt(10, 8, 30), mt(10, 9, 35), mt(10, 11, 0)]
     lag, n, oldest = p.odbc_plex_lag(changes, mt(10, 8, 10), mt(10, 14, 45))
     assert lag > LINE and n == 3 and oldest == mt(10, 8, 30)
+
+
+def test_1110_real_freeze_of_4_5_h_is_quiet_by_design():
+    # The real 11-10 freeze (08:10-12:50) was 4.5 h: inside ODBC's normal 1-5 h lag since the
+    # 4-hourly refresh is known (11-11), so no "ODBC behind" email. Label Design is covered by the
+    # screens (order 675 would reach Monday from the hourly releases read).
+    changes = [mt(10, 8, 30), mt(10, 9, 35)]
+    lag, _, _ = p.odbc_plex_lag(changes, mt(10, 8, 10), mt(10, 12, 45))
+    assert lag < LINE
 
 
 def test_1111_afternoon_wait_before_refresh_is_quiet():

@@ -824,3 +824,34 @@ if __name__ == "__main__":
         t()
         print(f"ok  {t.__name__}")
     print(f"OK: {len(tests)} tests")
+
+
+# ── 2026-11-12: a probe run re-extracts only the tables that changed ──────────
+
+CFG = m._CONFIG_SNAPSHOT_KEY
+PREV = {"raw_a": "10|5", "raw_b": "20|7", CFG: "c1"}
+
+
+def test_per_table_only_changed_tables():
+    assert m.tables_to_extract("auto", True, PREV, ["raw_b"]) == {"raw_b"}
+
+
+def test_per_table_full_when_config_changed():
+    assert m.tables_to_extract("auto", True, PREV, ["raw_b", CFG]) is None
+
+
+def test_per_table_full_on_full_runs_first_runs_and_explicit_probes():
+    assert m.tables_to_extract("auto", False, PREV, ["raw_b"]) is None      # RUN_MODE full / after a failed run
+    assert m.tables_to_extract("auto", True, None, ["raw_a", "raw_b"]) is None  # no previous snapshot
+    assert m.tables_to_extract("explicit", True, PREV, ["raw_b"]) is None   # label_design keeps its own rules
+
+
+def test_per_table_switch_off(monkeypatch):
+    monkeypatch.setattr(m, "PROBE_PER_TABLE", False)
+    assert m.tables_to_extract("auto", True, PREV, ["raw_b"]) is None
+
+
+def test_email_shows_kept_tables():
+    html = email_utils._extractions_to_html([{"table": "raw_a", "rows": None, "ok": True, "kept": True},
+                                              {"table": "raw_b", "rows": 12, "ok": True}])
+    assert "unchanged, kept" in html and "failed" not in html and "2 of 2 tables" in html

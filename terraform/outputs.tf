@@ -78,5 +78,5 @@ output "test_cloud_run_execute_command" {
 
 output "test_scheduler_job_name" {
   description = "Test Cloud Scheduler job name and cron schedule."
-  value       = "${google_cloud_scheduler_job.etl_test.name} — schedule: ${var.scheduler_cron_test} ${var.scheduler_time_zone}"
+  value       = "${google_cloud_scheduler_job.etl_test.name} — schedule: ${local.test_cron_weekdays} ${var.scheduler_time_zone}"
 }

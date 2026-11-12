@@ -14,6 +14,64 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Probe runs re-extract only the tables that changed; Flat_BOM probe watches content
+
+### Changed
+- **Auto-probed pipelines re-extract only the tables whose probe value changed;** the rest are kept
+  and the views rebuilt (`tables_to_extract` in `main.py`).
+  - Full runs (04:xx weekdays), a changed config, a first run and the run after a failed or partial
+    one still extract everything.
+  - The run email marks kept tables "unchanged, kept".
+  - Switch: job env `PROBE_PER_TABLE=0`.
+  - Why: part_routing re-extracted 18 tables 28 times a week while its big tables changed ~0.1% a
+    day (BigQuery time-travel comparison, 11-12).
+- **sales_orders' `raw_Part_v_Flat_BOM` probe watches content** (`Component_Part_Key`, `Part_Key`, `BOM_Level`,
+  `sum:Quantity`, `sum:BOM_Level`) instead of `Flat_BOM_Key`, which Plex regenerates daily. Both
+  YAMLs. The config change makes the next probe run of sales_orders a full run once.
+- **A Sonnet review found no blockers** (`docs/reviews/2026-11-12_alerts_weekend_cost.md`, part 2):
+  - The Flat_BOM probe now also watches `Part_Key` and `sum:BOM_Level`. `Lead_Time_Days` is always 0
+    and was dropped.
+  - The watchdog allows raw tables 84 h over a weekend (was 80), since only full runs touch kept
+    tables.
+- Measured saving (Sonnet, from `probe_log`): ~$0.10-1.0/month. The main gain is less Plex load and
+  shorter probe runs.
+- Tests: `tests/test_probe.py` (5 new). Docs: OPERATIONS.md and PROBE_BUILD_PLAN.md, "Change Probe";
+  CLAUDE.md.
+- Backups: `Backups.PlexOps__etl_schedule_before_weekend_20261112` (56 rows),
+  `Backups.PlexOps__etl_schedule_20261112` (70) and `Backups.PlexProd__probe_log_20261112` (2,006).
+
+## 2026-11-12 - Review fixes (two independent reviews) and the hub "Budget" tab
+
+### Fixed
+- **A Plex API outage is visible.** The watchdog's `odbc_vs_plex` used to log "skipped" and pass.
+  It now reports "API could not be read, the check is blind": pending first, then mailed.
+  `plex_order_changes` treats a short answer (under 100 orders) as unreadable instead of "nothing
+  missing".
+- **No overnight `odbc_vs_plex` emails.** It mails only on weekdays 06:00-18:00 MT and logs
+  `pending:` outside those hours. ODBC's overnight refresh time is known from one night only, and a
+  freeze that lasts into the morning is caught at 06:10, once the Label Design probes read ODBC again.
+- **Breaker-held runs no longer count as "we asked ODBC".** Label Design runs logged "Held — Plex
+  outage breaker" never read ODBC.
+- **The stale-data email calls Plex's API only inside its window** (weekdays 9-5), not on every prod
+  run.
+- The test-cascade message says "expect 14".
+- The Terraform output `test_scheduler_job_name` prints the real Monday-Friday cron, not the tfvars value.
+
+### Changed
+- **Tests:** the freeze replay is honest about the threshold. A freeze past 6 h alerts. The real
+  11-10 freeze of 4.5 h is quiet by design, because ODBC's normal lag is 1-5 h; Label Design is
+  covered by the screens.
+- **Docs:**
+  - `plex_api_lag.py` and `docs/ODBC_VS_SCREENS.md` state the limits: the measure covers sales orders
+    only, and freezes under 6 h are not mailed.
+  - The test retry history in OPERATIONS.md is marked removed.
+  - The cost doc gains a projection by service.
+
+### Added
+- **Hub tab "Budget"** (`scripts/hub/budget_tab.py`, chained in `build_hub.py`). It shows the monthly
+  cost by service before and after the 11-12 cuts (~$19 to ~$12, estimate), the cuts, where Cloud
+  Run time goes, and the next cuts (~$6-10).
+
 ## 2026-11-12 - Weekends: probes only, 4 AM and 11 PM; lighter weekend checks (Emilio: save money)
 
 ### Changed
@@ -26,9 +84,8 @@ don't need an entry.
   - a new 04:xx probe runs per job on weekends.
   Saturday and Sunday therefore run 2 probes per job (was 3 probes and a full run), and Monday 04:xx
   is full again. Weekend prod job starts drop from 112 to 56.
-- **The test cascade and its retries run Monday-Friday only.** Terraform `local.test_cron_weekdays` /
-  `test_retry_cron_weekdays` keep the tfvars minute and hour; the 13 hard-coded test crons now end
-  in `1-5`.
+- **The test cascade runs Monday-Friday only.** Terraform `local.test_cron_weekdays` keeps the tfvars
+  minute and hour; the 13 hard-coded test crons now end in `1-5`. (The retries were removed; see below.)
 - **Screens job on weekends: 05:20, 13:20, 21:20** (new scheduler `plex-live-screens-weekend-sync`);
   weekdays keep 6 runs a day.
 - **Watchdog on weekends: hourly** (new `plex-etl-watchdog-weekend-sync`); weekdays every 30 min.
@@ -38,7 +95,7 @@ don't need an entry.
   80 min.
 - Tests: `tests/test_dispatcher.py` (7 new), `tests/test_watchdog_odbc.py` (weekend window).
 
-### Removed (cost analysis 11-12: the project costs about $18-24 a month; these save ~$5.5)
+### Removed (cost analysis 11-12: the project costs about $18-24 a month; these three save ~$5.5 of the ~$7.3 cut that day)
 - **The 12 `*_test_retry` schedulers.** Each started a container every night that did nothing
   unless a test run had failed (~$1.75 a month).
 - **Cloud Build's E2_HIGHCPU_8 machine.** Builds use the default machine, inside the 2,500 free

@@ -310,6 +310,10 @@ prod job's run times: 1 PM / 6 PM / 11 PM `probe`, plus a 4 AM `full` run. The
 `etl-dispatcher` Cloud Function (called every 5 min by `plex-etl-dispatcher`)
 starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
 - **Change a time with SQL, not Terraform.**
+- **A probe run re-extracts only the changed tables (since 2026-11-12).** Auto-probed pipelines
+  keep unchanged raw tables, and the weekday 04:xx full run still refreshes everything
+  (`tables_to_extract`, `PROBE_PER_TABLE=0` turns it off). Details: `docs/OPERATIONS.md`, "Change
+  Probe".
 - **No retries:** a failed run gets ONE follow-up probe 15 min later.
 - **A Plex outage trips a breaker (since 2026-10-22).** After two runs fail
   to connect, due slots are logged `held-outage` instead of started, one
@@ -322,7 +326,7 @@ starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
   `weekdays` or `weekends` (Mountain dates; NULL = all). Saturday and Sunday each run two probes
   per job: the 04:xx `weekends` rows and the 23:xx rows. The 4 AM full run and the 1 PM / 6 PM
   probes are weekdays only, so Monday 04:xx is a full run again. The watchdog honours `days` and
-  allows raw tables 80 h over a weekend. On weekends the screens job runs at 05:20, 13:20 and 21:20,
+  allows raw tables 84 h over a weekend. On weekends the screens job runs at 05:20, 13:20 and 21:20,
   and the watchdog runs hourly.
 
 To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.

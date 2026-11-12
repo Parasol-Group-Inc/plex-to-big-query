@@ -44,6 +44,41 @@ to BigQuery is free and would make this exact.
 | Screens 3 runs a day on weekends (was 6) | 0.35 |
 | **Total** | **~7.3** |
 
+## Projected, by service (hub tab "Budget", `scripts/hub/budget_tab.py`)
+
+| Service | Before 11-12 | Now (projected) |
+|---|---|---|
+| Cloud Run jobs | 10.4 | 6.9 (7.4 before the per-table probe) |
+| Cloud Build | 3.2 | 0.1 |
+| Cloud Scheduler (33 jobs to 23) | 3.0 | 2.0 |
+| Artifact Registry | 1.2 | 1.2 |
+| Secret Manager | 0.75 | 0.8 |
+| Everything else | 0 | 0 |
+| **Total (midpoints)** | **~19 (range 18-24)** | **~11.5 (range 10-16)** |
+
+With the four cuts below, about $6-10 a month. Keep this table and `budget_tab.py` in step.
+
+## Probe runs re-extract only changed tables (11-12, PR #149)
+
+- **What it costs today:** probe runs spent ~28k s a week extracting. part_routing 10.9k, sales_orders
+  6.4k and part_on_hand_inventory 6.2k, after the ~80 s start-up, from `job_run_log`, 7 days.
+- **Tables changed per run that extracted** (a Sonnet measurement from `probe_log` snapshots, 14 days):
+
+  | Pipeline | Tables changed |
+  |---|---|
+  | part_routing | 3.9 of 18 |
+  | sales_orders | 14.2 of 29 |
+  | part_lot | 7.7 of 22 |
+  | work_orders | 6.3 of 15 |
+  | part_on_hand_inventory | 1.0 of 4 (the changed one is Container, the big one) |
+- **Saving:** a measured lower bound of ~$0.10/month (runs with unmatched durations counted as 0).
+  Apportioning by the share of unchanged rows gives ~12k s a week, **~$1/month**. Its real value is
+  less load on Plex and shorter runs (part_routing's probe runs take 576 s against 284 s for its full
+  runs).
+- **Flat_BOM:** it was never the only changed table (0 of 20 runs). Its content did not move over the
+  weekend (time travel 11-07 to 11-09) and moves most weekdays. `SUM(Lead_Time_Days)` is always 0,
+  so it adds no signal (harmless).
+
 ## Not done yet, ranked
 
 1. **Decide "skip" before starting a container** (~$2-5). The dispatcher, or a Plex API check, would

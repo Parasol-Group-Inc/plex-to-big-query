@@ -28,6 +28,24 @@ and runs them **four times a day** on times kept in a table.
 
 ## How the probe works
 
+**Changed tables only (since 2026-11-12).**
+- **What changed:** with `probe_mode: auto`, a probe run that finds changes re-extracts only the
+  tables whose probe value changed (`tables_to_extract` in `main.py`). The other tables stay as they
+  are in BigQuery, and every view is rebuilt as before. The run email lists those tables as
+  "unchanged, kept".
+- **Still extracts everything:**
+  - the 04:xx full run on weekdays;
+  - a changed config;
+  - a first run;
+  - the run after a failed or partial one.
+- **The trade-off:** a change the probe columns cannot see is picked up at the next full run, the
+  next morning, or Monday after a weekend. Turn it off with the job env `PROBE_PER_TABLE=0`.
+- **Why:** measured 11-12. part_routing re-extracted all 18 tables 28 times in a week (~8.5 min
+  each) while its big tables changed ~0.1% a day; one small table (`Part_v_Part`) changes daily.
+- **Flat_BOM's probe** in sales_orders now watches content (count, max component, part and level, sums
+  of quantity and level), not `Flat_BOM_Key`. Plex regenerates that key daily, so ~214k of
+  240k rows "changed" every day while the content changed in ~231.
+
 `probe_mode: auto` at the top of a report YAML turns it on. Each extraction then
 contributes one aggregate, built from its own view and filter:
 

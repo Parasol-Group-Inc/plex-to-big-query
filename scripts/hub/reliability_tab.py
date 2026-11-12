@@ -147,11 +147,13 @@ def render_tab() -> str:
                'check asks Plex\'s own API (every order\'s last change, about 1 s): <b>is there a change in Plex, older than the line, that '
                'ODBC does not have?</b> A quiet Plex gives 0; a frozen ODBC (11-10) still grows minute by minute. Code: '
                f'{code("plex_api_lag.py")}; rules: {code("docs/ODBC_VS_SCREENS.md")}.</p>' + table(["Check", "Compares Plex with", "Mails when"], [
-                   (code("watchdog odbc_vs_plex"), esc("our copy, at the last time we asked ODBC (a load or a skipped probe)"), esc("6 h+, two runs in a row; it owns the incident")),
+                   (code("watchdog odbc_vs_plex"), esc("our copy, at the last time we asked ODBC (a load or a skipped probe)"), esc("6 h+, two runs in a row, weekdays 6 AM-6 PM; it owns the incident; also mails if Plex's API cannot be read")),
                    (code("stale-data email (main.py)"), esc("ODBC read live in the run"), esc("6 h+, weekdays 9-5, once a day, not if the watchdog already mailed")),
                    (code("screens 'behind'"), esc("ODBC read live"), esc("Label Design 6 h+, revenue 12 h+")),
                ]) + '<p class="lede">If Plex\'s API cannot be read, each check falls back to the old measure. Replay tests from the real days '
-               '(11-10 freeze must alert; 11-11 afternoon, 11-12 overnight and morning, a quiet weekend must not) run with every build.</p></div>')
+               '(a freeze past 6 h must alert; 11-11 afternoon, 11-12 overnight and morning, a quiet weekend must not) run with every build. '
+               'Limits by design: it watches sales orders only, and a freeze under the 6 h line (like the real 4.5 h one on 11-10) is not mailed; '
+               'Label Design is covered by the screens either way.</p></div>')
     weekend = ('<div class="block"><h2>Weekends and cost (2026-11-12)</h2>'
                '<p class="lede">The project costs about $18-24 a month (estimate: usage x list price; no billing export). About 55% of '
                'Cloud Run time is start-up overhead. Cut on 11-12, about $7 a month:</p>' + table(["Change", "About $/month"], [

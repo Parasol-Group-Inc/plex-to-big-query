@@ -27,6 +27,8 @@ from zoneinfo import ZoneInfo
 
 from google.cloud import bigquery
 
+import plex_api_lag
+
 PROJECT = os.environ.get("GCP_PROJECT", "voxdatalake")
 REGION = os.environ.get("GCP_REGION", "us-central1")
 LOG_TABLE = f"{PROJECT}.PlexOps.watchdog_log"
@@ -46,14 +48,12 @@ STALE_RAW_ALLOW = {"raw_materials_parts"}
 #   odbc_connect  - 3 of the last 4 Label Design runs (every 15 min, weekdays) could not
 #                   connect ("ODBC connection failed").
 #   odbc_vs_plex  - Plex's own REST API (connect.plex.com, read-only, ~1 s) has order
-#                   changes our copy of ODBC lacks, the oldest over ODBC_PLEX_LAG_MIN (6 h) old.
-#                   Plex is quiet overnight, so this only fires when work happened and
-#                   ODBC did not deliver it. Docs: docs/ODBC_VS_SCREENS.md.
+#                   changes our copy of ODBC lacked AT our last load, the oldest over
+#                   ODBC_PLEX_LAG_MIN (6 h) old then (since 11-12: the 23:00 -> 04:00 gap
+#                   between our loads no longer counts), two runs in a row before mailing.
+#                   Plex quiet = 0. Measure: plex_api_lag.py. Docs: docs/ODBC_VS_SCREENS.md.
 # 360 since 11-11 PM: ODBC refreshes about every 4 h, so up to ~5 h is normal; 6 h = a missed refresh.
 ODBC_PLEX_LAG_MIN = int(os.environ.get("ODBC_PLEX_LAG_MIN", "360"))
-PLEX_API_BASE = os.environ.get("PLEX_API_BASE", "https://connect.plex.com")
-PLEX_API_SECRETS = (os.environ.get("SECRET_PLEX_API_CONSUMER_KEY", "plex-api-consumer-key"),
-                    os.environ.get("SECRET_PLEX_API_CONSUMER_SECRET", "plex-api-consumer-secret"))
 # Schedulers that are paused on purpose (none of the plex-* ones today).
 PAUSED_OK = {"monday-daily-sync"}
 
@@ -78,7 +78,9 @@ def check_dispatch_missed(c, now_mt):
           SELECT job_name, TIMESTAMP(DATETIME(d, PARSE_TIME('%H:%M', run_time)), 'America/Denver') slot
           FROM `{PROJECT}.PlexOps.etl_schedule`,
                UNNEST([CURRENT_DATE('America/Denver'), DATE_SUB(CURRENT_DATE('America/Denver'), INTERVAL 1 DAY)]) d
-          WHERE enabled)
+          WHERE enabled
+            -- `days` (since 11-12): all | weekdays | weekends; DAYOFWEEK 1 = Sunday, 7 = Saturday
+            AND (IFNULL(days, 'all') = 'all' OR (days = 'weekends') = (EXTRACT(DAYOFWEEK FROM d) IN (1, 7))))
         SELECT s.job_name, s.slot FROM s
         LEFT JOIN `{PROJECT}.PlexOps.etl_dispatch_log` l
           ON l.job_name = s.job_name AND l.scheduled_for = s.slot
@@ -132,7 +134,8 @@ def check_label_design_pending(c, now_mt, prev):
 
 def check_screens_job(c, now_mt):
     r = q(c, f"SELECT MAX(run_started_at) t FROM `{PROJECT}.PlexOps.screen_recon`")[0]
-    if r.t is None or r.t < dt.datetime.now(UTC) - dt.timedelta(minutes=300):
+    gap = 540 if weekend_window(now_mt) else 300   # weekends: 05:20, 13:20, 21:20 only (11-12)
+    if r.t is None or r.t < dt.datetime.now(UTC) - dt.timedelta(minutes=gap):
         return [f"The Plex screens job (every 4 h) (plex-live-screens) has not recorded a run since "
                 f"{r.t.astimezone(DEN):%m-%d %H:%M} MT. Without it nothing compares ODBC with the screens."
                 if r.t else "The Plex screens job has never recorded a run."]
@@ -170,69 +173,68 @@ def check_odbc_connect(c, now_mt):
     return []
 
 
-def odbc_plex_lag(changes, odbc_newest, now, slack_min=5):
-    """changes: Plex REST modification times (UTC). odbc_newest: newest change in our ODBC
-    copy. Returns (lag_min, unseen_count, oldest_unseen): how long the oldest Plex change
-    our copy lacks has been waiting. Pure."""
-    if odbc_newest is None:
-        return None, 0, None
-    unseen = sorted(t for t in changes if t > odbc_newest + dt.timedelta(minutes=slack_min))
-    if not unseen:
-        return 0.0, 0, None
-    return round((now - unseen[0]).total_seconds() / 60, 1), len(unseen), unseen[0]
+# The measure itself lives in plex_api_lag.py (shared with main.py and the screens job).
+odbc_plex_lag = plex_api_lag.odbc_plex_lag
 
 
-def _plex_api_orders():
-    import json
-    import urllib.request
-    from google.cloud import secretmanager
-    sm = secretmanager.SecretManagerServiceClient()
-    key, sec = (sm.access_secret_version(request={"name": f"projects/{PROJECT}/secrets/{n}/versions/latest"})
-                .payload.data.decode("utf-8").strip() for n in PLEX_API_SECRETS)
-    req = urllib.request.Request(f"{PLEX_API_BASE}/sales/v1/orders", method="GET", headers={
-        "X-Plex-Connect-Api-Key": key, "X-Plex-Connect-Api-Secret": sec, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read())
+def previous_failed(c, check_id):
+    """Did the previous watchdog run fail this check? (2 in a row before mailing.)"""
+    r = q(c, f"""SELECT ok, detail FROM `{PROJECT}.PlexOps.watchdog_log` WHERE check_id = '{check_id}'
+                 AND checked_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 75 MINUTE)
+                 ORDER BY checked_at DESC LIMIT 1""")
+    return bool(r) and (not r[0].ok or (r[0].detail or "").startswith("pending:"))
 
 
 def check_odbc_vs_plex(c, now_mt):
-    r = q(c, f"""SELECT odbc_data_as_of t, odbc_loaded_at l FROM `{PROJECT}.PlexOps.data_freshness`
-                 WHERE dataset = 'PlexProd' AND report_group = 'label_design'""")
-    odbc_newest = r[0].t if r else None
+    """Plex changes our last load lacked, measured AT that load (since 11-12): the hours between
+    our own loads (23:00 -> 04:00) never count, and a quiet Plex gives 0. Mails only when two
+    runs in a row are over the line; the first is logged as pending."""
+    # "as of" = the last time we asked ODBC: a load, or a Label Design probe that found nothing
+    # new ("skipped": ODBC had nothing newer than our copy). Without the skipped runs a frozen
+    # ODBC (11-10: every probe skipped) would never look behind.
+    r = q(c, f"""SELECT f.odbc_data_as_of t, GREATEST(f.odbc_loaded_at, IFNULL(j.asked, f.odbc_loaded_at)) l
+                 FROM `{PROJECT}.PlexOps.data_freshness` f
+                 LEFT JOIN (SELECT MAX(started_at) asked FROM `{PROJECT}.PlexProd.job_run_log`
+                            WHERE report_name = 'label_design' AND job_name NOT LIKE '%test%'
+                              AND status IN ('success', 'skipped')
+                              AND started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)) j ON TRUE
+                 WHERE f.dataset = 'PlexProd' AND f.report_group = 'label_design'""")
+    odbc_newest, loaded = (r[0].t, r[0].l) if r else (None, None)
     try:
-        orders = _plex_api_orders()
+        changes = plex_api_lag.plex_order_changes()
     except Exception as e:   # the API being down is not an ODBC problem; say so, do not fail
         print(f"  odbc_vs_plex: Plex REST API unreachable ({type(e).__name__}: {str(e)[:150]}); skipped")
         return []
-    changes = []
-    for o in orders:
-        m = o.get("modifiedDate")
-        if m:
-            try:
-                changes.append(dt.datetime.fromisoformat(m.replace("Z", "+00:00")))
-            except ValueError:
-                pass
-    lag, n, oldest = odbc_plex_lag(changes, odbc_newest, dt.datetime.now(UTC))
-    if lag is not None and lag > ODBC_PLEX_LAG_MIN:
-        return [f"Our Plex order data is {lag / 60:.1f} h behind Plex: Plex's API shows {n} order change(s) "
-                f"since {oldest.astimezone(DEN):%m-%d %H:%M} MT that ODBC has not delivered (our newest is "
-                f"{odbc_newest.astimezone(DEN):%m-%d %H:%M} MT, loaded {r[0].l.astimezone(DEN):%m-%d %H:%M}). "
-                f"Every report built on ODBC is that far behind; Label Design takes new lines from the screens. "
-                f"If ODBC also connects fine, it is serving frozen data: tell Plex support (OPEN_ITEMS D33)."]
-    return []
+    lag, n, oldest = odbc_plex_lag(changes, odbc_newest, loaded)
+    if lag is None or lag <= ODBC_PLEX_LAG_MIN:
+        return []
+    msg = (f"Our Plex order data was {lag / 60:.1f} h behind Plex when we last read ODBC "
+           f"({loaded.astimezone(DEN):%m-%d %H:%M} MT): Plex's API shows {n} order change(s) since "
+           f"{oldest.astimezone(DEN):%m-%d %H:%M} MT that ODBC did not have (its newest is "
+           f"{odbc_newest.astimezone(DEN):%m-%d %H:%M} MT). Every report built on ODBC is that far behind; "
+           f"Label Design takes new lines from the screens. If ODBC also connects fine, it is serving "
+           f"frozen data: tell Plex support (OPEN_ITEMS D33).")
+    return [msg] if previous_failed(c, "odbc_vs_plex") else [f"pending: {msg}"]
+
+
+def weekend_window(now_mt):
+    """Saturday, Sunday or Monday before 06:00 MT: only two probes a day run (since 11-12), so
+    raw tables can rest from Friday's 04:xx full run to Monday's."""
+    return now_mt.weekday() >= 5 or (now_mt.weekday() == 0 and now_mt.hour < 6)
 
 
 def check_raw_freshness(c, now_mt):
+    hours = 80 if weekend_window(now_mt) else 30
     rows = q(c, f"""
         SELECT table_id, TIMESTAMP_MILLIS(last_modified_time) m, row_count
         FROM `{PROJECT}.PlexProd.__TABLES__`
         WHERE STARTS_WITH(table_id, 'raw_') AND row_count > 0
-          AND TIMESTAMP_MILLIS(last_modified_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 HOUR)""")
+          AND TIMESTAMP_MILLIS(last_modified_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours} HOUR)""")
     rows = [r for r in rows if r.table_id not in STALE_RAW_ALLOW]
     if not rows:
         return []
     names = ", ".join(r.table_id for r in rows[:8]) + (" ..." if len(rows) > 8 else "")
-    return [f"{len(rows)} raw table(s) not refreshed in 30 h although they hold rows: {names}. "
+    return [f"{len(rows)} raw table(s) not refreshed in {hours} h although they hold rows: {names}. "
             f"Plex returned 0 rows (the ETL keeps yesterday's) or the extraction stopped."]
 
 
@@ -277,7 +279,9 @@ def check_backups(c, now_mt):
 
 
 def check_test_cascade(c, now_mt):
-    if now_mt.hour < 7:
+    # The test cascade runs Monday-Friday evenings only (since 11-12), so Sunday and Monday
+    # mornings have no "last night" to check.
+    if now_mt.hour < 7 or now_mt.weekday() in (6, 0):
         return []
     since = dt.datetime.combine(now_mt.date() - dt.timedelta(days=1), dt.time(19, 0), DEN)
     rows = q(c, f"""
@@ -346,7 +350,7 @@ CHECKS = [
 def previous_state(c):
     rows = q(c, f"""
         SELECT check_id, ARRAY_AGG(STRUCT(ok, detail) ORDER BY checked_at DESC LIMIT 1)[OFFSET(0)] last
-        FROM `{LOG_TABLE}` WHERE checked_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 MINUTE)
+        FROM `{LOG_TABLE}` WHERE checked_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 80 MINUTE)
         GROUP BY check_id""")
     return {r.check_id: (not r.last["ok"]) or (r.last["detail"] or "").startswith("pending:") for r in rows}
 

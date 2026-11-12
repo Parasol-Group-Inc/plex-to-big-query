@@ -306,12 +306,49 @@ def bq_keys(c, screen, since):
     return keys, modified
 
 
+# ── Plex's API: does ODBC lack any Plex change? (11-12) ───────────────────────
+
+def plex_unseen_now(conn):
+    """(oldest_unseen,) or None: the oldest Plex order change (REST API) newer than ODBC's
+    newest order update, both read now. None when either side cannot be read. Never raises."""
+    try:
+        import plex_api_lag
+        since = (dt.datetime.now(DEN) - dt.timedelta(days=4)).strftime("%Y-%m-%d")
+        cur = conn.cursor()
+        try:
+            cur.execute(f"SELECT MAX(t.Update_Date) FROM Sales_v_PO AS t WHERE t.Update_Date >= '{since}'")
+            row = cur.fetchone()
+        finally:
+            cur.close()
+        newest = plex_api_lag.mt_to_utc(row[0] if row else None)
+        changes = plex_api_lag.plex_order_changes(timeout=30)
+        lag, n, oldest = plex_api_lag.odbc_plex_lag(changes, newest, dt.datetime.now(UTC))
+        if lag is None:
+            return None
+        print(f"Plex API vs ODBC: {n} order change(s) ODBC lacks" + (f", oldest {lag:.0f} min" if n else ""))
+        return (oldest,)
+    except Exception as e:
+        print(f"Plex API vs ODBC not checked ({type(e).__name__}: {str(e)[:150]}); using ODBC's newest change")
+        return None
+
+
 # ── Comparing ─────────────────────────────────────────────────────────────────
 
 def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_at,
             prev_extra=frozenset(), raw=None, raw_modified=None, grace_min=GRACE_MIN,
-            tolerance_min=LAG_TOLERANCE_MIN, odbc_newest_change=None):
-    """Pure: returns (counts, diffs, verdict, lag_min). See the module docstring."""
+            tolerance_min=LAG_TOLERANCE_MIN, odbc_newest_change=None, plex_unseen=None):
+    """Pure: returns (counts, diffs, verdict, lag_min). See the module docstring.
+
+    plex_unseen (since 11-12): None when Plex's API could not be asked; else a tuple
+    (oldest_unseen,) where oldest_unseen is the oldest Plex order change ODBC lacks right now
+    (None = ODBC has them all). It replaces "ODBC's newest change is old" as the sign that ODBC
+    is stale: that age also grows when Plex is quiet (11-12 07:21: 4 new lines, under an hour
+    old, read as 554 min behind because nobody worked in Plex overnight)."""
+    if plex_unseen is not None:
+        stale_since = plex_unseen[0]
+    else:   # API unreadable: the old sign, which can over-report after a quiet night
+        stale_since = odbc_newest_change
+    stale_now = stale_since is not None and stale_since < fetch_at - dt.timedelta(minutes=tolerance_min)
     cut = fetch_at - dt.timedelta(minutes=grace_min)
     counts = {k: 0 for k in ("compared", "excluded_recent", "missing_tail", "missing_hole", "odbc_extra",
                              "status_diff", "value_diff", "odbc_newer", "bq_missing")}
@@ -326,8 +363,7 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
             # A record first seen now (releases and revenue have no time of their own)
             # that ODBC lacks while ODBC's newest change is already older than the
             # tolerance: ODBC is stale now, not in 4 h (the 11-10 order-675 case).
-            stale_at = odbc_newest_change if (odbc_newest_change and key not in odbc and s["event"] is None
-                       and odbc_newest_change < fetch_at - dt.timedelta(minutes=tolerance_min)) else None
+            stale_at = stale_since if (stale_now and key not in odbc and s["event"] is None) else None
             if stale_at is None:
                 counts["excluded_recent"] += 1
                 continue
@@ -382,7 +418,7 @@ def compare(screen, scr, odbc, odbc_max_num, odbc_max_event, first_seen, fetch_a
     # Extras are a lag sign too while ODBC is stale: on 11-10 five releases ODBC still
     # showed as open (Plex had moved on) stayed "extra" through two runs and cleared when
     # ODBC caught up overnight. Only extras while ODBC is fresh mean disagreement.
-    odbc_fresh = odbc_newest_change is None or odbc_newest_change >= fetch_at - dt.timedelta(minutes=tolerance_min)
+    odbc_fresh = not stale_now
     if persistent and lag <= tolerance_min and odbc_fresh:
         diverged.append(f"{len(persistent)} record(s) in ODBC but not on the screen in two runs, e.g. {persistent[0]}")
     if raw is not None and raw_modified is not None:
@@ -845,6 +881,7 @@ def run(args):
     except Exception as e:
         odbc_err = f"ODBC connection failed: {str(e).splitlines()[0][:250]}"
         print(odbc_err)
+    plex_unseen = plex_unseen_now(conn) if conn is not None else None
 
     recon_rows, diff_rows, snap_rows, summary = [], [], [], {}
     for n in names:
@@ -885,7 +922,8 @@ def run(args):
             print(f"  {n}: BigQuery comparison skipped ({str(e).splitlines()[0][:150]})")
         counts, diffs, verdict, lag, why = compare(n, scr, odbc, max_num, max_ev, first_seen, fetch_at[n],
                                                    prev_extra, raw, raw_mod,
-                                                   odbc_newest_change=newest_change(odbc))
+                                                   odbc_newest_change=newest_change(odbc),
+                                                   plex_unseen=plex_unseen)
         rec.update(counts)
         rec.update(verdict=verdict, odbc_lag_min=lag, bq_modified_at=raw_mod,
                    detail=json.dumps({"why": why[:5], "examples": [

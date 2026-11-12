@@ -753,6 +753,15 @@ ACTION NEEDED: Plex ODBC data is N h old — <date>`.
 
 ### Watchdog and screen reconciliation
 
+**Since 2026-11-12:**
+- **Cadence:**
+  - Weekdays: the watchdog every 30 min, the screens job at 01/05/09/13/17/21:20 plus hourly
+    releases-only from 06:20 to 16:20.
+  - Weekends: the watchdog hourly (`plex-etl-watchdog-weekend-sync`), the screens at 05:20, 13:20 and
+    21:20 (`plex-live-screens-weekend-sync`).
+- **"ODBC behind" alerts:** they compare Plex's REST API with ODBC (`plex_api_lag.py`), so a quiet Plex
+  never looks behind. Rules: `docs/ODBC_VS_SCREENS.md`, "One measure for every alert".
+
 Since 2026-11-10 two jobs watch the ETL from outside it:
 
 - **`plex-live-screens`** (every 4 h): Plex screens (Label Design, revenue, shipments) vs

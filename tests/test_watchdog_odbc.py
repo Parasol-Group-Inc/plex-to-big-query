@@ -42,3 +42,18 @@ def test_connect_failures_three_of_four():
     assert w.connect_failures(rows) == (3, 4, t(15, 1), err)
     rows[0] = ("failed", "BigQuery 503", t(15, 46))
     assert w.connect_failures(rows)[0] == 2
+
+
+def test_weekend_window_saturday_sunday_and_early_monday():
+    den = w.DEN
+    assert w.weekend_window(dt.datetime(2026, 11, 14, 10, 0, tzinfo=den))      # Saturday
+    assert w.weekend_window(dt.datetime(2026, 11, 15, 23, 0, tzinfo=den))      # Sunday
+    assert w.weekend_window(dt.datetime(2026, 11, 16, 5, 30, tzinfo=den))      # Monday before 06:00
+    assert not w.weekend_window(dt.datetime(2026, 11, 16, 6, 0, tzinfo=den))   # Monday 06:00
+    assert not w.weekend_window(dt.datetime(2026, 11, 13, 22, 0, tzinfo=den))  # Friday night
+
+
+def test_test_cascade_not_checked_sunday_or_monday_morning():
+    den = w.DEN
+    assert w.check_test_cascade(None, dt.datetime(2026, 11, 15, 9, 0, tzinfo=den)) == []
+    assert w.check_test_cascade(None, dt.datetime(2026, 11, 16, 9, 0, tzinfo=den)) == []

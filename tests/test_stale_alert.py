@@ -63,6 +63,20 @@ def test_nothing_in_four_days_counts_as_stale():
 
 # ── check_odbc_freshness ──────────────────────────────────────────────────────
 
+import pytest  # noqa: E402
+
+import plex_api_lag  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_plex_api(monkeypatch):
+    """Tests never call Plex: by default the API is "unreadable", so the check falls back
+    to the newest-change age (the pre-11-12 behaviour these tests were written for)."""
+    def boom(timeout=60):
+        raise OSError("no network in tests")
+    monkeypatch.setattr(plex_api_lag, "plex_order_changes", boom)
+
+
 class FakeConn:
     def __init__(self, values, fail=False):
         self.values, self.fail, self.sql = list(values), fail, []
@@ -175,3 +189,34 @@ def test_email_says_what_to_do():
     assert "Newest order update: Tue 11-10 08:08 MT" in text
     assert 'Enable-ScheduledTask -TaskName "Plex live screens"' in text and "holiday" in text
     assert "{{" not in html_content and "Tue 11-10 08:08" in html_content
+
+
+# ── 11-12: the alert asks Plex's API, not the newest change's age ─────────────
+
+def _mt(h, mi=0, d=10):
+    return m.datetime(2026, 11, d, h, mi)
+
+
+def test_quiet_plex_with_old_newest_change_does_not_alert(monkeypatch):
+    """A Monday-morning shape: ODBC's newest change is 5 h old only because nobody worked."""
+    monkeypatch.setattr(m, "OUTPUT_MODE", "bigquery")
+    monkeypatch.setattr(m, "BQ_DATASET", "PlexProd")
+    calls = []
+    monkeypatch.setattr(m, "maybe_send_stale_alert", lambda lag, newest: calls.append(lag))
+    newest = {"order update": _mt(7, 46), "production record": _mt(7, 0), "shipper": _mt(6, 0)}
+    order_utc = plex_api_lag.mt_to_utc(_mt(7, 46))
+    monkeypatch.setattr(plex_api_lag, "plex_order_changes", lambda timeout=60: [order_utc])
+    lag = m.check_odbc_freshness(FakeConn(newest.values()), _mt(14, 0))
+    assert lag > 360 and calls == []
+
+
+def test_plex_changes_odbc_lacks_for_7h_alert(monkeypatch):
+    monkeypatch.setattr(m, "OUTPUT_MODE", "bigquery")
+    monkeypatch.setattr(m, "BQ_DATASET", "PlexProd")
+    calls = []
+    monkeypatch.setattr(m, "maybe_send_stale_alert", lambda lag, newest: calls.append(lag))
+    newest = {"order update": _mt(7, 0), "production record": _mt(7, 0), "shipper": _mt(7, 0)}
+    unseen = [plex_api_lag.mt_to_utc(_mt(8, 0)), plex_api_lag.mt_to_utc(_mt(11, 0))]
+    monkeypatch.setattr(plex_api_lag, "plex_order_changes", lambda timeout=60: unseen)
+    m.check_odbc_freshness(FakeConn(newest.values()), _mt(15, 0))
+    assert calls == [420.0]

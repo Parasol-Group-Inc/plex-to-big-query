@@ -1061,6 +1061,22 @@ def stale_alert_due(lag_min: Optional[float], now_local: datetime,
     return lag_min is None or lag_min >= threshold
 
 
+def plex_lag_or_age(odbc_newest_order, age_min: Optional[float], now_local: datetime):
+    """(minutes, how): how long the oldest Plex order change ODBC lacks has waited (Plex's
+    REST API vs ODBC's newest order update, read now). Falls back to the newest-change age
+    when the API cannot be read. Never raises."""
+    try:
+        import plex_api_lag
+        changes = plex_api_lag.plex_order_changes(timeout=20)
+        as_of = now_local.replace(tzinfo=PLEX_TIME_ZONE).astimezone(timezone.utc)
+        lag, n, oldest = plex_api_lag.odbc_plex_lag(changes, plex_api_lag.mt_to_utc(odbc_newest_order), as_of)
+        if lag is None:
+            return age_min, "no ODBC order update; newest-change age"
+        return lag, f"{n} Plex change(s) ODBC lacks" if n else "ODBC has every Plex change"
+    except Exception as e:
+        return age_min, f"Plex API unreadable ({type(e).__name__}); newest-change age"
+
+
 def check_odbc_freshness(conn, now_local: Optional[datetime] = None) -> Optional[float]:
     """Prod only: log the ODBC data lag, alert when stale. Never raises.
     now_local (naive MT) is for tests."""
@@ -1086,9 +1102,14 @@ def check_odbc_freshness(conn, now_local: Optional[datetime] = None) -> Optional
                           for k, v in newest.items())
         log.info("ODBC data freshness (MT): %s; lag %s min.", shown,
                  "n/a" if lag is None else lag)
-        if stale_alert_due(lag, now_local, STALE_ALERT_MINUTES):
-            log.warning("Plex ODBC data looks stale: newest change %s min old.", lag)
-            maybe_send_stale_alert(lag, newest)
+        # Since 11-12 the alert asks Plex's API, not the age above: a quiet Plex (a
+        # Monday morning after the weekend) makes that age large without ODBC being behind.
+        decision, how = plex_lag_or_age(newest.get("order update"), lag, now_local)
+        log.info("ODBC vs Plex API (alert measure): %s min (%s).",
+                 "n/a" if decision is None else decision, how)
+        if stale_alert_due(decision, now_local, STALE_ALERT_MINUTES):
+            log.warning("Plex ODBC data looks stale: %s min (%s).", decision, how)
+            maybe_send_stale_alert(decision, newest)
         return lag
     except Exception:
         log.exception("ODBC freshness check failed; carrying on.")
@@ -1112,6 +1133,18 @@ def maybe_send_stale_alert(lag_min: Optional[float], newest: dict) -> bool:
         """).result())[0].n
         if recent:
             log.info("Stale-data alert already sent in the last %d h.", SCREENS_ALERT_REPEAT_HOURS)
+            return False
+        # One owner per incident (11-12): the watchdog's odbc_vs_plex mails "ODBC behind";
+        # if it already did in the last 24 h, this email would only repeat it.
+        try:
+            owned = list(bq.query(f"""
+                SELECT COUNT(*) AS n FROM `{GCP_PROJECT}.PlexOps.watchdog_log`
+                WHERE check_id = 'odbc_vs_plex' AND alerted
+                  AND checked_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)""").result())[0].n
+        except Exception:
+            owned = 0
+        if owned:
+            log.info("ODBC behind already mailed by the watchdog in the last 24 h; no stale-data email.")
             return False
         try:
             screens_at = list(bq.query(

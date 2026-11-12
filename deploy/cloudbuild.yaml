@@ -43,7 +43,8 @@ tags:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8          # faster builds — ODBC driver copy is heavy
+  # 2026-11-12 (save money): the default machine, inside Cloud Build's 2,500 free minutes a month.
+  # E2_HIGHCPU_8 (~$3/month) built about twice as fast; the timeout below allows for the slower build.
 
 steps:
 
@@ -185,4 +186,4 @@ images:
 # ── Build timeout ─────────────────────────────────────────────────────────────
 # 20 minutes — ODBC driver copy + Docker build can be slow on first run
 # with no layer cache available.
-timeout: "1800s"  # 2026-11-10: the screens image installs Chromium
+timeout: "3600s"  # 2026-11-10: the screens image installs Chromium; 11-12: default (slower) machine

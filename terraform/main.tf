@@ -621,11 +621,11 @@ resource "google_cloud_run_v2_job" "etl_test" {
   }
 }
 
-# 2026-11-12 (Emilio: save money on weekends): the test cascade and its retries run Monday-
-# Friday only. The tfvars crons keep their minute and hour; the day-of-week becomes 1-5.
+# 2026-11-12 (Emilio: save money): the test cascade runs Monday-Friday only (the tfvars cron
+# keeps its minute and hour; the day-of-week becomes 1-5), and the *_test_retry schedulers are
+# gone: they started a container every night that did nothing unless a test run had failed.
 locals {
-  test_cron_weekdays       = "${join(" ", slice(split(" ", var.scheduler_cron_test), 0, 4))} 1-5"
-  test_retry_cron_weekdays = "${join(" ", slice(split(" ", var.retry_scheduler_cron), 0, 4))} 1-5"
+  test_cron_weekdays = "${join(" ", slice(split(" ", var.scheduler_cron_test), 0, 4))} 1-5"
 }
 
 resource "google_cloud_scheduler_job" "etl_test" {
@@ -639,30 +639,6 @@ resource "google_cloud_scheduler_job" "etl_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_test_retry" {
-  name        = "${var.scheduler_job_test}-retry"
-  description = "Retries the sales orders ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -976,30 +952,6 @@ resource "google_cloud_scheduler_job" "etl_work_orders_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_work_orders_test_retry" {
-  name        = "plex-work-orders-sync-test-retry"
-  description = "Retries the work orders ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_work_orders_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -1330,30 +1282,6 @@ resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_test" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_purchasing_open_orders_test_retry" {
-  name        = "plex-purchasing-open-orders-sync-test-retry"
-  description = "Retries the purchasing open orders ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_open_orders_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Part Obsolescence report — GCS config files ──────────────────────────────
 
 resource "google_storage_bucket_object" "part_obsolescence_config_prod" {
@@ -1663,30 +1591,6 @@ resource "google_cloud_scheduler_job" "etl_part_obsolescence_test" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_part_obsolescence_test_retry" {
-  name        = "plex-part-obsolescence-sync-test-retry"
-  description = "Retries the part obsolescence ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_obsolescence_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ── Inventory Activity report — GCS config files ─────────────────────────────
 
 resource "google_storage_bucket_object" "inventory_activity_config_prod" {
@@ -1989,30 +1893,6 @@ resource "google_cloud_scheduler_job" "etl_inventory_activity_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_activity_test_retry" {
-  name        = "plex-inventory-activity-sync-test-retry"
-  description = "Retries the inventory activity ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_activity_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -2331,27 +2211,6 @@ resource "google_cloud_scheduler_job" "etl_inventory_snapshot_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot_test.name}:run"
     body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_inventory_snapshot_test_retry" {
-  name        = "plex-inventory-snapshot-sync-test-retry"
-  description = "Retries the inventory snapshot ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_inventory_snapshot_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
     oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
@@ -2826,27 +2685,6 @@ resource "google_cloud_scheduler_job" "etl_quality_nonconformance_test" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_quality_nonconformance_test_retry" {
-  name        = "plex-quality-nonconformance-sync-test-retry"
-  description = "Retries the quality non-conformance ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_nonconformance_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
 # ── Part On-Hand Inventory report — GCS config files ──────────────────────────
 
 resource "google_storage_bucket_object" "part_on_hand_inventory_config_prod" {
@@ -3168,27 +3006,6 @@ resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory_test.name}:run"
     body        = base64encode("{}")
-    oauth_token { service_account_email = google_service_account.etl.email }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_part_on_hand_inventory_test_retry" {
-  name        = "plex-part-on-hand-inventory-sync-test-retry"
-  description = "Retries the part on-hand inventory ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_part_on_hand_inventory_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
     oauth_token { service_account_email = google_service_account.etl.email }
   }
 }
@@ -3610,29 +3427,6 @@ resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_test"
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_purchasing_pending_requisitions_test_retry" {
-  name        = "plex-purchasing-pending-requisitions-sync-test-retry"
-  description = "Retries the purchasing pending requisitions ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_purchasing_pending_requisitions_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
 # ═══════════════════════════════════════════════════════════════════════════
 # Open Quotes — "Vox | Open Quotes" (NetSuite parity). SQL/business rule
 # built and schema-confirmed 2026-08-14/21, but discovered 2026-08-23 (while
@@ -3927,30 +3721,6 @@ resource "google_cloud_scheduler_job" "etl_sales_quotes_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_sales_quotes_test_retry" {
-  name        = "plex-sales-quotes-sync-test-retry"
-  description = "Retries the Open Quotes ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_quotes_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -4256,30 +4026,6 @@ resource "google_cloud_scheduler_job" "etl_sales_returns_test" {
   }
 }
 
-resource "google_cloud_scheduler_job" "etl_sales_returns_test_retry" {
-  name        = "plex-sales-returns-sync-test-retry"
-  description = "Retries the Open RMA's ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_sales_returns_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
 # ═══════════════════════════════════════════════════════════════════════════
 # Approve Vendor Return Authorizations — "Quality | Approve Vendor Return
 # Authorizations" (NetSuite parity). SQL/business rule built and
@@ -4576,30 +4322,6 @@ resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_test" {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns_test.name}:run"
     body        = base64encode("{}")
-
-    oauth_token {
-      service_account_email = google_service_account.etl.email
-    }
-  }
-}
-
-resource "google_cloud_scheduler_job" "etl_quality_supplier_returns_test_retry" {
-  name        = "plex-quality-supplier-returns-sync-test-retry"
-  description = "Retries the Approve Vendor Return Authorizations ETL job (test) if today's scheduled run failed"
-  schedule    = local.test_retry_cron_weekdays
-  time_zone   = var.retry_time_zone
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://run.googleapis.com/v2/projects/${var.gcp_project}/locations/${var.gcp_region}/jobs/${google_cloud_run_v2_job.etl_quality_supplier_returns_test.name}:run"
-    body = base64encode(jsonencode({
-      overrides = {
-        containerOverrides = [{
-          env = [{ name = "RUN_MODE", value = "retry" }]
-        }]
-      }
-    }))
 
     oauth_token {
       service_account_email = google_service_account.etl.email
@@ -5207,6 +4929,7 @@ resource "google_cloud_scheduler_job" "etl_label_design_test" {
   schedule    = "5 5-17 * * 1-5" # hourly at :05, 5 AM - 5 PM Mountain, Mon-Fri — see scheduler_time_zone
   time_zone   = var.scheduler_time_zone
   region      = var.gcp_region
+  paused      = true # 2026-11-12 (save money): it ran ~10 times a weekday against the prod view; run it by hand when testing
 
   http_target {
     http_method = "POST"

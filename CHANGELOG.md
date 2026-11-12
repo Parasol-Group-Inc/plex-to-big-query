@@ -38,6 +38,14 @@ don't need an entry.
   80 min.
 - Tests: `tests/test_dispatcher.py` (7 new), `tests/test_watchdog_odbc.py` (weekend window).
 
+### Removed (cost analysis 11-12: the project costs about $18-24 a month; these save ~$5.5)
+- **The 12 `*_test_retry` schedulers.** Each started a container every night that did nothing
+  unless a test run had failed (~$1.75 a month).
+- **Cloud Build's E2_HIGHCPU_8 machine.** Builds use the default machine, inside the 2,500 free
+  minutes, and the timeout goes from 1800 s to 3600 s (~$3.1 a month).
+- **`plex-label-design-sync-test` is paused.** It ran about 10 times a weekday against the prod
+  view; run it by hand when testing (~$0.6). The watchdog lists it in `PAUSED_OK`.
+
 ## 2026-11-12 - Alerts: one measure (Plex changes ODBC lacks), no false positives
 
 ### Fixed

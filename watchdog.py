@@ -54,8 +54,8 @@ STALE_RAW_ALLOW = {"raw_materials_parts"}
 #                   Plex quiet = 0. Measure: plex_api_lag.py. Docs: docs/ODBC_VS_SCREENS.md.
 # 360 since 11-11 PM: ODBC refreshes about every 4 h, so up to ~5 h is normal; 6 h = a missed refresh.
 ODBC_PLEX_LAG_MIN = int(os.environ.get("ODBC_PLEX_LAG_MIN", "360"))
-# Schedulers that are paused on purpose (none of the plex-* ones today).
-PAUSED_OK = {"monday-daily-sync"}
+# Schedulers that are paused on purpose. plex-label-design-sync-test since 11-12 (save money).
+PAUSED_OK = {"monday-daily-sync", "plex-label-design-sync-test"}
 
 
 def q(c, sql, **params):

@@ -122,8 +122,8 @@ DIAGRAM = """flowchart LR
 
 def render_tab() -> str:
     stats = [("3", "Plex screens checked"), ("17", "reports labeled with their source"),
-             ("14", "watchdog checks every 30 min"), ("4", "Google alerts outside our code"),
-             ("1 h", "a new Label Design order to Monday"), ("6 h / 12 h", "ODBC lag before an email")]
+             ("14", "watchdog checks every 30 min (hourly on weekends)"), ("4", "Google alerts outside our code"),
+             ("1 h", "a new Label Design order to Monday"), ("6 h / 12 h", "Plex changes ODBC lacks before an email")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     verdicts = table(["Verdict", "When", "What happens"], [(code(v), esc(w), esc(h)) for v, w, h in VERDICTS])
     emails = table(["Email", "To", "When", "What it says"], [tuple(esc(x) for x in r) for r in EMAILS])
@@ -140,6 +140,28 @@ def render_tab() -> str:
              f'later and confirms it. Shipments and revenue stay on ODBC. Nobody is emailed for a normal delay. Full rules: '
              f'{code("docs/ODBC_VS_SCREENS.md")}.</p>' + table(["", "Label Design", "Revenue and shipments"], [
                  (esc(a), esc(b), esc(c)) for a, b, c in GROUP_RULES]) + '</div>')
+    measure = ('<div class="block"><h2>No false alarms: one measure for "ODBC is behind" (2026-11-12)</h2>'
+               '<p class="lede">Until 11-12 three checks asked how old ODBC\'s newest change was. That age also grows when nobody '
+               'works in Plex, so a quiet night or weekend looked like a stuck ODBC: the watchdog fired at 02:11 (6.1 h; we do not load '
+               'between 23:00 and 04:00), and the screens digest said "554 min behind" at 07:21 for four lines under an hour old. Now every '
+               'check asks Plex\'s own API (every order\'s last change, about 1 s): <b>is there a change in Plex, older than the line, that '
+               'ODBC does not have?</b> A quiet Plex gives 0; a frozen ODBC (11-10) still grows minute by minute. Code: '
+               f'{code("plex_api_lag.py")}; rules: {code("docs/ODBC_VS_SCREENS.md")}.</p>' + table(["Check", "Compares Plex with", "Mails when"], [
+                   (code("watchdog odbc_vs_plex"), esc("our copy, at the last time we asked ODBC (a load or a skipped probe)"), esc("6 h+, two runs in a row; it owns the incident")),
+                   (code("stale-data email (main.py)"), esc("ODBC read live in the run"), esc("6 h+, weekdays 9-5, once a day, not if the watchdog already mailed")),
+                   (code("screens 'behind'"), esc("ODBC read live"), esc("Label Design 6 h+, revenue 12 h+")),
+               ]) + '<p class="lede">If Plex\'s API cannot be read, each check falls back to the old measure. Replay tests from the real days '
+               '(11-10 freeze must alert; 11-11 afternoon, 11-12 overnight and morning, a quiet weekend must not) run with every build.</p></div>')
+    weekend = ('<div class="block"><h2>Weekends and cost (2026-11-12)</h2>'
+               '<p class="lede">The project costs about $18-24 a month (estimate: usage x list price; no billing export). About 55% of '
+               'Cloud Run time is start-up overhead. Cut on 11-12, about $7 a month:</p>' + table(["Change", "About $/month"], [
+                   (esc("Weekends: prod probes only, 04:xx and 23:xx (etl_schedule.days); Monday 04:xx is a full run again"), "0.5"),
+                   (esc("Test cascade Monday-Friday; the 12 nightly no-op test retry schedulers removed"), "2.35"),
+                   (esc("Label Design test scheduler paused"), "0.6"),
+                   (esc("Cloud Build on the default machine (free minutes)"), "3.1"),
+                   (esc("Screens 3 times a day on weekends (05:20, 13:20, 21:20); watchdog hourly on weekends"), "0.75"),
+               ]) + f'<p class="lede">Next, not done: decide "skip" before starting a container (~$2-5), screens at 1 vCPU / 2 GiB (~$1.7), '
+               f'an Artifact Registry cleanup policy (~$1.1). Details: {code("docs/COST_ANALYSIS.md")}.</p></div>')
     return f"""{START}<section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref">
 <div class="block"><h2>How we know the data is right</h2>
 <p class="lede">On 2026-11-10 Plex's database feed (ODBC) kept answering but served data frozen at 08:10 MT for 4.5 hours, and every
@@ -149,7 +171,7 @@ every report says where its data came from, and a watchdog checks that every par
 <div class="block"><h2>The flow</h2><div class="diagram"><pre class="mermaid">{DIAGRAM}</pre></div></div>
 <div class="two">
 <div class="panel"><h3>The screens check (plex-live-screens)</h3><ol class="steps">
-<li>Hourly on weekdays (6:20 AM-5:20 PM, Label Design screen only) and every 4 hours (all three screens) it logs into Plex's web screens. Every login, and any re-login, is logged with a screenshot; a failed one emails Emilio.</li>
+<li>Hourly on weekdays (6:20 AM-5:20 PM, Label Design screen only), every 4 hours on weekdays and at 05:20, 13:20, 21:20 on weekends (all three screens) it logs into Plex's web screens. Every login, and any re-login, is logged with a screenshot; a failed one emails Emilio.</li>
 <li>Reads three screens: Label Design order releases, Shipper History and Shipping Revenue by Part Group, and screenshots each.</li>
 <li>Reads the same records from ODBC <b>live</b> (its own connection, minutes after the screen read, not our extracted copy) and from our BigQuery tables, and compares them record by record (records under 15 minutes old are skipped). So "ODBC is behind" is Plex's lag, never a sign that our ETL hasn't extracted lately; only the BigQuery comparison depends on our extraction schedule.</li>
 <li>Gives each screen a verdict and records every difference.</li>
@@ -157,6 +179,8 @@ every report says where its data came from, and a watchdog checks that every par
 <li>Sends the digest and any alert.</li></ol></div>
 <div class="panel"><h3>Verdicts</h3>{verdicts}</div></div>
 {rules}
+{measure}
+{weekend}
 <div class="block"><h2>Where the data came from: on every report</h2>
 <p class="lede">Every report built on the Label Design queue, the shipping revenue report or production records ends with three columns
 from {code("PlexOps.data_freshness")}. Production always reads ODBC. On Monday, the push writes {code("data_label")} into the new
@@ -168,7 +192,7 @@ stopped, even when every run succeeded.</p>{labels}</div>
 <li>Screenshots: {code("gs://voxdatalake-plex-screenshots/plex-screens/YYYY/MM/DD/HHMM-MT_<run>/NN_<what>.png")}, kept 365 days.</li>
 <li>Tables: {code("PlexOps.screen_recon")}, {code("screen_recon_diff")}, {code("screen_snapshot")}, {code("plex_login_log")}, {code("live_source")}, {code("data_freshness")}, {code("watchdog_log")}.</li>
 <li>Settings: behind at 300 min, email at 360 min (Label Design and ODBC alerts) / 720 min (shipments, revenue), digest hours 9/13/17; ODBC refreshes about every 4 h (Terraform, job plex-live-screens; hourly scheduler plex-live-screens-releases-sync).</li>
-<li>Cost: about $6 a month for the screens job (4-hourly plus weekday hourly), $1 for the watchdog.</li>
+<li>Cost: about $5 a month for the screens job, $1 for the watchdog; the whole project about $18-24 (docs/COST_ANALYSIS.md).</li>
 <li>Hand-built datasets: Jennilyn's VoxScorecardsLive (60 views, 25 tables) is backed up in the repo under custom_views/ with a README per object, and its tables are copied to Backups.VoxScorecardsLive__*_20261111 (11-11). Refresh with scripts/backup_custom_views.py.</li>
 <li>Runbooks: PLEX_SCREEN_EXTRACTION.md "Reconciliation (cloud job)", OPERATIONS.md "Watchdog and screen reconciliation", docs/reports/data_freshness.md.</li>
 </ul></div></div>

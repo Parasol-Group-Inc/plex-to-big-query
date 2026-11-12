@@ -326,7 +326,7 @@ starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
   `weekdays` or `weekends` (Mountain dates; NULL = all). Saturday and Sunday each run two probes
   per job: the 04:xx `weekends` rows and the 23:xx rows. The 4 AM full run and the 1 PM / 6 PM
   probes are weekdays only, so Monday 04:xx is a full run again. The watchdog honours `days` and
-  allows raw tables 80 h over a weekend. On weekends the screens job runs at 05:20, 13:20 and 21:20,
+  allows raw tables 84 h over a weekend. On weekends the screens job runs at 05:20, 13:20 and 21:20,
   and the watchdog runs hourly.
 
 To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.

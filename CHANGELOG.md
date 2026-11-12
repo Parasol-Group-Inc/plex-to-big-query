@@ -25,9 +25,16 @@ don't need an entry.
   - Switch: job env `PROBE_PER_TABLE=0`.
   - Why: part_routing re-extracted 18 tables 28 times a week while its big tables changed ~0.1% a
     day (BigQuery time-travel comparison, 11-12).
-- **sales_orders' `raw_Part_v_Flat_BOM` probe watches content** (`Component_Part_Key`, `BOM_Level`,
-  `sum:Quantity`, `sum:Lead_Time_Days`) instead of `Flat_BOM_Key`, which Plex regenerates daily. Both
+- **sales_orders' `raw_Part_v_Flat_BOM` probe watches content** (`Component_Part_Key`, `Part_Key`, `BOM_Level`,
+  `sum:Quantity`, `sum:BOM_Level`) instead of `Flat_BOM_Key`, which Plex regenerates daily. Both
   YAMLs. The config change makes the next probe run of sales_orders a full run once.
+- **A Sonnet review found no blockers** (`docs/reviews/2026-11-12_alerts_weekend_cost.md`, part 2):
+  - The Flat_BOM probe now also watches `Part_Key` and `sum:BOM_Level`. `Lead_Time_Days` is always 0
+    and was dropped.
+  - The watchdog allows raw tables 84 h over a weekend (was 80), since only full runs touch kept
+    tables.
+- Measured saving (Sonnet, from `probe_log`): ~$0.10-1.0/month. The main gain is less Plex load and
+  shorter probe runs.
 - Tests: `tests/test_probe.py` (5 new). Docs: OPERATIONS.md and PROBE_BUILD_PLAN.md, "Change Probe";
   CLAUDE.md.
 - Backups: `Backups.PlexOps__etl_schedule_before_weekend_20261112` (56 rows),

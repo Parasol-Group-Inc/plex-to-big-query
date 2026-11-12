@@ -20,9 +20,9 @@ KEY, LABEL = "budget", "Budget"
 
 # (service, before 11-12, after 11-12, what changed)   $/month, midpoints
 SERVICES = [
-    ("Cloud Run jobs", 10.4, 7.4,
+    ("Cloud Run jobs", 10.4, 6.9,
      "weekend probes only; test cascade Mon-Fri; test retries removed; Label Design test paused; "
-     "screens 3x and watchdog hourly on weekends"),
+     "screens 3x and watchdog hourly on weekends; probe runs re-extract only changed tables"),
     ("Cloud Build", 3.2, 0.1, "default machine, inside the 2,500 free minutes"),
     ("Cloud Scheduler", 3.0, 2.0, "33 jobs to 23 (12 retries removed, 2 weekend schedulers added; 3 free)"),
     ("Artifact Registry", 1.2, 1.2, "no change yet (cleanup policy is next)"),
@@ -39,6 +39,7 @@ DONE = [
     ("Weekends: prod probes only at 04:xx and 23:xx", 0.5),
     ("Watchdog hourly on weekends", 0.4),
     ("Screens 3 times a day on weekends (was 6)", 0.35),
+    ("Probe runs re-extract only changed tables (PR #149; measured $0.10-1.0, mostly less Plex load)", 0.5),
 ]
 
 NEXT = [
@@ -74,9 +75,9 @@ def render_tab() -> str:
     after = sum(a for _, _, a, _ in SERVICES)
     done = sum(v for _, v in DONE)
     stats = [(f"${before:,.0f}", "a month before 11-12 (estimate; range $18-24)"),
-             (f"${after:,.0f}", "a month projected now (range $11-17)"),
-             (f"${done:,.1f}", "a month cut on 11-12"),
-             ("$6-10", "a month if the next four cuts are made"),
+             (f"${after:,.0f}", "a month projected now (range $10-16)"),
+             (f"${done:,.1f}", "a month cut on 11-12 (per-table probe included once #149 ships)"),
+             ("$6-10", "a month if the next cuts are made"),
              ("~55%", "of Cloud Run time is container start-up")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
     top = max(b for _, b, _, _ in SERVICES)

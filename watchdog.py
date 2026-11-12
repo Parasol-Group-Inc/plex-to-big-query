@@ -235,7 +235,9 @@ def weekend_window(now_mt):
 
 
 def check_raw_freshness(c, now_mt):
-    hours = 80 if weekend_window(now_mt) else 30
+    # 84 h: Friday 04:xx full -> Monday 04:xx full is 72 h, and since 11-12 probe runs keep
+    # unchanged tables, so only full runs touch them (review: leave room for a slow Monday run).
+    hours = 84 if weekend_window(now_mt) else 30
     rows = q(c, f"""
         SELECT table_id, TIMESTAMP_MILLIS(last_modified_time) m, row_count
         FROM `{PROJECT}.PlexProd.__TABLES__`

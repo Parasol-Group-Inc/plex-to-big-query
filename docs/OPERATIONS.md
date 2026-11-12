@@ -491,8 +491,8 @@ For known error signatures (e.g. a specific ODBC error code), the Errors section
   next morning, or Monday after a weekend. Turn it off with the job env `PROBE_PER_TABLE=0`.
 - **Why:** measured 11-12. part_routing re-extracted all 18 tables 28 times in a week (~8.5 min
   each) while its big tables changed ~0.1% a day; one small table (`Part_v_Part`) changes daily.
-- **Flat_BOM's probe** in sales_orders now watches content (count, max component and level, sums
-  of quantity and lead time), not `Flat_BOM_Key`. Plex regenerates that key daily, so ~214k of
+- **Flat_BOM's probe** in sales_orders now watches content (count, max component, part and level, sums
+  of quantity and level), not `Flat_BOM_Key`. Plex regenerates that key daily, so ~214k of
   240k rows "changed" every day while the content changed in ~231.
 
 Every pipeline can start a run with a cheap question to Plex: has anything I

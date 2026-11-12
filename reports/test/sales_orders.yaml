@@ -242,7 +242,7 @@ extractions:
     bq_table: raw_Part_v_Flat_BOM
     filter: ""
     date_col: ""
-    probe: [Component_Part_Key, BOM_Level, sum:Quantity, sum:Lead_Time_Days]
+    probe: [Component_Part_Key, Part_Key, BOM_Level, sum:Quantity, sum:BOM_Level]
     page_key: Flat_BOM_Key
     page_size: 25000
 

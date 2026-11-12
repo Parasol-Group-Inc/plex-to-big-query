@@ -343,7 +343,9 @@ def main():
         import reliability_tab  # 2026-11-10: screens check, source labels, watchdog, emails (static)
         import label_api_tab  # 2026-11-11: Plex REST API for Label Design (docs/hub/label_api_survey.json)
         import budget_tab  # 2026-11-12: monthly cost before/after the cuts (docs/COST_ANALYSIS.md)
-        live = budget_tab.add(label_api_tab.add(reliability_tab.add(customer_notes_tab.add(screens_tab.add(audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot}))))))))
+        import dr_tab  # 2026-11-12: disaster recovery (docs/DISASTER_RECOVERY.md)
+        import onboarding_tab  # 2026-11-12: new developer (docs/ONBOARDING.md)
+        live = onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(customer_notes_tab.add(screens_tab.add(audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot}))))))))))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

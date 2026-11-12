@@ -82,6 +82,26 @@ Also since 11-12:
 - **Replay tests** from the real days: `tests/test_plex_api_lag.py` (11-10 freeze must alert;
   11-11 afternoon, 11-12 overnight, 11-12 07:21 and a quiet weekend must stay quiet).
 
+## Cross-check: Plex's Order Line Manager (11-12)
+
+`https://vox.on.plex.com/SalesAndCRM/OrderLineManager`, filtered Order Status = Pending Fulfillment +
+Active and Order Line Status = Label Design. "Order Line Status" is the release status (field
+`ReleaseStatusKey`), the same thing `label_design_report` uses. Read once on 11-12, read-only
+(screenshots and rows in `etl-manual/order_line_manager_check/`):
+- **Speed:** about 7 s to load, plus about 20 s to log in. There is no export, but the page is easy
+  to read.
+- **Rows:** 82 lines against our 64.
+  - **18 orders, 20 lines, appear on the screen only.** All 18 are dated before 2026-10-18, the
+    go-live floor the report applies on purpose.
+  - **2 lines appear in our report only** (371, 581). They left Label Design after ODBC's 08:03 data
+    and drop out at the next refresh.
+  - Orders 405 and 490-493 show "NEW PRODUCT" as the part text on the screen, against the product
+    name in our report.
+- **Orders 625, 669, 671** (Kelli, 11-12) are on the screen with Label Design. They became Pending
+    Fulfillment that morning.
+- **Verdict:** the screen agrees with our report apart from the floor and ODBC's lag. It could be
+  a cheaper extra cross-check than the releases screen (one page), but it is not built.
+
 ## Why
 
 | | ODBC (`vox.odbc.plex.com`) | Plex screens (web, Playwright) |

@@ -76,7 +76,7 @@ def render_tab() -> str:
     done = sum(v for _, v in DONE)
     stats = [(f"${before:,.0f}", "a month before 11-12 (estimate; range $18-24)"),
              (f"${after:,.0f}", "a month projected now (range $10-16)"),
-             (f"${done:,.1f}", "a month cut on 11-12 (per-table probe included once #149 ships)"),
+             (f"${done:,.1f}", "a month cut on 11-12 (all shipped: PRs #147 and #149)"),
              ("$6-10", "a month if the next cuts are made"),
              ("~55%", "of Cloud Run time is container start-up")]
     stats_html = "".join(f'<div class="stat"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l in stats)
@@ -89,7 +89,7 @@ def render_tab() -> str:
     next_t = table(["Next cut (not done)", "About $/month", "Effort", "Risk"],
                    [tuple(esc(x) for x in r) for r in NEXT])
     runs = table(["Cloud Run job", "Wall seconds a month", "Note"], [
-        (esc("Prod ETL (14 jobs)"), "~218k", esc("about 80 s of start-up per run (boot, ODBC driver, connect, probe)")),
+        (esc("Prod ETL (14 dispatcher jobs)"), "~218k", esc("about 80 s of start-up per run (boot, ODBC driver, connect, probe)")),
         (esc("Watchdog"), "~122k", esc("48 runs a weekday x 85 s; 24 a weekend day since 11-12")),
         (esc("Label Design"), "~117k", esc("40 runs a weekday x 96 s; 78% skip")),
         (esc("Test cascade"), "~107k", esc("weekdays only since 11-12; retries removed")),
@@ -110,6 +110,15 @@ billing export to BigQuery is free and would make these exact. Method and eviden
 <p class="lede">The biggest lever is the first: most runs end "nothing changed" after paying for a full container start. Deciding that
 before starting the container (a cheap check in the dispatcher, or the Plex API trigger planned for Label Design, D38) removes most
 of that cost.</p></div>
+<div class="block"><h2>Getting actual costs instead of estimates</h2>
+<p class="lede">Checked 11-12 (read-only): no billing data is readable. The Cloud Billing API is disabled on voxdatalake, there is
+no billing export, and the billing account is not visible to our accounts. To turn this tab into actual figures, a billing admin can:</p>
+<ol class="steps">
+<li>Enable the APIs: <code>gcloud services enable cloudbilling.googleapis.com billingbudgets.googleapis.com --project=voxdatalake</code>.</li>
+<li>Grant <code>roles/billing.viewer</code> on the billing account to <code>claude-readonly@voxdatalake.iam.gserviceaccount.com</code> and share the billing account id (budgets and account totals).</li>
+<li>Turn on Billing export to BigQuery (Standard usage cost, and Detailed if offered) into a new dataset <code>voxdatalake.billing_export</code> (US), with <code>roles/bigquery.dataViewer</code> for claude-readonly. It starts from the day it is enabled.</li>
+<li>Meanwhile: a CSV from Billing &gt; Reports, grouped by SKU, last 3 months, project voxdatalake (Date, Service, SKU, Cost, Credits, Subtotal), plus a Group-by-Project view, which shows whether other projects use the free tier (Cloud Run $10.4 vs $15.7 before the cuts).</li>
+</ol></div>
 <div class="block"><h2>What is not counted</h2><ul class="plain">
 <li>BigQuery queries from Looker Studio dashboards (VoxScorecardsLive, plex_mirror): not readable; likely inside the 1 TiB free.</li>
 <li>Cloud Logging ingestion: not readable; likely inside 50 GiB free.</li>

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Milestone trigger (2026-11-12): when main moves in the PRIMARY folder (git pull of a merged PR),
+# start scripts/milestone_sync.sh in the background (backups + documentation to-do). Never blocks
+# the pull; set SKIP_MILESTONE=1 to skip once. Installed by scripts/install_hooks.sh.
+[ "${SKIP_MILESTONE:-}" = "1" ] && exit 0
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || exit 0
+top="$(git rev-parse --show-toplevel)"
+[ -x "$top/scripts/milestone_sync.sh" ] || exit 0
+prev="$(git rev-parse --short 'HEAD@{1}' 2>/dev/null)"
+nohup "$top/scripts/milestone_sync.sh" "$prev" >/dev/null 2>&1 &
+echo "milestone: backups + docs to-do started in the background (~/plex-monitor/milestones.log)"
+exit 0

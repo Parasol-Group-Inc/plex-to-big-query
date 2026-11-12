@@ -1,9 +1,38 @@
 # Disaster Recovery — "the GCP account is lost, now what?"
 
-Last reviewed: 2026-09-25
+Last reviewed: 2026-11-12
 
 > Two very different scenarios hide behind that question. Read the first
 > paragraph of each section to figure out which one you're in.
+
+## What breaks, and the quick fix (added 2026-11-12)
+
+| What went wrong | Where the copy is | How to get it back |
+|---|---|---|
+| A table or view was deleted or overwritten in BigQuery | **Time travel**: 7 days, automatic | `bq cp voxdatalake:PlexProd.<t>@<ms-epoch> voxdatalake:PlexProd.<t>_restored` |
+| A BigQuery-only table is damaged (no Plex source: `PlexOps.etl_schedule`, `PlexProd.probe_log`, `msl_demand_daily`, `scorecard_goals_app`, `VoxScorecardsLive.*`) | **`Backups` dataset**: dated copies `<Dataset>__<table>_<YYYYMMDD>`; weekly snapshots, 90 days (the 11-11 `VoxScorecardsLive__*` copies never expire) | `bq cp -f voxdatalake:Backups.<name> voxdatalake:<Dataset>.<table>_restored`, compare, then swap. List: `bq ls --max_results=500 voxdatalake:Backups` |
+| A `raw_*` table or a report view is wrong | Plex and git | Re-run the job; the views are rebuilt from `reports/sql/` |
+| Terraform state is damaged or rolled back | `gs://voxdatalake-terraform-state` is **versioned** (on since 2026-10-27; 471 versions on 11-12) | `gcloud storage ls -a gs://voxdatalake-terraform-state/plex-to-big-query/`, copy the good generation back over the live object, then `terraform init` |
+| Code, Terraform or docs lost | GitHub (every branch pushed). Also git bundles in `~/plex-monitor/backups/` on Emilio's Mac (`plex-to-big-query_<date>.bundle`) | `git clone <bundle> restore-dir` |
+| The dispatcher stopped (no prod runs) | Code in `deploy/etl_dispatcher/`; times in `PlexOps.etl_schedule` | Redeploy the function with the `gcloud functions deploy etl-dispatcher` command in `terraform/main.tf` (keep `--max-instances=1`, `--timeout=300`) |
+| A prod run time is wrong | `PlexOps.etl_schedule` (a `days` column since 11-12 says which weekdays) | Change it with SQL, not Terraform. Backups: `Backups.PlexOps__etl_schedule_20261112`, `_before_weekend_20261112` |
+| The laptop is lost | `.env`, `driver/`, `terraform.tfvars`: see Scenario B and `scripts/backup_to_bucket.ps1` | `scripts/dev_setup.sh` rebuilds `.env` and `driver/` |
+
+**In plain words.** Data lost: at most a day for anything the ETL reloads
+(next run); for BigQuery-only tables, up to a week (the weekly snapshot),
+unless it is inside the 7-day time-travel window, when it is minutes.
+Time to restore one table: about 15 minutes. Time to rebuild the whole
+project from nothing: a working day (Scenario B), most of it waiting on
+Plex support if the driver licence is lost.
+
+**Who to call.** The two project Owners: Emilio Dominguez and Jennilyn
+Tockstein. Plex support for the ODBC driver licence; SendGrid and Monday
+admins for their keys.
+
+**Not infrastructure.** The hourly Windows and Mac monitors (Plex live
+screens task, the `~/plex-monitor` scripts) run on laptops. If a laptop is
+lost, nothing in production stops; the Cloud Run watchdog and screens jobs
+carry on.
 
 ---
 
@@ -124,7 +153,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Fill in terraform.tfvars from your backed-up copy (or reconstruct from
 # docs/CLICKUP_TEAM_GUIDE.md's documented live values), pointing
 # gcp_project at NEW-PROJECT-ID — and delete the example's legacy
-# cloud_run_job/scheduler_job lines (see QUICKSTART.md Step 8).
+# cloud_run_job/scheduler_job lines (the example's comments say which).
 # terraform.tfvars is gitignored, so it doesn't make the tree dirty.
 terraform init
 cd ..
@@ -154,10 +183,18 @@ docker push us-central1-docker.pkg.dev/NEW-PROJECT-ID/plex-pipeline/etl:$SHA
 # (or deploy/cloudbuild.yaml's deploy-all step, after ./scripts/deploy_preflight.sh) — see docs/TROUBLESHOOTING.md
 # § "Full rebuild procedure."
 
-# 7. Report configs: nothing to upload. Every reports/ YAML and SQL file (94)
+# 6b. Deploy the dispatcher BEFORE the schedulers hit it (else 404 every 5 min),
+# using the `gcloud functions deploy etl-dispatcher` command in terraform/main.tf,
+# then load the run times: deploy/etl_dispatcher/seed_schedule.sql (PlexOps.etl_schedule),
+# or restore Backups.PlexOps__etl_schedule_<latest>. BigQuery-only tables
+# (probe_log, msl_demand_daily, scorecard_goals_app, VoxScorecardsLive) come back
+# from the Backups dataset ONLY if it survived: it is in the same project, so a
+# project deletion takes it too. Copy it out to another project now and then.
+
+# 7. Report configs: nothing to upload. Every reports/ YAML and SQL file (184 on 11-12)
 # is a Terraform-managed GCS object, created by the step 4 deploy from git.
 
-# 8. Test before trusting it — every *-test job (13), not just one
+# 8. Test before trusting it — every *-test job (15), not just one
 for job in $(grep '_ALL_JOBS:' deploy/cloudbuild.yaml | cut -d'"' -f2 | tr ' ' '\n' | grep -- '-test$'); do
   gcloud run jobs execute "$job" --region=us-central1 --project=NEW-PROJECT-ID --wait
 done
@@ -177,3 +214,9 @@ runbook.
 does (gone if the whole project is deleted, fine if only Emilio's laptop
 is lost). Re-upload it after every edit; see the file's own header for the
 command.
+
+**Backups live in the same project (2026-11-12).** The `Backups` dataset, the
+state bucket and Secret Manager all sit in `voxdatalake`. They cover mistakes,
+not the loss of the project. Git (GitHub plus the Mac bundles) is the only copy
+outside it. The open gap is a periodic export of `Backups` and
+`secrets.env` to a second project.

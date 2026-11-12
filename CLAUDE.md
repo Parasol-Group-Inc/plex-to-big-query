@@ -527,6 +527,18 @@ Terraform. Details: `docs/OPERATIONS.md` § "Batch emails".
   "line-ending only" from real content changes in case an old CRLF object
   remains in GCS.
 
+## Milestones: every merge to main backs up and lists the docs to update (since 2026-11-12)
+
+`.githooks/post-merge` starts `scripts/milestone_sync.sh` in the background when main moves (a `git pull`
+of a merged PR). It does three things:
+- makes a git bundle in `~/plex-monitor/backups/`;
+- takes daily BigQuery copies of `etl_schedule` and `manual_data_access` in `Backups`;
+- writes a to-do in `~/plex-monitor/milestones/<sha>.md`: CHANGELOG, Cloud Build / deploy.sh, hub
+  re-inject + `refresh_live_data.py`, work log, DR/onboarding docs.
+
+**After each milestone, read the newest to-do and close it.** Hub tabs since 11-12 also include
+Budget, Disaster recovery and New developer.
+
 ## Convention
 
 **Every answer also goes into the work log (Emilio, 2026-11-11).** Emilio finds the chat hard

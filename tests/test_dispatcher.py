@@ -168,7 +168,7 @@ def test_tick_sends_batch_env_and_followups_mail_as_themselves():
         started = {}
 
         def fake_query(bq, sql, params=None):
-            if "FROM" in sql and "run_time" in sql:
+            if "etl_schedule" in sql:
                 return rows
             if "followup_of" in sql and "INSERT" not in sql:
                 return [failed]
@@ -215,7 +215,7 @@ def test_a_failed_log_insert_starts_nothing_and_keeps_the_pass_going():
             if job == ROW["job_name"]:
                 raise RuntimeError("streaming buffer busy")
             return []
-        if "FROM" in sql and "run_time" in sql:
+        if "etl_schedule" in sql:
             return rows
         return []
 
@@ -407,7 +407,7 @@ def test_tick_during_an_outage_holds_slots_and_starts_one_canary():
             p = {x.name: x.value for x in params}
             inserted.append((p["job"], p["reason"], p["outcome"]))
             return []
-        if "FROM" in sql and "run_time" in sql:
+        if "etl_schedule" in sql:
             return rows
         if "followup_of" in sql and "detail" in sql:
             return recent
@@ -426,6 +426,78 @@ def test_tick_during_an_outage_holds_slots_and_starts_one_canary():
     assert list(started) == ["plex-etl-sales-quotes"], started
     assert started["plex-etl-sales-quotes"]["role"] == "outage-alert"
     assert summary["followups"] == [], "no follow-ups while Plex is down"
+
+
+# ── Weekend schedule (2026-11-12): etl_schedule.days ─────────────────────────
+# 2026-11-13 is a Friday, 11-14 Saturday, 11-15 Sunday, 11-16 Monday.
+
+def _week_rows(job="plex-etl-sales-orders", m="00"):
+    return [
+        {"job_name": job, "run_time": f"04:{m}", "mode": "full", "enabled": True, "days": "weekdays"},
+        {"job_name": job, "run_time": f"04:{m}", "mode": "probe", "enabled": True, "days": "weekends"},
+        {"job_name": job, "run_time": f"13:{m}", "mode": "probe", "enabled": True, "days": "weekdays"},
+        {"job_name": job, "run_time": f"18:{m}", "mode": "probe", "enabled": True, "days": "weekdays"},
+        {"job_name": job, "run_time": f"23:{m}", "mode": "probe", "enabled": True, "days": None},
+    ]
+
+
+def _due(rows, now):
+    return [(s["mode"], s["scheduled_for"]) for s in d.due_slots(rows, now, set(), set())]
+
+
+def test_days_null_or_all_runs_every_day():
+    for days in (None, "", "all", "ALL"):
+        row = dict(ROW, days=days)
+        for day in (13, 14, 15, 16):
+            assert len(d.due_slots([row], mt(2026, 11, day, 13, 2), set(), set())) == 1, (days, day)
+
+
+def test_weekday_runs_full_at_4_and_probes_at_13_18_23():
+    rows = _week_rows()
+    assert _due(rows, mt(2026, 11, 13, 4, 2)) == [("full", mt(2026, 11, 13, 4, 0))]
+    assert _due(rows, mt(2026, 11, 13, 13, 2)) == [("probe", mt(2026, 11, 13, 13, 0))]
+    assert _due(rows, mt(2026, 11, 13, 18, 2)) == [("probe", mt(2026, 11, 13, 18, 0))]
+    assert _due(rows, mt(2026, 11, 13, 23, 2)) == [("probe", mt(2026, 11, 13, 23, 0))]
+
+
+def test_saturday_and_sunday_only_probe_at_4_and_23():
+    rows = _week_rows()
+    for day in (14, 15):
+        assert _due(rows, mt(2026, 11, day, 4, 2)) == [("probe", mt(2026, 11, day, 4, 0))], day
+        assert _due(rows, mt(2026, 11, day, 13, 2)) == [], day
+        assert _due(rows, mt(2026, 11, day, 18, 2)) == [], day
+        assert _due(rows, mt(2026, 11, day, 23, 2)) == [("probe", mt(2026, 11, day, 23, 0))], day
+
+
+def test_monday_4am_is_full_again():
+    assert _due(_week_rows(), mt(2026, 11, 16, 4, 2)) == [("full", mt(2026, 11, 16, 4, 0))]
+
+
+def test_friday_late_slot_still_due_after_midnight_into_saturday():
+    rows = [{"job_name": "j", "run_time": "23:55", "mode": "probe", "enabled": True, "days": "weekdays"}]
+    assert _due(rows, mt(2026, 11, 14, 0, 10)) == [("probe", mt(2026, 11, 13, 23, 55))]
+    # ...but a weekdays row's Saturday 23:55 slot is not due on Sunday 00:10.
+    assert _due(rows, mt(2026, 11, 15, 0, 10)) == []
+
+
+def test_unknown_days_value_is_reported_not_ignored():
+    out = d.due_slots([dict(ROW, days="mondays")], mt(2026, 11, 13, 13, 2), set(), set())
+    assert out[0]["action"] == "invalid" and "days" in out[0]["detail"]
+
+
+def test_weekend_4am_probe_batch_has_its_own_roles():
+    rows = _week_rows("a", "00") + _week_rows("b", "04") + _week_rows("c", "08")
+    sat = mt(2026, 11, 14, 4, 4)
+    assert d.batch_for(rows, "a", "probe", mt(2026, 11, 14, 4, 0))["role"] == "first"
+    b = d.batch_for(rows, "c", "probe", mt(2026, 11, 14, 4, 8))
+    assert b["role"] == "last" and b["batch_kind"] == "probe-0400" and b["batch_id"] == "probe-0400-2026-11-14"
+    # The weekday full rows at the same hour do not join the weekend batch, and
+    # the weekend probe rows do not join Monday's full batch.
+    assert d.batch_for(rows, "a", "full", sat) is None
+    assert d.batch_for(rows, "c", "full", mt(2026, 11, 16, 4, 8))["role"] == "last"
+    assert d.batch_for(rows, "a", "probe", mt(2026, 11, 16, 4, 0)) is None
+    # Saturday 1 PM has no batch at all.
+    assert d.batch_for(rows, "a", "probe", mt(2026, 11, 14, 13, 0)) is None
 
 
 if __name__ == "__main__":

@@ -79,7 +79,7 @@ def main():
     if newest and newest[0]["t"]:
         age_h = (now - newest[0]["t"]).total_seconds() / 3600
         loc = now.astimezone(DEN)
-        if loc.weekday() < 5 and 9 <= loc.hour < 17 and age_h >= 2:
+        if loc.weekday() < 5 and 9 <= loc.hour < 17 and age_h >= 6:   # 6 h = a missed 4-hourly refresh (11-11)
             flags.append(f"ODBC newest change is {age_h:.1f} h old in work hours")
 
     # ── Screens job ─────────────────────────────────────────────────────────────

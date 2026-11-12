@@ -1,6 +1,6 @@
 # ODBC and the Plex screens: how they work together
 
-Current as of **2026-11-11**. This page holds all the rules in one place. The runbook is
+Current as of **2026-11-12**. This page holds all the rules in one place. The runbook is
 `docs/PLEX_SCREEN_EXTRACTION.md` ("Reconciliation (cloud job)"). The code is:
 
 | Code | Where |
@@ -10,6 +10,7 @@ Current as of **2026-11-11**. This page holds all the rules in one place. The ru
 | Filling in blanks on Monday | `label_design_service/fill.py` |
 | `live_source`, `data_freshness` and the schedulers | `terraform/main.tf` |
 | The daytime stale-data alert | `check_odbc_freshness` in `main.py` |
+| "Does ODBC lack a Plex change?" (every alert, since 11-12) | `plex_api_lag.py` |
 
 ## In short
 
@@ -36,6 +37,39 @@ The alerts and timings follow from that:
   longer a "behind" verdict.
 - **Full screen checks run at :20 just after each refresh:** 01, 05, 09, 13, 17 and 21. The
   digests ride the 09:20, 13:20 and 17:20 runs.
+
+## One measure for every alert: Plex changes ODBC lacks (11-12)
+
+Until 11-12 three checks asked **"how old is ODBC's newest change?"**: the stale-data email
+(`main.py`), the screens job's `behind` verdict, and the watchdog's `odbc_vs_plex`. That age
+also grows when nobody works in Plex, so it raised false alarms:
+
+| When | What fired | Why it was false |
+|---|---|---|
+| 11-11 14:21-16:41 | screens behind/diverged, watchdog, stale email | the normal wait before the 17:00 refresh (2 h lines then) |
+| 11-12 02:11-03:41 | watchdog `odbc_vs_plex`, 6.1-7.6 h | it measured our copy to "now"; we do not load between 23:00 and 04:00 |
+| 11-12 07:21 | screens problem digest, "554 min behind" | 4 new Label Design lines under 1 h old, aged from ODBC's newest change (22:08, a quiet night) |
+
+Now every check asks: **is there a change in Plex, older than X, that ODBC does not have?**
+Plex's REST API returns every sales order with its `modifiedDate` in about a second
+(`plex_api_lag.plex_order_changes`). `odbc_plex_lag(changes, odbc_newest, as_of)` counts the
+changes after ODBC's newest order update and up to `as_of`, and returns how long the oldest had
+waited at `as_of`. A quiet Plex gives 0; a frozen ODBC (11-10) grows minute by minute.
+
+| Check | ODBC side | as_of | If the API cannot be read |
+|---|---|---|---|
+| Watchdog `odbc_vs_plex` | our copy's newest order change (`data_freshness`) | the last time we asked ODBC: a load **or a Label Design probe that came back "skipped"** (so a frozen ODBC, where every probe skips, still grows) | skipped, logged |
+| Stale-data email (`main.py`) | ODBC's newest order update, read live in the run | now | the old newest-change age |
+| Screens `behind` (`screen_recon.py`) | ODBC's newest order update, read live | now | the old newest-change age |
+
+Also since 11-12:
+- **Two in a row.** The watchdog mails `odbc_vs_plex` only when the previous run (within 75 min)
+  also failed it; the first is logged as `pending:`.
+- **One owner per incident.** The watchdog owns "ODBC is behind". The stale-data email is not sent
+  when the watchdog mailed `odbc_vs_plex` in the last 24 h (on 11-11 one afternoon lag mailed three
+  ways).
+- **Replay tests** from the real days: `tests/test_plex_api_lag.py` (11-10 freeze must alert;
+  11-11 afternoon, 11-12 overnight, 11-12 07:21 and a quiet weekend must stay quiet).
 
 ## Why
 
@@ -122,9 +156,9 @@ The alerts and timings follow from that:
 | Screen failed twice running | once a day per screen | REPORT_TO_EMAILS |
 | Screens digest | 9:20, 13:20, 17:20 MT (just after ODBC refreshes). Also another run that needs action, at most once per 4 h | Emilio, Jennilyn, marketing |
 | Plex login failed | once a day per cause | Emilio only |
-| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, newest ODBC record 6 h+ old (a missed refresh; 2 h until 11-11), once a day (no longer silenced by Label Design's screens, since 11-11) | REPORT_TO_EMAILS |
+| "Plex ODBC data is N h old" (`main.py`) | weekdays 9 to 5, a Plex change ODBC lacks for 6 h+ (since 11-12; the newest record's age before, and still if Plex's API cannot be read), once a day, and not when the watchdog already mailed `odbc_vs_plex` in 24 h | REPORT_TO_EMAILS |
 | Watchdog `odbc_connect` | weekdays, 3 of the last 4 Label Design runs could not connect to ODBC | REPORT_TO_EMAILS, once a day |
-| Watchdog `odbc_vs_plex` | Plex's REST API shows order changes our ODBC copy lacks for over 6 h (a missed refresh), any hour (Plex is quiet at night, so it fires only when work happened) | REPORT_TO_EMAILS, once a day |
+| Watchdog `odbc_vs_plex` | Plex's REST API shows an order change our ODBC copy lacked for over 6 h **when we last asked ODBC** (a missed refresh), two runs in a row (since 11-12), any hour | REPORT_TO_EMAILS, once a day |
 
 A lag under the lines above shows in the digest as "ODBC catching up" (info) and sends nothing of its own.
 

@@ -1,0 +1,194 @@
+Emilio Dominguez  00:09
+All right. I think that's that's it. Let me get you. Sorry, on the hub on the Plex Data Hub, we have the the work done for the customer notes. So you'll see a bunch of bunch of new tabs at the end, so you asked me also if we were using the API for the label design work. So initially, I I wasn't. I was working with just the live the live screens, just getting Chrome to jump into the website and do the things, but we also have another angle that could be possible to just have us as a reference of the API being a source of also of truth for that. So there are like these three angles that the label design can take, label design can take, since the ODBC can either lag for those four hours or either or froze entirely from the day before, and since those orders are now being mapped entirely by the lives, the live capture on the on the portal. So that's an angle. Then there's another, but not everything is captured. The sales rep and a new part, or even a new customer, can be just be blanked when it's extracted, because it is just we are not getting everything right. ODBC is is getting us everything, but it is a reference that okay. So those new orders are in, so we can extract them if they are they meet the criteria, then pass them into Monday and then update the Monday item for the sales rep and things that weren't updated. If things were new, totally new, I really don't know how frequent is to have a new part or a new customer, right? But it is also being taken care on that logic. So yeah, since the last talk, so it seems like the ODBC is quite good at the full extraction in the morning, in the early morning, like 4 a.m. So that's good, but then it just continues to not deliver the data, and I think that's by design because you told me initially. Okay, we were going to have four hours of of gap, so that's that wasn't the case before, but it is now being seen right now. So maybe they are kind of pushing that harder because of computing power. I don't know what was the problem with them, but yeah, maybe they are just queuing, having this queue for for clients to not deliver data because maybe there is just millions of rows to be delivered by ODBC. So the conclusion or the point is just to get ODBC to have this sort of truth, but for the day, once at the morning, during the mornings, on the full extraction of 4 a.m., 5 a.m., and then just keep probing, keep extracting things, whether from the API or the live screens are immediate. They are a very good source of truth for label design. So yeah, that was the work done, and it's been also polished each day. So you could have a look if when you have the time to those those tabs, the label design tab, the reliability. The the important one that you asked me before was that of the customer notes. So that's also done, but there were some flags. Let me just. So there were some existing notes there, so there were there weren't like erased. They were just appended, so they could be a little bit all. But the information that was already there was kept, and the information from the spreadsheet was just added to that. Then there were some that were inactive, but for these the the notes written that's the number, and we have all, you know, all the detail here of what happened. All the login, right? Notes written. There were some also like inactive customers that I chose to not write because they are inactive, but they could be useful for them if they get active, right? So yeah, three of them differ on on the on the name. So maybe yeah, this is open. So maybe Holden or you can take a look at this, right? And that's that's about
+
+Jennilyn Tockstein  06:09
+it. Awesome.
+
+Emilio Dominguez  06:10
+This is from
+
+Jennilyn Tockstein  06:11
+the most are like inactive customers, or they're just not in there, and that's fine.
+
+Emilio Dominguez  06:16
+Correct. Yeah, some of them were not a complete match, also, so they weren't they weren't updated. The the thing that you ask how that screen extraction works, right? Getting that, getting the even the statuses. I run audits also frequently for the for the data, so there's a tab for that also, like either for logic or the numbers, like because now we have more data than before when things weren't on production, so I kind of like run some audits, so they are logged here too. I think this wasn't discussed, but these are the latest, the latest data that we we get from Justin, so he helped me with Kaya and ODF, and we fix also the previous ones because they were they died on on the tokens. So there are some dashboards that are proposed dashboards based on the data, and he told me maybe you can spin some things, and then maybe Jennilyn could take a look at that. So that's that's that on that those two those two
+
+Jennilyn Tockstein  07:59
+recent yeah
+
+Emilio Dominguez  08:00
+that yeah. I really don't know if this is fresh, but I could maybe refresh this. But yeah, but they are being thrown into BigQuery for that regard. This is what we have already seen from label design, The history work, yeah, this is also like very dense, but this is more about how the pros work and what they check hourly, half an hour, what they push and things like that. But it's been polished each day because of the new angles that we have for proving proving if ODBC died or data is just way way is lagging a lot, right? Yeah,
+
+Jennilyn Tockstein  09:01
+I miss. So the the label design is going back in because I saw a note from Hallie saying she was missing some info yesterday. But yeah, yeah,
+
+Emilio Dominguez  09:14
+it was stale because we were they were not battling, but live screens were not giving the complete status to the to the workflow about new orders being present, and then ODBC was surely very frozen. But that was fixed. So yeah, so now those are the the fixes on having multiple multiple angles to check if there are some orders that change on statuses on the status that they have and push them and update them with more info if if that wasn't a push from the ODBC. ODBC still holds everything. Live screens can also get all of that, but you need to teach the teach it where everything is at. So, so yeah. So I haven't messaged Kelly regarding that, but yeah, I was just having a look at the at the board, and I think also the the interface was quite changed from from Monday on the colors and things like that, but but that's that.
+
+Jennilyn Tockstein  10:51
+Okay. Yeah, if you could send her, would be great. All of this is great. So, I probably made in the Vox scorecards live set. I made a bunch of views based off
+
+Emilio Dominguez  11:14
+of the
+
+Jennilyn Tockstein  11:14
+Plex prod, and it has been so Awesome to like be able to get like you know they I was getting questions like well what is each part of Rev and Whip right and I can just combine a few tables and make a view for that or same with like the held inventory. They're like, well, what is it? You know, I was able to get like a thing for the sales team to be able to find out where their orders are. I mean, this is not like live. It could have an eight-hour delay, but like,
+
+Emilio Dominguez  12:02
+yeah. So that that one was like that's that's cool. Yeah,
+
+Jennilyn Tockstein  12:07
+it has been so awesome to have all of the data in there. One thing that we might end up needing to change that will be an easy-ish change later is Plex's calling. It's putting the container status as expired if it's past the use by date, even if it's not past the expiration date, and so that's removing it from inventory valuation and removing it from being considered on hand, I'm. I forced it back into inventory valuation, and we may force it back into on hand. I'm not sure.
+
+Emilio Dominguez  12:52
+Okay.
+
+Jennilyn Tockstein  12:52
+Um, but it's so nice to have everything in BigQuery like fairly fresh to just be able to answer questions because it's so much easier to work in there than it is to try to look at the plex.
+
+Emilio Dominguez  13:04
+But I will back up your views because they are custom made, right? So, so they are not tracked right now. So they are not documented. Also, so I can just get them, get them to the hub to have a reference of what they have inside, and if anything, just you know, a destruction of the project, we can get everything from from the backups. Everything is being backed up. Everything like credentials, everything is in a good sense of even if a developer needs to start working on something like okay, so let's get everything like the container, the Docker right Docker container, everything that can be spin on a new laptop. So that's that's good. But I'm going to have a look at those views just to have them as a backup on the reference on the on the project, right?
+
+Jennilyn Tockstein  14:07
+Yeah,
+
+Emilio Dominguez  14:07
+there was something added on inventory, but let me just
+
+Jennilyn Tockstein  14:20
+the other thing, my next project. I'm. I mean, I guess it's Wet Wednesday, so for sure by next week, if not sooner,
+
+Emilio Dominguez  14:30
+I'm
+
+Jennilyn Tockstein  14:32
+gonna start trying to get all of the Google Cloud stuff, not under me. Under Parasol BizOps, I have an email for it. I'm going to transfer the billing ownership and then the ownership of the projects.
+
+Emilio Dominguez  14:54
+All right,
+
+Jennilyn Tockstein  14:55
+and then I'm sure Anthony's talked to you about the PCS software project. Correct. I want to put. I think we'll do a Vox datalake and a Parasol one for like the smaller companies. But any of the companies that are big enough to to have their own billing, so Kaya on demand, Ship Central, QSM. I want to have them each as their own, so that we can really easily tell how much they're spending and using each month, and also just to kind of keep it clean instead of lumping them into Parasol. And then the PCS one needs to be separated because right now Hania's scripts consume more money than the Vox ones, which kind of blows my mind. Given how much we're doing with the ODBC, like I don't know, I she she added on to some of my scripts on that sheet, and I was looking at it, and she has them set to run every 10 minutes, and so I was like, "Well, that's gonna drive up costs, right? If you're writing a script every 10 minutes, like correct all the time."
+
+Emilio Dominguez  16:09
+And maybe it's you know the prop logic also, like checking if something changed. So that's like pure, you know, the essence of how to not spend so much money because if you are just getting everything thrown and not checking if something changed truthfully, right? So then it's just maybe cents, but each cent gets yeah adds up and and then starts. So that's also the the logic behind some of the things that we have like big things saying okay, did we already have this? Do we have already this, like the full the full table? Not struck the 2 million parts or things like that, because that that keeps adding up. But surely they can be. Well, Anthony said that he wanted to start fresh, so that's yeah, yeah. So that's something good regarding or not maybe trying to fix or troubleshoot most of the things there. But for sure, the things to separate and also have service accounts, but because even with just pure turnover, a developer that has all the credentials, it's not good, right? It should be service accounts that hold extraction, the the prop logics, that all the things that the that the project has. But yeah,
+
+Jennilyn Tockstein  17:41
+yeah, and I mean, really, right now we have the top two. The scripts for Vox can mostly be trashed, and then you've got the Parasol marketing one. But the goal is going to be to transfer Parasol organization and all projects, and the billing account associated with them all out of me. Get rid of the inactive ones, and yeah, I can.
+
+Emilio Dominguez  18:05
+I'm not sure if I have all of those that you have on that, but I can take a look of a look at what what the numbers are for me, what the accounts are, and just have them also clean and say, okay, so this is this is that right?
+
+Jennilyn Tockstein  18:23
+Yeah, because I I have a bunch of views in like the Vox scorecards
+
+Emilio Dominguez  18:30
+live being
+
+Jennilyn Tockstein  18:30
+that that aren't used like they're they're views of old NetSuite data that's not even getting added to anymore. And I think when transferring everything over, it'll be a good time to clean up. Um, and you know, I I try to explain the importance to to Anthony and Justin. Like we did this as a trial, and then it kind of exploded. But it is not good to have everything in my name. Like it's gonna take me a week or two to get it all out of my name, but we don't want everything in my name. Like that's that's not secure. We need we need it in a company name. You know, if I get it by a bus, then it still exists.
+
+Emilio Dominguez  19:13
+Hope not. But yeah, even for the Plex, for for example, for myself, those live views those get distracted with my with my account, and most of the things are with my account. So maybe maybe with Amber is more like not so busy. Just tell her if we have the capabilities to spin service accounts in the name of just getting those to extract things and not and just have our own accounts to to do things for ourselves, but not the main logic or extraction, publishing even publishing things, right? But yeah,
+
+Jennilyn Tockstein  19:53
+yeah. And with those, I can make them. All right, the service accounts. I think you have to open a case with Plex, so we just need the new email. I don't know if we should have everything out of Parasol Biz Ops. I kind of like and don't like that idea. It would be nice to have everything consolidated in like one email ownership, but you know, if something ever happened in that account, it'd be really bad.
+
+Emilio Dominguez  20:21
+Yeah, correct. It is you know like the same for happens for marketing. The marketing account at Parasol, so it holds everything, like literally everything. So luckily, is with Google Suite, and there are a bunch of ways just to recover that. But doesn't feel great. Yeah, it's not really just split them maybe into three or four areas that could be easily tracked with Soho. Do you have Soho Vault, and do you use that?
+
+Jennilyn Tockstein  20:57
+I might. I'm not sure actually. Right on. Yeah,
+
+Emilio Dominguez  21:02
+because then we can also have we could have the set of credentials there, even if it's just for ourselves or or for a new dev or whatever, right? Like you say, even if someone is maybe on a flight, right, and something needs to happen, and you don't have the credentials. You know, you can't access the thing, and you need to wait four or five hours to get that. And maybe it's just a matter of getting some somewhere very easily, but you don't have the access. So that could be taken care by Backups and where they are and the credentials being shared. It's a whole bolt. It's quite straightforward, but I don't really know if you need a seat there and it's paid and yeah. But
+
+Jennilyn Tockstein  21:58
+yeah, I kind of wonder if it'd be useful to have those paid seats, just one per company and one per Parasol, and that way the overall Google account could be the the Parasol biz ops. But each project can have an owner of their company shared with the Parasol. That way, there's two points at any given time if something were to happen for each project, and then that would allow people from those companies to maybe interact, but only be allowed to interact with just their project and not all the projects. Yeah, correct,
+
+Emilio Dominguez  22:34
+makes sense.
+
+Jennilyn Tockstein  22:35
+So I know that they like don't like having multiple Google accounts. We think it is worth it.
+
+Emilio Dominguez  22:44
+Yeah, the the
+
+Jennilyn Tockstein  22:44
+nominal cost of those accounts is probably worth it for being able to split things up and have that backup.
+
+Emilio Dominguez  22:54
+Correct. Yeah, and the other thing is just also repository of that we have worked is also under a repository on Parasol Group Inc. I may be the only one to be accessing that right now, but that could change even with that the PCS with the PCS project just to have that marketing your
+
+Jennilyn Tockstein  23:22
+marketing ones we could divvy up then too, right? Like at least things coming from the marketing email could just be coming from each company's biz
+
+Emilio Dominguez  23:29
+ops. Yeah, have some tracking also because of not entirely tickets as some other companies, but have the code there, have code changes and the way to track that, but that yeah, I might add you to the GitHub repository of this Plex ETL because it's like we were discussing, it's not good just to have one person there. Or sometimes also the executives have the access, but they haven't accessed that like ever. So they don't really know how, where where is it and how to find it. But but yeah, that's about it.
+
+Jennilyn Tockstein  24:29
+Hey, that's all.
+
+Emilio Dominguez  24:32
+So yeah, what I'm missing is just those views, getting those tracked, getting those documented. I think you are also interacting a little bit with the manual data data app from the app script.
+
+Jennilyn Tockstein  24:47
+I changed it a fair bit,
+
+Emilio Dominguez  24:50
+so no worries. I'm I'm I'm aware because I was because of this probe logic and everything. I was having some changes done, so there is a new deployment, like recent deployments there. But I got the changes from the most mostly the periods were right on that, and right now it has also the new period of six months there, and if it has deviated a little bit, or if you see something odd on that new deployment, just let me know, and I can push the change and track it also.
+
+Jennilyn Tockstein  25:38
+Okay.
+
+Emilio Dominguez  25:39
+Yeah, but no worries, I can.
+
+Jennilyn Tockstein  25:41
+Yeah, I edited the manual table a couple times, and and then the app should override those if she wants to do them one by one. I told her you kind of have to figure out like the amount that would be worth Uploading versus just doing them in there. I'm like, if you have 10 that changed, it might just be easier to use the app.
+
+Emilio Dominguez  26:09
+Correct.
+
+Jennilyn Tockstein  26:09
+You know, if you have 200, give me a table. Yeah, right. Like,
+
+Emilio Dominguez  26:16
+yeah, that's a nice, nice idea. Right on. Okay, so any other questions? Just let me know, and I will tell Kelly about the the new process because they also could see data that is maybe missing on some columns and say, "Hey, where is the data? But it is because the live screens data could be missing some columns, and it can be also made more robust by searching those columns and getting the screens and teaching the bot to to get the screen data and everything, right? And eventually, even even for them, ODBC wouldn't be useful, right? It it is very useful for parts and all the things that we have discussed because there are 1000s of rows and things like that. But for label designs, it is just very like four or five order stops for the day. It's just more like it can be switched over to to the live screen to the portal to the portal information, right? If ODBC lacks too much for them, right?
+
+Jennilyn Tockstein  27:39
+Okay.
+
+Emilio Dominguez  27:40
+Yeah, but I will continue monitoring for today, and tomorrow I will have more reference of how ODBC is reacting, and if we can have like all of the data from the live screens, switch can be done. The switch can be done, right?
+
+Jennilyn Tockstein  28:01
+Awesome. Can you send me an email with the web services that you need out of your name, like any anything for anything that's set up under your name that I need to create a new account for and open a case.
+
+Emilio Dominguez  28:24
+Right on. Send that
+
+Jennilyn Tockstein  28:26
+to me, and I can get started on that too.
+
+Emilio Dominguez  28:29
+Nice. Okay. Let me get that information and send you
+
+Jennilyn Tockstein  28:35
+email. And then yeah, I'll I'll be coordinating with you as we start that because you're gonna have to change stuff out of your name too. Correct. But it's good to do it now before it gets bigger. Like as they're starting to give us, like we want these scorecards and build this software. It's like we gotta change this.
+
+Emilio Dominguez  28:54
+Yeah. Or it will be
+
+Jennilyn Tockstein  28:55
+like an unchangeable nightmare. So let's just do it while it's still kind of small. Yeah,
+
+Emilio Dominguez  29:00
+in 1000s of places, 1000s places it will be a nightmare but yeah right on
+
+Jennilyn Tockstein  29:05
+okay sounds good thank you have a good
+
+
+Transcribed by https://otter.ai

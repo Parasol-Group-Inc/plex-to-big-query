@@ -14,6 +14,60 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Weekends: probes only, 4 AM and 11 PM; lighter weekend checks (Emilio: save money)
+
+### Changed
+- **`PlexOps.etl_schedule` gets a `days` column** (`all` | `weekdays` | `weekends`, Mountain dates,
+  NULL = all; Terraform adds it). The dispatcher skips rows that do not run that day and counts the
+  batch email roles among the rows that do.
+- **`deploy/etl_dispatcher/weekend_schedule.sql`** (run once) changes the schedule:
+  - the 04:xx full run and the 13:xx/18:xx probes become weekdays only;
+  - the 23:xx probes run every day;
+  - a new 04:xx probe runs per job on weekends.
+  Saturday and Sunday therefore run 2 probes per job (was 3 probes and a full run), and Monday 04:xx
+  is full again. Weekend prod job starts drop from 112 to 56.
+- **The test cascade and its retries run Monday-Friday only.** Terraform `local.test_cron_weekdays` /
+  `test_retry_cron_weekdays` keep the tfvars minute and hour; the 13 hard-coded test crons now end
+  in `1-5`.
+- **Screens job on weekends: 05:20, 13:20, 21:20** (new scheduler `plex-live-screens-weekend-sync`);
+  weekdays keep 6 runs a day.
+- **Watchdog on weekends: hourly** (new `plex-etl-watchdog-weekend-sync`); weekdays every 30 min.
+- **The watchdog follows the new schedule.** `dispatch_missed` honours `days`. `raw_freshness`
+  allows 80 h over the weekend (Saturday, Sunday, Monday before 06:00). `screens_job` allows 9 h on
+  weekends. `test_cascade` is not checked on Sunday and Monday mornings. `previous_state` looks back
+  80 min.
+- Tests: `tests/test_dispatcher.py` (7 new), `tests/test_watchdog_odbc.py` (weekend window).
+
+### Removed (cost analysis 11-12: the project costs about $18-24 a month; these save ~$5.5)
+- **The 12 `*_test_retry` schedulers.** Each started a container every night that did nothing
+  unless a test run had failed (~$1.75 a month).
+- **Cloud Build's E2_HIGHCPU_8 machine.** Builds use the default machine, inside the 2,500 free
+  minutes, and the timeout goes from 1800 s to 3600 s (~$3.1 a month).
+- **`plex-label-design-sync-test` is paused.** It ran about 10 times a weekday against the prod
+  view; run it by hand when testing (~$0.6). The watchdog lists it in `PAUSED_OK`.
+
+## 2026-11-12 - Alerts: one measure (Plex changes ODBC lacks), no false positives
+
+### Fixed
+- **False "ODBC behind" alarms after quiet hours.** Three checks measured the age of ODBC's newest
+  change, which also grows when nobody works in Plex:
+  - the watchdog's `odbc_vs_plex` fired 6.1-7.6 h on 11-12 02:11-03:41, because we do not load
+    between 23:00 and 04:00;
+  - the screens job mailed a problem digest at 07:21, "554 min behind", for 4 Label Design lines
+    under an hour old.
+  New `plex_api_lag.py` asks Plex's REST API for every order's `modifiedDate` and counts only
+  changes ODBC lacks. The watchdog measures at the last time we asked ODBC (a load or a "skipped"
+  Label Design probe). The stale-data email (`main.py`) and the screens `behind` verdict compare
+  with ODBC read live. Each falls back to the old age if the API cannot be read.
+
+### Changed
+- **Watchdog `odbc_vs_plex` mails only on two failing runs in a row**; the first is logged `pending:`.
+- **The stale-data email is skipped when the watchdog mailed `odbc_vs_plex` in the last 24 h**
+  (one owner per incident).
+- Dockerfile copies `plex_api_lag.py`. Tests: `tests/test_plex_api_lag.py` replays 11-10 to 11-12;
+  `tests/test_stale_alert.py` never calls Plex. Docs: `docs/ODBC_VS_SCREENS.md`, "One measure for
+  every alert".
+
 ## 2026-11-11 - Wrap-up: record page, hub tabs, meeting notes, where customer notes show
 
 ### Added

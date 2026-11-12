@@ -35,7 +35,10 @@ which the ETL service account holds via the plexEtlRunWithOverrides role
 (OPEN_ITEMS D2).
 
 Changing a time is a SQL UPDATE on etl_schedule, never a deploy — see
-docs/OPERATIONS.md § "ETL schedule".
+docs/OPERATIONS.md § "ETL schedule". Since 2026-11-12 a row also says which
+days it runs (`days`: all | weekdays | weekends, NULL = all, America/Denver):
+on Saturday and Sunday prod runs only a 04:xx probe and the 23:xx probe, to
+save money (Emilio, 11-12).
 
 Edge cases, by design: a follow-up that finds its job busy is logged
 `skipped-busy` and not retried (the job is busy only because it is running
@@ -85,6 +88,8 @@ LOST_AFTER_MINUTES = int(os.environ.get("LOST_AFTER_MINUTES", "120"))
 OUTCOME_GRACE_MINUTES = int(os.environ.get("OUTCOME_GRACE_MINUTES", "5"))
 
 VALID_MODES = ("probe", "full")
+# etl_schedule.days (2026-11-12). NULL or '' means 'all'.
+VALID_DAYS = ("all", "weekdays", "weekends")
 FOLLOWUP_OUTCOMES = ("failed", "partial", "lost")
 
 # Plex outage breaker (2026-10-22). On 2026-10-21, from 11 PM to 4:30 AM, Plex
@@ -144,6 +149,20 @@ def parse_run_time(value):
     return h, m
 
 
+def row_days(row):
+    """The row's `days` value, normalised; raises ValueError on an unknown one."""
+    days = str(row.get("days") or "all").strip().lower()
+    if days not in VALID_DAYS:
+        raise ValueError(f"days must be one of {VALID_DAYS}, not {row.get('days')!r}")
+    return days
+
+
+def runs_on(row, local_date):
+    """Whether a schedule row runs on this America/Denver date (Mon=0 .. Sun=6)."""
+    days = row_days(row)
+    return days == "all" or (days == "weekends") == (local_date.weekday() >= 5)
+
+
 def slot_for(run_time, local_date):
     """The UTC instant of run_time (America/Denver wall clock) on local_date.
     DST-safe: the wall-clock time is placed in the zone, then converted."""
@@ -173,7 +192,15 @@ def due_slots(schedule, now_utc, logged_slots, busy_jobs, window_minutes=WINDOW_
             continue
         job, mode = row.get("job_name"), row.get("mode")
         try:
-            slots = [slot_for(row.get("run_time"), d) for d in dates]
+            row_days(row)
+        except ValueError as exc:
+            out.append({"job_name": job, "mode": mode, "scheduled_for": None,
+                        "action": "invalid", "detail": str(exc)})
+            continue
+        try:
+            # Each slot is placed on its own date, so a weekdays row has no
+            # Saturday slot and a weekends row no Monday one.
+            slots = [slot_for(row.get("run_time"), d) for d in dates if runs_on(row, d)]
         except (ValueError, TypeError) as exc:
             out.append({"job_name": job, "mode": mode, "scheduled_for": None,
                         "action": "invalid", "detail": f"bad run_time {row.get('run_time')!r}: {exc}"})
@@ -396,7 +423,8 @@ def batch_for(schedule, job_name, mode, scheduled_for):
     """Which batch a scheduled run belongs to, and its place in it (2026-10-21).
 
     A batch is every enabled row with the same mode whose run_time falls in the
-    same hour: the 1 PM probes, the 4 AM full run. Ordered by run_time, the
+    same hour and that runs on that date (`days`): the 1 PM probes, the 4 AM
+    full run, the weekend 4 AM probes. Ordered by run_time, the
     first job emails its own report, the last one sends the digest of the whole
     batch, and the rest stay silent unless they fail (main.py email_plan).
     Returns {"role": first|middle|last|only, "batch_id", "batch_kind"}, or None
@@ -408,6 +436,8 @@ def batch_for(schedule, job_name, mode, scheduled_for):
             continue
         try:
             h, m = parse_run_time(row.get("run_time"))
+            if not runs_on(row, local.date()):
+                continue
         except (ValueError, TypeError):
             continue
         if h == local.hour:
@@ -556,7 +586,8 @@ def tick(now_utc=None, dry_run=False):
     summary["outage"] = outage
 
     # 2. Scheduled slots — held, not started, while Plex is refusing connections.
-    schedule = _query(bq, f"SELECT job_name, run_time, mode, enabled FROM {_fq(SCHEDULE_TABLE)}")
+    # SELECT *: works before and after the `days` column exists (NULL = all).
+    schedule = _query(bq, f"SELECT * FROM {_fq(SCHEDULE_TABLE)}")
     logged = {(r["job_name"], r["scheduled_for"]) for r in _query(bq, f"""
         SELECT job_name, scheduled_for FROM {_fq(LOG_TABLE)}
         WHERE scheduled_for > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)""")}

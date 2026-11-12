@@ -317,7 +317,13 @@ starts what is due, and logs each start in `PlexOps.etl_dispatch_log`.
   once one connects each held job gets ONE `recovery` run. All derived from
   `etl_dispatch_log`; no state elsewhere. It matches the error prefix
   `ODBC connection failed`, so don't reword it in `main.py`.
-- **Test jobs still use their own nightly schedulers.**
+- **Test jobs still use their own nightly schedulers,** Monday-Friday only since 2026-11-12.
+- **Weekends run probes only (since 2026-11-12, to save money).** `etl_schedule.days` is `all`,
+  `weekdays` or `weekends` (Mountain dates; NULL = all). Saturday and Sunday each run two probes
+  per job: the 04:xx `weekends` rows and the 23:xx rows. The 4 AM full run and the 1 PM / 6 PM
+  probes are weekdays only, so Monday 04:xx is a full run again. The watchdog honours `days` and
+  allows raw tables 80 h over a weekend. On weekends the screens job runs at 05:20, 13:20 and 21:20,
+  and the watchdog runs hourly.
 
 To ask "did prod run?", read `etl_dispatch_log`, not the Cloud Scheduler list.
 The function is deployed with `gcloud functions deploy` (command in
@@ -404,6 +410,14 @@ its unchanged query (`SELECT __b.*, ... FROM (...) __b LEFT JOIN data_freshness 
 it is `SELECT *` over a wrapped view (it inherits; a second wrapper duplicates the columns).
 Monday's "Data Source" text column (both boards) gets `data_label` from the push. The screens job
 sends a digest at 9:20/13:20/17:20 MT to REPORT_TO_EMAILS.
+
+**Every "ODBC is behind" alert asks Plex's API since 2026-11-12** (`plex_api_lag.py`): is there a Plex
+order change, older than the line, that ODBC lacks? The age of ODBC's newest change also grows when
+nobody works (quiet nights, weekends), which caused the 11-12 false alarms. The watchdog measures at
+the last time we asked ODBC, including Label Design probes that came back "skipped", so a frozen
+ODBC still shows. It mails on two failing runs in a row and owns the incident: the stale-data email
+stays quiet when the watchdog already mailed it. Replay tests: `tests/test_plex_api_lag.py`.
+`docs/ODBC_VS_SCREENS.md`, "One measure for every alert".
 
 **ODBC is a copy refreshed about every 4 h** (Plex's champion, via Jennilyn; our logs show jumps at
 ~09:00, 13:00, 17:00 MT to data ~1 h old). A lag of 1-5 h is normal, so every ODBC alert line is 6 h

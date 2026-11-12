@@ -1,0 +1,438 @@
+[00:09] All right, I think that's it.
+[00:18] Let me get you.
+[00:23] Sorry.
+[00:25] On the Hub, on the Plex Data Hub, we have the work done
+[00:33] for the customer notes.
+[00:35] So you'll see a bunch of new tabs at the end.
+[00:43] So you asked me also if we were using the API
+[00:48] for the label design work.
+[00:50] So initially, I wasn't.
+[00:54] I was working with just the live screens,
+[00:59] just getting crumb to jump into the website and do the things.
+[01:04] But we also have another angle that
+[01:07] could be possible to just have as a reference of the API
+[01:13] being a source also of truth for that.
+[01:16] So there are like these three angles
+[01:20] that the label design can take, since the ODBC can either
+[01:27] lag for those four hours or froze entirely from the day
+[01:32] before.
+[01:33] And since those orders are now being mapped entirely
+[01:39] by the live capture on the portal, so that's an angle,
+[01:48] but not everything is captured.
+[01:51] The sales rep and a new part or even a new customer
+[01:56] can be just be blanked when it's extracted,
+[02:00] because it is just we are not getting everything, right?
+[02:06] ODBC is getting us everything.
+[02:09] But it is a reference that, OK, so those new orders are in.
+[02:13] So we can extract them.
+[02:14] If they meet the criteria, then pass them into Monday
+[02:18] and then update the Monday item for the sales rep
+[02:22] and things that weren't updated.
+[02:24] If things were new, totally new.
+[02:27] I really don't know how frequent it
+[02:29] is to have a new part or a new customer, right?
+[02:34] But it is also being taken care on that logic.
+[02:40] So yeah, since the last talk, so it
+[02:45] seems like the ODBC is quite good at the full instruction
+[02:50] in the morning, in the early morning, like 4 AM.
+[02:53] So that's good.
+[02:54] But then it just continues to not deliver the data.
+[02:59] And I think that's by design, because you told me initially,
+[03:02] OK, we were going to have four hours of gap.
+[03:07] So that wasn't the case before, but it is now
+[03:11] being seen right now.
+[03:12] So maybe they are kind of pushing that harder because
+[03:17] of computing power.
+[03:20] I don't know what was the problem with them.
+[03:24] But yeah, maybe they are just queuing,
+[03:28] having this queue for clients to not deliver data,
+[03:32] because maybe there is just millions of rocks
+[03:35] to be delivered by ODBC.
+[03:38] So the conclusion or the point is just
+[03:41] to get ODBC to have this sort of truth,
+[03:46] but for the day, once at the morning,
+[03:49] during the mornings, on the full instruction of 4 AM, 5 AM.
+[03:54] And then just keep probing, keep instructing things,
+[03:59] whether from the API or the live screens are immediate.
+[04:04] They are a very good source of truth for label design.
+[04:09] So yeah, that was the work done.
+[04:11] And it's been also polished each day.
+[04:16] So you could have a look when you have the time
+[04:19] to those tabs, the label design tab, the reliability.
+[04:26] The important one that you asked me before
+[04:29] was that of the customer notes.
+[04:32] So that's also done.
+[04:35] But there were some plugs, so there
+[04:46] were some existing notes there.
+[04:48] So there weren't like arrays.
+[04:53] They were just appended.
+[04:55] So they could be a little bit odd.
+[04:57] But the information that was already there was kept.
+[05:02] And the information from the spreadsheet
+[05:04] was just added to that.
+[05:10] Then there were some that were inactive.
+[05:13] But for these, the notes written, that's the number.
+[05:20] And we have all the detail here of what happened,
+[05:27] all the login notes written.
+[05:31] There were some also inactive customers
+[05:34] that I chose to not write because they are inactive.
+[05:40] But they could be useful for them if they get active.
+[05:49] So yeah, three of them differ on the name.
+[05:55] So maybe, yeah, this is open.
+[05:57] So maybe hold in, or you can take a look at this.
+[06:02] All right, and that's about it.
+[06:10] Yeah, it looks like most are inactive customers,
+[06:14] or they're just not in there.
+[06:15] And that's fine.
+[06:16] Correct.
+[06:17] Yeah, some of them were not completely matched also,
+[06:20] so they weren't updated.
+[06:26] The thing that you asked, how that screen extraction works,
+[06:32] getting that, even the statuses, I run audits.
+[06:43] Also frequently for the data.
+[06:47] So there's a tab for that also, either for logic or the numbers.
+[06:55] Because now we have more data than before
+[07:00] when things weren't on production.
+[07:02] So I kind of run some audits.
+[07:05] So they are logged here too.
+[07:10] I think this wasn't discussed.
+[07:12] But these are the latest data that we get from Justin.
+[07:25] So he held me with Kaya and ODF.
+[07:29] And we fixed also the previous ones,
+[07:32] because they died on the tokens.
+[07:37] So there are some dashboards that are proposed dashboards
+[07:44] based on the data.
+[07:47] And he told me, maybe you can spin some things,
+[07:49] and then maybe Janeline could take a look at that.
+[07:53] So that's that.
+[07:56] Those two risks and I really don't know if this is fresh,
+[08:04] but I could maybe refresh this.
+[08:06] But they are being thrown into BigQuery for that regard.
+[08:16] This is what we have already seen from label design,
+[08:20] the history of work.
+[08:24] Yeah, this is also very dense.
+[08:26] But this is more about how the pros work
+[08:30] and what they check hourly, half an hour, what they push
+[08:36] and things like that.
+[08:37] But it's been polished each day because of the new angles
+[08:43] that we have for Proven, Proven, if ODVC died,
+[08:50] or if data is just way, way is lagging a lot, right?
+[08:59] Yeah.
+[09:03] So the label design is going back in,
+[09:07] because I saw a note from Callie saying
+[09:10] she was missing some info yesterday, but.
+[09:14] Yeah, it was stale because they were not battling,
+[09:21] but live screens were not giving the complete status
+[09:25] to the workflow about new orders being present.
+[09:30] And then ODVC was surely very frozen.
+[09:36] But that was fixed.
+[09:37] So yeah, so now those are the fixes
+[09:41] on having multiple angles to check
+[09:46] if there are some orders that change on the status
+[09:51] that they have and push them and update them
+[09:56] with more info if that wasn't a push from the ODVC.
+[10:01] ODVC still holds everything.
+[10:05] Live screens can also get all of that,
+[10:08] but you need to teach it where everything is at.
+[10:14] So yeah, so I haven't messaged Kelly regarding that.
+[10:24] But yeah, I was just having a look at the board.
+[10:34] And I think also the interface was quite changed
+[10:39] from on the colors and things like that.
+[10:45] But that's that.
+[10:51] OK.
+[10:53] Yeah, if you could send her, that would be great.
+[11:00] All of this is great.
+[11:01] So I probably made, in the Vox Square Cards Live,
+[11:12] I made a bunch of views based on the complex fraud.
+[11:16] And it has been so awesome to be able to get like,
+[11:28] I was getting questions like, well, what
+[11:30] is each part of Rev and Wip, right?
+[11:33] And I can just combine a few tables and make a view for that.
+[11:37] Or same with like the held inventory.
+[11:42] They're like, well, what is it?
+[11:43] You know, I was able to get like a thing for the sales team
+[11:53] to be able to find out where their orders are.
+[11:56] I mean, this is not like live.
+[11:58] It could have an eight hour delay, but like.
+[12:02] Yeah, so that one was really good.
+[12:04] That's good.
+[12:05] That's cool.
+[12:06] Yeah.
+[12:07] It has been so awesome to have all of the data in there.
+[12:14] One thing that we might end up needing
+[12:16] to change that will be an easy exchange later
+[12:21] is Plex's calling.
+[12:23] It's putting the container status as expired
+[12:26] if it's past the use by date, even if it's not
+[12:30] past the expiration date.
+[12:32] And so that's removing it from inventory valuation
+[12:37] and removing it from being considered on hand.
+[12:44] I forced it back into inventory valuation.
+[12:47] And we may force it back into on hand.
+[12:50] I'm not sure.
+[12:54] But it's so nice to have everything in BigQuery
+[12:56] like fairly fresh to just be able to answer questions
+[12:59] because it's so much easier to work in there than just
+[13:02] to try to look at the Plex.
+[13:04] But I will back up your views because they are custom made.
+[13:10] So they are not tracked right now.
+[13:15] So they are not documented also.
+[13:16] So I can just get them to the Hub to have
+[13:21] a reference of what they have inside.
+[13:26] And if anything, just a destruction of the project,
+[13:31] we can get everything from the backups.
+[13:35] Everything is being backed up.
+[13:36] Everything like credentials.
+[13:38] Everything is in a good sense of even if a developer needs
+[13:44] to start working on something like, OK, so let's
+[13:47] get everything, like the container, the Docker
+[13:50] talking container, everything that
+[13:52] can be spin on a new laptop.
+[13:54] So that's good.
+[13:56] But I'm going to have a look at those views
+[13:59] just to have them as a backup on the reference on the project.
+[14:07] There was something added on inventory, but let me just see.
+[14:20] The other thing, my next project, I mean,
+[14:25] I guess it's what, Wednesday?
+[14:26] So for sure by next week, if not sooner,
+[14:32] I'm going to start trying to get all of the Google Cloud stuff
+[14:42] not under me, under Parasol BizOps.
+[14:47] I have an email for it.
+[14:49] I'm going to transfer the billing ownership and then
+[14:51] the ownership of the projects.
+[14:55] And then I'm sure Anthony's talked to you
+[14:59] about the PCS software project.
+[15:04] I think we'll do a Vox data lake and a Parasol
+[15:09] one for the smaller companies, but any of the companies
+[15:12] that are big enough to have their own billing,
+[15:17] so Kia, On Demand, Fifth Central, QSM,
+[15:22] I want to have them each as their own
+[15:25] so that we can really easily tell how much they're
+[15:29] spending and using each month and also just
+[15:32] to keep it clean instead of lumping them into Parasol.
+[15:36] And then the PCS one needs to be separated
+[15:38] because right now, Hanya's scripts
+[15:42] consume more money than the Vox ones, which
+[15:47] blows my mind, given how much we're doing with the ODBC.
+[15:51] I don't know.
+[15:53] She added on to some of my scripts on that sheet,
+[15:58] and I was looking at it, and she
+[15:59] hasn't set to run every 10 minutes.
+[16:01] And so I was like, well, that's going to drive up costs
+[16:05] if you're writing a script every 10 minutes, all the time.
+[16:09] And maybe it's the prop logic also,
+[16:13] like checking if something changed.
+[16:15] So that's like pure the essence of how
+[16:20] to not spend so much money because if you are just
+[16:23] getting everything thrown and not checking if something
+[16:26] changed truthfully, right?
+[16:28] So then it's just maybe cents, but each cent gets at top.
+[16:35] So that's also the logic behind some of the things
+[16:39] that we have, like big things saying, OK,
+[16:42] did we already have this?
+[16:44] Do we have already this, like the full table,
+[16:48] not subtract the 2 million parts or things like that?
+[16:51] Because that keeps adding up, but surely they can be,
+[16:58] well, Anthony said that he wanted to start fresh,
+[17:03] so that's something good regarding or not maybe
+[17:08] trying to fix or troubleshoot most of the things there.
+[17:11] But for sure, the things to separate,
+[17:15] and he also have service accounts,
+[17:17] but because even with just pure turnover,
+[17:24] a developer that has all the credentials, it's not good,
+[17:29] right?
+[17:30] It should be service accounts that hold extraction,
+[17:34] the prop logics, all the things that the project has.
+[17:39] But yeah.
+[17:41] Yeah.
+[17:41] And I mean, really, right now we have the top two.
+[17:46] The scripts for Vox can mostly be trashed,
+[17:49] and then you've got the parasol marketing one.
+[17:51] But the goal is going to be to transfer parasol organization
+[17:55] and all projects and the billing account associated with them
+[17:58] all out of me, get rid of the inactive ones, and.
+[18:04] Yeah, I'm not sure if I have all of those
+[18:08] that you have on that.
+[18:09] But I can take a look at what the numbers are for me,
+[18:15] what the accounts are, and just have been also clean and say,
+[18:20] OK, so this is that, right?
+[18:23] Yeah, because I have a bunch of views in the box,
+[18:28] scorecards live, things that aren't used.
+[18:32] Like, they're views of old NetSuite data
+[18:35] that's not even getting added to anymore.
+[18:37] And I think when transferring everything over,
+[18:41] it'll be a good time to clean up.
+[18:44] And I try to explain the importance to Anthony and Justin.
+[18:52] We did this as a trial, and then it kind of exploded.
+[18:55] But it is not good to have everything in my name.
+[18:57] Like, it's going to take me a week or two
+[19:00] to get it all out of my name, but we
+[19:01] don't want everything in my name.
+[19:03] Like, that's not secure.
+[19:05] We need it in a company name.
+[19:08] If I can get by a bus, then it will exist.
+[19:13] I hope not.
+[19:14] But yeah, even for the Plex, for example, for myself,
+[19:18] those live views, those get distracted with my account.
+[19:23] Most of the things are with my account.
+[19:25] So maybe with Amber, it's more like not so busy.
+[19:32] Just tell her if we have the capabilities
+[19:35] to spin service accounts in the name of just getting
+[19:39] those to extract things and just have our own accounts
+[19:44] to do things for ourselves, but not the main logic
+[19:48] or extraction, publishing, even publishing things, right?
+[19:53] Yeah.
+[19:54] And with those, I can make them in the service account.
+[19:59] I think you have to open a case with Plex.
+[20:02] So we just need the new email.
+[20:04] I don't know if we should have everything out of Parasil BizOps.
+[20:07] I kind of like and don't like that idea.
+[20:11] It would be nice to have everything consolidated
+[20:13] in one email ownership, but if something ever
+[20:19] happened in that account, it would be really bad.
+[20:21] Yeah, correct.
+[20:24] The same happens for marketing, the marketing account at Parasil.
+[20:28] So it holds everything, literally everything.
+[20:32] So luckily, it's with Google Suite,
+[20:34] and there are a bunch of ways just to recover that, but.
+[20:39] Doesn't it feel great?
+[20:40] Yeah, it's not really.
+[20:44] Just split them, maybe, into three or four areas
+[20:48] that could be easily tracked with SoHo.
+[20:52] Do you have SoHo Bolt, and do you use that?
+[20:57] I might.
+[20:58] I'm not sure, actually.
+[21:00] Right on.
+[21:02] Yeah, because then we could have the set of credentials there,
+[21:08] even if it's just for ourselves or for a new dev or whatever.
+[21:14] Like you said, even if someone is maybe on a flight,
+[21:18] and something needs to happen, and you don't have the credentials,
+[21:23] you can't access the thing, and you
+[21:25] need to wait for five hours to get that.
+[21:29] Maybe it's just a matter of getting somewhere very easily,
+[21:33] but you don't have the access.
+[21:35] So that could be taken care of by backups, and where they are,
+[21:44] and the credential being shared with SoHo Bolt.
+[21:48] It's quite straightforward, but I don't really
+[21:51] know if you need a seat there, and it's paid, and yeah.
+[21:58] I kind of wonder if it'd be useful to have those paid seats,
+[22:04] just one per company and one per parasol.
+[22:08] And that way, the overall Google account
+[22:13] could be the parasol biz ops, but each project
+[22:16] can have an owner of their company shared with the parasol.
+[22:20] That would be just two points at any given time
+[22:22] if something were to happen for each project,
+[22:25] and then that would allow people from those companies
+[22:28] to maybe interact, but only be allowed
+[22:31] to interact with just their project and not all the projects.
+[22:34] Yeah, correct.
+[22:35] Makes sense.
+[22:35] So I know that they don't like having multiple Google
+[22:40] accounts, because it is worth it.
+[22:44] The nominal cost of those accounts
+[22:47] is probably worth it for being able to split things up
+[22:52] and have that backup.
+[22:54] Correct, yeah.
+[22:57] The other thing is just also repository
+[23:01] that we have worked is also under a repository
+[23:05] on parasol group, Inc.
+[23:08] I may be the only one to be accessing that right now,
+[23:11] but that could change even with that with the PCS project
+[23:17] just to have.
+[23:20] That marketing ones, we could divvy up them too, right?
+[23:25] Like, at least things coming from the marketing email
+[23:27] could just be coming from each company, the top.
+[23:30] Yeah, have some tracking also because of not entirely tickets
+[23:38] as some other companies, but have the code there,
+[23:41] have code changes and the way to track that.
+[23:47] But that, yeah, it might add you to the GitHub repository
+[23:56] of this Plexi ETL because it's like we were discussing,
+[24:01] it's not good just to have one person there.
+[24:05] Or sometimes also the executives have the access,
+[24:10] but they haven't accessed that like ever,
+[24:14] so they don't really know where is it and how to find it.
+[24:22] But yeah, that's about it.
+[24:27] Okay, that's all.
+[24:32] So yeah, what I'm missing is just those views,
+[24:36] getting those tracked, getting those documented.
+[24:39] I think you are also interacting a little bit
+[24:43] with the manual data app from the app script.
+[24:47] I changed it a fair bit.
+[24:50] So, no worries, I'm aware because I was,
+[24:58] because of this probe logic and everything,
+[25:01] I was having some changes done.
+[25:04] So there is a new deployment, like recent deployments there,
+[25:11] but I got the changes from mostly the periods, right, on that.
+[25:17] And right now it has also the new period
+[25:20] of six months there.
+[25:24] And if it has deviated a little bit,
+[25:26] or if you see something out on that new deployment,
+[25:31] just let me know and I can push the change and track it also.
+[25:38] Okay.
+[25:39] Yeah, but no worries, I can.
+[25:41] Yeah, I edited the manual table a couple times,
+[25:45] and then the app should override those
+[25:52] if she wants to do them one by one.
+[25:55] You kind of have to figure out the amount
+[25:59] that would be worth uploading versus just doing them in there.
+[26:04] I'm like, if you have 10 that changed,
+[26:06] it might just be easier to use the app.
+[26:09] Correct.
+[26:10] If you have 200, give me a table.
+[26:14] Yeah, definitely.
+[26:16] Yeah, that's a nice idea.
+[26:19] Right on.
+[26:21] Okay.
+[26:22] So any other questions, just let me know.
+[26:27] I will tell Kelly about the new process
+[26:33] because they also could see data
+[26:36] that is maybe missing on some columns
+[26:39] and say, hey, where is the data?
+[26:41] But it is because the live screen's data
+[26:47] could be missing some columns.
+[26:51] And it can be also made more robust
+[26:54] by searching those columns and getting the screens
+[26:57] and teaching the bot to get the screen data and everything.
+[27:03] And eventually, even for them, ODBC wouldn't be useful.
+[27:10] It is very useful for parts and other things
+[27:13] that we have discussed because there are thousands of rows
+[27:15] and things like that.
+[27:17] But for label designs, it is just very like four or five
+[27:23] order stops for the day.
+[27:25] It's just more like it can be switched over
+[27:30] to the live screen, to the portal information
+[27:35] if ODBC lacks too much for them.
+[27:40] Yeah.
+[27:42] But I will continue monitoring for today.
+[27:45] And tomorrow, I will have more reference
+[27:47] of how all the ODBC is reacting.
+[27:50] And if we can have all of the data from the live screens,
+[27:56] the switch can be done.
+[27:58] The switch can be done, right?
+[28:02] Can you send me an email with the web services
+[28:10] that you need out of your name?
+[28:16] Anything that's set up under your name
+[28:20] that I need to create a new account for and open a case.
+[28:24] Right on.
+[28:26] Send that to me, and I can get started on that too.
+[28:29] Nice.
+[28:30] OK.
+[28:32] Let me get that information and send you an email.
+[28:36] And then, yeah, I'll be coordinating with you
+[28:39] as we start that because you're going
+[28:41] to have to change stuff out of your name too.
+[28:44] Correct.
+[28:44] But if you get to do it now before it gets bigger,
+[28:48] as they're starting to give us, we want B-score cards
+[28:51] and build the software.
+[28:52] We've got to change this.
+[28:54] It will be like an unchangeable nightmare.
+[28:57] So let's just do it while it's still kind of small.
+[28:59] Yeah, in thousands of places, thousands of places
+[29:02] will be a nightmare.
+[29:03] But yeah, right on.
+[29:05] OK, sounds good.
+[29:07] Thank you to you.
+[29:09] Have a good one.
+[29:10] Bye.
+[29:11] Take care.

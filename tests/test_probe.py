@@ -855,3 +855,11 @@ def test_email_shows_kept_tables():
     html = email_utils._extractions_to_html([{"table": "raw_a", "rows": None, "ok": True, "kept": True},
                                               {"table": "raw_b", "rows": 12, "ok": True}])
     assert "unchanged, kept" in html and "failed" not in html and "2 of 2 tables" in html
+
+
+def test_main_passes_the_config_entry_to_tables_to_extract():
+    """The wiring, not just the pure function: main() must pass the full `changed` list (with the
+    config entry), not probe_info["changed"] (without it). 11-12 13:01 regression."""
+    src = open(m.__file__, encoding="utf-8").read()
+    assert "tables_to_extract(kind, may_skip, previous_snapshot, changed)" in src
+    assert 'tables_to_extract(kind, may_skip, previous_snapshot, probe_info["changed"])' not in src

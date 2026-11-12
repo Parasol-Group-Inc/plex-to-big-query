@@ -14,6 +14,27 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Fix: a config change runs every table again
+
+### Fixed
+- **A config change now re-extracts every table.** `tables_to_extract` was handed the changed-sources
+  list with the config entry already removed. So a probe run after a config or SQL change re-extracted
+  only the changed tables instead of every table.
+- **Seen:** 11-12 13:01, the first sales_orders run after its Flat_BOM probe change.
+- **Harmless that time:** Flat_BOM's own value changed, so it was re-extracted, and views are always
+  rebuilt.
+- **Fix:** pass the full list. Test: `tests/test_probe.py`
+  (`test_main_passes_the_config_entry_to_tables_to_extract`).
+- **First per-table probe runs (11-12 13:00):**
+
+  | Pipeline | Tables re-extracted | Time (avg this week) |
+  |---|---|---|
+  | part_on_hand_inventory | 1 of 4 | 38 s (404 s) |
+  | inventory_snapshot | 1 of 4 | |
+  | purchasing_open_orders | 3 of 6 | |
+  | work_orders | 7 of 15 | |
+  | sales_orders | 18 of 29 | 140 s (478 s) |
+
 ## 2026-11-12 - Hub builds in one command on any machine (tab store)
 
 ### Changed

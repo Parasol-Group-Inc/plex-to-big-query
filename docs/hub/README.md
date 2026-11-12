@@ -62,6 +62,10 @@ The store is read and written with the gcloud CLI: your own login, or for Claude
 `CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=claude-operator@...`. Seed it from a published page with
 `python scripts/hub/tab_store.py --seed <page.html>`.
 
+**Build in `ptbq-dev`, not the primary folder.** The build rewrites the committed `index.html`,
+which leaves the primary folder dirty, and `deploy.sh` refuses a dirty tree. If you did build there,
+run `git checkout -- docs/hub/index.html`.
+
 `refresh_live_data.py` (swap only the data in a published page) is kept for a quick data refresh,
 but the full build above is the normal path.
 

@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Numbers audit: revenue, shipping, production (docs only)
+
+### Added
+- **`docs/ETL_AUDIT_2026-11-12.md`.** Two Sonnet agents (data rebuild and Plex screens) and Claude
+  checked revenue, shipping and production.
+  - **Result:** the reports match their raw data exactly, and Plex's screens through 11-11; ODBC lag
+    explains today.
+  - **New finding:** the revenue report dates invoices by `Shipper_AR_Invoice.Add_Date`. One invoice
+    ($19,982.20) is in November in the report and in October in Plex (OPEN_ITEMS D40; fix proposed,
+    not made).
+  - **D32 gap:** $21.9K for November.
+- **Hub Reliability tab:** a "Latest numbers audit" block.
+
 ## 2026-11-12 - Fix: a config change runs every table again
 
 ### Fixed

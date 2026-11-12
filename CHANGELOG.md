@@ -14,6 +14,46 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Fix: a config change runs every table again
+
+### Fixed
+- **A config change now re-extracts every table.** `tables_to_extract` was handed the changed-sources
+  list with the config entry already removed. So a probe run after a config or SQL change re-extracted
+  only the changed tables instead of every table.
+- **Seen:** 11-12 13:01, the first sales_orders run after its Flat_BOM probe change.
+- **Harmless that time:** Flat_BOM's own value changed, so it was re-extracted, and views are always
+  rebuilt.
+- **Fix:** pass the full list. Test: `tests/test_probe.py`
+  (`test_main_passes_the_config_entry_to_tables_to_extract`).
+- **First per-table probe runs (11-12 13:00):**
+
+  | Pipeline | Tables re-extracted | Time (avg this week) |
+  |---|---|---|
+  | part_on_hand_inventory | 1 of 4 | 38 s (404 s) |
+  | inventory_snapshot | 1 of 4 | |
+  | purchasing_open_orders | 3 of 6 | |
+  | work_orders | 7 of 15 | |
+  | sales_orders | 18 of 29 | 140 s (478 s) |
+
+## 2026-11-12 - Hub builds in one command on any machine (tab store)
+
+### Changed
+- **`scripts/hub/tab_store.py`.** The four tabs whose inputs live on one machine save their render to
+  `gs://voxdatalake-plex-screenshots/hub-tabs/` whenever a build can render them. A build without the
+  inputs uses the stored copy instead of dropping the tab:
+  - QuickBooks (Emilio's login);
+  - Audit (`audit.json`);
+  - Screen extraction (the Windows laptop's screenshots);
+  - Customer notes (the primary folder's `etl-manual`).
+- **`build_hub.py`:** uses the store for those tabs. A missing QuickBooks login now falls back to the
+  stored tab instead of stopping the build, and a page with no QuickBooks tab at all is still
+  refused.
+- **The published page is the build output, never patched by hand.** Seeded from hub v53; the first
+  full build from this Mac matched v53 outside the data, QuickBooks (fresh figures) and Customer notes
+  (timestamps).
+- Docs: `docs/hub/README.md` "One build, any machine"; CLAUDE.md; the milestone to-do points at the
+  one command.
+
 ## 2026-11-12 - Milestone trigger (backups + docs to-do on every merge), hub refresh, DR and onboarding tabs
 
 ### Added

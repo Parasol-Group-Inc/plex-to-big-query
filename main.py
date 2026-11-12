@@ -2321,7 +2321,10 @@ def main():
                     if probe_info.get("no_new_data"):
                         log.warning(probe_info["no_new_data_note"] + ".")
                         events.append(probe_info["no_new_data_note"])
-                only_tables = tables_to_extract(kind, may_skip, previous_snapshot, probe_info["changed"])
+                # `changed` still holds the config entry (probe_info["changed"] drops it), so a config
+                # or SQL change runs everything (bug on 11-12 13:01: sales_orders' first run after its
+                # probe-column change was per-table).
+                only_tables = tables_to_extract(kind, may_skip, previous_snapshot, changed)
                 if only_tables is not None:
                     probe_info["per_table"] = sorted(only_tables)
                     log.info(f"Probe: re-extracting only the {len(only_tables)} changed table(s): "

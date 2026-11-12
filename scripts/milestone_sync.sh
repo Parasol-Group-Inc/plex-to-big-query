@@ -55,7 +55,7 @@ echo "$CHANGED" | grep -qx CHANGELOG.md || \
     && todo+=("CHANGELOG.md has no entry for deployable changes in this range"); }
 echo "$CHANGED" | grep -Eq '^(reports/|terraform/|deploy/|main\.py|watchdog\.py)' && \
   todo+=("Deploy: Cloud Build for code (main.py, watchdog.py, scripts/screen_recon.py, deploy/cloudbuild.yaml) and ./scripts/deploy.sh for terraform/ and reports/")
-todo+=("Hub: re-inject the hand-built tabs into the live hub and refresh its data (scripts/hub/refresh_live_data.py), then republish")
+todo+=("Hub: python scripts/hub/snapshot_data.py && python scripts/hub/build_hub.py (machine-local tabs come from tab_store), then publish docs/hub/index_live.html")
 todo+=("Work log: add a row; daily scan rebuilds the Record page (scripts/build_record.py) and conversation page")
 echo "$CHANGED" | grep -Eq '^(terraform/|deploy/|scripts/deploy)' && todo+=("docs/DISASTER_RECOVERY.md and docs/ONBOARDING.md: still true after these infra changes?")
 log ""; log "## To do"

@@ -14,6 +14,25 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-12 - Hub builds in one command on any machine (tab store)
+
+### Changed
+- **`scripts/hub/tab_store.py`.** The four tabs whose inputs live on one machine save their render to
+  `gs://voxdatalake-plex-screenshots/hub-tabs/` whenever a build can render them. A build without the
+  inputs uses the stored copy instead of dropping the tab:
+  - QuickBooks (Emilio's login);
+  - Audit (`audit.json`);
+  - Screen extraction (the Windows laptop's screenshots);
+  - Customer notes (the primary folder's `etl-manual`).
+- **`build_hub.py`:** uses the store for those tabs. A missing QuickBooks login now falls back to the
+  stored tab instead of stopping the build, and a page with no QuickBooks tab at all is still
+  refused.
+- **The published page is the build output, never patched by hand.** Seeded from hub v53; the first
+  full build from this Mac matched v53 outside the data, QuickBooks (fresh figures) and Customer notes
+  (timestamps).
+- Docs: `docs/hub/README.md` "One build, any machine"; CLAUDE.md; the milestone to-do points at the
+  one command.
+
 ## 2026-11-12 - Milestone trigger (backups + docs to-do on every merge), hub refresh, DR and onboarding tabs
 
 ### Added

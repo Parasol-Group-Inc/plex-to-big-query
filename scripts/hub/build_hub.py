@@ -220,10 +220,10 @@ def add_qbo_tab(live):
         from google.cloud import bigquery
         data = qbo_tab.gather(bigquery.Client(project=qbo_tab.BQ_PROJECT))
     except Exception as exc:
-        sys.exit(f"Cannot build the QuickBooks tab: {exc}\n"
-                 "It reads parasoldatalake with your own gcloud login (configuration `default`, "
-                 "`gcloud auth application-default login`), not claude-readonly. "
-                 "Fix that, or rerun with --no-qbo and do NOT publish index_live.html.")
+        # Since 11-12 the stored copy (tab_store) stands in; main() still refuses a page with no tab.
+        print(f"QuickBooks tab not rendered here ({str(exc).splitlines()[0][:150]}); "
+              "it reads parasoldatalake with Emilio's own gcloud login. Trying the stored copy.")
+        return live
     return qbo_tab.inject(live, qbo_tab.render_tab(data))
 
 
@@ -345,7 +345,18 @@ def main():
         import budget_tab  # 2026-11-12: monthly cost before/after the cuts (docs/COST_ANALYSIS.md)
         import dr_tab  # 2026-11-12: disaster recovery (docs/DISASTER_RECOVERY.md)
         import onboarding_tab  # 2026-11-12: new developer (docs/ONBOARDING.md)
-        live = onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(customer_notes_tab.add(screens_tab.add(audit_tab.add(add_qbo_tab(page({**data, "snapshot": snapshot}))))))))))
+        import qbo_tab
+        import tab_store  # 2026-11-12: machine-local tabs fall back to their last stored render
+        live = page({**data, "snapshot": snapshot})
+        if "--no-qbo" not in sys.argv:
+            live = tab_store.add_with_store(live, "qbo", add_qbo_tab, qbo_tab.inject)
+            if qbo_tab.START not in live:
+                sys.exit("No QuickBooks tab: not renderable here and none stored. Publishing this page would "
+                         "delete the tab (2026-10-22). Fix the login, or rerun with --no-qbo and do NOT publish.")
+        live = tab_store.add_with_store(live, "audit", audit_tab.add, audit_tab.inject)
+        live = tab_store.add_with_store(live, "screens", screens_tab.add, screens_tab.inject)
+        live = tab_store.add_with_store(live, "custnotes", customer_notes_tab.add, customer_notes_tab.inject)
+        live = onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(live)))))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

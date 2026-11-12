@@ -539,6 +539,17 @@ of a merged PR). It does three things:
 **After each milestone, read the newest to-do and close it.** Hub tabs since 11-12 also include
 Budget, Disaster recovery and New developer.
 
+**The hub builds in one command on any machine (since 2026-11-12):**
+
+```
+python scripts/hub/snapshot_data.py && python scripts/hub/build_hub.py
+```
+
+Then publish `docs/hub/index_live.html`. Never patch the published HTML by hand. Machine-local tabs
+(QuickBooks, Audit, Screen extraction, Customer notes) come from `scripts/hub/tab_store.py`
+(`gs://voxdatalake-plex-screenshots/hub-tabs/`) when their inputs are not on this machine.
+`docs/hub/README.md`.
+
 ## Convention
 
 **Every answer also goes into the work log (Emilio, 2026-11-11).** Emilio finds the chat hard

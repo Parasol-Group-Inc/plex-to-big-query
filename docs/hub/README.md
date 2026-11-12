@@ -37,6 +37,34 @@ and the live page are gitignored, because they hold real PlexProd rows
 (customer names, order values) that belong in the org-only artifact, not in
 GitHub.
 
+### One build, any machine (since 2026-11-12)
+
+Every tab is now built by this one command; nothing is pasted in by hand.
+
+| Tab | Built from | Inputs |
+|---|---|---|
+| Static tabs: Reliability, Label Design API, Budget, Disaster recovery, New developer | `scripts/hub/*_tab.py` | repo only |
+| Report and table cards, Schedules, Scorecard, Label Design | repo files plus the BigQuery snapshot | `snapshot_data.py` |
+| QuickBooks, Audit, Screen extraction, Customer notes | `qbo_tab`, `audit_tab`, `screens_tab`, `customer_notes_tab` | one machine only, see below |
+
+Each of the last four inputs lives on one machine:
+- **QuickBooks:** Emilio's own gcloud login to parasoldatalake.
+- **Audit:** `docs/hub/audit.json`.
+- **Screen extraction:** the Windows laptop's `docs/hub/screens/`.
+- **Customer notes:** the primary folder's `etl-manual/customer_note/`.
+
+`scripts/hub/tab_store.py` covers them. Whenever a build can render one of these tabs it saves the
+render to `gs://voxdatalake-plex-screenshots/hub-tabs/` (private). A build without the inputs uses the
+last saved copy, so the tab is never dropped. A page with no QuickBooks tab, rendered or stored, is
+refused unless you pass `--no-qbo`, because publishing it would delete the tab (2026-10-22).
+
+The store is read and written with the gcloud CLI: your own login, or for Claude,
+`CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=claude-operator@...`. Seed it from a published page with
+`python scripts/hub/tab_store.py --seed <page.html>`.
+
+`refresh_live_data.py` (swap only the data in a published page) is kept for a quick data refresh,
+but the full build above is the normal path.
+
 Run it after any change to `reports/*.yaml`, `reports/sql/`, `reports/plex_sql/`
 or `docs/reports/`, commit the new `index.html`, and republish the artifact from
 `index_live.html` (it includes the QuickBooks tab; see the last section).

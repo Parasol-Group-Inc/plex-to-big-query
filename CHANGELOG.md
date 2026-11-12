@@ -29,6 +29,7 @@ don't need an entry.
 - **The stale-data email calls Plex's API only inside its window** (weekdays 9-5), not on every prod
   run.
 - The test-cascade message says "expect 14".
+- The Terraform output `test_scheduler_job_name` prints the real Monday-Friday cron, not the tfvars value.
 
 ### Changed
 - **Tests:** the freeze replay is honest about the threshold. A freeze past 6 h alerts. The real

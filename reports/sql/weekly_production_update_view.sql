@@ -19,8 +19,7 @@
 --
 -- SAME SOURCE/CONVENTION AS THE 4 DAILY REPORTS (encap/blending/labeling/
 -- packaging_daily_report_view.sql): Part_v_Production.Quantity, filtered to
--- non-rejected (Plex represents boolean true as -1, not 1), joined through
--- Part_v_Job_Op to Part_v_Workcenter.Workcenter_Group. Only difference:
+-- non-rejected, joined to Part_v_Workcenter.Workcenter_Group. Only difference:
 -- summed over a rolling week/month window instead of grouped by single day,
 -- and covers Printing for the first time (no existing Daily Report does).
 --
@@ -38,6 +37,15 @@
 -- own scheduling convention, since Plex production dates have no
 -- explicit timezone conversion applied elsewhere in this codebase either.
 --
+-- DEPARTMENT = THE RECORD'S OWN WORKCENTER (fixed 2026-11-13): this view used
+-- to reach the workcenter through Part_v_Job_Op, and that join finds nothing
+-- for records whose operation is not in raw_Part_v_Job_Op. Those records were
+-- dropped silently: in November 2026 (to 11-13) 2,575 of them, Labeling
+-- 283,763 units, Printing 12,701 and Bottling 2,501. Found by the 11-12 numbers
+-- audit (Labeling MTD 41,093 here against 306,236 in the monthly report).
+-- The fix is the one the monthly report made on 2026-09-04: Workcenter_Key
+-- is on Part_v_Production itself, so no Job_Op join at all.
+--
 -- BOTTLING 9-PARTS ARE NOT PRODUCTION (Jennilyn, 2026-10-22): when Bottling
 -- completes a job for a part starting with 9 (the finished-good version),
 -- the same output was already counted on the job for its 5 part (the
@@ -54,9 +62,18 @@
 -- twice. The drop above applies only to records dated before 2026-11-01, so
 -- October and earlier keep their numbers; from November 9-parts count. About
 -- 14 in-use 9-parts still have a 5-part BOM; finishing that change is hers.
--- VISIBILITY, not a filter: bottling_9part_with_5_bom_qty is the 9-part
--- Bottling output whose part still has an active 5-part BOM line, i.e.
--- possible double credit. If it is not 0 from November, a BOM is unfinished.
+-- 5/9 PARTS DROPPED AGAIN (Jennilyn, 2026-11-13, D27): "if we can drop those
+-- it'd be great. There are only 5 active parts ... still using this 5/9 double
+-- count setup. We are still phasing these out." So a Bottling 9-part record is
+-- also dropped, at ANY date, while its part still has an active BOM line to a
+-- 5-part: that output was already counted on the 5-part's job (checked
+-- 11-13: 93147-10, 93055-45 and 93334-01 each had their 5-part bottled the
+-- same week). Only 9-parts whose 5-part BOM is gone count from November.
+-- The rule reads the CURRENT BOM: once she removes a part's 5-part BOM, that
+-- part's earlier records count again. Pin the part list then if past months
+-- must not move (OPEN_ITEMS D27).
+-- mtd_bottling_9part_with_5_bom_qty: the good 9-part output that rule
+-- dropped this month. It is NOT in mtd_actual_qty / wtd_actual_qty.
 --
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
 -- GRAIN: one row per department.
@@ -87,7 +104,7 @@ prod AS (
   SELECT
     p.Quantity,
     p.Rejected,
-    p.Job_Op_Key,
+    p.Workcenter_Key,
     p.Part_Key,
     COALESCE(
       DATE(TIMESTAMP_MICROS(DIV(NULLIF(SAFE_CAST(CAST(p.Record_Date AS STRING) AS INT64), 0), 1000))),
@@ -128,11 +145,9 @@ by_department AS (
 
   FROM prod
 
-  JOIN `{gcp_project}.{dataset}.raw_Part_v_Job_Op` jo
-    ON SAFE_CAST(prod.Job_Op_Key AS INT64) = SAFE_CAST(jo.Job_Op_Key AS INT64)
-
+  -- The record's own workcenter, no Job_Op join (see DEPARTMENT above).
   JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
-    ON SAFE_CAST(jo.Workcenter_Key AS INT64) = wc.Workcenter_Key
+    ON SAFE_CAST(prod.Workcenter_Key AS INT64) = wc.Workcenter_Key
 
   LEFT JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` part
     ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(part.Part_Key AS INT64)
@@ -158,12 +173,15 @@ departments AS (
 SELECT
   departments.department,
 
+  -- A 5/9 record (is_bottling_9part AND has_5_bom) is not counted.
   SUM(IF(by_department.production_date >= bounds.week_start
-         AND by_department.production_date <= bounds.today_date,
+         AND by_department.production_date <= bounds.today_date
+         AND NOT (by_department.is_bottling_9part AND by_department.has_5_bom),
          by_department.non_rejected_qty, 0))                         AS wtd_actual_qty,
 
   SUM(IF(by_department.production_date >= bounds.month_start
-         AND by_department.production_date <= bounds.today_date,
+         AND by_department.production_date <= bounds.today_date
+         AND NOT (by_department.is_bottling_9part AND by_department.has_5_bom),
          by_department.non_rejected_qty, 0))                         AS mtd_actual_qty,
 
   ANY_VALUE(SAFE_DIVIDE(
@@ -171,11 +189,11 @@ SELECT
     EXTRACT(DAY FROM LAST_DAY(bounds.today_date))
   ))                                                                   AS pct_of_month_complete,
 
-  -- Added 2026-10-30 (CUTOVER above): MTD good Bottling output on 9-parts,
-  -- and the part of it on 9-parts that still have a 5-part BOM line.
+  -- Added 2026-10-30 (CUTOVER above): MTD good Bottling output on 9-parts
+  -- that is counted, and (5/9 rule) the 9-part output dropped this month.
   SUM(IF(by_department.production_date >= bounds.month_start
          AND by_department.production_date <= bounds.today_date
-         AND by_department.is_bottling_9part,
+         AND by_department.is_bottling_9part AND NOT by_department.has_5_bom,
          by_department.non_rejected_qty, 0))                         AS mtd_bottling_9part_qty,
   SUM(IF(by_department.production_date >= bounds.month_start
          AND by_department.production_date <= bounds.today_date

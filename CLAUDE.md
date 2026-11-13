@@ -173,15 +173,21 @@ what the live view returns, then merge and deploy before the next prod slot
 (1 PM / 6 PM / 11 PM MT probe, 4 AM full). Recipe: `docs/OPERATIONS.md`,
 "A view was edited by hand in BigQuery".
 
-## Bottling 9-parts count from 2026-11-01
+## Bottling 9-parts: the 5/9 rule (2026-11-13)
 
-Until 10-30, Bottling records on 9-parts were dropped as double credit for
-their 5-part job (bulk cases exempt). Jennilyn removed the 5-part BOMs and
-asked to count them "starting now"; the drop now applies only before
-2026-11-01, in `packaging_daily_report`, `production_monthly_by_workcenter_group_report`
-and `weekly_production_update_report` (and so `production_vs_goal_report`).
-`*_9part_with_5_bom_qty` columns show possible double credit and should be 0
-once her BOMs are finished (OPEN_ITEMS D27). Don't move the date without her.
+Bottling records on 9-parts were dropped as double credit for their 5-part job until 10-30 (bulk
+cases exempt). Jennilyn then removed most 5-part BOMs and asked to count 9-parts "starting now", so
+the blanket drop applies only before 2026-11-01. On 11-13 she asked to drop the parts still on the
+5/9 setup: from November a Bottling 9-part record is dropped while its part has an **active 5-part
+BOM line** (11,500 units on 3 parts by 11-13). This applies in `packaging_daily_report`,
+`production_monthly_by_workcenter_group_report` and `weekly_production_update_report` (and so
+`production_vs_goal_report`). `*_9part_with_5_bom_qty` is the quantity dropped. The rule reads
+the current BOM: once she removes a part's 5-part BOM, that part's earlier records count again
+(OPEN_ITEMS D27). Don't change either date or the rule without her.
+
+**Production by department uses the record's own `Workcenter_Key`, never `Part_v_Job_Op`.** The
+Job_Op path silently drops records whose operation is not extracted: the weekly report missed
+283,763 Labeling units in November 2026 until 11-13.
 
 ## bq_view creation order and the retry-once safety net
 

@@ -171,12 +171,15 @@ def render_tab() -> str:
              'The differences with Plex are ODBC\'s normal lag (today\'s shipments and production after the 13:00 refresh), '
              'the known valuation gap (D32: quantity x price against the invoiced amount, $21.9K for November), and one new '
              'finding: the report dates an invoice by when a shipper line was linked to it, not by the invoice\'s own date, so '
-             'one invoice ($19,982.20) is in November in the report and in October in Plex. A fix is proposed, not made '
-             f'(D40). Details: {code("docs/ETL_AUDIT_2026-11-12.md")}.</p>' + table(["Area", "Result"], [
+             'one invoice ($19,982.20) is in November in the report and in October in Plex. '
+             '<b>Jennilyn answered on 11-13:</b> revenue is by shipment, so neither the invoice date (D40) nor the '
+             'invoiced amount (D32) changes anything; the 5/9 parts are dropped again (D27); and the weekly production '
+             'report had a bug, now fixed, that missed 283,763 Labeling units in November. '
+             f'Details: {code("docs/ETL_AUDIT_2026-11-12.md")}.</p>' + table(["Area", "Result"], [
                  (esc("Revenue, November"), esc("$1,187,202.54, 217 lines, 125 shippers: report = raw rebuild; Plex screen +$6,603.82, reconciled line by line")),
                  (esc("Shipping, last 7 days"), esc("raw = report every day; Plex Shipper History has all 237 of ours, plus 8 shipped after the 13:00 extraction")),
                  (esc("Production, 11-01 to 11-12"), esc("raw = report = Plex screens through 11-11; 11-12 short by the afternoon's records (ODBC lag)")),
-                 (esc("Open questions"), esc("invoice date basis (D40), invoiced valuation (D32), 5-part BOMs (D27, 11,500 units flagged), weekly sheet departments")),
+                 (esc("Decided 11-13"), esc("D40 and D32 closed (revenue = shipments); D27 5/9 parts dropped at any date (11,500 units, 3 parts); weekly report uses the record's own workcenter (now equals the monthly report)")),
              ]) + '</div>')
     return f"""{START}<section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref">
 <div class="block"><h2>How we know the data is right</h2>

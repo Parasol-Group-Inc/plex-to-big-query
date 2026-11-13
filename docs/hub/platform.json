@@ -1026,8 +1026,8 @@
       "detail": "Every extracting run recreates its views from the SQL in GCS, so a view changed in the BigQuery console reverts at the next run, not just the next deploy. Jennilyn edits views directly (pipeline_plex_value_report Deposit Review, 2026-10-30). Put the change in reports/sql, prove the repo SQL returns exactly the live rows, deploy before the next prod slot. docs/OPERATIONS.md, \"A view was edited by hand\"."
     },
     {
-      "title": "Bottling 9-parts count from 2026-11-01",
-      "detail": "The 9-part drop (double credit for the 5-part job) applies only before 2026-11-01. *_9part_with_5_bom_qty shows possible double credit; it should be 0 once Jennilyn finishes removing 5-part BOMs (D27)."
+      "title": "Bottling 9-parts: the 5/9 rule (2026-11-13)",
+      "detail": "Before 2026-11-01 every Bottling 9-part record is dropped (double credit for the 5-part job; bulk cases count). From November only 9-parts that still have an active 5-part BOM line are dropped (Jennilyn, 11-13; 11,500 units on 3 parts by 11-13). *_9part_with_5_bom_qty is the quantity dropped. The rule reads the current BOM, so removing a part's 5-part BOM makes its earlier records count again (D27)."
     },
     {
       "title": "Exit 0 does not mean the view was created",

@@ -37,8 +37,11 @@ WHERE pd.production_date IS NOT NULL
 -- Bottling 9-parts are double credit for their 5 part (Jennilyn, 2026-10-22).
   -- Bulk cases (9xxxx-BK) have no 5-part job and still count.
   -- Cutover (Jennilyn, 2026-10-30): the drop applies only before 2026-11-01; 9-parts count from November.
+  -- 5/9 parts (Jennilyn, 2026-11-13, D27): also dropped at any date while the 9-part has an active 5-part BOM line.
   AND NOT (wc.Workcenter_Group = 'Bottling' AND LTRIM(ISNULL(pp.Part_No, '')) LIKE '9%'
            AND LTRIM(ISNULL(pp.Part_No, '')) NOT LIKE '9[0-9][0-9][0-9][0-9]-BK%'
-           AND pd.production_date < '2026-11-01')
+           AND (pd.production_date < '2026-11-01'
+                OR EXISTS (SELECT 1 FROM Part_v_BOM AS b JOIN Part_v_Part AS c ON c.Part_Key = b.Component_Part_Key
+                        WHERE b.Part_Key = pd.Part_Key AND LTRIM(c.Part_No) LIKE '5%' AND ISNULL(b.Active, 1) <> 0)))
 GROUP BY DATEFROMPARTS(YEAR(pd.production_date), MONTH(pd.production_date), 1), wc.Workcenter_Group
 ORDER BY production_month DESC, workcenter_group;

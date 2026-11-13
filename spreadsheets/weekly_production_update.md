@@ -3,7 +3,7 @@
 - **Type:** Google Sheet
 - **Category:** Weekly/Monthly Production Attainment
 - **Departments:** Production, Planning (Users: Mark, Nick, Chris — per `reports-list/production.md`)
-- **Status:** 🔍 Mapped — real content received 2026-08-26 (2 tabs: "Capacity" and "Goals"). Partially buildable; several open questions below before the rest can be built. · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count). · **2026-10-30:** from 1 Nov Bottling 9-parts count (Jennilyn removed their 5-part BOMs); earlier dates keep the drop; `*_9part_with_5_bom_qty` shows possible double credit · **2026-11-06:** reads `part_production_current` (adds Plex's production screens while ODBC is frozen, D30)
+- **Status:** 🔍 Mapped — real content received 2026-08-26 (2 tabs: "Capacity" and "Goals"). Partially buildable; several open questions below before the rest can be built. · **2026-10-22:** Bottling records for parts starting with 9 excluded (double credit for the 5 part, Jennilyn; bulk cases 9xxxx-BK still count). · **2026-10-30:** from 1 Nov Bottling 9-parts count (Jennilyn removed their 5-part BOMs); earlier dates keep the drop; `*_9part_with_5_bom_qty` shows possible double credit · **2026-11-06:** reads `part_production_current` (adds Plex's production screens while ODBC is frozen, D30) · **2026-11-13:** department from the record's own workcenter (the Job_Op path missed 2,575 November records, Labeling 283,763 units); Bottling 9-parts that still have an active 5-part BOM line dropped again at any date (Jennilyn, D27)
 
 ## What it is
 
@@ -19,7 +19,7 @@ Two tabs tracking weekly/monthly production attainment against manually set targ
 
 | Column | Plex source |
 |---|---|
-| Actual WTD/MTD quantity by department | `Part_v_Production` (`Quantity`, `Rejected`) joined through `Part_v_Job_Op` to `Part_v_Workcenter.Workcenter_Group`, non-rejected quantity summed over the relevant date range — exact same source and Plex-boolean convention (`Rejected = -1`) already confirmed and used by `encap_daily_report`/`blending_daily_report`/`labeling_daily_report`/`packaging_daily_report`. Only difference from those reports: summed over week-to-date/month-to-date instead of grouped by single day. |
+| Actual WTD/MTD quantity by department | `Part_v_Production` (`Quantity`, `Rejected`) joined (since 2026-11-13 by the record's own `Workcenter_Key`; until then through `Part_v_Job_Op`, which missed records) to `Part_v_Workcenter.Workcenter_Group`, non-rejected quantity summed over the relevant date range — exact same source and Plex-boolean convention (`Rejected = -1`) already confirmed and used by `encap_daily_report`/`blending_daily_report`/`labeling_daily_report`/`packaging_daily_report`. Only difference from those reports: summed over week-to-date/month-to-date instead of grouped by single day. |
 | Printing department coverage | **New** — no existing Daily Report covers Printing. `Workcenter_Group = 'Printing'` is already confirmed live (`reports-list/production.md`'s 2026-08-21 confirmed-workcenter-roster note), so this is the same pattern as the other 4, just not built yet. |
 | "Caps Lost" (Weekly Loss - Encap) | Same `Rejected` flag already used as `scrap_qty` on `encap_daily_report` — buildable, not a new gap. |
 | "% of Month Complete" | Pure date arithmetic (`EXTRACT(DAY FROM CURRENT_DATE()) / days in current month`) — no Plex dependency at all, doesn't need any of this pipeline's extracted data. |

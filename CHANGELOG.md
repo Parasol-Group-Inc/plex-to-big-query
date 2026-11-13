@@ -14,6 +14,41 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - Production: 5/9 parts dropped again; weekly report missed records; D40 and D32 decided
+
+Jennilyn answered the 11-12 audit questions on 11-13.
+
+### Changed
+- **Bottling 9-parts that still have an active 5-part BOM line are dropped again, at any date**
+  (Jennilyn: "if we can drop those it'd be great. There are only 5 active parts currently in the
+  system that we are still using with this 5/9 double count setup"; OPEN_ITEMS D27).
+  - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`,
+    `weekly_production_update_report`, and so `production_vs_goal_report`.
+  - **Effect on 11-13:** Bottling November falls by 11,500 units (702,261 to 690,761 in the monthly
+    report). They are on 3 parts: 93147-10VOXNU-0 (5,000), 93055-45VOXNU-0 (4,000) and
+    93334-01VOXNU-0 (2,500). Each of their 5-parts was bottled the same week. October is unchanged.
+  - **Columns:** `*_9part_with_5_bom_qty` now shows the quantity dropped, not possible double credit.
+    `*_9part_qty` counts only the 9-part output that is kept. In `packaging_daily_report`, a day and
+    line that ran only those parts no longer has a row.
+  - **Caveat:** the rule reads the current BOM. When Jennilyn removes a part's 5-part BOM, that
+    part's earlier records count again.
+  - **Plex SQL copies:** the same rule is in the three `reports/plex_sql/` copies (untested in Plex).
+
+### Fixed
+- **`weekly_production_update_report` left out production records.** It found the department
+  through `Part_v_Job_Op`, and that lookup misses records whose operation is not extracted.
+  - **Missed:** 2,575 November records: Labeling 283,763 units (MTD read 41,093 instead of 324,206),
+    Printing 12,701 and Bottling 2,501.
+  - **Fix:** it now uses the record's own `Workcenter_Key`, as the monthly report has since
+    2026-09-04. Its MTD equals the monthly report for all four departments. Also fixed in the
+    `reports/plex_sql/` copy.
+
+### Decided (no change)
+- **D40, invoice date basis: closed.** October is closed, and revenue is reported by shipment, not by
+  invoice, so the one invoice whose date basis differs does not move revenue.
+- **D32, revenue valuation: closed.** Revenue stays shipped quantity × price; invoicing lags and is
+  not the measure. The rest of D32 (the empty views) stays open.
+
 ## 2026-11-12 - Numbers audit: revenue, shipping, production (docs only)
 
 ### Added

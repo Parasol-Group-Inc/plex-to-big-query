@@ -52,10 +52,18 @@ header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; backg
 .brand span { color: var(--muted); font-size: 12px; font-family: var(--f-mono); }
 .search { flex: 1 1 240px; display: flex; min-width: 0; }
 .search input { width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
-nav { display: flex; gap: 2px; overflow-x: auto; margin-bottom: -1px; }
-nav button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; color: var(--muted); font-weight: 500; white-space: nowrap; }
-nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-nav button .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); margin-left: 4px; }
+/* two-level nav (2026-11-13): a row of groups, then the chosen group's tabs; both wrap, nothing scrolls sideways */
+nav { margin-bottom: -1px; }
+nav .groups { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; }
+nav .groups button { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; }
+nav .groups button:hover { color: var(--ink); }
+nav .groups button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+nav .groups .gn { font-family: var(--f-mono); font-size: 11px; opacity: .75; margin-left: 5px; }
+nav .sub { display: flex; flex-wrap: wrap; gap: 2px; }
+nav .sub button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 12px 8px; cursor: pointer; color: var(--muted); font-weight: 500; white-space: nowrap; }
+nav .sub button:hover { color: var(--ink); }
+nav .sub button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav .sub button .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); margin-left: 4px; }
 
 /* summary strip */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-block: 20px; }
@@ -249,7 +257,7 @@ pre.sql { white-space: pre-wrap; background: var(--code-bg); padding: 10px; bord
       <div class="brand"><h1>Plex Data Hub</h1><span id="built"></span></div>
       <label class="search" for="q"><input id="q" type="search" placeholder="Search reports, Plex views, raw tables, pipelines…" autocomplete="off" aria-label="Search"></label>
     </div>
-    <nav id="tabs" role="tablist"></nav>
+    <nav id="tabs" aria-label="Hub sections"><div class="groups" id="tab-groups"></div><div class="sub" id="tab-list" role="tablist"></div></nav>
   </div>
 </header>
 
@@ -503,14 +511,37 @@ $("#built").textContent = `voxdatalake · built ${D.built}`;
 const SC = D.scorecard || { tiles: [] };
 const TL = byName(SC.tiles, "id");
 const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["board", "Scorecard view", Object.keys(SC.figures || {}).length], ["platform", "Schedules & probe", ""], ["label", "Label Design", ""], ["history", "History", ""]];
-$("#tabs").innerHTML = TABS.map(([k, l, n]) => `<button role="tab" data-k="${k}" aria-selected="false">${l}${n !== "" ? `<span class="n">${n}</span>` : ""}</button>`).join("");
-function show(k) {
-  document.querySelectorAll("main section").forEach(s => s.hidden = s.dataset.tab !== k);
-  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.k === k));
-  $("#q").disabled = !["reports", "tables", "pipelines", "scorecard"].includes(k);
-  try { localStorage.setItem("hub-tab", k); } catch (e) {}
+// Tabs grouped by what you came to do. A tab not listed here (a new injected one) lands in "More".
+const TAB_GROUPS = [["data", "Data", ["reports", "tables", "pipelines"]],
+  ["scorecard", "Scorecard", ["scorecard", "board", "rules"]],
+  ["ops", "Operations", ["platform", "reliability", "screens", "label", "labelapi", "audit"]],
+  ["tools", "Business tools", ["custnotes", "qbo"]],
+  ["project", "Project", ["budget", "dr", "onboarding", "history"]]];
+const TAB_BY_KEY = Object.fromEntries(TABS.map(t => [t[0], t]));
+const GROUPS = TAB_GROUPS.map(([g, l, ks]) => [g, l, ks.filter(k => TAB_BY_KEY[k])]).filter(g => g[2].length);
+const listed = new Set(GROUPS.flatMap(g => g[2]));
+const extra = TABS.map(t => t[0]).filter(k => !listed.has(k));
+if (extra.length) GROUPS.push(["more", "More", extra]);
+const groupOf = k => (GROUPS.find(g => g[2].includes(k)) || GROUPS[0]);
+$("#tab-groups").innerHTML = GROUPS.map(([g, l, ks]) => `<button type="button" data-g="${g}" aria-pressed="false">${l}<span class="gn">${ks.length}</span></button>`).join("");
+function renderSub(g) {
+  $("#tab-list").innerHTML = g[2].map(k => { const [, l, n] = TAB_BY_KEY[k]; return `<button role="tab" data-k="${k}" aria-selected="false">${l}${n !== "" ? `<span class="n">${n}</span>` : ""}</button>`; }).join("");
+  document.querySelectorAll("#tab-groups button").forEach(b => b.setAttribute("aria-pressed", b.dataset.g === g[0]));
 }
-$("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) show(b.dataset.k); });
+function show(k) {
+  if (!TAB_BY_KEY[k]) k = TABS[0][0];
+  const g = groupOf(k);
+  if (!$("#tab-list").querySelector(`[data-k="${k}"]`)) renderSub(g);
+  document.querySelectorAll("main section").forEach(s => s.hidden = s.dataset.tab !== k);
+  document.querySelectorAll("#tab-list button").forEach(b => b.setAttribute("aria-selected", b.dataset.k === k));
+  $("#q").disabled = !["reports", "tables", "pipelines", "scorecard"].includes(k);
+  try { localStorage.setItem("hub-tab", k); localStorage.setItem("hub-tab-" + g[0], k); } catch (e) {}
+}
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.g) { const g = GROUPS.find(x => x[0] === b.dataset.g); let last = ""; try { last = localStorage.getItem("hub-tab-" + g[0]) || ""; } catch (err) {} show(g[2].includes(last) ? last : g[2][0]); return; }
+  if (b.dataset.k) show(b.dataset.k);
+});
 
 /* ---------- stats ---------- */
 const translated = D.reports.filter(r => r.plex_sql).length;

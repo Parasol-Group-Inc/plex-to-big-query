@@ -14,6 +14,31 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - Hub: Business rules tab with live numbers; grouped tab bar
+
+### Added
+- **Business rules tab** (`scripts/hub/rules_tab.py`, data in `docs/hub/business_rules.json`,
+  readable copy `docs/BUSINESS_RULES.md`). 92 rules across revenue, sales, production, inventory,
+  Label Design, goals, operations, data sources and customers.
+  - **How it was built:** two Sonnet agents collected the rules from the report docs, SQL headers,
+    CLAUDE.md, OPEN_ITEMS, CHANGELOG and the Field Manual, and checked each against `reports/sql/`.
+    A third wrote a read-only measure query for each. Claude reviewed and spot-checked them.
+  - **Live numbers:** 88 rules have a number, re-run by `snapshot_data.py` on every hub build
+    (`rule_measures` in the snapshot; a failing query is recorded, never fatal).
+  - **Findings:** 14 findings and 11 docs-vs-code disagreements. Examples:
+    - The MFG job success 84-day gate never passes (no job has a testing-released date).
+    - Every job reads Stock (Plex's job distribution view is empty).
+    - "Pending approval" has three definitions ($272,861 / $348,869 / $621,730).
+    - FPY includes 9-part Bottling the production reports drop (323,904 units in October).
+    - customers-by-rep differs from the rep chain for 31 of 282 customers.
+- **Milestone to-do:** asks for a `business_rules.json` update when `reports/sql/` changed.
+
+### Changed
+- **Hub tab bar:** 19 tabs in one sideways-scrolling row became 5 groups (Data, Scorecard,
+  Operations, Business tools, Project) with the chosen group's tabs below. Both rows wrap, and each
+  group remembers its last tab. A new tab not in `TAB_GROUPS` lands in "More".
+- **CLAUDE.md:** the screens tolerance is 300 min in Terraform (the text said 120, the code default).
+
 ## 2026-11-13 - Milestone backups work from a read-only shell
 
 ### Fixed

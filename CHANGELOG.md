@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - Milestone backups work from a read-only shell
+
+### Fixed
+- **`scripts/milestone_sync.sh` skipped its daily BigQuery backups** (`etl_schedule`,
+  `manual_data_access`) on the 11-13 merge: `bq` ignores `CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT`.
+  It now falls back to a BigQuery REST copy job with an impersonated `claude-operator` token. The
+  11-13 copies were taken by hand (70 and 26 rows).
+
 ## 2026-11-13 - Production: 5/9 parts dropped again; weekly report missed records; D40 and D32 decided
 
 Jennilyn answered the 11-12 audit questions on 11-13.

@@ -33,14 +33,28 @@ else
 fi
 ls -1t "$BACK"/plex-to-big-query_*.bundle 2>/dev/null | tail -n +11 | xargs -r rm -f
 
+# bq ignores impersonation, so a read-only shell copies through the REST API with
+# an impersonated token (gcloud honours --impersonate-service-account).
+bq_copy_as_operator() {
+  local tok job
+  tok="$(gcloud auth print-access-token --impersonate-service-account=claude-operator@voxdatalake.iam.gserviceaccount.com 2>/dev/null)" || return 1
+  [ -n "$tok" ] || return 1
+  job="$(curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" \
+    "https://bigquery.googleapis.com/bigquery/v2/projects/voxdatalake/jobs" \
+    -d "{\"configuration\":{\"copy\":{\"sourceTable\":{\"projectId\":\"voxdatalake\",\"datasetId\":\"${1%%.*}\",\"tableId\":\"${1#*.}\"},\"destinationTable\":{\"projectId\":\"voxdatalake\",\"datasetId\":\"${2%%.*}\",\"tableId\":\"${2#*.}\"},\"writeDisposition\":\"WRITE_TRUNCATE\"}}}")"
+  echo "$job" | grep -q '"errorResult"' && return 1
+  echo "$job" | grep -q '"jobReference"'
+}
+
 # 1b. dated BigQuery copies of hand-edited ops tables, once a day
 for t in PlexOps.etl_schedule PlexProd.manual_data_access; do   # tables only; views (live_source, data_freshness) are in Terraform
   dst="Backups.${t/./__}_${TODAY}"
   if bq show "voxdatalake:$dst" >/dev/null 2>&1; then
     log "- Backup: $dst already taken today"
-  elif CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=claude-operator@voxdatalake.iam.gserviceaccount.com \
-       bq cp -f "voxdatalake:$t" "voxdatalake:$dst" >/dev/null 2>&1; then
+  elif bq cp -f "voxdatalake:$t" "voxdatalake:$dst" >/dev/null 2>&1; then
     log "- Backup: $dst"
+  elif bq_copy_as_operator "$t" "$dst"; then
+    log "- Backup: $dst (as claude-operator)"
   else
     log "- Backup: $dst SKIPPED (no BigQuery write access from this shell)"
   fi

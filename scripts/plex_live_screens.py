@@ -121,6 +121,43 @@ def half_months(start, end):
             yield beg, nxt
 
 
+class ScreenCapError(RuntimeError):
+    """One day alone returns at least the cap: no smaller window exists to read it whole."""
+
+
+def read_windows(windows, fetch, cap, label, max_requests=200):
+    """Read [beg, end) date windows through fetch(beg, end) -> rows, halving any window that
+    comes back at the cap until every piece is under it (2026-11-13: Nov 1-15 reached 520
+    revenue rows and the whole read failed). Returns [((beg, end), rows)] in date order.
+
+    - A capped answer is never used: the screen may have cut it, so it is read again in halves.
+    - A one-day window at the cap raises ScreenCapError (nothing smaller to ask for).
+    - max_requests bounds a runaway (a screen that ignores the dates would otherwise halve
+      down to single days for every day): past it, RuntimeError.
+    - fetch errors propagate unchanged; a non-list answer is an error, not 0 rows."""
+    out, todo, n = [], list(windows)[::-1], 0
+    while todo:
+        beg, end = todo.pop()
+        if end <= beg:
+            continue
+        n += 1
+        if n > max_requests:
+            raise RuntimeError(f"{label}: more than {max_requests} requests while splitting capped windows")
+        rows = fetch(beg, end)
+        if not isinstance(rows, list):
+            raise RuntimeError(f"{label} {beg:%Y-%m-%d}: unexpected answer ({type(rows).__name__}), not a row list")
+        if len(rows) < cap:
+            out.append(((beg, end), rows))
+            continue
+        days = (end - beg).days
+        if days <= 1:
+            raise ScreenCapError(f"{label} {beg:%Y-%m-%d}: {len(rows)} rows for one day, at the screen's cap of {cap}")
+        mid = beg + dt.timedelta(days=days // 2)
+        print(f"  {label} {beg:%Y-%m-%d}..{end:%Y-%m-%d}: {len(rows)} rows (cap {cap}), reading it in two halves")
+        todo += [(mid, end), (beg, mid)]   # stack: the earlier half is read first
+    return out
+
+
 def schema(cols):
     return [bigquery.SchemaField(n, t) for n, t in cols]
 
@@ -154,14 +191,18 @@ def fetch_revenue(pg, today, ctx):
     url = f"{BASE}/Shipping/ShippingRevenueByPartGroupReport/"
     pg.goto(url + "Index", wait_until="networkidle", timeout=90000)
     out, seen_windows = [], {}
-    for beg, end in half_months(START, today):
+
+    def fetch(beg, end):
         r = post_json(pg, url + "Search", ctx, f"Shipping Revenue {beg:%Y-%m-%d}", {
             "Security": False, "ShowSubTotals": False, "CommissionReporting": True,
             "InvoiceDateBegin": utc_midnight(beg), "InvoiceDateEnd": utc_midnight(end),
             "PCN": 0, "SortBy": "5"})
-        rows = r["Data"]["Rows"]
-        if len(rows) >= CAP:
-            raise RuntimeError(f"Shipping Revenue {beg:%Y-%m}: {len(rows)} rows, at the screen's cap")
+        try:
+            return r["Data"]["Rows"]
+        except (KeyError, TypeError):
+            raise RuntimeError(f"Shipping Revenue {beg:%Y-%m-%d}: answer has no Data.Rows") from None
+
+    for (beg, end), rows in read_windows(half_months(START, today), fetch, CAP, "Shipping Revenue"):
         lines = {}
         for x in rows:
             key = tuple(sorted((k, str(v)) for k, v in x.items() if k not in PER_ACCOUNT))
@@ -175,7 +216,7 @@ def fetch_revenue(pg, today, ctx):
                 lines[key] = o
             gl = lines[key]["_gl"]
             if x["AccountNo"] in gl:  # the same line and account twice: not a GL split
-                raise RuntimeError(f"Shipping Revenue {beg:%Y-%m}: repeated row {x['InvoiceNo']} {x['AccountNo']}")
+                raise RuntimeError(f"Shipping Revenue {beg:%Y-%m-%d}: repeated row {x['InvoiceNo']} {x['AccountNo']}")
             gl[x["AccountNo"]] = x["Amount"]
         for o in lines.values():
             o["gl_amounts"] = "; ".join(f"{k}: {v}" for k, v in sorted(o.pop("_gl").items()))

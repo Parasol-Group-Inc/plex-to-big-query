@@ -58,8 +58,8 @@ shipments; production was dropped from the check on 11-10, its view stays on ODB
 **One cycle** (`scripts/screen_recon.py`, about 5 min):
 1. Logs into Plex (secrets `plex-portal-username` / `plex-portal-password`) and reads
    three screens: `releases` (Sales Orders + Rapid Entry), `history` (Shipper History)
-   and `revenue` (Shipping Revenue by Part Group, half-month windows since the 500-row
-   cap). `--only production` still compares production by hand.
+   and `revenue` (Shipping Revenue by Part Group, half-month windows, each halved again
+   while it hits the 500-row cap). `--only production` still compares production by hand.
    **Every login** (first and any re-login mid-screen) is timed and written to
    `PlexOps.plex_login_log` (ok, error, seconds, final page, screenshot). **A failed
    login is emailed on its own to `LOGIN_ALERT_EMAILS`** (Emilio), with a diagnosis: the
@@ -258,8 +258,10 @@ that come back are converted to Mountain-time dates.
   second `41000-01-01` row at $0, and `Revenue` is repeated on both. Rows are collapsed back
   to one per line; the account amounts are kept as text in `gl_amounts`
   (`"40200-01-01: 1234.5; 41000-01-01: 0"`). Summing the raw screen rows would double October.
-- The cap is 500 rows per request. A month at 500 rows fails the screen. The same line and
-  account twice also fails it.
+- The screen cuts an answer at about 520 rows (11-13: Nov 1-14 came back as 520; split, it was
+  558). We treat 500 as the cap. Since 2026-11-13 a half-month window at the cap is read again
+  in halves (`read_windows`), down to one day; a capped answer is never used. Only a single day
+  at the cap fails the screen (`ScreenCapError`). The same line and account twice also fails it.
 - One row per invoiced line: invoice date/no/link, shipper no, order no, PO no/key, customer,
   customer part, part no/revision/key/type/group, product group, quantity, net unit price,
   revenue, outside salesperson, region/city/state, `loaded_at`.

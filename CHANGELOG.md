@@ -14,6 +14,30 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - Screens job: capped revenue windows split; a returning value no longer "diverges"
+
+Ships with the screens image (Cloud Build), not `deploy.sh`.
+
+### Fixed
+- **Revenue screen failed at its row cap** (13:21 MT, `screens_failed`). Nov 1-14 came back at 520
+  rows, the screen's cut-off; read whole, it was 558.
+  - **Fix:** `plex_live_screens.read_windows` reads any window at the cap again in halves, down to
+    one day, and never uses a capped answer. Only a single capped day fails the screen
+    (`ScreenCapError`).
+  - **Limits:** a runaway is bounded at 200 requests, and an answer without `Data.Rows` is an
+    error, not 0 rows.
+  - **Checked live** (dry run, nothing written): 458 lines, 14 s.
+- **False `diverged` on Label Design releases** (15:21 and 16:21 MT; one "ODBC is behind or
+  disagrees" email).
+  - **Case:** release 132398307 showed status 3016 on 11-11, then 3020, then 3016 again on 11-13.
+  - **Cause:** `first_seen_map` dated the current value from its first sighting in 3 days (11-11),
+    so ODBC's 11-11 update looked newer than the screen. ODBC was only 3 h behind.
+  - **Fix:** it now dates the value from when it last began (`current_run_start`: the first
+    snapshot with the current hash after the last snapshot with another). Checked live: the line
+    now dates from 11-13 22:21 UTC.
+- **Tests:** `tests/test_screen_windows.py` (8) and 5 new in `tests/test_screen_recon.py`, including
+  a replay of 132398307.
+
 ## 2026-11-13 - D27: Jennilyn's list of the 5/9 parts (docs only)
 
 - **Her list (11-13):** 93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0 and

@@ -14,6 +14,16 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - D27: Jennilyn's list of the 5/9 parts (docs only)
+
+- **Her list (11-13):** 93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0 and
+  93055-45VOXNU-0, each with a -1 replacement part. The old BOMs stay; the -0 parts go Obsolete.
+- **No code change:** all 5 already have an active 5-part BOM line, so the rule drops them.
+- **History stays put:** because the BOMs are not removed, past months do not move. Rule PROD-06 is
+  no longer an open decision.
+- **To confirm:** 93147-10VOXNU-0 (5,000 units on 11-05) is dropped but not on her list.
+- OPEN_ITEMS D27, business rules PROD-03 and PROD-06, and `docs/BUSINESS_RULES.md` updated.
+
 ## 2026-11-13 - Hub: Business rules tab with live numbers; grouped tab bar
 
 ### Added

@@ -128,7 +128,7 @@
    "why": "Counting both the 5-part (bottled bulk) and the 9-part (finished good) is double credit for one run of bottles.",
    "decided_by": "Jennilyn",
    "decided_on": "2026-11-13",
-   "quote": "if we can drop those it'd be great. There are only 5 active parts currently in the system that we are still using with this 5/9 double count setup. We are still phasing these out.",
+   "quote": "if we can drop those it'd be great. There are only 5 active parts currently in the system that we are still using with this 5/9 double count setup. We are still phasing these out. | 11-13 list: \"93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0, 93055-45VOXNU-0. Each of these has a VOXNU-1 part to replace the VOXNU-0 part ready to go.\"",
    "status": "in force",
    "open_item": "D27",
    "reports": [
@@ -169,7 +169,7 @@
     "detail": "view shows 11500; 45 records on 3 parts; Bottling counted after the rule 690761",
     "as_of": "2026-11-13 10:24 MT"
    },
-   "finding": null
+   "finding": "Jennilyn's 11-13 list has 5 parts; all have an active 5-part BOM line, so the rule covers them. 93147-10VOXNU-0 (5,000 units on 11-05) is dropped too but is not on her list: same -0/-1 setup, to confirm with her."
   },
   {
    "id": "PROD-04",
@@ -266,13 +266,13 @@
   {
    "id": "PROD-06",
    "area": "Production",
-   "title": "The 5/9 rule reads today's BOM, so past months can move",
-   "rule": "Whether a 9-part is dropped depends on the BOM as it is now, not as it was on the production date. When Jennilyn removes a part's 5-part BOM, its earlier records (from 2026-11-01) start counting again. To keep past months fixed the dropped part list would have to be pinned.",
-   "why": "The rule has no history of BOM changes to look at.",
-   "decided_by": "unknown",
-   "decided_on": null,
-   "quote": null,
-   "status": "open decision",
+   "title": "The 5/9 rule reads today's BOM; the -0 BOMs stay, so past months hold",
+   "rule": "Whether a 9-part is dropped depends on the BOM as it is now. Jennilyn is not removing the old 5-part BOMs: the -0 parts become Obsolete with their BOMs intact, and production moves to new -1 parts that have no 5-part line. So the -0 records stay dropped and the -1 records count. Past months would move only if an old 5-part BOM line were deleted.",
+   "why": "Settled by her 11-13 reply: the -1 replacement parts carry the change, the old BOMs stay in Plex.",
+   "decided_by": "Jennilyn",
+   "decided_on": "2026-11-13",
+   "quote": "ALL of the old BOMs are still there - but the parts they belong to are Obsolete (aka inactive).",
+   "status": "in force",
    "open_item": "D27",
    "reports": [
     "packaging_daily_report",

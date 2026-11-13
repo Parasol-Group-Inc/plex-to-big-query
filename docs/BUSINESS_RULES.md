@@ -234,10 +234,11 @@
 - **Rule:** A Bottling record for a 9-part (finished good, part number starting 9) is dropped while that part still has an active BOM line to a 5-part, because the same output was already counted on the 5-part job. Before 2026-11-01 every Bottling 9-part record is dropped, good and scrap alike. From November only 9-parts that still have a 5-part BOM line are dropped; 9-parts whose 5-part BOM is gone count.
 - **Why:** Counting both the 5-part (bottled bulk) and the 9-part (finished good) is double credit for one run of bottles.
 - **Decided:** Jennilyn, 2026-11-13 · D27 · status: in force
-- **In her words:** "if we can drop those it'd be great. There are only 5 active parts currently in the system that we are still using with this 5/9 double count setup. We are still phasing these out."
+- **In her words:** "if we can drop those it'd be great. There are only 5 active parts currently in the system that we are still using with this 5/9 double count setup. We are still phasing these out. | 11-13 list: "93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0, 93055-45VOXNU-0. Each of these has a VOXNU-1 part to replace the VOXNU-0 part ready to go.""
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 87-96,150-153, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 106-115,160-163, `reports/sql/weekly_production_update_view.sql` lines 117-126,158-162,176-185
 - **Measured:** 11,500: Bottling units on 9-parts with an active 5-part BOM that the 5/9 rule drops, month to date (raw tables, repo logic) (2026-11-13 10:36 MT). Repo logic drops 11,500 Bottling units this month: Bottling reads 690,761 with the rule, 702,261 without it. The live view (13:00 run pending) still counts them.
+- **Finding:** Jennilyn's 11-13 list has 5 parts; all have an active 5-part BOM line, so the rule covers them. 93147-10VOXNU-0 (5,000 units on 11-05) is dropped too but is not on her list: same -0/-1 setup, to confirm with her.
 
 ### PROD-04 Bulk cases (9xxxx-BK) are always counted
 
@@ -257,11 +258,12 @@
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 150, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 160, `reports/sql/weekly_production_update_view.sql` lines 159
 - **Measured:** 324,206: Labeling units counted in full, month to date (2026-11-13 10:36 MT). Labeling is never checked: every one of its 324,206 units this month is on a 9-part that has a 5-part BOM, so applying the Bottling rule to Labeling would erase all of it.
 
-### PROD-06 The 5/9 rule reads today's BOM, so past months can move
+### PROD-06 The 5/9 rule reads today's BOM; the -0 BOMs stay, so past months hold
 
-- **Rule:** Whether a 9-part is dropped depends on the BOM as it is now, not as it was on the production date. When Jennilyn removes a part's 5-part BOM, its earlier records (from 2026-11-01) start counting again. To keep past months fixed the dropped part list would have to be pinned.
-- **Why:** The rule has no history of BOM changes to look at.
-- **Decided:** not recorded · D27 · status: open decision
+- **Rule:** Whether a 9-part is dropped depends on the BOM as it is now. Jennilyn is not removing the old 5-part BOMs: the -0 parts become Obsolete with their BOMs intact, and production moves to new -1 parts that have no 5-part line. So the -0 records stay dropped and the -1 records count. Past months would move only if an old 5-part BOM line were deleted.
+- **Why:** Settled by her 11-13 reply: the -1 replacement parts carry the change, the old BOMs stay in Plex.
+- **Decided:** Jennilyn, 2026-11-13 · D27 · status: in force
+- **In her words:** "ALL of the old BOMs are still there - but the parts they belong to are Obsolete (aka inactive)."
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 87-96, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 106-115
 - **Measured:** 3: 9-parts that still have an active 5-part BOM (and Bottling output on them since 2026-11-01) (2026-11-13 10:36 MT). Only 3 9-parts still have an active 5-part BOM (11,500 Bottling units this month). Each BOM Jennilyn removes moves that part's past output from dropped back to counted.

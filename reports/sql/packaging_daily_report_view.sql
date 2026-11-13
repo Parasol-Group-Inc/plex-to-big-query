@@ -41,9 +41,19 @@
 -- twice. The drop above applies only to records dated before 2026-11-01, so
 -- October and earlier keep their numbers; from November 9-parts count. About
 -- 14 in-use 9-parts still have a 5-part BOM; finishing that change is hers.
--- VISIBILITY, not a filter: bottling_9part_with_5_bom_qty is the 9-part
--- Bottling output whose part still has an active 5-part BOM line, i.e.
--- possible double credit. If it is not 0 from November, a BOM is unfinished.
+-- 5/9 PARTS DROPPED AGAIN (Jennilyn, 2026-11-13, D27): "if we can drop those
+-- it'd be great. There are only 5 active parts ... still using this 5/9 double
+-- count setup. We are still phasing these out." So a Bottling 9-part record is
+-- also dropped, at ANY date, while its part still has an active BOM line to a
+-- 5-part: that output was already counted on the 5-part's job (checked
+-- 11-13: 93147-10, 93055-45 and 93334-01 each had their 5-part bottled the
+-- same week). Only 9-parts whose 5-part BOM is gone count from November.
+-- The rule reads the CURRENT BOM: once she removes a part's 5-part BOM, that
+-- part's earlier records count again. Pin the part list then if past months
+-- must not move (OPEN_ITEMS D27).
+-- bottling_9part_with_5_bom_qty: the good 9-part output that rule dropped
+-- from November, per day and workcenter. It is NOT in actual_qty. It goes to
+-- 0 when her phase-out is finished.
 --
 -- Not re-extracted — bq_view entry in reports/work_orders.yaml.
 -- PLACEHOLDERS: {gcp_project} and {dataset} are replaced at runtime.
@@ -82,8 +92,9 @@ nine_with_five_bom AS (
     ON SAFE_CAST(c.Part_Key AS INT64) = SAFE_CAST(b.Component_Part_Key AS INT64)
   WHERE STARTS_WITH(TRIM(c.Part_No), '5')
     AND COALESCE(SAFE_CAST(b.Active AS INT64), 1) != 0
-)
+),
 
+totals AS (
 SELECT
 
   prod.production_date,
@@ -106,13 +117,10 @@ SELECT
   SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) != 0, SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS scrap_qty,
 
   -- Added 2026-10-30 (CUTOVER above): good output on 9-parts (bulk cases
-  -- excluded), and the part of it on 9-parts that still have a 5-part BOM.
+  -- excluded) that is counted, i.e. whose part has no 5-part BOM line.
   SUM(IF((STARTS_WITH(COALESCE(TRIM(prod_part.Part_No), ''), '9') AND NOT REGEXP_CONTAINS(COALESCE(TRIM(prod_part.Part_No), ''), r'^9[0-9]{4}-BK'))
          AND COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
-         SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS bottling_9part_qty,
-  SUM(IF((STARTS_WITH(COALESCE(TRIM(prod_part.Part_No), ''), '9') AND NOT REGEXP_CONTAINS(COALESCE(TRIM(prod_part.Part_No), ''), r'^9[0-9]{4}-BK')) AND f5.part_key IS NOT NULL
-         AND COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
-         SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS bottling_9part_with_5_bom_qty
+         SAFE_CAST(prod.Quantity AS FLOAT64), 0)) AS bottling_9part_qty
 
 FROM prod
 
@@ -142,10 +150,42 @@ LEFT JOIN nine_with_five_bom f5
 WHERE wc.Workcenter_Group = 'Bottling'
   AND (NOT STARTS_WITH(COALESCE(TRIM(prod_part.Part_No), ''), '9')
        OR REGEXP_CONTAINS(COALESCE(TRIM(prod_part.Part_No), ''), r'^9[0-9]{4}-BK')
-       OR prod.production_date >= DATE '2026-11-01')
+       OR (prod.production_date >= DATE '2026-11-01' AND f5.part_key IS NULL))
 
 GROUP BY prod.production_date, workcenter, workcenter_group
-ORDER BY prod.production_date DESC, workcenter
+),
+
+-- The output the 5/9 rule dropped from November (see 5/9 PARTS DROPPED AGAIN).
+dropped_5_9 AS (
+  SELECT
+    prod.production_date,
+    wc.Name                                             AS workcenter,
+    SUM(IF(COALESCE(SAFE_CAST(prod.Rejected AS INT64), 0) = 0,
+           SAFE_CAST(prod.Quantity AS FLOAT64), 0))     AS qty
+  FROM prod
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Workcenter` wc
+    ON SAFE_CAST(prod.Workcenter_Key AS INT64) = wc.Workcenter_Key
+  JOIN `{gcp_project}.{dataset}.raw_Part_v_Part` prod_part
+    ON SAFE_CAST(prod.Part_Key AS INT64) = SAFE_CAST(prod_part.Part_Key AS INT64)
+  JOIN nine_with_five_bom f5
+    ON f5.part_key = SAFE_CAST(prod.Part_Key AS INT64)
+  WHERE wc.Workcenter_Group = 'Bottling'
+    AND STARTS_WITH(COALESCE(TRIM(prod_part.Part_No), ''), '9')
+    AND NOT REGEXP_CONTAINS(COALESCE(TRIM(prod_part.Part_No), ''), r'^9[0-9]{4}-BK')
+    AND prod.production_date >= DATE '2026-11-01'
+  GROUP BY prod.production_date, workcenter
+)
+
+-- A day and workcenter that ran ONLY dropped 5/9 output has no totals row,
+-- as before; its dropped quantity is not shown (the monthly report has it).
+SELECT
+  totals.*,
+  COALESCE(d.qty, 0)                                    AS bottling_9part_with_5_bom_qty
+FROM totals
+LEFT JOIN dropped_5_9 d
+  ON d.production_date = totals.production_date
+ AND d.workcenter = totals.workcenter
+ORDER BY totals.production_date DESC, totals.workcenter
 ) AS __b
 LEFT JOIN (
   SELECT f.data_source, f.data_as_of, f.data_label

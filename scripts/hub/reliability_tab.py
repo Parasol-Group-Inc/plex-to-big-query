@@ -165,6 +165,22 @@ def render_tab() -> str:
                    (esc("Screens 3 times a day on weekends (05:20, 13:20, 21:20); watchdog hourly on weekends"), "0.75"),
                ]) + f'<p class="lede">Next, not done: decide "skip" before starting a container (~$2-5), screens at 1 vCPU / 2 GiB (~$1.7), '
                f'an Artifact Registry cleanup policy (~$1.1). Details: {code("docs/COST_ANALYSIS.md")}.</p></div>')
+    audit = ('<div class="block"><h2>Latest numbers audit (2026-11-12)</h2>'
+             '<p class="lede">Revenue, shipping and production were rebuilt from the raw tables and compared with Plex\'s '
+             'own screens. <b>The reports match their raw data exactly, and Plex for every day up to 11-11.</b> '
+             'The differences with Plex are ODBC\'s normal lag (today\'s shipments and production after the 13:00 refresh), '
+             'the known valuation gap (D32: quantity x price against the invoiced amount, $21.9K for November), and one new '
+             'finding: the report dates an invoice by when a shipper line was linked to it, not by the invoice\'s own date, so '
+             'one invoice ($19,982.20) is in November in the report and in October in Plex. '
+             '<b>Jennilyn answered on 11-13:</b> revenue is by shipment, so neither the invoice date (D40) nor the '
+             'invoiced amount (D32) changes anything; the 5/9 parts are dropped again (D27); and the weekly production '
+             'report had a bug, now fixed, that missed 283,763 Labeling units in November. '
+             f'Details: {code("docs/ETL_AUDIT_2026-11-12.md")}.</p>' + table(["Area", "Result"], [
+                 (esc("Revenue, November"), esc("$1,187,202.54, 217 lines, 125 shippers: report = raw rebuild; Plex screen +$6,603.82, reconciled line by line")),
+                 (esc("Shipping, last 7 days"), esc("raw = report every day; Plex Shipper History has all 237 of ours, plus 8 shipped after the 13:00 extraction")),
+                 (esc("Production, 11-01 to 11-12"), esc("raw = report = Plex screens through 11-11; 11-12 short by the afternoon's records (ODBC lag)")),
+                 (esc("Decided 11-13"), esc("D40 and D32 closed (revenue = shipments); D27 5/9 parts dropped at any date (11,500 units, 3 parts); weekly report uses the record's own workcenter (now equals the monthly report)")),
+             ]) + '</div>')
     return f"""{START}<section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref">
 <div class="block"><h2>How we know the data is right</h2>
 <p class="lede">On 2026-11-10 Plex's database feed (ODBC) kept answering but served data frozen at 08:10 MT for 4.5 hours, and every
@@ -181,6 +197,7 @@ every report says where its data came from, and a watchdog checks that every par
 <li>Loads the Label Design screen for the report to add the lines ODBC lacks, and starts the Monday push when there are any. Shipments and revenue stay on ODBC; their screen tables are kept empty.</li>
 <li>Sends the digest and any alert.</li></ol></div>
 <div class="panel"><h3>Verdicts</h3>{verdicts}</div></div>
+{audit}
 {rules}
 {measure}
 {weekend}

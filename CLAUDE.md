@@ -395,7 +395,7 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
   a failed login emails Emilio on its own (`LOGIN_ALERT_EMAILS`), diagnosed (cause + fix, one mail
   per cause per 24 h via `login-alert` rows). A rejected/unclear login is not retried and suspends
   logins for 24 h (no lockout by repetition); after fixing, run the job with `--force-login`. Tolerance:
-  `RECON_LAG_TOLERANCE_MIN` (120) switches to the screens; only a lag over `RECON_ALERT_LAG_MIN`
+  `RECON_LAG_TOLERANCE_MIN` (300 in Terraform; code default 120) switches to the screens; only a lag over `RECON_ALERT_LAG_MIN`
   (360) or a non-delay verdict mails or says ACTION NEEDED (since 11-11: ODBC runs hours behind
   in the afternoon and catches up overnight). The screens job queries ODBC **live** for its comparison
   (not our `raw_*` copy), so "ODBC behind" never reflects our extraction schedule; only
@@ -433,6 +433,16 @@ stays quiet when the watchdog already mailed it. Replay tests: `tests/test_plex_
 ~09:00, 13:00, 17:00 MT to data ~1 h old). A lag of 1-5 h is normal, so every ODBC alert line is 6 h
 (a missed refresh) and the full screens checks run at :20 just after each refresh (01, 05 ... 21).
 `docs/ODBC_VS_SCREENS.md`.
+
+## Business rules live in one file (since 2026-11-13)
+
+`docs/hub/business_rules.json` holds every rule about what a number means: 92 rules, each with
+who decided it and when, the reports that apply it, the SQL lines that enforce it, and a read-only
+`measure` query. `snapshot_data.py` re-runs the measures on every hub build, so the hub's
+**Business rules** tab (Scorecard group) shows live numbers. `docs/BUSINESS_RULES.md` is generated
+from it (`python scripts/hub/rules_tab.py --md`). **When a report's logic or a decision changes,
+change its rule in the same commit**; the milestone to-do reminds you when `reports/sql/` changed.
+Its "disagreements" list holds the docs-vs-code differences found on 11-13 that are still open.
 
 ## Hand-built datasets are backed up in `custom_views/` (since 2026-11-11)
 

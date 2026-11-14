@@ -14,6 +14,73 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-13 - Screens job: capped revenue windows split; a returning value no longer "diverges"
+
+Ships with the screens image (Cloud Build), not `deploy.sh`.
+
+### Fixed
+- **Revenue screen failed at its row cap** (13:21 MT, `screens_failed`). Nov 1-14 came back at 520
+  rows, the screen's cut-off; read whole, it was 558.
+  - **Fix:** `plex_live_screens.read_windows` reads any window at the cap again in halves, down to
+    one day, and never uses a capped answer. Only a single capped day fails the screen
+    (`ScreenCapError`).
+  - **Limits:** a runaway is bounded at 200 requests, and an answer without `Data.Rows` is an
+    error, not 0 rows.
+  - **Checked live** (dry run, nothing written): 458 lines, 14 s.
+- **False `diverged` on Label Design releases** (15:21 and 16:21 MT; one "ODBC is behind or
+  disagrees" email).
+  - **Case:** release 132398307 showed status 3016 on 11-11, then 3020, then 3016 again on 11-13.
+  - **Cause:** `first_seen_map` dated the current value from its first sighting in 3 days (11-11),
+    so ODBC's 11-11 update looked newer than the screen. ODBC was only 3 h behind.
+  - **Fix:** it now dates the value from when it last began (`current_run_start`: the first
+    snapshot with the current hash after the last snapshot with another). Checked live: the line
+    now dates from 11-13 22:21 UTC.
+- **Tests:** `tests/test_screen_windows.py` (8) and 5 new in `tests/test_screen_recon.py`, including
+  a replay of 132398307.
+
+## 2026-11-13 - D27: Jennilyn's list of the 5/9 parts (docs only)
+
+- **Her list (11-13):** 93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0 and
+  93055-45VOXNU-0, each with a -1 replacement part. The old BOMs stay; the -0 parts go Obsolete.
+- **No code change:** all 5 already have an active 5-part BOM line, so the rule drops them.
+- **History stays put:** because the BOMs are not removed, past months do not move. Rule PROD-06 is
+  no longer an open decision.
+- **To confirm:** 93147-10VOXNU-0 (5,000 units on 11-05) is dropped but not on her list.
+- OPEN_ITEMS D27, business rules PROD-03 and PROD-06, and `docs/BUSINESS_RULES.md` updated.
+
+## 2026-11-13 - Hub: Business rules tab with live numbers; grouped tab bar
+
+### Added
+- **Business rules tab** (`scripts/hub/rules_tab.py`, data in `docs/hub/business_rules.json`,
+  readable copy `docs/BUSINESS_RULES.md`). 92 rules across revenue, sales, production, inventory,
+  Label Design, goals, operations, data sources and customers.
+  - **How it was built:** two Sonnet agents collected the rules from the report docs, SQL headers,
+    CLAUDE.md, OPEN_ITEMS, CHANGELOG and the Field Manual, and checked each against `reports/sql/`.
+    A third wrote a read-only measure query for each. Claude reviewed and spot-checked them.
+  - **Live numbers:** 88 rules have a number, re-run by `snapshot_data.py` on every hub build
+    (`rule_measures` in the snapshot; a failing query is recorded, never fatal).
+  - **Findings:** 14 findings and 11 docs-vs-code disagreements. Examples:
+    - The MFG job success 84-day gate never passes (no job has a testing-released date).
+    - Every job reads Stock (Plex's job distribution view is empty).
+    - "Pending approval" has three definitions ($272,861 / $348,869 / $621,730).
+    - FPY includes 9-part Bottling the production reports drop (323,904 units in October).
+    - customers-by-rep differs from the rep chain for 31 of 282 customers.
+- **Milestone to-do:** asks for a `business_rules.json` update when `reports/sql/` changed.
+
+### Changed
+- **Hub tab bar:** 19 tabs in one sideways-scrolling row became 5 groups (Data, Scorecard,
+  Operations, Business tools, Project) with the chosen group's tabs below. Both rows wrap, and each
+  group remembers its last tab. A new tab not in `TAB_GROUPS` lands in "More".
+- **CLAUDE.md:** the screens tolerance is 300 min in Terraform (the text said 120, the code default).
+
+## 2026-11-13 - Milestone backups work from a read-only shell
+
+### Fixed
+- **`scripts/milestone_sync.sh` skipped its daily BigQuery backups** (`etl_schedule`,
+  `manual_data_access`) on the 11-13 merge: `bq` ignores `CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT`.
+  It now falls back to a BigQuery REST copy job with an impersonated `claude-operator` token. The
+  11-13 copies were taken by hand (70 and 26 rows).
+
 ## 2026-11-13 - Production: 5/9 parts dropped again; weekly report missed records; D40 and D32 decided
 
 Jennilyn answered the 11-12 audit questions on 11-13.

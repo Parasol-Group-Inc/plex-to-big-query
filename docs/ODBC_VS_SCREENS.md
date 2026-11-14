@@ -167,7 +167,7 @@ Active and Order Line Status = Label Design. "Order Line Status" is the release 
 |---|---|
 | `current` | lag up to 5 h (`RECON_LAG_TOLERANCE_MIN` = 300 since 11-11; was 120) |
 | `behind` | lag over 5 h. Lag = age of the oldest record or edit the screen shows and ODBC lacks |
-| `diverged` | not a delay: ODBC changed a value after the screen showed another; a record missing below a later ODBC record for 2 h+; or records ODBC has and the screen lacks in two reads, while ODBC itself is fresh |
+| `diverged` | not a delay: ODBC changed a value after the screen started showing its current value (since 11-13 that is when the current value last began, not its first sighting: a status that went back to an old value was a false diverged on 11-13 15:21); a record missing below a later ODBC record for 2 h+; or records ODBC has and the screen lacks in two reads, while ODBC itself is fresh |
 | `odbc_unreachable` | ODBC connect or query failed |
 | `pipeline_behind` | ODBC has it, our `raw_*` table (loaded after it) does not: our ETL, not Plex |
 | `screens_failed` | a screen could not be read, or came back far smaller than last time |

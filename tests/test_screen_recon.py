@@ -391,3 +391,47 @@ def test_screens_digest_quiet_lag_is_info(monkeypatch):
                                      "alert_lag_min": 360, "groups": [], "screens": []})
     assert got[0]["severity"] == "info" and got[0]["headline"] == "Screens Digest: ODBC catching up"
     assert "6 h Label Design" in got[0]["summary"] and "12 h shipments" in got[0]["summary"] and not got[0]["steps"]
+
+
+# ── 2026-11-13: a value that comes back is dated from when it came back ─────────────
+
+def _t(h):
+    return FETCH + dt.timedelta(hours=h)
+
+
+def test_run_start_is_after_the_last_other_value():
+    # 3016 (old) -> 3020 -> 3016 again: today's 3016 starts at its return, not at the first sighting
+    hist = [(_t(-60), "A"), (_t(-48), "B"), (_t(-24), "B"), (_t(-1), "A"), (_t(0), "A")]
+    assert r.current_run_start(hist, "A") == _t(-1)
+
+
+def test_run_start_unchanged_value_keeps_its_first_sighting():
+    hist = [(_t(-60), "A"), (_t(-30), "A"), (_t(0), "A")]
+    assert r.current_run_start(hist, "A") == _t(-60)
+
+
+def test_run_start_gap_without_other_value_does_not_break_the_run():
+    # missing from some runs (no snapshot rows) is not a change
+    assert r.current_run_start([(_t(-50), "A"), (_t(-2), "A")], "A") == _t(-50)
+
+
+def test_run_start_never_seen_and_unsorted_input():
+    assert r.current_run_start([], "A") is None
+    assert r.current_run_start([(_t(-5), "B")], "A") is None
+    assert r.current_run_start([(_t(0), "A"), (_t(-10), "B"), (_t(-20), "A")], "A") == _t(0)
+
+
+def test_status_back_to_old_value_is_lag_not_diverged():
+    """Replay of release 132398307 (11-13 15:21): screen went back to 3016 an hour ago; ODBC
+    (3 h behind) still has 3020 from its 11-11 update. With the run start that is ODBC lag."""
+    scr = {"132398307": {"num": 132398307, "event": None,
+                         "m": {"status_key": 3016, "quantity": 6.0, "order_status": "Pending Fulfillment"}}}
+    o = odbc({"num": 132398307, "event": None,
+              "m": {"status_key": 3020, "quantity": 6.0, "order_status": "Pending Fulfillment"}},
+             updated=FETCH - dt.timedelta(days=2, hours=7))
+    run_start = {"132398307": FETCH - dt.timedelta(minutes=60)}
+    _, _, verdict, lag, why = r.compare("releases", scr, {"132398307": o}, 132398307, None, run_start, FETCH)
+    assert verdict == "current" and lag == 60 and not why
+    # the old rule (first sighting 3 days ago) called the same data diverged
+    old_rule = {"132398307": FETCH - dt.timedelta(days=3)}
+    assert r.compare("releases", scr, {"132398307": o}, 132398307, None, old_rule, FETCH)[2] == "diverged"

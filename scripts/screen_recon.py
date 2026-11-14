@@ -487,16 +487,46 @@ def login_suspended(c):
     return None
 
 
+def current_run_start(history, current_hash):
+    """Pure: when the CURRENT value of a record started showing, from its snapshots
+    [(fetch_started_at, row_hash)]. That is the first snapshot with current_hash after the
+    last snapshot with any other hash; None if current_hash was never snapshotted.
+
+    Why not just the first time current_hash was ever seen (the rule until 11-13): a value
+    can come back. Release 132398307 showed status 3016 on 11-11, 3020 from later that day,
+    and 3016 again on 11-13. Dating today's 3016 from 11-11 made ODBC's 11-11 update (3020)
+    look "newer than the screen", a false 'diverged' (11-13 15:21, email sent) when ODBC was
+    only behind. A record missing from some runs (filtered out, screen hiccup) does not break
+    the run: only a different value does."""
+    last_other, start = None, None
+    for t, h in sorted(history, key=lambda x: x[0]):
+        if h != current_hash:
+            last_other, start = t, None
+        elif start is None:
+            start = t
+    return start
+
+
 def first_seen_map(c, screen, recs):
-    """For each key, when its current row hash was first snapshotted (last 3 days)."""
+    """For each key, when its current value started showing (current_run_start), from the
+    last 3 days of snapshots. Same rule in SQL: the first snapshot with the current hash
+    after the last snapshot with another hash."""
     pairs = [f"{k}|{row_hash(v['m'])}" for k, v in recs.items()]
     if not pairs:
         return {}
     rows = c.query(f"""
-        SELECT record_key, MIN(fetch_started_at) t FROM `{SNAP_TABLE}`
-        WHERE screen = @s AND fetch_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
-          AND CONCAT(record_key, '|', row_hash) IN UNNEST(@p)
-        GROUP BY record_key""", job_config=bigquery.QueryJobConfig(query_parameters=[
+        WITH cur AS (
+          SELECT SPLIT(p, '|')[OFFSET(0)] AS k, SPLIT(p, '|')[OFFSET(1)] AS h FROM UNNEST(@p) AS p),
+        snaps AS (
+          SELECT s.record_key, s.row_hash, s.fetch_started_at, s.row_hash = cur.h AS is_current
+          FROM `{SNAP_TABLE}` s JOIN cur ON cur.k = s.record_key
+          WHERE s.screen = @s AND s.fetch_started_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)),
+        last_other AS (
+          SELECT record_key, MAX(fetch_started_at) AS t FROM snaps WHERE NOT is_current GROUP BY record_key)
+        SELECT s.record_key, MIN(s.fetch_started_at) AS t
+        FROM snaps s LEFT JOIN last_other o USING (record_key)
+        WHERE s.is_current AND (o.t IS NULL OR s.fetch_started_at > o.t)
+        GROUP BY s.record_key""", job_config=bigquery.QueryJobConfig(query_parameters=[
         bigquery.ScalarQueryParameter("s", "STRING", screen),
         bigquery.ArrayQueryParameter("p", "STRING", pairs)])).result()
     return {r.record_key: r.t for r in rows}

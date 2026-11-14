@@ -77,6 +77,8 @@ Edit the page in `scripts/hub/template.html`, never `index.html`.
 | Input | What it gives the page |
 |---|---|
 | `scripts/hub/qbo_tab.py`, `docs/hub/qbo_atlas.html` | the QuickBooks tab, added to `index_live.html` only (BigQuery, `parasoldatalake`) |
+| `scripts/hub/rules_tab.py`, `docs/hub/business_rules.json` | the Business rules tab (2026-11-13): 92 rules with who decided, reports, SQL lines and a measure query that `snapshot_data.py` re-runs each build; `--md` writes `docs/BUSINESS_RULES.md` |
+| `TAB_GROUPS` in `scripts/hub/template.html` | the grouped tab bar (2026-11-13): add a new tab's key to a group there, or it shows under "More" |
 | `reports/*.yaml`, `reports/test/*.yaml` | pipelines, extractions, `bq_view` lists, prod/test count check |
 | `reports/sql/*.sql` | BigQuery SQL; `raw_*` and `{dataset}.<view>` references build the lineage |
 | `reports/plex_sql/*.sql` | Plex SQL Developer equivalents and their header (`confidence`, `plex_views`, `notes`) |

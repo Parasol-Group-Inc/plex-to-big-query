@@ -94,6 +94,31 @@ def snapshot_dataset(client, pool, ds):
     }
 
 
+def rule_measures(client):
+    """Re-run each business rule's measure (docs/hub/business_rules.json, read-only SQL returning
+    one row with `value` and optionally `detail`) for the Business rules tab. A failing query is
+    recorded, never fatal."""
+    path = ROOT / "docs" / "hub" / "business_rules.json"
+    if not path.exists():
+        return {}
+    rules = [r for r in json.loads(path.read_text(encoding="utf-8")).get("rules", []) if (r.get("measure") or {}).get("sql")]
+    mt = datetime.now(timezone.utc).astimezone(__import__("zoneinfo").ZoneInfo("America/Denver")).strftime("%Y-%m-%d %H:%M MT")
+
+    def one(r):
+        try:
+            rows = list(client.query(r["measure"]["sql"], job_config=bigquery.QueryJobConfig(use_query_cache=True)).result(timeout=120))
+            row = dict(rows[0].items()) if rows else {}
+            return r["id"], {"value": row.get("value"), "detail": row.get("detail"), "as_of": mt}
+        except Exception as e:  # noqa: BLE001
+            return r["id"], {"error": ((str(e) or repr(e)).splitlines() or [type(e).__name__])[0][:300], "as_of": mt}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        out = dict(pool.map(one, rules))
+    bad = [k for k, v in out.items() if "error" in v]
+    print(f"rule measures: {len(out) - len(bad)} of {len(out)} ok; failed: {', '.join(bad) or '-'}")
+    return json.loads(json.dumps(out, default=str))
+
+
 def main():
     client = bigquery.Client(project=PROJECT)
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -103,6 +128,7 @@ def main():
         "envs": envs,
         "dispatch_log": log_rows(client, f"{PROJECT}.PlexOps.etl_dispatch_log", "dispatched_at"),
         "figure_specs": {k: {x: v.get(x) for x in ("sql", "format", "pct_scale", "view", "note")} for k, v in FIGURES.items()},
+        "rule_measures": rule_measures(client),
     }
     OUT.write_text(json.dumps(snap, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
     for ds, e in envs.items():

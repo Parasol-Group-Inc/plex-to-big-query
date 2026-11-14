@@ -345,6 +345,7 @@ def main():
         import budget_tab  # 2026-11-12: monthly cost before/after the cuts (docs/COST_ANALYSIS.md)
         import dr_tab  # 2026-11-12: disaster recovery (docs/DISASTER_RECOVERY.md)
         import onboarding_tab  # 2026-11-12: new developer (docs/ONBOARDING.md)
+        import rules_tab  # 2026-11-13: business rules with live numbers (docs/hub/business_rules.json)
         import qbo_tab
         import tab_store  # 2026-11-12: machine-local tabs fall back to their last stored render
         live = page({**data, "snapshot": snapshot})
@@ -356,7 +357,7 @@ def main():
         live = tab_store.add_with_store(live, "audit", audit_tab.add, audit_tab.inject)
         live = tab_store.add_with_store(live, "screens", screens_tab.add, screens_tab.inject)
         live = tab_store.add_with_store(live, "custnotes", customer_notes_tab.add, customer_notes_tab.inject)
-        live = onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(live)))))
+        live = rules_tab.add(onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(live))))))
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

@@ -66,12 +66,13 @@ on_hand AS (
   -- upstream extract."
   --
   -- The status test is now an explicit name list, not OK_Status, because
-  -- OK_Status cannot express Vox's rule (given 2026-09-04): on-hand =
-  -- Hold + Inspection Required + OK + Hold for Design Order, excluding
-  -- Defective and Expired. Against the real lookup, OK_Status is 0 on Hold
-  -- and Inspection Required (which must be INCLUDED) and 1 on Allocated,
-  -- Loaded, Shipped and Staged (which must NOT be, or shipped goods count
-  -- as on hand). Naming the four statuses is the only faithful encoding.
+  -- OK_Status cannot express Vox's rule (given 2026-09-04, updated
+  -- 2026-11-16): on-hand = Hold + Inspection Required + OK + Hold for
+  -- Design Order + Allocated + Released, excluding Defective and Expired.
+  -- Against the real lookup, OK_Status is 0 on Hold and Inspection Required
+  -- (which must be INCLUDED) and 1 on Loaded, Shipped and Staged (which must
+  -- NOT be, or shipped goods count as on-hand). Naming the statuses remains
+  -- the faithful encoding.
   --
   -- The Container_Status lookup join is gone on purpose: nothing here
   -- selected from it, and the extracted copy is STALE — Plex has 16
@@ -82,7 +83,8 @@ on_hand AS (
   -- Reports. Filtering on the container's own status string avoids it.
   WHERE SAFE_CAST(c.Active AS INT64) = 1
     AND UPPER(TRIM(CAST(c.Container_Status AS STRING))) IN (
-          'OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+          'OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER',
+          'ALLOCATED', 'RELEASED')
   GROUP BY part_key
 )
 

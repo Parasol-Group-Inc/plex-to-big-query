@@ -14,6 +14,15 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-16 - Part on-hand inventory: include Allocated and Released in on-hand status list
+
+### Changed
+- `part_on_hand_inventory_report` now treats container statuses `ALLOCATED` and `RELEASED` as on-hand, in addition to `OK`, `HOLD`, `INSPECTION REQUIRED`, and `HOLD FOR DESIGN ORDER`.
+- Updated both SQL sources: `reports/sql/part_on_hand_inventory_view.sql` (deployed BigQuery view) and `reports/plex_sql/part_on_hand_inventory_view.sql` (Plex SQL mirror).
+
+### Fixed
+- Corrects downstream demand/availability math that depends on `PlexProd.part_on_hand_inventory_report` by including inventory in `ALLOCATED` and `RELEASED` containers.
+
 ## 2026-11-13 - Screens job: capped revenue windows split; a returning value no longer "diverges"
 
 Ships with the screens image (Cloud Build), not `deploy.sh`.

@@ -7,7 +7,8 @@
 
 -- GRAIN: one row per part.
 -- RULE: on hand = Active containers (Active = 1) whose Container_Status is OK, Hold,
---       Inspection Required or Hold for Design Order (name list, not OK_Status).
+--       Inspection Required, Hold for Design Order, Allocated or Released
+--       (name list, not OK_Status).
 WITH on_hand AS (
   SELECT
     c.Part_Key              AS part_key,
@@ -16,7 +17,7 @@ WITH on_hand AS (
     SUM(c.Net_Weight)       AS on_hand_weight   -- Net_Weight, not Gross_Weight
   FROM Part_v_Container AS c
   WHERE c.Active = 1
-    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+    AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER', 'ALLOCATED', 'RELEASED')
   GROUP BY c.Part_Key
 ),
 
@@ -28,7 +29,7 @@ locs AS (
     SELECT DISTINCT c.Part_Key AS part_key, NULLIF(LTRIM(RTRIM(c.Location)), '') AS location
     FROM Part_v_Container AS c
     WHERE c.Active = 1
-      AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER')
+      AND UPPER(LTRIM(RTRIM(c.Container_Status))) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER', 'ALLOCATED', 'RELEASED')
   ) AS d
   GROUP BY d.part_key
 )

@@ -37,7 +37,8 @@ them is a service account.
 
 | Credential | Tied to | Where it shows | What to do on rotation |
 |---|---|---|---|
-| Plex IAM token and user | the Plex user `edominguez.parasol` | every run logs `UID=edominguez.parasol`; secrets `plex-access-token`, `plex-odbc-user` | get a dedicated Plex user for the pipeline, update the two secrets, rerun the health check |
+| Plex IAM token and user | prod: the company user `gcp.odbc.vox` (since 2026-11-17); test: `edominguez.parasol` | prod runs log `UID=gcp.odbc.vox`; secrets `plex-access-token-prod` (prod), `plex-access-token` (test) | new token into the matching secret, rerun the health check; `docs/PLEX_CREDENTIALS.md` |
+| Plex screens login | `gcp.odbc.vox` (since 2026-11-17) | `PlexOps.plex_login_log.user`; secrets `plex-portal-username` / `-password` | new password into `plex-portal-password` |
 | Monday API key | Jennette Boone's personal token | secret `monday-api-key`; see DISASTER_RECOVERY.md | a Monday service account and token |
 | GCP project Owners | Emilio Dominguez and Jennilyn Tockstein | `roles/owner` | keep at least two Owners at all times (DISASTER_RECOVERY.md, Scenario A) |
 | GitHub access | two `gh` logins on the Mac: `emiliodom` (no access to the repo), `emiliodparasol` (has it) | `gh auth status` | switch with `gh auth switch --user emiliodparasol` |

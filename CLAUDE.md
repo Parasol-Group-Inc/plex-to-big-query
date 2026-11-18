@@ -472,6 +472,15 @@ it on update (200, nothing saved), so it is written through the screen:
 D31). Runbook: `docs/CUSTOMER_NOTES_BULK.md`; hub tab "Customer notes". Keep the laptop lid
 open while it runs: a sleep stops it (safely) mid-batch.
 
+## Prod runs on the company Plex user gcp.odbc.vox (since 2026-11-17)
+
+Prod ODBC (every job on `var.plex_host`) uses `var.plex_odbc_user_prod` = `gcp.odbc.vox` and secret
+`plex-access-token-prod`; test jobs keep `edominguez.parasol` / `plex-access-token`, because the test
+host refuses `gcp.odbc.vox`. The screens job logs in as `gcp.odbc.vox` too (`plex-portal-*` secrets).
+**A new prod job must use the `_prod` pair, a test job the plain pair.** The REST API token is still on
+Emilio's login. Rotation and rollback: `docs/PLEX_CREDENTIALS.md`. Local Docker on the Mac runs Chromium
+emulated and times out on Plex pages for any user: test screens in Cloud Run.
+
 ## Job naming
 
 `plex-etl-<pipeline>` for Cloud Run jobs, `plex-<pipeline>-sync` for schedulers

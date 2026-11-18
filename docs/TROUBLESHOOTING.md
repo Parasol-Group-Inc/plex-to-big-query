@@ -91,6 +91,10 @@ echo -n 'NEW_TOKEN_HERE' | \
 
 No Terraform apply or Docker rebuild needed — the job reads the secret at runtime.
 
+**Prod and test use different tokens since 2026-11-17:** prod jobs read `plex-access-token-prod`
+(user `gcp.odbc.vox`), test jobs read `plex-access-token` (user `edominguez.parasol`). Put the new
+token in the secret of the user it was made for. See `docs/PLEX_CREDENTIALS.md`.
+
 ### Check what value is stored in a secret
 
 ```bash

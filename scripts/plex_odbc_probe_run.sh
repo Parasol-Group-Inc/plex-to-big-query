@@ -2,7 +2,7 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 : "${PLEX_ACCESS_TOKEN:?export PLEX_ACCESS_TOKEN first}"
-: "${PLEX_ODBC_USER:=edominguez.parasol}"
+: "${PLEX_ODBC_USER:=gcp.odbc.vox}"
 export PLEX_ODBC_USER
 SUDO=$([ "$(id -u)" = 0 ] || echo sudo)
 { command -v odbcinst >/dev/null && [ -e /usr/lib64/libpam.so.0 ]; } || $SUDO dnf install -y -q unixODBC pam

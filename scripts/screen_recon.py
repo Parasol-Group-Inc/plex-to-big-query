@@ -222,8 +222,10 @@ def load_portal_secrets():
 def odbc_connect():
     """The ETL's own connection code and credentials (main.py)."""
     import main as etl
-    token = os.environ.get("PLEX_ACCESS_TOKEN") or etl.get_secret(etl.SECRET_TOKEN)
-    return etl.get_odbc_connection(os.environ.get("PLEX_ODBC_USER", ""), "", "", token)
+    user, token = etl.local_odbc_env()  # local .env; in Cloud Run: Terraform user + secret token
+    if not token:
+        user, token = os.environ.get("PLEX_ODBC_USER", ""), etl.get_secret(etl.SECRET_TOKEN)
+    return etl.get_odbc_connection(user, "", "", token)
 
 
 def odbc_records(conn, screen, since):

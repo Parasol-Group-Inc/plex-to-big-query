@@ -106,7 +106,7 @@ gcp_region     = "us-central1"
 bq_dataset     = "PlexTest"
 bq_table       = "raw_Part_v_Part"
 plex_host      = "vox.test.odbc.plex.com"     # test host — change to vox.odbc.plex.com for production
-plex_odbc_user = "edominguez.parasol"
+plex_odbc_user = "edominguez.parasol"   # legacy, unused since 2026-11-18: jobs use plex_odbc_user_gcp (gcp.odbc.vox), docs/PLEX_CREDENTIALS.md
 image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"
 ```
 
@@ -294,7 +294,7 @@ gcloud logging read \
 ```
 [INFO] Fetching credentials...
 [INFO] Using IAM access token for Plex authentication.
-[INFO] Connecting driver-direct to vox.test.odbc.plex.com:19995 (IAM token auth, UID=edominguez.parasol)
+[INFO] Connecting driver-direct to vox.test.odbc.plex.com:19995 (IAM token auth, UID=gcp.odbc.vox)
 [INFO] ODBC connection established.
 [INFO] Querying Plex [Part_v_Part] for Raw Materials parts...
 [INFO] Fetched NNN Raw Materials parts from Plex.

@@ -116,9 +116,11 @@ def api_customers() -> list[dict]:
 
 def _api_customers() -> list[dict]:
     env = env_file()
+    gcp = env.get("PLEX_GCP_API_CONSUMER_KEY") and env.get("PLEX_GCP_API_CONSUMER_SECRET")  # gcp.odbc.vox app
+    pre = "PLEX_GCP_API_CONSUMER_" if gcp else "PLEX_API_CONSUMER_"
     req = urllib.request.Request(API, headers={
-        "X-Plex-Connect-Api-Key": env["PLEX_API_CONSUMER_KEY"],
-        "X-Plex-Connect-Api-Secret": env["PLEX_API_CONSUMER_SECRET"], "Accept": "application/json"})
+        "X-Plex-Connect-Api-Key": env[pre + "KEY"],
+        "X-Plex-Connect-Api-Secret": env[pre + "SECRET"], "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=120) as r:
         data = json.loads(r.read().decode())
     if not isinstance(data, list) or len(data) < 1000:

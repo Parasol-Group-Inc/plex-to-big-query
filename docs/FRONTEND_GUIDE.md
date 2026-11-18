@@ -164,7 +164,7 @@ sequenceDiagram
     SM-->>CR: token string
     CR->>GCS: GET reports/sales_orders.yaml
     GCS-->>CR: 27 extractions + bq_view config
-    CR->>PLEX: ODBC connect (driver-direct)<br/>HOST=vox.odbc.plex.com:19995<br/>UID=edominguez.parasol<br/>authmethod=iam; accesstoken=...
+    CR->>PLEX: ODBC connect (driver-direct)<br/>HOST=vox.odbc.plex.com:19995<br/>UID=gcp.odbc.vox<br/>authmethod=iam; accesstoken=...
     PLEX-->>CR: connection established
 
     loop For each of 27 Plex views
@@ -246,7 +246,7 @@ This diagram shows one pipeline (Sales Orders) — the other 12 follow the ident
 ```mermaid
 graph TD
     subgraph "Who is Cloud Run talking to Plex as?"
-        TOKEN["Plex IAM Token<br/>stored in Secret Manager<br/>does not expire"] -->|authenticates to| PLEX_AUTH["Plex ODBC server<br/>edominguez.parasol"]
+        TOKEN["Plex IAM Token<br/>stored in Secret Manager<br/>does not expire"] -->|authenticates to| PLEX_AUTH["Plex ODBC server<br/>gcp.odbc.vox"]
     end
 
     subgraph "Who is Cloud Run talking to GCP as?"
@@ -276,7 +276,7 @@ graph TD
 "ServerDataSource=ReportDataSource;"
 "Encrypted=1;"
 "UseLDAP=0;"
-"UID=edominguez.parasol;"
+"UID=gcp.odbc.vox;"
 "PWD=;"
 "CustomProperties=authmethod=iam; accesstoken=NTIx..."
 ```
@@ -288,7 +288,7 @@ graph TD
 | `PORT=19995` | Plex always uses this port |
 | `ServerDataSource=ReportDataSource` | Named data service on the Plex server |
 | `Encrypted=1` | TLS — like `https` vs `http` |
-| `UID=edominguez.parasol` | Plex login: `username.company` format |
+| `UID=gcp.odbc.vox` | Plex login: `username.company` format (company user since 2026-11-18) |
 | `PWD=` | Empty — IAM token auth, no password |
 | `CustomProperties=...` | **Must be last** — contains semicolons that would confuse the parser if in the middle |
 

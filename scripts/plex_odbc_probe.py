@@ -15,7 +15,7 @@ so run it inside the ETL image, e.g. from the repo root:
       -v "$PWD/scripts:/scripts:ro" --entrypoint python \
       plex-to-big-query-etl /scripts/plex_odbc_probe.py --passes 3
 
-Env: PLEX_ACCESS_TOKEN, PLEX_ODBC_USER (from .env), optional PROBE_SOURCE label.
+Env: PLEX_GCP_ODBC_USER + PLEX_GCP_ODBC_USER_TOKEN (gcp.odbc.vox), else PLEX_ODBC_USER + PLEX_ACCESS_TOKEN (from .env), optional PROBE_SOURCE label.
 """
 import argparse
 import os
@@ -29,6 +29,11 @@ import pyodbc
 
 HOSTS = {"prod": "vox.odbc.plex.com", "test": "vox.test.odbc.plex.com"}
 PORT = int(os.environ.get("PLEX_PORT", "19995"))
+# The company user gcp.odbc.vox (PLEX_GCP_ODBC_USER + _TOKEN) when both are set, else the older pair.
+if os.environ.get("PLEX_GCP_ODBC_USER") and os.environ.get("PLEX_GCP_ODBC_USER_TOKEN"):
+    USER, TOKEN = os.environ["PLEX_GCP_ODBC_USER"], os.environ["PLEX_GCP_ODBC_USER_TOKEN"]
+else:
+    USER, TOKEN = os.environ.get("PLEX_ODBC_USER", ""), os.environ.get("PLEX_ACCESS_TOKEN", "")
 QUERIES = [
     ("8-row lookup", "SELECT COUNT(*) FROM Sales_v_PO_Status"),
     ("TOP 10 orders", "SELECT TOP 10 PO_Key FROM Sales_v_PO ORDER BY PO_Key DESC"),
@@ -65,8 +70,8 @@ def conn_str(host):
         f"HOST={host};PORT={PORT};"
         f"ServerDataSource={os.environ.get('PLEX_SERVER_DATASOURCE', 'ReportDataSource')};"
         "Encrypted=1;UseLDAP=0;"
-        f"UID={os.environ['PLEX_ODBC_USER']};PWD=;"
-        f"CustomProperties=authmethod=iam; accesstoken={os.environ['PLEX_ACCESS_TOKEN']}"
+        f"UID={USER};PWD=;"
+        f"CustomProperties=authmethod=iam; accesstoken={TOKEN}"
     )
 
 
@@ -120,7 +125,7 @@ def main():
     except Exception as exc:  # noqa: BLE001
         ip = f"unknown ({short(exc)})"
     source = os.environ.get("PROBE_SOURCE", socket.gethostname())
-    print(f"Source: {source}; public IP {ip}; user {os.environ.get('PLEX_ODBC_USER')}; port {PORT}\n", flush=True)
+    print(f"Source: {source}; public IP {ip}; user {USER}; port {PORT}\n", flush=True)
     cols = ["utc", "env", "dns", "tcp", "connect"] + [q[0] for q in QUERIES]
     print("| " + " | ".join(cols) + " |")
     print("|" + "---|" * len(cols), flush=True)

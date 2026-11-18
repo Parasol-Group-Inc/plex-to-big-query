@@ -39,12 +39,12 @@ variable "plex_host" {
 
 variable "plex_odbc_user" {
   type        = string
-  description = "Plex login in username.company format (e.g. edominguez.parasol)"
+  description = "LEGACY since 2026-11-18: no job reads it (jobs use plex_odbc_user_gcp). Kept so terraform.tfvars, which still sets it, stays valid."
 }
 
-variable "plex_odbc_user_prod" {
+variable "plex_odbc_user_gcp" {
   type        = string
-  description = "Plex ODBC login for the PROD jobs (vox.odbc.plex.com). Since 2026-11-17 the company user gcp.odbc.vox, so prod no longer runs on a person's login; test jobs keep plex_odbc_user (vox.test refuses gcp.odbc.vox). Its token is in secret_access_token_prod."
+  description = "Plex ODBC login of every job, prod and test: the company user gcp.odbc.vox (prod since 2026-11-17, test since 2026-11-18). Its token is in secret_access_token_gcp. docs/PLEX_CREDENTIALS.md"
   default     = "gcp.odbc.vox"
 }
 
@@ -56,13 +56,13 @@ variable "plex_dsn" {
 
 variable "secret_access_token" {
   type        = string
-  description = "Secret Manager secret name for the Plex IAM access token"
+  description = "LEGACY since 2026-11-18: the token of edominguez.parasol, no longer read by any job (jobs use secret_access_token_gcp)."
   default     = "plex-access-token"
 }
 
-variable "secret_access_token_prod" {
+variable "secret_access_token_gcp" {
   type        = string
-  description = "Secret Manager secret holding the Plex IAM token of plex_odbc_user_prod (prod jobs only). Test jobs read secret_access_token."
+  description = "Secret Manager secret with the Plex IAM token of plex_odbc_user_gcp, read by every ODBC job. The name keeps -prod from the first, prod-only step (2026-11-17)."
   default     = "plex-access-token-prod"
 }
 

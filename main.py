@@ -188,6 +188,17 @@ def get_secret(secret_name: str) -> str:
     return response.payload.data.decode("UTF-8")
 
 
+def local_odbc_env() -> tuple[str, str]:
+    """(user, token) from the environment for local runs (.env via docker compose / --env-file).
+    Prefers the company user gcp.odbc.vox (PLEX_GCP_ODBC_USER + PLEX_GCP_ODBC_USER_TOKEN, since
+    2026-11-18) and only as a pair, so a user is never sent with another user's token; falls back
+    to PLEX_ODBC_USER + PLEX_ACCESS_TOKEN. Cloud Run sets neither GCP name: there the user comes
+    from Terraform and the token from Secret Manager. docs/PLEX_CREDENTIALS.md"""
+    if os.environ.get("PLEX_GCP_ODBC_USER") and os.environ.get("PLEX_GCP_ODBC_USER_TOKEN"):
+        return os.environ["PLEX_GCP_ODBC_USER"], os.environ["PLEX_GCP_ODBC_USER_TOKEN"]
+    return os.environ.get("PLEX_ODBC_USER", ""), os.environ.get("PLEX_ACCESS_TOKEN", "")
+
+
 def get_credential(direct_env: str, secret_name: str) -> str:
     """Return a direct env var value if set, otherwise fetch from Secret Manager."""
     direct = os.environ.get(direct_env)
@@ -2114,7 +2125,7 @@ def main():
     # Fetch credentials — IAM token takes priority over username/password
     log.info("Fetching credentials...")
     try:
-        access_token = os.environ.get("PLEX_ACCESS_TOKEN", "")
+        env_user, access_token = local_odbc_env()
         if not access_token and OUTPUT_MODE == "bigquery":
             try:
                 access_token = get_secret(SECRET_TOKEN)
@@ -2125,7 +2136,7 @@ def main():
                 )
 
         if access_token:
-            user         = os.environ.get("PLEX_ODBC_USER", "")
+            user         = env_user or os.environ.get("PLEX_ODBC_USER", "")
             password     = ""
             company_code = ""
             if not user:

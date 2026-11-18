@@ -60,7 +60,7 @@ The secret container exists but no value has been stored.
 ```bash
 # Store the Plex IAM access token
 echo -n 'YOUR_TOKEN_HERE' | \
-  gcloud secrets versions add plex-access-token \
+  gcloud secrets versions add plex-access-token-prod \
   --data-file=- --project=voxdatalake
 
 # Store the SendGrid API key (starts with SG.)
@@ -85,15 +85,14 @@ Plex IAM tokens expire. Generate a new one in the Plex portal, then overwrite:
 
 ```bash
 echo -n 'NEW_TOKEN_HERE' | \
-  gcloud secrets versions add plex-access-token \
+  gcloud secrets versions add plex-access-token-prod \
   --data-file=- --project=voxdatalake
 ```
 
 No Terraform apply or Docker rebuild needed — the job reads the secret at runtime.
 
-**Prod and test use different tokens since 2026-11-17:** prod jobs read `plex-access-token-prod`
-(user `gcp.odbc.vox`), test jobs read `plex-access-token` (user `edominguez.parasol`). Put the new
-token in the secret of the user it was made for. See `docs/PLEX_CREDENTIALS.md`.
+**Every job reads `plex-access-token-prod` since 2026-11-18** (user `gcp.odbc.vox`, prod and test;
+the name is historical). `plex-access-token` is legacy and read by nothing. See `docs/PLEX_CREDENTIALS.md`.
 
 ### Check what value is stored in a secret
 
@@ -179,13 +178,13 @@ The IAM access token stored in Secret Manager is no longer valid.
 ```bash
 # Overwrite with a fresh token (no rebuild needed)
 echo -n 'NEW_TOKEN_HERE' | \
-  gcloud secrets versions add plex-access-token \
+  gcloud secrets versions add plex-access-token-prod \
   --data-file=- --project=voxdatalake
 ```
 
 ### `HY000 Login failed`
 
-Wrong ODBC username. The format must be `username.company` (e.g. `edominguez.parasol`).
+Wrong ODBC username. The format must be `username.company` (every job uses `gcp.odbc.vox` since 2026-11-18).
 
 ```bash
 # Update the env var via terraform (no rebuild needed)

@@ -69,7 +69,10 @@ def creds():
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip().strip('"').strip("'")
     get = lambda k: os.environ.get(k) or env.get(k)
-    u, pw = get("PLEX_PORTAL_USERNAME"), get("PLEX_PORTAL_PASSWORD")
+    # the company user gcp.odbc.vox first (since 2026-11-18), as a pair; else the older names
+    u, pw = get("PLEX_GCP_ODBC_USER"), get("PLEX_GCP_ODBC_USER_PASSWORD")
+    if not (u and pw):
+        u, pw = get("PLEX_PORTAL_USERNAME"), get("PLEX_PORTAL_PASSWORD")
     if not (u and pw):
         sys.exit("PLEX_PORTAL_USERNAME / PLEX_PORTAL_PASSWORD not set (environment or .env)")
     return u, pw

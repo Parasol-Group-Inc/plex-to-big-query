@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-18 - Every Plex credential is the company user gcp.odbc.vox (test ODBC, API, local scripts)
+
+Ships with Cloud Build (main.py, screen_recon.py) and `./scripts/deploy.sh` (Terraform).
+
+### Changed
+- The 15 test jobs connect as `gcp.odbc.vox` too: all 31 ODBC jobs read `var.plex_odbc_user_gcp`
+  and secret `plex-access-token-prod` (renamed in Terraform from `*_prod` to `*_gcp`; a `moved`
+  block keeps the secret, whose ID is unchanged). The test host accepts the user since 11-18.
+- REST API secrets `plex-api-consumer-key` / `-secret` hold the key of the `gcp.odbc.vox` Developer
+  Portal app (version 2, 2026-11-18); no deploy needed.
+- Local runs prefer the `.env` pairs `PLEX_GCP_ODBC_USER` + `_TOKEN` (ODBC: `main.local_odbc_env()`,
+  `extract_schema_catalog.py`, `screen_recon.py`, `plex_odbc_probe.py`), `PLEX_GCP_ODBC_USER` +
+  `_PASSWORD` (web login, `plex_web_export.creds`) and `PLEX_GCP_API_CONSUMER_*`
+  (`plex_customer_notes_bulk.py`), falling back to the older names. `dev_setup.sh` writes
+  `gcp.odbc.vox` and its token into a new laptop's `.env`.
+
+### Deprecated
+- Secret `plex-access-token` and `var.plex_odbc_user` / `var.secret_access_token` (edominguez.parasol):
+  read by nothing, kept as a rollback. `docs/PLEX_CREDENTIALS.md` rewritten as the full map.
+
 ## 2026-11-17 - Prod runs on the company Plex user gcp.odbc.vox (ODBC and screens)
 
 Ships with `./scripts/deploy.sh` (Terraform); the screens login is a secret version, no deploy.

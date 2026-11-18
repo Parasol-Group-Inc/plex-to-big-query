@@ -65,12 +65,10 @@ else
   {
     echo "# Written by scripts/dev_setup.sh on $(date -u +%Y-%m-%dT%H:%MZ). Gitignored; never commit or paste it."
     echo "# Values come from Secret Manager in ${PROJECT}. Targets the Plex TEST tenant."
-    echo "PLEX_ACCESS_TOKEN=$(secret plex-access-token)"
-    # The ODBC user is not a secret: it's plex_odbc_user in terraform.tfvars.
-    # The plex-odbc-user secret is an empty placeholder (username/password
-    # auth, never used), so read it from the tfvars backup.
-    echo "PLEX_ODBC_USER=$(gcloud storage cat "gs://${PROJECT}-terraform-state/plex-to-big-query/terraform.tfvars.backup" 2>/dev/null \
-      | sed -n 's/^[[:space:]]*plex_odbc_user[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+    # Every job connects as the company user gcp.odbc.vox (since 2026-11-18); its token is in
+    # plex-access-token-prod (the name is historical: prod used it first). docs/PLEX_CREDENTIALS.md
+    echo "PLEX_ACCESS_TOKEN=$(secret plex-access-token-prod)"
+    echo "PLEX_ODBC_USER=gcp.odbc.vox"
     echo "PLEX_HOST=vox.test.odbc.plex.com"
     echo "PLEX_PORT=19995"
     echo "PLEX_SERVER_DATASOURCE=ReportDataSource"
@@ -78,8 +76,7 @@ else
     echo "# Monday: Jennette Boone's token, the only one that can write to the boards."
     echo "MONDAY_API_KEY=$(secret monday-api-key)"
   } > .env
-  grep -q '^PLEX_ACCESS_TOKEN=.' .env || fail ".env written but the Plex token is empty: ask for secretAccessor on plex-access-token"
-  grep -q '^PLEX_ODBC_USER=.' .env || echo "  warn  PLEX_ODBC_USER is empty: can't read the tfvars backup (objectViewer on ${PROJECT}-terraform-state)" >&2
+  grep -q '^PLEX_ACCESS_TOKEN=.' .env || fail ".env written but the Plex token is empty: ask for secretAccessor on plex-access-token-prod"
   ok ".env written ($(grep -c '=.' .env) values filled; nothing printed)"
 fi
 

@@ -390,7 +390,7 @@ PORT=19995;
 ServerDataSource=ReportDataSource;
 Encrypted=1;
 UseLDAP=0;
-UID=edominguez.parasol;
+UID=gcp.odbc.vox;        ← company user, every job since 2026-11-18 (docs/PLEX_CREDENTIALS.md)
 PWD=;
 CustomProperties=authmethod=iam; accesstoken=<token>
           ↑ no semicolon after this — token is at the end

@@ -228,7 +228,7 @@ view (`label_design_report`) chooses between them and the ETL's raw tables.
 | Code it runs | **The primary folder's copy**, `C:\F\Parasol\plex-to-big-query`, branch `main`. A change reaches the task only after it is merged **and** `git pull`ed there. |
 | Log | `C:\F\Parasol\plex-to-big-query\etl-manual\live_screens.log` (gitignored). Rolled to `.log.1` at 5 MB. Each run starts with `=== <date> <time>` and ends with `exit <code>`. |
 | Exit codes | `0` all screens loaded · `1` at least one screen (or the push start) failed; the others still loaded · `75` another Plex web run holds the lock, so nothing ran |
-| Credentials | Plex: `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD` from the environment or the primary folder's `.env`. Google: the laptop's Application Default Credentials (`gcloud auth application-default login`). |
+| Credentials | Plex: `PLEX_GCP_ODBC_USER` / `PLEX_GCP_ODBC_USER_PASSWORD` (gcp.odbc.vox, since 2026-11-18), else `PLEX_PORTAL_USERNAME` / `PLEX_PORTAL_PASSWORD`, from the environment or the primary folder's `.env`. Google: the laptop's Application Default Credentials (`gcloud auth application-default login`). |
 
 Manual runs (from any folder; they share the task's lock):
 

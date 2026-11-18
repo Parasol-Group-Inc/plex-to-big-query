@@ -66,8 +66,7 @@ def main():
     views = collect_view_names()
     etl.log.info(f"Collected {len(views)} candidate view names from catalog/*.md")
 
-    user = os.environ["PLEX_ODBC_USER"]
-    token = os.environ["PLEX_ACCESS_TOKEN"]
+    user, token = etl.local_odbc_env()  # gcp.odbc.vox when PLEX_GCP_* are in .env
     conn = etl.get_odbc_connection(user=user, password="", company_code="", access_token=token)
 
     ok = 0

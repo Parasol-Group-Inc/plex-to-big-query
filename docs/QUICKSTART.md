@@ -147,8 +147,8 @@ cp .env.example .env
 Open `.env` and set these values (the others can stay as defaults for now):
 
 ```env
-PLEX_ACCESS_TOKEN=<token-from-plex-support>
-PLEX_ODBC_USER=edominguez.parasol
+PLEX_ACCESS_TOKEN=<token of gcp.odbc.vox: secret plex-access-token-prod>
+PLEX_ODBC_USER=gcp.odbc.vox
 PLEX_HOST=vox.test.odbc.plex.com
 BQ_TABLE=raw_Part_v_Part
 ```
@@ -237,7 +237,7 @@ gcp_project    = "voxdatalake"
 bq_dataset     = "PlexTest"
 bq_table       = "raw_Part_v_Part"       # unused today — plex-etl-sales-orders runs sales_orders.yaml instead, see below
 plex_host      = "vox.test.odbc.plex.com"
-plex_odbc_user = "edominguez.parasol"
+plex_odbc_user = "edominguez.parasol"   # legacy, unused since 2026-11-18 (jobs: plex_odbc_user_gcp)
 image_url      = "us-central1-docker.pkg.dev/voxdatalake/plex-pipeline/etl:latest"  # bootstrap only — pin to a commit SHA once you push a real build, never leave this as :latest long-term
 ```
 

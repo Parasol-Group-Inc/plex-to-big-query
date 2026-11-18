@@ -103,7 +103,13 @@ working command here.
 --impersonate-service-account=claude-operator@voxdatalake.iam.gserviceaccount.com
 --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .` built `etl:d1901eb`
 and moved all 31 jobs to it (build a50baee9, 7 min 24 s). `gcloud builds list`
-needs the same flag. **Not yet exercised:** `gcloud functions deploy`
+needs the same flag, and so does `gcloud builds describe`: `claude-readonly` has no Cloud
+Build role, so a plain describe fails with PERMISSION_DENIED. **Wait for a build with
+`scripts/wait_build.sh <build-id>`** (since 2026-11-18): it switches to the operator
+on PERMISSION_DENIED, gives up after 3 unreadable checks or 30 min, prints each step's
+status and the error lines, and flags a registry 5xx as safe to resubmit. A hand-made
+wait loop that hid stderr waited 3 h on a build that had failed in 4 min (11-18,
+`push-sha` got a 503). **Not yet exercised:** `gcloud functions deploy`
 (dispatcher).
 
 ## What each identity can do

@@ -14,6 +14,23 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-17 - Prod runs on the company Plex user gcp.odbc.vox (ODBC and screens)
+
+Ships with `./scripts/deploy.sh` (Terraform); the screens login is a secret version, no deploy.
+
+### Changed
+- The 16 prod ODBC jobs (every job on `var.plex_host`, including `plex-live-screens`' live ODBC
+  comparison) connect as `gcp.odbc.vox` (`var.plex_odbc_user_prod`) with the token in the new
+  secret `plex-access-token-prod`. The 15 test jobs keep `edominguez.parasol` and
+  `plex-access-token`: `vox.test.odbc.plex.com` refuses `gcp.odbc.vox`.
+- The screens job logs into Plex as `gcp.odbc.vox` (`plex-portal-username` / `-password` version
+  2, added 2026-11-17 18:28 MT; verified in Cloud Run: login 5.9 s, all three screens read).
+- The secret was created by hand with its first version before the deploy; an `import` block in
+  `terraform/main.tf` adopts it.
+
+### Added
+- `docs/PLEX_CREDENTIALS.md`: which Plex login each part uses, rotation and rollback.
+
 ## 2026-11-16 - Part on-hand inventory: include Allocated and Released in on-hand status list
 
 ### Changed

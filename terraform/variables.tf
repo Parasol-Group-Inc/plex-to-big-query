@@ -42,6 +42,12 @@ variable "plex_odbc_user" {
   description = "Plex login in username.company format (e.g. edominguez.parasol)"
 }
 
+variable "plex_odbc_user_prod" {
+  type        = string
+  description = "Plex ODBC login for the PROD jobs (vox.odbc.plex.com). Since 2026-11-17 the company user gcp.odbc.vox, so prod no longer runs on a person's login; test jobs keep plex_odbc_user (vox.test refuses gcp.odbc.vox). Its token is in secret_access_token_prod."
+  default     = "gcp.odbc.vox"
+}
+
 variable "plex_dsn" {
   type        = string
   description = "ODBC DSN name — used for username/password auth fallback only"
@@ -52,6 +58,12 @@ variable "secret_access_token" {
   type        = string
   description = "Secret Manager secret name for the Plex IAM access token"
   default     = "plex-access-token"
+}
+
+variable "secret_access_token_prod" {
+  type        = string
+  description = "Secret Manager secret holding the Plex IAM token of plex_odbc_user_prod (prod jobs only). Test jobs read secret_access_token."
+  default     = "plex-access-token-prod"
 }
 
 variable "backfill_minutes" {

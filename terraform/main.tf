@@ -258,6 +258,22 @@ resource "google_secret_manager_secret" "access_token" {
   }
 }
 
+# IAM token of the PROD ODBC user gcp.odbc.vox (var.plex_odbc_user_prod), since 2026-11-17.
+# Prod jobs read this one; test jobs keep access_token (edominguez.parasol), because
+# vox.test.odbc.plex.com refuses gcp.odbc.vox. The secret was created (with its first
+# version) before this deploy, so the import block adopts it instead of creating it.
+import {
+  to = google_secret_manager_secret.access_token_prod
+  id = "projects/${var.gcp_project}/secrets/${var.secret_access_token_prod}"
+}
+
+resource "google_secret_manager_secret" "access_token_prod" {
+  secret_id = var.secret_access_token_prod
+  replication {
+    auto {}
+  }
+}
+
 # SendGrid API key — optional, only needed when SENDGRID_ENABLED=true
 resource "google_secret_manager_secret" "sendgrid_api_key" {
   secret_id = var.secret_sendgrid_key
@@ -324,11 +340,11 @@ resource "google_cloud_run_v2_job" "etl" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         # Plex connection — username/password auth (fallback)
         env {
@@ -706,11 +722,11 @@ resource "google_cloud_run_v2_job" "etl_work_orders" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -1031,11 +1047,11 @@ resource "google_cloud_run_v2_job" "etl_purchasing_open_orders" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -1342,11 +1358,11 @@ resource "google_cloud_run_v2_job" "etl_part_obsolescence" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -1651,11 +1667,11 @@ resource "google_cloud_run_v2_job" "etl_inventory_activity" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -1971,11 +1987,11 @@ resource "google_cloud_run_v2_job" "etl_inventory_snapshot" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -2439,11 +2455,11 @@ resource "google_cloud_run_v2_job" "etl_quality_nonconformance" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -2762,11 +2778,11 @@ resource "google_cloud_run_v2_job" "etl_part_on_hand_inventory" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -3178,11 +3194,11 @@ resource "google_cloud_run_v2_job" "etl_purchasing_pending_requisitions" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -3497,11 +3513,11 @@ resource "google_cloud_run_v2_job" "etl_sales_quotes" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -3795,11 +3811,11 @@ resource "google_cloud_run_v2_job" "etl_sales_returns" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -4098,11 +4114,11 @@ resource "google_cloud_run_v2_job" "etl_quality_supplier_returns" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -4645,11 +4661,11 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -5234,11 +5250,11 @@ resource "google_cloud_run_v2_job" "etl_part_routing" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -5547,11 +5563,11 @@ resource "google_cloud_run_v2_job" "etl_part_lot" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         env {
           name  = "PLEX_DSN"
@@ -6311,11 +6327,11 @@ resource "google_cloud_run_v2_job" "live_screens" {
         }
         env {
           name  = "PLEX_ODBC_USER"
-          value = var.plex_odbc_user
+          value = var.plex_odbc_user_prod
         }
         env {
           name  = "SECRET_ACCESS_TOKEN"
-          value = var.secret_access_token
+          value = google_secret_manager_secret.access_token_prod.secret_id
         }
         # Secret NAMES; screen_recon.py reads them at run time (a value_source ref to a
         # secret with no version yet would stop the job from being created).

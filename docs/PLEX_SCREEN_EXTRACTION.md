@@ -56,7 +56,7 @@ screens were right both times. So every 4 hours a job checks ODBC against them (
 shipments; production was dropped from the check on 11-10, its view stays on ODBC).
 
 **One cycle** (`scripts/screen_recon.py`, about 5 min):
-1. Logs into Plex (secrets `plex-portal-username` / `plex-portal-password`) and reads
+1. Logs into Plex as `gcp.odbc.vox` since 2026-11-17 (secrets `plex-portal-username` / `plex-portal-password`; `docs/PLEX_CREDENTIALS.md`) and reads
    three screens: `releases` (Sales Orders + Rapid Entry), `history` (Shipper History)
    and `revenue` (Shipping Revenue by Part Group, half-month windows, each halved again
    while it hits the 500-row cap). `--only production` still compares production by hand.

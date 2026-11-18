@@ -102,14 +102,14 @@ working command here.
 --config deploy/cloudbuild.yaml --project=voxdatalake
 --impersonate-service-account=claude-operator@voxdatalake.iam.gserviceaccount.com
 --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) .` built `etl:d1901eb`
-and moved all 31 jobs to it (build a50baee9, 7 min 24 s). `gcloud builds list`
-needs the same flag, and so does `gcloud builds describe`: `claude-readonly` has no Cloud
-Build role, so a plain describe fails with PERMISSION_DENIED. **Wait for a build with
-`scripts/wait_build.sh <build-id>`** (since 2026-11-18): it switches to the operator
-on PERMISSION_DENIED, gives up after 3 unreadable checks or 30 min, prints each step's
-status and the error lines, and flags a registry 5xx as safe to resubmit. A hand-made
-wait loop that hid stderr waited 3 h on a build that had failed in 4 min (11-18,
-`push-sha` got a 503). **Not yet exercised:** `gcloud functions deploy`
+and moved all 31 jobs to it (build a50baee9, 7 min 24 s). **Reading builds needs no
+impersonation since 2026-11-18:** `claude-readonly` has `roles/cloudbuild.builds.viewer`
+(`gcloud builds list`, `describe` and `log`). **Wait for a build with
+`scripts/wait_build.sh <build-id>`:** it gives up after 3 unreadable checks or 30 min,
+prints each step's status and the error lines, and flags a registry 5xx as safe to
+resubmit; if the viewer role is ever removed it reads as the operator instead. A
+hand-made wait loop that hid stderr waited 3 h on a build that had failed in 4 min
+(11-18, `push-sha` got a 503), which is why both exist. **Not yet exercised:** `gcloud functions deploy`
 (dispatcher).
 
 ## What each identity can do
@@ -239,8 +239,10 @@ for good, also delete the `claude-operator` service account.
 - The `claude-readonly` key is long-lived and now leads to write access through
   impersonation. A leaked key is a project-wide write credential. Record each
   key's creation date and rotate it (open item D17, `AI_WORKFLOW_HANDOVER.md` §4).
-- `claude-readonly`'s own roles are still inferred from behaviour, not read
-  from the policy. An Owner can list them:
+- `claude-readonly`'s project roles (read from the policy 2026-11-18):
+  `bigquery.dataViewer`, `bigquery.jobUser`, `logging.viewer`, `run.viewer`,
+  `cloudbuild.builds.viewer` (added 11-18 by Emilio), plus `iam.serviceAccountTokenCreator`
+  on `claude-operator`. To list them again:
   `gcloud projects get-iam-policy voxdatalake --flatten="bindings[].members" --filter="bindings.members:claude-" --format="table(bindings.members,bindings.role)"`.
 
 ## Related

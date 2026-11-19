@@ -73,6 +73,7 @@ terraform/deploy.plan.json
 docs/hub/data_snapshot.json
 docs/hub/index_live.html
 docs/hub/audit.json
+docs/hub/folder_move_audit.json
 # screenshots and status for the hub's Plex screen extraction tab (customer data)
 docs/hub/screens/
 

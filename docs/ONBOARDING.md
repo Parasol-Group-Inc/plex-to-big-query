@@ -18,7 +18,7 @@ production with it.
 | What | Why you need it | How it's granted |
 |---|---|---|
 | **GitHub:** write access to `Parasol-Group-Inc/plex-to-big-query` | clone, push branches, open PRs | GitHub org admin |
-| **Secret Manager:** Secret Accessor on the six secrets `plex-access-token`, `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `sendgrid-api-key`, `monday-api-key` | `scripts/dev_setup.sh` builds your `.env` from them | GCP IAM, per secret |
+| **Secret Manager:** Secret Accessor on `plex-access-token-prod` (the company Plex user gcp.odbc.vox's ODBC token, since 2026-11-18), `plex-odbc-user`, `plex-odbc-password`, `plex-company-code`, `sendgrid-api-key`, `monday-api-key` (`plex-access-token` is legacy; all Plex credentials: `docs/PLEX_CREDENTIALS.md`) | `scripts/dev_setup.sh` builds your `.env` from them | GCP IAM, per secret |
 | **Storage:** Object Viewer on `voxdatalake-build-assets` | the licensed Plex ODBC driver. Docker can't build without it | GCP IAM, on the bucket |
 | **Storage:** Object Viewer on `voxdatalake-terraform-state` | the tfvars backup and the repo backups | GCP IAM, on the bucket |
 | **BigQuery:** Data Viewer + Job User on `voxdatalake` | query the views and raw tables | GCP IAM, project |

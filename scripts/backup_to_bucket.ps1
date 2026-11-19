@@ -157,7 +157,9 @@ Write-Host ''
 # so no value is ever shown or pasted. The names match terraform/main.tf.
 $SecretNames = @('plex-access-token', 'plex-odbc-user', 'plex-odbc-password',
                  'plex-company-code', 'sendgrid-api-key', 'monday-api-key',
-                 'plex-api-consumer-key', 'plex-api-consumer-secret')   # REST API pair, added 2026-10-20
+                 'plex-api-consumer-key', 'plex-api-consumer-secret',   # REST API pair, added 2026-10-20
+                 'plex-access-token-prod',                              # gcp.odbc.vox ODBC token, every job since 2026-11-18
+                 'plex-portal-username', 'plex-portal-password')        # screens login (gcp.odbc.vox), added 2026-11-19
 $SecretsPath = Join-Path ([System.IO.Path]::GetTempPath()) "secrets-$Stamp.env"
 Write-Host 'Secret values (Secret Manager -> secrets.env, never printed):' -ForegroundColor Yellow
 if ($PSCmdlet.ShouldProcess($SecretsPath, "read $($SecretNames.Count) secret values")) {

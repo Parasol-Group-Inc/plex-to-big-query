@@ -241,7 +241,9 @@ for good, also delete the `claude-operator` service account.
   key's creation date and rotate it (open item D17, `AI_WORKFLOW_HANDOVER.md` §4).
 - `claude-readonly`'s project roles (read from the policy 2026-11-18):
   `bigquery.dataViewer`, `bigquery.jobUser`, `logging.viewer`, `run.viewer`,
-  `cloudbuild.builds.viewer` (added 11-18 by Emilio), plus `iam.serviceAccountTokenCreator`
+  `cloudbuild.builds.viewer` (added 11-18 by Emilio), `cloudfunctions.viewer` and
+  `cloudscheduler.viewer` (11-19), `orgpolicy.policyViewer` on folder 232835607810 "Vox Company Folder"
+  (11-19, after the folder move), plus `iam.serviceAccountTokenCreator`
   on `claude-operator`. To list them again:
   `gcloud projects get-iam-policy voxdatalake --flatten="bindings[].members" --filter="bindings.members:claude-" --format="table(bindings.members,bindings.role)"`.
 

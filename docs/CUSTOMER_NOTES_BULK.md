@@ -82,6 +82,11 @@ This update writes only the first.
 the writes. `scripts/plex_customer_note.py` is the one-customer version (first used on 101 Via
 Imports, `PLACEHOLDER`).
 
+**Update 2026-11-19:** the same PUT now saves the note, and the Customer Details screen shows it
+(test tenant, customer LUISO, as `gcp.odbc.vox` with its own API app; restored afterwards). Whether
+that comes from the new app or a Plex change is not known. A future bulk load could use the API;
+verify on a few customers first. Notes on orders: [CUSTOMER_NOTES_ON_ORDERS.md](CUSTOMER_NOTES_ON_ORDERS.md).
+
 ## The rules
 
 Decided by Emilio on 2026-11-09:

@@ -69,7 +69,7 @@ page.
   test push and its scheduler were removed 2026-10-27).
   Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (One *other* scheduler —
   `monday-daily-sync-VoxScorecardsLive` (the older `monday-daily-sync` was deleted 2026-11-19) — also lives in
-  this GCP project but belong to an unrelated Monday.com integration, not this
+  this GCP project but belongs to an unrelated Monday.com integration, not this
   pipeline.)
 
 ## Full schedule

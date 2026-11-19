@@ -464,13 +464,17 @@ Deploy > Manage deployments > edit > New version.
 
 ## Customer Notes in Plex (2026-11-09)
 
-Plex's customer **Note** (Customer Details, NOTES section) is not in ODBC and the REST API ignores
-it on update (200, nothing saved), so it is written through the screen:
+Plex's customer **Note** (Customer Details, NOTES section) is not in ODBC. On 11-09 the REST API ignored
+it on update (200, nothing saved); **since 11-19 a PUT saves it** (tested in TEST). It was written through the screen:
 `scripts/plex_customer_note.py` for one customer, `scripts/plex_customer_notes_bulk.py` for a CSV
 (plan, verified batches, stop file, full action log). 1,542 notes went in on 2026-11-09 from
 `docs/reference/CustomerNotesResults9.csv`; 3,015 rows were flagged and not written (OPEN_ITEMS
 D31). Runbook: `docs/CUSTOMER_NOTES_BULK.md`; hub tab "Customer notes". Keep the laptop lid
 open while it runs: a sleep stops it (safely) mid-batch.
+
+**Notes on sales orders (parked 11-19, for the Vox ERP team):** Plex never copies the customer Note onto
+an order; a ship-to's Shipping Instructions pre-fill the order's Special Instructions, which print on
+shippers. Tests, options and API quirks: `docs/CUSTOMER_NOTES_ON_ORDERS.md` (OPEN_ITEMS D41).
 
 ## Every Plex credential is the company user gcp.odbc.vox (since 2026-11-18)
 

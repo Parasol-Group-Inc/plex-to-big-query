@@ -2,7 +2,8 @@
 
 The REST Customers API cannot do this: on 2026-11-09 a PUT with `note` on a test-tenant
 customer that had no note returned 200 and stamped the record modified, but the note
-stayed empty. The screen writes the same field people edit by hand, so this drives it
+stayed empty. (Since 2026-11-19 the same PUT saves it in TEST: docs/CUSTOMER_NOTES_ON_ORDERS.md.)
+The screen writes the same field people edit by hand, so this drives it
 with the same Playwright login the screen task uses (plex_web_export.login), one
 customer at a time.
 

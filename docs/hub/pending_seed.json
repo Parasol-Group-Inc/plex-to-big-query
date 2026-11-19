@@ -1,0 +1,423 @@
+[
+ {
+  "id": "ashley-notes-on-orders",
+  "order": 10,
+  "title": "Reply to Ashley: customer notes on every SO are with the Vox ERP team",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-19",
+   "source": "Ashley's email",
+   "ref": "OPEN_ITEMS D41"
+  },
+  "context": "Ashley asked whether the 11-09 customer notes can show on every sales order automatically. Tested in Plex TEST: Plex never copies the customer Note; a ship-to's Shipping Instructions pre-fill Special Instructions, which print on shippers. Jennilyn wants the Vox ERP team to own it.",
+  "action": "Reply that it is parked for the Vox ERP team, with the reference doc. Options A-E are in the doc.",
+  "links": [
+   {
+    "label": "Reference doc",
+    "url": "https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/docs/CUSTOMER_NOTES_ON_ORDERS.md"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "backup-new-secrets",
+  "order": 20,
+  "title": "Run a backup so the gcp.odbc.vox credentials are saved outside Secret Manager",
+  "kind": "run",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-19",
+   "source": "Milestone 4171303 check",
+   "ref": "PR #157"
+  },
+  "context": "Since 11-18 every job uses plex-access-token-prod and the screens log in with plex-portal-*. The backup script did not save them until PR #157.",
+  "action": "pwsh scripts/backup_to_bucket.ps1",
+  "links": [
+   {
+    "label": "Disaster recovery",
+    "url": "https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/docs/DISASTER_RECOVERY.md"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "daily-backups-by-hand",
+  "order": 30,
+  "title": "OK for Claude to take the skipped daily backups by hand",
+  "kind": "decide",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-16",
+   "source": "Work log",
+   "ref": "milestone_sync.sh"
+  },
+  "context": "The milestone step copies etl_schedule and manual_data_access to Backups daily, but from your shell it cannot impersonate claude-operator, so some days were skipped.",
+  "action": "Mark Done (or leave a note) and Claude takes the copies as claude-operator.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "folder-move-permissions",
+  "order": 35,
+  "title": "Grant the read roles the folder-move audit asked for",
+  "kind": "access",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-19",
+   "source": "Folder move audit",
+   "ref": "hub tab GCP audit"
+  },
+  "context": "Jennilyn's folder move (2026-11-18 14:23 MT, into 'Vox Company Folder') broke nothing. The audit was refused a few reads; these read-only roles let Claude check functions, schedulers and folder org policies without the write account. Scheduled queries have no read-only role, so they stay on claude-operator.",
+  "action": "gcloud projects add-iam-policy-binding voxdatalake --member=serviceAccount:claude-readonly@voxdatalake.iam.gserviceaccount.com --role=roles/cloudfunctions.viewer --condition=None --configuration=default\ngcloud projects add-iam-policy-binding voxdatalake --member=serviceAccount:claude-readonly@voxdatalake.iam.gserviceaccount.com --role=roles/cloudscheduler.viewer --condition=None --configuration=default\ngcloud resource-manager folders add-iam-policy-binding 232835607810 --member=serviceAccount:claude-readonly@voxdatalake.iam.gserviceaccount.com --role=roles/orgpolicy.policyViewer --condition=None --configuration=default\nKeep reading these through claude-operator; no grant recommended.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "jennilyn-5-9-part",
+  "order": 40,
+  "title": "Send the second reply to Jennilyn about part 93147-10VOXNU-0",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-13",
+   "source": "Gmail draft",
+   "ref": "OPEN_ITEMS D27"
+  },
+  "context": "Her 5/9 part list is covered by the active 5-part BOM rule; the draft asks whether 93147-10VOXNU-0 belongs on it. The first reply went 11-13 09:29.",
+  "action": "Send the Gmail draft.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "ownership-doc",
+  "order": 50,
+  "title": "Share the ownership migration doc with Jennilyn",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-17",
+   "source": "Ownership migration",
+   "ref": "OPEN_ITEMS D39"
+  },
+  "context": "Her Day 1 grants unblock our part of the move to Parasol BizOps. Plex is already done (gcp.odbc.vox).",
+  "action": "Review, then share from the doc's Share menu.",
+  "links": [
+   {
+    "label": "Ownership doc",
+    "url": "https://claude.ai/artifact/J92U8RHzeGWiU3UXdHib4Q"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "rules-findings",
+  "order": 60,
+  "title": "Pick which business-rule findings go to Jennilyn",
+  "kind": "decide",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-13",
+   "source": "Business rules tab",
+   "ref": "docs/BUSINESS_RULES.md"
+  },
+  "context": "Three findings: pending approval has 3 definitions; FPY counts 5/9 parts; the MFG job success 84-day gate never passes.",
+  "action": "Tell Claude which ones to send; Claude drafts the message.",
+  "links": [
+   {
+    "label": "Business rules",
+    "url": "https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/docs/BUSINESS_RULES.md"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "label-api-trigger",
+  "order": 70,
+  "title": "Label Design API trigger: go or no",
+  "kind": "decide",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Label Design review",
+   "ref": "OPEN_ITEMS D38"
+  },
+  "context": "Plex's REST API sees order changes before ODBC. A trigger would start the Label Design push on an API change instead of waiting for ODBC's refresh. Analysis on the hub's Label Design API tab.",
+  "action": "Go or no. On go, Claude builds it on dev-label-design.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "plex-support-d33",
+  "order": 80,
+  "title": "Send the Plex support message about session refusals and the refresh schedule",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-10",
+   "source": "Stale ODBC incident",
+   "ref": "OPEN_ITEMS D33"
+  },
+  "context": "ODBC refused sessions and served data frozen for hours on 11-10. The message asks Plex about both and about the ~4 h refresh.",
+  "action": "Send the draft on the work log's Reference tab.",
+  "links": [
+   {
+    "label": "Work log",
+    "url": "https://claude.ai/artifact/2Shqehydk8GV7a9m4Fy4w2"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "customer-notes-flagged",
+  "order": 90,
+  "title": "Customer notes: decide on the 3,015 flagged rows",
+  "kind": "decide",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-09",
+   "source": "Notes bulk load",
+   "ref": "OPEN_ITEMS D31"
+  },
+  "context": "927 inactive customers, 3 name mismatches, 690 codes not in Plex, 1,395 comments without a code. Also 8 Plex customer names with a broken character.",
+  "action": "Decide per group (hub Customer notes tab filters them). Since 11-19 the API can write the Note, which makes a second load simpler.",
+  "links": [
+   {
+    "label": "Runbook",
+    "url": "https://github.com/Parasol-Group-Inc/plex-to-big-query/blob/main/docs/CUSTOMER_NOTES_BULK.md"
+   }
+  ],
+  "created_by": "claude"
+ },
+ {
+  "id": "kelli-draft",
+  "order": 100,
+  "title": "Send the Kelli draft about the new Label Design process",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Meeting with Jennilyn",
+   "ref": "Gmail draft"
+  },
+  "context": "Screen lines can reach Monday with blank columns that ODBC fills later. Reply in the Label Design thread, cc Ashley and Jennilyn.",
+  "action": "Send the Gmail draft.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "jennilyn-logins-draft",
+  "order": 110,
+  "title": "Jennilyn draft on whose login each Plex/SendGrid item is",
+  "kind": "send",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Meeting with Jennilyn",
+   "ref": "Gmail draft"
+  },
+  "context": "Plex is now all gcp.odbc.vox (11-18), so the Plex part of the draft is outdated; SendGrid still runs on a personal account.",
+  "action": "Update the Plex part (or mark Not needed if the ownership doc covers it), then send.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "github-jennilyn",
+  "order": 120,
+  "title": "Add Jennilyn to the GitHub repo",
+  "kind": "access",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Meeting with Jennilyn",
+   "ref": ""
+  },
+  "context": "She asked for read access to the code behind the reports.",
+  "action": "Org admin adds her to Parasol-Group-Inc/plex-to-big-query.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "billing-access",
+  "order": 130,
+  "title": "Billing data for real costs on the Budget tab",
+  "kind": "access",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-12",
+   "source": "Budget tab",
+   "ref": ""
+  },
+  "context": "The Budget tab estimates costs. Real numbers need the billing export or a viewer role.",
+  "action": "Enable cloudbilling + billingbudgets APIs, give claude-readonly roles/billing.viewer on the billing account, turn on the BigQuery billing export to voxdatalake.billing_export. Or send a 3-month SKU CSV from Billing > Reports.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "weekend-plants",
+  "order": 140,
+  "title": "Does any plant work weekends?",
+  "kind": "decide",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-12",
+   "source": "Weekend schedule review",
+   "ref": ""
+  },
+  "context": "Weekends run probes only at 04:xx and 23:xx, so production reports can be up to ~19 h old on Saturday and Sunday.",
+  "action": "Answer yes/no; on yes Claude adds a midday weekend probe.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "goals-tab-d36",
+  "order": 150,
+  "title": "Open the manual-data app's Goals tab so Claude can drop the v2_* views",
+  "kind": "check",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Manual-data app v2",
+   "ref": "OPEN_ITEMS D36"
+  },
+  "context": "The live app should read scorecard_goals_resolved; the four orphan v2_* views go once that is confirmed.",
+  "action": "Open the Goals tab once, then mark Done.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "commit-meeting-survey",
+  "order": 160,
+  "title": "Commit the meeting notes and API survey file",
+  "kind": "run",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-11",
+   "source": "Blocked commit",
+   "ref": ""
+  },
+  "context": "A commit script was prepared in an earlier session's scratchpad; that folder may be gone.",
+  "action": "If the script is gone, mark Not needed and tell Claude in a note; Claude recreates the commit.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "plex-web-services-401",
+  "order": 170,
+  "title": "Plex web services account refused (401)",
+  "kind": "access",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-16",
+   "source": "API setup",
+   "ref": ""
+  },
+  "context": "Before gcp.odbc.vox had its own API app, a web services account was tried and refused. The company user's API key now works on both tenants.",
+  "action": "Probably Not needed now; confirm.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "goals-apps-script-s1",
+  "order": 180,
+  "title": "Disable the old goals Apps Script project",
+  "kind": "run",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-09-22",
+   "source": "Scorecard",
+   "ref": "OPEN_ITEMS S1"
+  },
+  "context": "Its trigger can still truncate scorecard_goals.",
+  "action": "Disable the deployed Apps Script project's trigger.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "manual-app-s12",
+  "order": 190,
+  "title": "Deploy the manual-data app's 'already saved' panel fix",
+  "kind": "run",
+  "owner": "Emilio",
+  "status": "open",
+  "origin": {
+   "date": "2026-10",
+   "source": "Scorecard",
+   "ref": "OPEN_ITEMS S12"
+  },
+  "context": "The fix is in the repo but not in the deployed web app.",
+  "action": "Paste only the changed code into v2, Deploy > Manage deployments > New version.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "revenue-recon-zero",
+  "order": 200,
+  "title": "Revenue screen check compares 0 rows",
+  "kind": "check",
+  "owner": "Claude",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-18",
+   "source": "Screens job",
+   "ref": ""
+  },
+  "context": "Every revenue reconciliation on 11-18 had compared=0 (all rows excluded as recent), so the check proves nothing.",
+  "action": "Claude investigates and reports.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "felicity-bq-access",
+  "order": 36,
+  "title": "Felicity is denied on two reports: grant BigQuery read or not",
+  "kind": "decide",
+  "owner": "Jennilyn",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-19",
+   "source": "Folder move audit",
+   "ref": "hub tab GCP audit"
+  },
+  "context": "Since 11-17 felicity.michaels@voxnutrition.com gets access denied opening ar_invoice_lines_report and purchasing_po_report. She has no BigQuery role on voxdatalake. Not caused by the move.",
+  "action": "Decide; if yes, grant roles/bigquery.jobUser on the project and roles/bigquery.dataViewer on PlexProd.",
+  "links": [],
+  "created_by": "claude"
+ },
+ {
+  "id": "looker-labor-chart",
+  "order": 37,
+  "title": "Looker chart on vw_sc_labor_per_million fails (text summed as a number)",
+  "kind": "check",
+  "owner": "Jennilyn",
+  "status": "open",
+  "origin": {
+   "date": "2026-11-19",
+   "source": "Folder move audit",
+   "ref": "VoxScorecardsLive"
+  },
+  "context": "bizops@voxnutrition.com's Looker Studio chart errors with 'Failed to parse input string \"10617\"': a SUM over a text field in her hand-built view VoxScorecardsLive.vw_sc_labor_per_million.",
+  "action": "Cast the field to a number in the view (or set the field type in Looker). Claude can propose the SQL.",
+  "links": [],
+  "created_by": "claude"
+ }
+]

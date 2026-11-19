@@ -41,6 +41,7 @@ TABS = {
     "audit": ("<!--audit-tab-start-->", "<!--audit-tab-end-->"),
     "screens": ("<!--screens-tab-start-->", "<!--screens-tab-end-->"),
     "custnotes": ("<!--custnotes-tab-start-->", "<!--custnotes-tab-end-->"),
+    "gcpaudit": ("<!--gcpaudit-tab-start-->", "<!--gcpaudit-tab-end-->"),
 }
 
 

@@ -37,6 +37,17 @@ and the live page are gitignored, because they hold real PlexProd rows
 (customer names, order values) that belong in the org-only artifact, not in
 GitHub.
 
+### Pending tab: the page's own database (since 2026-11-19)
+
+The Pending tab is the only part of the hub with state. Its items are documents in the artifact's
+database (collection `pending`; notes in `pending_notes`), written by Claude with ArtifactData and
+updated by people with the tab's buttons (Done, Waiting on someone, Not needed, Reopen, Add note).
+The page holds only the code, so a rebuild never touches the list. The hub is therefore published
+with capabilities (`pending_tab.CAPABILITIES`): a redeploy that omits `capabilities` keeps them; a
+publish that passes a different set would drop them. Viewers read; anyone who can use the page
+writes. `docs/hub/pending_seed.json` is the record of what Claude seeded on 11-19, not the live list:
+read the database for that.
+
 ### One build, any machine (since 2026-11-12)
 
 Every tab is now built by this one command; nothing is pasted in by hand.
@@ -46,6 +57,8 @@ Every tab is now built by this one command; nothing is pasted in by hand.
 | Static tabs: Reliability, Label Design API, Budget, Disaster recovery, New developer | `scripts/hub/*_tab.py` | repo only |
 | Report and table cards, Schedules, Scorecard, Label Design | repo files plus the BigQuery snapshot | `snapshot_data.py` |
 | QuickBooks, Audit, Screen extraction, Customer notes | `qbo_tab`, `audit_tab`, `screens_tab`, `customer_notes_tab` | one machine only, see below |
+| GCP audit (2026-11-19) | `gcp_audit_tab` | `docs/hub/folder_move_audit.json` (gitignored), else the stored render |
+| Pending (2026-11-19) | `pending_tab` | none: items live in the artifact's database, see below |
 
 Each of the last four inputs lives on one machine:
 - **QuickBooks:** Emilio's own gcloud login to parasoldatalake.

@@ -68,7 +68,7 @@ page.
   `plex-label-design-sync-test` and `plex-label-design-push-sync` (live; the
   test push and its scheduler were removed 2026-10-27).
   Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (Two *other* schedulers —
-  `monday-daily-sync` and `monday-daily-sync-VoxScorecardsLive` — also live in
+  `monday-daily-sync-VoxScorecardsLive` (the older `monday-daily-sync` was deleted 2026-11-19) — also live in
   this GCP project but belong to an unrelated Monday.com integration, not this
   pipeline.)
 

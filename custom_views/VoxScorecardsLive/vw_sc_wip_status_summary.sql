@@ -1,11 +1,13 @@
 -- VoxScorecardsLive.vw_sc_wip_status_summary (view), backed up from BigQuery by scripts/backup_custom_views.py
--- last created 2026-11-11 15:52 UTC by jennilyn.tockstein@parasolgroupinc.com
+-- last created 2026-11-12 15:31 UTC by jennilyn.tockstein@parasolgroupinc.com
 
 WITH u AS (
-  SELECT 1 AS sort_order, 'Ready to ship (already made)' AS status, order_no, ready_value AS value
+  SELECT IF(release_status = 'Blanket', 15, 10) AS sort_order,
+         IF(release_status = 'Blanket', 'Blankets in shipping', 'Ready to ship (already made)') AS status,
+         order_no, ready_value AS value
   FROM `voxdatalake.VoxScorecardsLive.vw_sc_wip_status_lines` WHERE ready_value > 0
   UNION ALL
-  SELECT IF(remaining_sort = 3, 2, remaining_sort),
+  SELECT CASE remaining_sort WHEN 2 THEN 20 WHEN 3 THEN 20 WHEN 4 THEN 40 WHEN 5 THEN 50 WHEN 6 THEN 60 ELSE 70 END,
          IF(remaining_sort = 3, 'Open job', remaining_status),
          order_no, remaining_value
   FROM `voxdatalake.VoxScorecardsLive.vw_sc_wip_status_lines` WHERE remaining_value != 0

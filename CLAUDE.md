@@ -446,9 +446,13 @@ Its "disagreements" list holds the docs-vs-code differences found on 11-13 that 
 
 ## Hand-built datasets are backed up in `custom_views/` (since 2026-11-11)
 
-Jennilyn's `VoxScorecardsLive` has 60 views and 25 tables, built in the console and not by the
+Jennilyn's `VoxScorecardsLive` has 65 views and 28 tables (11-19), built in the console and not by the
 ETL. Its SQL and docs are in `custom_views/VoxScorecardsLive/`, and its table data is in
-`Backups.VoxScorecardsLive__*_20261111`.
+`Backups.VoxScorecardsLive__*_20261111`. The hub's **Vox Scorecards** tab lists every object, its source
+and the 51 PlexProd objects her views read: **check it before renaming or dropping anything in PlexProd.**
+8 of her views read the `v2_*` views (D36), so those stay. Its Monday tables come from
+`monday-daily-sync-VoxScorecardsLive` → Cloud Run `monday-to-bigquery-vox` (01:00 UTC); the older paused
+`monday-daily-sync` and `monday-sync-flattened` were deleted 11-19.
 - **Refresh:** `python scripts/backup_custom_views.py VoxScorecardsLive`, then read the git diff.
 - **Not backed up yet:** `plex_mirror` (also hers).
 

@@ -410,6 +410,19 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
 - Cloud Build builds the screens image FROM the same commit's ETL image and updates
   `plex-live-screens`; `plex-etl-watchdog` is in `_ALL_JOBS`.
 
+## Plex's REST API is Label Design's third source (since 2026-11-20)
+
+`plex_api_releases.py`: the API (`/sales/v1/orders?status=Pending%20Fulfillment`,
+`/sales/v1/releases?status=Label%20Design`; the status filter works, `orderId` is ignored) is compared
+with our ODBC copy and the last releases screen read. Its UUIDs are ODBC's `Resource_ID` (all matched).
+- **Trigger:** each prod Label Design run (`API_SCREENS_TRIGGER=1`, before ODBC, weekdays 5:00-17:50 MT)
+  starts a releases-only screen read when a Label Design line is in neither source and changed after
+  the last read. Log: `PlexOps.api_trigger_log`.
+- **Watchdog `label_design_coverage`:** a line in neither source for 75 min (5 h off-hours) emails.
+- **The API never pushes a line:** Monday items are keyed `<order>|L<po_line_key>` and the API has no
+  integer keys, so an API-made item would be a duplicate later. Rekeying was set aside (11-20).
+All angles: `docs/PLEX_API_THIRD_SOURCE.md` (hub tab "API third source").
+
 ## Every report says where its data came from (since 2026-11-10)
 
 `PlexOps.data_freshness` (Terraform view) gives, per dataset and report group, `data_source`
@@ -510,6 +523,9 @@ also logs its build SHA in `job_run_log.build`, and the batch digest flags a
 job on a different build.
 
 ## Email subjects
+
+**Sender: `bizops@voxnutrition.com` since 2026-11-20** (`report_from_email` in `terraform.tfvars`, and
+`SENDGRID_FROM_EMAIL` on `monday-to-bigquery-vox`, outside Terraform). Verified in SendGrid.
 
 `[Plex ETL] - {Category}: {Pipeline} — {date}`, built in `email_utils.py` from
 each config's `category` plus its pipeline name. Changed 2026-09-04 — the

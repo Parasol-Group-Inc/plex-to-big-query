@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 from google.cloud import bigquery
 
 import plex_api_lag
+import plex_api_releases
 
 PROJECT = os.environ.get("GCP_PROJECT", "voxdatalake")
 REGION = os.environ.get("GCP_REGION", "us-central1")
@@ -228,6 +229,35 @@ def check_odbc_vs_plex(c, now_mt):
     return [msg] if previous_failed(c, "odbc_vs_plex") else [f"pending: {msg}"]
 
 
+# Label Design coverage (2026-11-20): Plex's REST API is the third source. A Label Design line
+# (release "Label Design" on a "Pending Fulfillment" order) that Plex has had for over
+# COVERAGE_MIN minutes and that is in neither our ODBC copy nor the last releases screen read is
+# a line Monday does not have. 75 min in weekday working hours (screens hourly + slack), 5 h
+# otherwise (screens every 4 h). Two runs in a row before mailing. An unreadable API is
+# reported by odbc_vs_plex, not here. plex_api_releases.py, docs/PLEX_API_THIRD_SOURCE.md.
+COVERAGE_MIN, COVERAGE_OFF_HOURS_MIN = 75, 300
+
+
+def check_label_design_coverage(c, now_mt):
+    try:
+        res = plex_api_releases.fetch(c)
+    except Exception as e:
+        print(f"  label_design_coverage: API not read ({type(e).__name__}: {str(e)[:150]})")
+        return []
+    lines = res["lines"]
+    line_min = COVERAGE_MIN if (now_mt.weekday() < 5 and 6 <= now_mt.hour < 18) else COVERAGE_OFF_HOURS_MIN
+    now = now_mt.astimezone(UTC)
+    late = [x for x in plex_api_releases.missing(lines) if (now - x["changed_at"]).total_seconds() / 60 > line_min]
+    print(f"  label_design_coverage: {len(lines)} Label Design lines in Plex, {sum(x['in_odbc'] for x in lines)} in "
+          f"ODBC, {sum(x['in_screen'] for x in lines)} on the screen, {len(plex_api_releases.missing(lines))} in neither")
+    if not late:
+        return []
+    msg = (f"{len(late)} Label Design line(s) Plex has had for over {line_min} min are in neither ODBC nor the "
+           f"releases screen, so Monday does not have them: {plex_api_releases.describe(late, now)}. Check the "
+           f"screens job (plex-live-screens) and ODBC; the runbook is docs/PLEX_API_THIRD_SOURCE.md.")
+    return [msg] if previous_failed(c, "label_design_coverage") else [f"pending: {msg}"]
+
+
 def weekend_window(now_mt):
     """Saturday, Sunday or Monday before 06:00 MT: only two probes a day run (since 11-12), so
     raw tables can rest from Friday's 04:xx full run to Monday's."""
@@ -350,6 +380,7 @@ CHECKS = [
     ("screens_job", check_screens_job),
     ("odbc_connect", check_odbc_connect),
     ("odbc_vs_plex", check_odbc_vs_plex),
+    ("label_design_coverage", check_label_design_coverage),
     ("raw_freshness", check_raw_freshness),
     ("msl_daily", check_msl_daily),
     ("usage_monthly", check_usage_monthly),

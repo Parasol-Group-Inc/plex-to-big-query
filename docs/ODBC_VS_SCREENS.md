@@ -18,6 +18,11 @@ Current as of **2026-11-12**. This page holds all the rules in one place. The ru
   reads ODBC plus any Label Design line the screens show that ODBC does not have yet. The new
   line reaches Monday within the hour. When ODBC catches up, the push fills the item's blank
   cells and marks it "confirmed by ODBC". There is no switching, so the two never compete.
+- **Plex's REST API is the third source (since 2026-11-20).** Every prod Label Design run first asks
+  the API; a Label Design line that neither ODBC nor the last screen read has starts a releases
+  screen read at once (new lines in about 15 to 25 min instead of up to an hour). The watchdog's
+  `label_design_coverage` emails when a line is in neither source for 75 min. The API never writes a
+  line itself (it has no integer keys). All of it: `docs/PLEX_API_THIRD_SOURCE.md`.
 - **Shipments and revenue: ODBC only.** Jennilyn: not time critical, the data comes every day.
   The screens check them every 4 hours as an audit. Only a lag that survives the overnight
   catch-up (12 h) emails.
@@ -150,6 +155,10 @@ Active and Order Line Status = Label Design. "Order Line Status" is the release 
    Label Design lines that only the screens have so far, by order number. A release ODBC
    still lacks after 6 h is emailed once a day: that means ODBC never delivered it, or it
    was cancelled in Plex.
+6. **The API's trigger (since 2026-11-20).** Between the hourly reads, each Label Design run
+   asks Plex's REST API for Label Design lines that neither ODBC nor the last read has, and starts
+   a releases-only read when one changed after that read (not while a read runs, not from :08 to
+   :19 when the hourly one is due, at most every 20 min). `docs/PLEX_API_THIRD_SOURCE.md`.
 
 ## Shipments and revenue
 

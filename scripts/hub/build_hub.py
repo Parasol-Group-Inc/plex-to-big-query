@@ -349,6 +349,7 @@ def main():
         import pending_tab  # 2026-11-19: pending items with buttons and notes (artifact db)
         import gcp_audit_tab  # 2026-11-19: infrastructure audits (docs/hub/folder_move_audit.json, gitignored)
         import vox_scorecards_tab  # 2026-11-19: Jennilyn's VoxScorecardsLive (custom_views/VoxScorecardsLive)
+        import api_source_tab  # 2026-11-20: Plex's REST API as Label Design's third source (docs/PLEX_API_THIRD_SOURCE.md)
         import qbo_tab
         import tab_store  # 2026-11-12: machine-local tabs fall back to their last stored render
         live = page({**data, "snapshot": snapshot})
@@ -363,6 +364,7 @@ def main():
         live = tab_store.add_with_store(live, "gcpaudit", gcp_audit_tab.add, gcp_audit_tab.inject)
         live = rules_tab.add(onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(live))))))
         live = vox_scorecards_tab.add(live)
+        live = api_source_tab.add(live)
         live = pending_tab.add(live)  # items live in the artifact's db, not the page (2026-11-19)
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")

@@ -105,7 +105,7 @@ Backups.VoxScorecardsLive__*_20261111. Inventory as of the last backup refresh.<
 <div class="panel"><h3>Monday.com, nightly</h3><ul class="plain">
 <li>Scheduler <code>monday-daily-sync-VoxScorecardsLive</code> at 01:00 UTC (6 PM MT) calls Cloud Run service <code>monday-to-bigquery-vox</code> (built by Emilio 2026-05-19).</li>
 <li>It writes one table per Monday board (below) and emails Emilio, Jennilyn and marketing@ ("Vox Scorecards Live").</li>
-<li>Its Monday token is a plain environment variable on the service, not in Secret Manager (the SendGrid key is). Worth moving.</li>
+<li>Its Monday token comes from Secret Manager (<code>monday-sync-token</code>, since 2026-11-19 evening); the SendGrid key too. It sends from bizops@voxnutrition.com since 2026-11-20.</li>
 <li>The older <code>monday-daily-sync</code> / <code>monday-sync-flattened</code> (paused since June) was deleted 2026-11-19.</li></ul>
 <div class="tbl-wrap"><table><thead><tr><th>Board</th><th>Board id</th><th>Table</th></tr></thead><tbody>{mon_rows}</tbody></table></div></div>
 <div class="panel"><h3>Everything else</h3><ul class="plain">

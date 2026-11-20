@@ -61,6 +61,11 @@ page.
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
+- **Sender: `bizops@voxnutrition.com` since 2026-11-20** (was `marketing@parasolgroupinc.com`;
+  Emilio). It is `report_from_email` in `terraform.tfvars` for every ETL job, and
+  `SENDGRID_FROM_EMAIL` on the Monday Scorecards service `monday-to-bigquery-vox` (not in Terraform).
+  Both addresses are verified senders in SendGrid; voxnutrition.com has no SendGrid domain
+  authentication (DMARC `p=none`, so mail is delivered, and Gmail may show "via sendgrid.net").
 - **30 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
   5 minutes, starts all prod pipelines except Label Design), one nightly
   trigger per test pipeline plus a retry on 12 of them

@@ -14,6 +14,21 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-20 (evening) - Picking app: pick list opens at once with loaders; pooled API connections
+
+### Changed
+- `deploy/picking_app`: `/set/<no>` opens at once with a loader per ingredient; each ingredient's live
+  containers load from the new `/set/<no>/line/<part_id>` fragment as Plex answers (`?all=1` = old one-go
+  page). Live data only (Emilio: old data is not acceptable), so the SQL-screen shortcut was measured and
+  set aside: in production it reads the ODBC copy.
+- `plex_api.py`: one pooled `requests.Session` instead of urllib per call (about 20% faster).
+- Dockerfile: gunicorn 12 threads (was 8).
+- Measured, not used: 32 threads, API filters (all ignored), SQL screen. SQL screen writes refused (TEST).
+  `docs/PICKING_STAGING_APP.md`, "Speed (third pass)".
+
+### Not deployed
+- Needs `./deploy/picking_app/deploy.sh` after merge.
+
 ## 2026-11-20 - Picking app deployed to Cloud Run (Plex TEST); keep-warm ping parked; sender stays marketing@
 
 ### Deployed

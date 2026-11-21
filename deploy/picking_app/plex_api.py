@@ -18,10 +18,11 @@ from __future__ import annotations
 import json
 import os
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
+
+import requests
+from requests.adapters import HTTPAdapter
 
 BASES = {"test": "https://test.connect.plex.com", "prod": "https://connect.plex.com"}
 REPO = Path(__file__).resolve().parents[2]
@@ -58,6 +59,16 @@ class PlexApi:
         self.base = BASES[self.env]
         self._get = get
         self._key = None
+        self._http = None       # one pooled HTTPS session: no new TLS handshake per call (~20% faster, 11-20)
+
+    def _session(self) -> requests.Session:
+        if self._http is None:
+            s = requests.Session()
+            s.mount("https://", HTTPAdapter(pool_connections=2, pool_maxsize=int(os.environ.get("PICKING_API_POOL", "32"))))
+            s.headers.update({"X-Plex-Connect-Api-Key": self._key[0], "X-Plex-Connect-Api-Secret": self._key[1],
+                              "Accept": "application/json"})
+            self._http = s
+        return self._http
 
     def get(self, path: str, **params):
         if params:
@@ -68,19 +79,17 @@ class PlexApi:
             self._key = api_key()
         last = None
         for attempt in range(3):
-            req = urllib.request.Request(self.base + path, headers={
-                "X-Plex-Connect-Api-Key": self._key[0], "X-Plex-Connect-Api-Secret": self._key[1],
-                "Accept": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=120) as r:
-                    return json.loads(r.read() or b"null")
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
+                r = self._session().get(self.base + path, timeout=120)
+                if r.status_code == 404:
                     return None
-                if e.code < 500:
-                    raise
-                last = e
-            except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as e:
+                if r.status_code < 500:
+                    r.raise_for_status()
+                    return r.json() if r.content else None
+                last = requests.HTTPError(f"HTTP {r.status_code} from Plex API {path.split('?')[0]}")
+            except requests.HTTPError:
+                raise
+            except (requests.RequestException, ValueError) as e:
                 last = e
             time.sleep(2 * (attempt + 1))
         raise last

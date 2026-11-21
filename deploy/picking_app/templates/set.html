@@ -1,18 +1,37 @@
 {% extends "base.html" %}{% block title %}Job set {{ s.set_no }}{% endblock %}{% block body %}
 <div class="card"><h2 style="margin:0 0 4px">Job set {{ s.set_no }}: {{ s.main.part_no }}</h2>
-<div class="muted">Main job {{ s.main.job_no }} ({{ s.main.group or 'no workcenter' }}, due {{ s.main.due }}) · {{ s.open_jobs }} open jobs · job set read {{ read_at }}; containers below are live from Plex (up to a minute old; every move re-reads them) · loaded in {{ load_seconds }} s · <a href="?days={{ days }}&refresh=1">reload containers</a></div></div>
-{% for ln in lines %}<div class="card">
+<div class="muted">Main job {{ s.main.job_no }} ({{ s.main.group or 'no workcenter' }}, due {{ s.main.due }}) · {{ s.open_jobs }} open jobs · job set read {{ read_at }}; containers below are live from Plex (up to a minute old; every move re-reads them) · <span id="progress">{% if loading %}reading live containers: <b>0</b> of {{ lines|length }} ingredients{% else %}loaded in {{ load_seconds }} s{% endif %}</span> · <a href="?days={{ days }}&refresh=1">reload containers</a></div></div>
+{% for ln in lines %}{% if loading %}<div class="card line-loading" id="line-{{ ln.part_id }}" data-url="{{ url_for('job_set_line', set_no=s.set_no, part_id=ln.part_id, days=days, target=ln.target, refresh=refresh) }}">
 <div class="bar" style="justify-content:space-between"><div><b>{{ ln.part_no }}</b> <span class="muted">job {{ ln.job_no }} · {{ ln.group or 'no workcenter' }} {{ ln.workcenter }} · due {{ ln.due }}</span></div>
-<div>Need <b>{{ '%.3f'|format(ln.required) }}</b> · staged {{ '%.3f'|format(ln.staged_qty) }} · suggested {{ '%.3f'|format(ln.picked_qty) }}
-{% if ln.short_qty > 0 %}<span class="short">· short {{ '%.3f'|format(ln.short_qty) }}</span>{% elif ln.staged_qty >= ln.required %}<span class="done">· fully staged</span>{% endif %}</div></div>
-<form method="post" action="{{ url_for('move') }}"><input type="hidden" name="set_no" value="{{ s.set_no }}"><input type="hidden" name="job_no" value="{{ ln.job_no }}"><input type="hidden" name="part_id" value="{{ ln.part_id }}">
-<div class="tbl"><table><thead><tr><th></th><th>Serial</th><th>LP</th><th>Lot</th><th>Best by</th><th>Location</th><th>Status</th><th class="n">Qty</th><th></th></tr></thead><tbody>
-{% for r in ln.rows %}<tr><td>{% if r.role in ('pick','spare') %}<input type="checkbox" name="serial" value="{{ r.serial }}" {% if r.role=='pick' %}checked{% endif %}>{% endif %}</td>
-<td>{{ r.serial }}</td><td>{{ r.lp }}</td><td>{{ r.lot }}</td><td>{{ r.best_by }}</td><td>{{ r.location }}</td><td>{{ r.status }}</td><td class="n">{{ '%.3f'|format(r.qty) }}</td>
-<td><span class="role {{ r.role }}">{{ r.role }}</span> <span class="muted">{{ r.why }}</span></td></tr>
-{% else %}<tr><td colspan="9" class="muted">No containers of this part in Plex.</td></tr>{% endfor %}</tbody></table></div>
-<div class="bar" style="margin-top:8px"><label>Move ticked to <select name="target">{% for t in staging %}<option {% if t==ln.target %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
-<button {% if not moves_enabled %}disabled title="Moves are off in production"{% endif %}>Move to staging</button>
-<span class="muted">Each container is re-read live first; only status OK is moved. A pallet (LP) moves whole when all its containers are ticked; a container moved alone leaves its pallet in Plex. Suggestions come from {{ pick_from|join(', ') }} locations only.</span></div></form></div>
+<div>Need <b>{{ '%.3f'|format(ln.required) }}</b></div></div>
+<div class="loader"><span class="spin"></span><span class="muted msg">Reading live containers from Plex…</span></div></div>
+{% else %}{% include "_line.html" %}{% endif %}
 {% else %}<div class="card muted">This job set has no open pick lines.</div>{% endfor %}
+{% if loading %}<noscript><div class="card">JavaScript is off: <a href="?days={{ days }}&all=1">open the whole page at once</a>.</div></noscript>
+<script>
+(function () {
+  const cards = [...document.querySelectorAll(".line-loading")], total = cards.length, t0 = performance.now();
+  const prog = document.getElementById("progress");
+  let done = 0;
+  function tick() {
+    done++;
+    prog.innerHTML = done < total ? "reading live containers: <b>" + done + "</b> of " + total + " ingredients"
+                                  : "all " + total + " ingredients live, loaded in " + ((performance.now() - t0) / 1000).toFixed(1) + " s";
+  }
+  function load(card) {
+    card.querySelector(".msg").textContent = "Reading live containers from Plex…";
+    card.querySelector(".spin").hidden = false;
+    fetch(card.dataset.url, {credentials: "same-origin"}).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
+    }).then(html => { card.outerHTML = html; tick(); }).catch(e => {
+      card.querySelector(".spin").hidden = true;
+      const m = card.querySelector(".msg");
+      m.innerHTML = "Could not read this ingredient from Plex (" + e.message + "). <a href='#'>Try again</a>";
+      m.querySelector("a").onclick = ev => { ev.preventDefault(); load(card); };
+    });
+  }
+  cards.forEach(load);
+})();
+</script>{% endif %}
 {% endblock %}

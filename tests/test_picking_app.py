@@ -174,3 +174,23 @@ def test_saved_session_file_round_trip(tmp_path, monkeypatch):
     w2 = plex_web.PlexWeb("prod")
     w2.store = w.store
     assert w2._try_saved() is False                   # a TEST session is never used for prod
+
+
+def test_set_page_opens_with_loaders_and_each_line_fills_in_live(monkeypatch):
+    a = _app(monkeypatch)
+    s = picking.build_sets(SET_832)["832"]
+    monkeypatch.setattr(a, "_find_set", lambda set_no, days: (s, 0) if set_no == "832" else (None, 0))
+    monkeypatch.setattr(a, "location_groups", lambda: {"103": "Warehouse"})
+    reads = []
+    monkeypatch.setattr(a.api, "containers_for_part", lambda pid: reads.append(pid) or
+                        [{"serialNo": "S1", "location": "103", "quantity": 50, "containerStatus": "OK", "lotId": "L1"}])
+    monkeypatch.setattr(a.api, "lots_for_part", lambda pid: [{"id": "L1", "bestByDateTime": "2027-01-01T00:00:00Z"}])
+    client = a.app.test_client()
+    page = client.get("/set/832").get_data(as_text=True)
+    assert reads == []                                         # opens without waiting for Plex
+    assert page.count('class="card line-loading"') == len(s["lines"]) and "/set/832/line/p12761" in page
+    frag = client.get("/set/832/line/p12761?days=3").get_data(as_text=True)
+    assert reads == ["p12761"] and "S1" in frag and 'id="line-p12761"' in frag and "Move to staging" in frag
+    assert client.get("/set/832/line/nope").status_code == 404
+    full = client.get("/set/832?all=1").get_data(as_text=True)  # the old one-go page still works
+    assert "line-loading" not in full and full.count("<td>S1</td>") == len(s["lines"])

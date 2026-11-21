@@ -1,0 +1,14 @@
+<div class="card" id="line-{{ ln.part_id }}">
+<div class="bar" style="justify-content:space-between"><div><b>{{ ln.part_no }}</b> <span class="muted">job {{ ln.job_no }} · {{ ln.group or 'no workcenter' }} {{ ln.workcenter }} · due {{ ln.due }}</span></div>
+<div>Need <b>{{ '%.3f'|format(ln.required) }}</b> · staged {{ '%.3f'|format(ln.staged_qty) }} · suggested {{ '%.3f'|format(ln.picked_qty) }}
+{% if ln.short_qty > 0 %}<span class="short">· short {{ '%.3f'|format(ln.short_qty) }}</span>{% elif ln.staged_qty >= ln.required %}<span class="done">· fully staged</span>{% endif %}</div></div>
+<form method="post" action="{{ url_for('move') }}"><input type="hidden" name="set_no" value="{{ s.set_no }}"><input type="hidden" name="job_no" value="{{ ln.job_no }}"><input type="hidden" name="part_id" value="{{ ln.part_id }}">
+<div class="tbl"><table><thead><tr><th></th><th>Serial</th><th>LP</th><th>Lot</th><th>Best by</th><th>Location</th><th>Status</th><th class="n">Qty</th><th></th></tr></thead><tbody>
+{% for r in ln.rows %}<tr><td>{% if r.role in ('pick','spare') %}<input type="checkbox" name="serial" value="{{ r.serial }}" {% if r.role=='pick' %}checked{% endif %}>{% endif %}</td>
+<td>{{ r.serial }}</td><td>{{ r.lp }}</td><td>{{ r.lot }}</td><td>{{ r.best_by }}</td><td>{{ r.location }}</td><td>{{ r.status }}</td><td class="n">{{ '%.3f'|format(r.qty) }}</td>
+<td><span class="role {{ r.role }}">{{ r.role }}</span> <span class="muted">{{ r.why }}</span></td></tr>
+{% else %}<tr><td colspan="9" class="muted">No containers of this part in Plex.</td></tr>{% endfor %}</tbody></table></div>
+<div class="bar" style="margin-top:8px"><label>Move ticked to <select name="target">{% for t in staging %}<option {% if t==ln.target %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+<button {% if not moves_enabled %}disabled title="Moves are off in production"{% endif %}>Move to staging</button>
+<span class="muted">Each container is re-read live first; only status OK is moved. A pallet (LP) moves whole when all its containers are ticked; a container moved alone leaves its pallet in Plex. Suggestions come from {{ pick_from|join(', ') }} locations only.</span></div></form></div>
+

@@ -52,6 +52,7 @@ or `sql/` paths:** that is how prod diverged and a fix got rolled back
   | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
   | `ptbq-label-design` | `dev-label-design` | Label Design |
   | `ptbq-part-lot` | `dev-part-lot` | Part Lot Attributes + inheritance |
+  | `ptbq-picking` | `dev-picking` | Picking & staging app |
   | `ptbq-dev` | `dev` | shared tooling |
 
   Work in the folder of the project you were asked about. Never
@@ -478,6 +479,22 @@ Its code is in `deploy/manual_data_app_v2/` (Code.gs + Index.html; reads `scorec
 live copy still reads the orphan `v2_scorecard_goals_resolved` until redeployed, D36). **Never paste
 `deploy/manual_data_app/` into the live project.** Update v2 by editing only what changed, then
 Deploy > Manage deployments > edit > New version.
+
+## Picking & staging app: moves go through Plex's screen (2026-11-20)
+
+`deploy/picking_app/` (Flask, draft, not deployed; `docs/PICKING_STAGING_APP.md`, OPEN_ITEMS D42) lists the job
+sets due soon (a blend job + one Pre-Weigh job per ingredient), suggests containers live from the REST API, and moves
+them to a staging location. **No API or ODBC route moves a container** (tested 11-20: the API has scrap and retire
+only; ODBC refuses any write). The move is the Move Container screen's own request, `POST
+/inventory/MoveContainer/ContainerMove?sourceActionKey=11984` with `{SerialNo, Location, Putaway, Confirmed}`, sent
+with the cookies of one Playwright login (`plex_web.PlexWeb`). Job sets and per-job BOM come from the SQL
+Development screen through the same session. Things that bite:
+- **Plex moves a Hold container without asking**: the app moves only status OK.
+- **An LP number moves the whole pallet; a container moved alone leaves its pallet** (LP-087265 in TEST lost all 4).
+  The app moves an LP whole when all its containers are ticked.
+- **Every move is recorded in Plex as gcp.odbc.vox**; the app's log (`PICKING_LOG`, `PlexOps.picking_move_log`)
+  is the only record of who asked.
+- `PLEX_ENV=test` is the default; production moves need `PICKING_ALLOW_PROD_MOVES=1`.
 
 ## Customer Notes in Plex (2026-11-09)
 

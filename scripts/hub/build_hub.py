@@ -350,6 +350,7 @@ def main():
         import gcp_audit_tab  # 2026-11-19: infrastructure audits (docs/hub/folder_move_audit.json, gitignored)
         import vox_scorecards_tab  # 2026-11-19: Jennilyn's VoxScorecardsLive (custom_views/VoxScorecardsLive)
         import api_source_tab  # 2026-11-20: Plex's REST API as Label Design's third source (docs/PLEX_API_THIRD_SOURCE.md)
+        import picking_tab  # 2026-11-20: picking & staging app (docs/PICKING_STAGING_APP.md)
         import qbo_tab
         import tab_store  # 2026-11-12: machine-local tabs fall back to their last stored render
         live = page({**data, "snapshot": snapshot})
@@ -366,6 +367,7 @@ def main():
         live = vox_scorecards_tab.add(live)
         live = api_source_tab.add(live)
         live = pending_tab.add(live)  # items live in the artifact's db, not the page (2026-11-19)
+        live = picking_tab.add(live)
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")
         print(f"{rel(OUT_LIVE)}: {len(live) // 1024} KB with the data snapshot of {snapshot.get('taken_at')} (publish this one)")
     missing = [r["name"] for r in reports.values() if not r["plex_sql"]]

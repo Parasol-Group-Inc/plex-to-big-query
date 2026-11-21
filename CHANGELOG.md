@@ -14,6 +14,26 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-20 - Picking app deployed to Cloud Run (Plex TEST); keep-warm ping parked; sender stays marketing@
+
+### Deployed
+- Terraform (3 changes): `iap.googleapis.com`, `PlexOps.picking_move_log`, and Label Design's
+  `API_SCREENS_TRIGGER=1` from #159. ETL image a339ae8 built (Cloud Build) for #159's code.
+- `picking-app` revision 00001 (a339ae8): https://picking-app-651304971296.us-central1.run.app, open to Emilio and
+  Jennilyn (IAP). Emilio's first page: 200 in 18 s (cold, fresh Plex login).
+
+### Changed
+- `deploy/picking_app/deploy.sh`: prints the IAM steps claude-operator may not do (IAP agent invoker, IAP
+  access) for an admin, and creates the keep-warm scheduler only with `WARM_AUDIENCE` (a custom IAP OAuth
+  client). The scheduler got HTTP 401 from IAP and was deleted the same evening.
+
+### Not deployed
+- #159's sender change to bizops@voxnutrition.com is held for the 32 ETL jobs (`report_from_email` stays
+  marketing@ in terraform.tfvars): the SendGrid test was delivered to Google but not found in the mailbox. The
+  same evening the Monday sync's "Vox Scorecards Live" mail from bizops@ did land in the inbox, so the test was
+  likely filtered on its own. voxnutrition.com is not authenticated in SendGrid (no DKIM; SPF lacks SendGrid;
+  DMARC p=none), so its mail fails DMARC (OPEN_ITEMS D43).
+
 ## 2026-11-20 - Picking app: faster, saved Plex login, Cloud Run behind IAP (pay per use)
 
 Terraform (`./scripts/deploy.sh`): enables `iap.googleapis.com`, creates `PlexOps.picking_move_log`. The service

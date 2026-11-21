@@ -8,9 +8,16 @@
 #
 # Run from the primary folder on a clean main (like scripts/deploy.sh). Writes, so Claude runs it
 # with CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=claude-operator@... set.
-# Pay per use (request-based billing), scaled to zero, at most one instance; the scheduler
-# picking-app-warm calls /warm every 10 min on weekdays 6:00-17:50 Mountain so the Plex session
-# and the default job-set list stay warm. Terraform owns the IAP API and PlexOps.picking_move_log.
+# Pay per use (request-based billing), scaled to zero, at most one instance. Terraform owns the IAP
+# API and PlexOps.picking_move_log.
+#
+# Found on the first deploy (2026-11-20):
+# - claude-operator may deploy the service but NOT set its IAM: run.services.setIamPolicy and the
+#   IAP policy are refused. Those steps are printed for an admin (Emilio) to paste instead.
+# - The keep-warm scheduler (picking-app-warm, /warm every 10 min in working hours) got HTTP 401 from
+#   IAP: Cloud Run's built-in IAP uses a Google-managed OAuth client, which lets people sign in with
+#   a browser but not a service account's OIDC token. It needs a custom OAuth client (console) whose
+#   ID is the token audience; until then WARM_AUDIENCE is empty and no scheduler is created.
 set -euo pipefail
 PROJECT=voxdatalake
 REGION=us-central1
@@ -50,23 +57,36 @@ gcloud run deploy "$SERVICE" --project="$PROJECT" --region="$REGION" --image="$I
   --set-secrets="PLEX_PORTAL_USERNAME=plex-portal-username:latest,PLEX_PORTAL_PASSWORD=plex-portal-password:latest,PLEX_API_KEY=plex-api-consumer-key:latest,PLEX_API_SECRET=plex-api-consumer-secret:latest" \
   --labels="app=picking,plex-env=${PLEX_ENV_FOR_APP},build=${SHA}"
 
-# IAP calls the service as its own service agent.
-gcloud run services add-iam-policy-binding "$SERVICE" --project="$PROJECT" --region="$REGION" \
-  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com" --role=roles/run.invoker >/dev/null
+URL=https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app
 
-# Who may open it, and the keep-warm caller.
-for m in "${access[@]}" "serviceAccount:${SA}"; do
-  gcloud iap web add-iam-policy-binding --project="$PROJECT" --resource-type=cloud-run --service="$SERVICE" \
-    --region="$REGION" --member="$m" --role=roles/iap.httpsResourceAccessor >/dev/null
+# IAP calls the service as its own service agent; people (and the ping) need IAP access.
+# claude-operator cannot set these: try, and print the command for an admin when refused.
+admin=()
+try() { "$@" >/dev/null 2>&1 || admin+=("$*"); }
+try gcloud run services add-iam-policy-binding "$SERVICE" --project="$PROJECT" --region="$REGION" \
+  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com" --role=roles/run.invoker
+for m in ${access[@]+"${access[@]}"}; do
+  try gcloud iap web add-iam-policy-binding --project="$PROJECT" --resource-type=cloud-run --service="$SERVICE" \
+    --region="$REGION" --member="$m" --role=roles/iap.httpsResourceAccessor
 done
 
-URL=$(gcloud run services describe "$SERVICE" --project="$PROJECT" --region="$REGION" --format='value(status.url)')
-WARM=(--project="$PROJECT" --location="$REGION" --schedule="*/10 6-17 * * 1-5" --time-zone="America/Denver"
-      --uri="${URL}/warm" --http-method=GET --oidc-service-account-email="$SA" --oidc-token-audience="$URL"
-      --attempt-deadline=120s --description="Keeps picking-app's Plex session and job-set list warm in working hours (docs/PICKING_STAGING_APP.md)")
-if gcloud scheduler jobs describe picking-app-warm --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http picking-app-warm "${WARM[@]}" >/dev/null
-else
-  gcloud scheduler jobs create http picking-app-warm "${WARM[@]}" >/dev/null
+# Keep-warm ping: only with a custom IAP OAuth client (WARM_AUDIENCE = its client ID); see above.
+if [ -n "${WARM_AUDIENCE:-}" ]; then
+  try gcloud iap web add-iam-policy-binding --project="$PROJECT" --resource-type=cloud-run --service="$SERVICE" \
+    --region="$REGION" --member="serviceAccount:${SA}" --role=roles/iap.httpsResourceAccessor
+  WARM=(--project="$PROJECT" --location="$REGION" --schedule="*/10 6-17 * * 1-5" --time-zone="America/Denver"
+        --uri="${URL}/warm" --http-method=GET --oidc-service-account-email="$SA" --oidc-token-audience="$WARM_AUDIENCE"
+        --attempt-deadline=120s --description="Keeps picking-app's Plex session and job-set list warm in working hours (docs/PICKING_STAGING_APP.md)")
+  if gcloud scheduler jobs describe picking-app-warm --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http picking-app-warm "${WARM[@]}" >/dev/null
+  else
+    gcloud scheduler jobs create http picking-app-warm "${WARM[@]}" >/dev/null
+  fi
 fi
-echo "picking-app ${SHA} deployed: ${URL} (Plex ${PLEX_ENV_FOR_APP}); keep-warm picking-app-warm"
+
+echo "picking-app ${SHA} deployed: ${URL} (Plex ${PLEX_ENV_FOR_APP})"
+if [ ${#admin[@]} -gt 0 ]; then
+  echo
+  echo "These need an admin (paste in your own terminal):"
+  printf '%s\n' "${admin[@]}"
+fi

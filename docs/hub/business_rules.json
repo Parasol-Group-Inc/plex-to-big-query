@@ -1200,10 +1200,14 @@
     {
      "file": "reports/sql/label_design_view.sql",
      "lines": "551-552,680-681"
+    },
+    {
+     "file": "plex_api_releases.py",
+     "lines": "133,149,152"
     }
    ],
    "verified": true,
-   "verify_note": "Both the ODBC branch and the screens branch repeat the two filters (UPPER(TRIM(...))).",
+   "verify_note": "Both the ODBC branch and the screens branch repeat the two filters (UPPER(TRIM(...))). Since 2026-11-20 plex_api_releases.py applies the same two filters to Plex's REST API (the third source: screen-read trigger and the watchdog's label_design_coverage).",
    "doc_sources": [
     "docs/reports/label_design_report.md"
    ],

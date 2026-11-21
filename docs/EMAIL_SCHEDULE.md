@@ -61,15 +61,20 @@ page.
   `emilio.dominguez@parasolgroupinc.com`, `jennilyn.tockstein@parasolgroupinc.com`,
   `marketing@parasolgroupinc.com` (`report_to_emails` in `terraform.tfvars`).
   No separate test-only recipient list exists — see "Worth deciding" below.
+- **Sender: `bizops@voxnutrition.com` since 2026-11-20** (was `marketing@parasolgroupinc.com`;
+  Emilio). It is `report_from_email` in `terraform.tfvars` for every ETL job, and
+  `SENDGRID_FROM_EMAIL` on the Monday Scorecards service `monday-to-bigquery-vox` (not in Terraform).
+  Both addresses are verified senders in SendGrid; voxnutrition.com has no SendGrid domain
+  authentication (DMARC `p=none`, so mail is delivered, and Gmail may show "via sendgrid.net").
 - **30 Cloud Scheduler jobs** back these jobs: the `plex-etl-dispatcher` (every
   5 minutes, starts all prod pipelines except Label Design), one nightly
   trigger per test pipeline plus a retry on 12 of them
   (`plex-<pipeline>-sync-test[-retry]`), and Label Design's `plex-label-design-sync`,
   `plex-label-design-sync-test` and `plex-label-design-push-sync` (live; the
   test push and its scheduler were removed 2026-10-27).
-  Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (Two *other* schedulers —
-  `monday-daily-sync` and `monday-daily-sync-VoxScorecardsLive` — also live in
-  this GCP project but belong to an unrelated Monday.com integration, not this
+  Prod pipelines have no `plex-<pipeline>-sync` scheduler any more. (One *other* scheduler —
+  `monday-daily-sync-VoxScorecardsLive` (the older `monday-daily-sync` was deleted 2026-11-19) — also lives in
+  this GCP project but belongs to an unrelated Monday.com integration, not this
   pipeline.)
 
 ## Full schedule

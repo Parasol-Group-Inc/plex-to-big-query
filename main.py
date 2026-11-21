@@ -2708,6 +2708,13 @@ def run_and_report():
     job_identity = run_identity()
     batch = run_batch()
 
+    # Plex's REST API as a third source for Label Design (2026-11-20): before ODBC is touched, so it
+    # works while ODBC is down. Starts a releases screen read when Plex has a new Label Design line
+    # that neither ODBC nor the last screen read has. Never raises. plex_api_releases.py.
+    if os.environ.get("API_SCREENS_TRIGGER") == "1":
+        import plex_api_releases
+        plex_api_releases.maybe_trigger_screens(GCP_REGION, log)
+
     try:
         result = main()
         if result.get("skipped"):

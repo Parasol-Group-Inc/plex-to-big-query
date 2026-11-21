@@ -348,6 +348,8 @@ def main():
         import rules_tab  # 2026-11-13: business rules with live numbers (docs/hub/business_rules.json)
         import pending_tab  # 2026-11-19: pending items with buttons and notes (artifact db)
         import gcp_audit_tab  # 2026-11-19: infrastructure audits (docs/hub/folder_move_audit.json, gitignored)
+        import vox_scorecards_tab  # 2026-11-19: Jennilyn's VoxScorecardsLive (custom_views/VoxScorecardsLive)
+        import api_source_tab  # 2026-11-20: Plex's REST API as Label Design's third source (docs/PLEX_API_THIRD_SOURCE.md)
         import picking_tab  # 2026-11-20: picking & staging app (docs/PICKING_STAGING_APP.md)
         import qbo_tab
         import tab_store  # 2026-11-12: machine-local tabs fall back to their last stored render
@@ -362,6 +364,8 @@ def main():
         live = tab_store.add_with_store(live, "custnotes", customer_notes_tab.add, customer_notes_tab.inject)
         live = tab_store.add_with_store(live, "gcpaudit", gcp_audit_tab.add, gcp_audit_tab.inject)
         live = rules_tab.add(onboarding_tab.add(dr_tab.add(budget_tab.add(label_api_tab.add(reliability_tab.add(live))))))
+        live = vox_scorecards_tab.add(live)
+        live = api_source_tab.add(live)
         live = pending_tab.add(live)  # items live in the artifact's db, not the page (2026-11-19)
         live = picking_tab.add(live)
         OUT_LIVE.write_text(live, encoding="utf-8", newline="\n")

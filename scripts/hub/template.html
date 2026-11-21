@@ -513,8 +513,8 @@ const TL = byName(SC.tiles, "id");
 const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables", D.tables.length], ["pipelines", "Pipelines", D.pipelines.length], ["scorecard", "Scorecard", SC.tiles.length], ["board", "Scorecard view", Object.keys(SC.figures || {}).length], ["platform", "Schedules & probe", ""], ["label", "Label Design", ""], ["history", "History", ""]];
 // Tabs grouped by what you came to do. A tab not listed here (a new injected one) lands in "More".
 const TAB_GROUPS = [["data", "Data", ["reports", "tables", "pipelines"]],
-  ["scorecard", "Scorecard", ["scorecard", "board", "rules"]],
-  ["ops", "Operations", ["platform", "reliability", "screens", "label", "labelapi", "audit", "gcpaudit"]],
+  ["scorecard", "Scorecard", ["scorecard", "board", "rules", "voxsc"]],
+  ["ops", "Operations", ["platform", "reliability", "screens", "label", "labelapi", "apisource", "audit", "gcpaudit"]],
   ["tools", "Business tools", ["custnotes", "qbo", "picking"]],
   ["project", "Project", ["pending", "budget", "dr", "onboarding", "history"]]];
 const TAB_BY_KEY = Object.fromEntries(TABS.map(t => [t[0], t]));

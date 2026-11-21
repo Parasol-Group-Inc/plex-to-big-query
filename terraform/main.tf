@@ -4696,6 +4696,14 @@ resource "google_cloud_run_v2_job" "etl_label_design" {
           name  = "POST_RUN_JOB"
           value = google_cloud_run_v2_job.label_design_push.name
         }
+        # Plex's REST API as a third source (2026-11-20): before reading ODBC,
+        # ask the API for Label Design lines that neither ODBC nor the last
+        # screen read has, and start a releases-only screen read if there is
+        # one (weekdays 5:00 AM-5:50 PM MT). Prod only. plex_api_releases.py.
+        env {
+          name  = "API_SCREENS_TRIGGER"
+          value = "1"
+        }
         # Its own scheduler, not the dispatcher, starts this job, so it reads
         # the dispatcher's outage breaker itself (2026-10-27): while Plex is
         # down it ends as a silent `skipped` instead of a failed connect

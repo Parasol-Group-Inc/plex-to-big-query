@@ -65,7 +65,7 @@ used: 84F47G-0003, S040303 (Hold), S026696, S031084, EE8B18-0001/-0002 (LP-07941
 
 | Data | Source | Why |
 |---|---|---|
-| Job sets, member jobs, per-job BOM | Plex SQL screen (SQL Development Environment's CSV download) through the same web session | Not in the REST API (`/scheduling/v1/job-sets` is a 404); not in our BigQuery raw tables; ODBC needs a driver the app's image does not have. It is Plex's reporting copy (about 4 h behind), fine for job sets |
+| Job sets, member jobs, per-job BOM | Plex SQL screen (SQL Development Environment's CSV download) through the same web session | Not in the REST API (`/scheduling/v1/job-sets` is a 404); not in our BigQuery raw tables; ODBC needs a driver the app's image does not have. In production it is Plex's reporting copy (about 4 h behind), fine for job sets; in TEST it is live |
 | Location groups | Same, `Common_v_Location` + `Common_v_Location_Group`, cached 1 h | Tells Warehouse from Retains, Shipping, Quarantine, ... |
 | Containers, lots (best-by), one container | REST API, live | On 11-20 the API had container changes 4 h newer than ODBC, and 1,530 of 65,300 containers were in a different location in the copy |
 | The move | Move Container screen's request | The only way (above) |
@@ -166,6 +166,37 @@ What changed (`app.py`, `plex_web.py`):
 - **Keep-warm:** `/warm` checks the Plex session and refreshes the default job-set list (3 days).
 
 Still slow, and from Plex: some parts' container lists take 2 to 3 s in Plex's API.
+
+## Speed (third pass, 2026-11-20 evening): live only, so show the wait
+
+Decision (Emilio): **old data is not acceptable**, so no faster but older source is used. The best
+available is to open the page at once and show what is loading.
+
+- **The pick list opens at once** (0.1 to 0.2 s) with each ingredient's header and need, and a loader
+  ("Reading live containers from Plex..."). Each ingredient fills in on its own as Plex answers, from
+  `/set/<no>/line/<part_id>` (an HTML fragment). The header counts "N of M ingredients" and ends with the
+  total time. A failed ingredient shows "Try again" for that ingredient only. `?all=1` renders the
+  whole page on the server in one go (the old way; also the link shown when JavaScript is off).
+- **One pooled HTTPS session** for the REST API (`requests.Session`, pool 32, `PICKING_API_POOL`) instead
+  of a new connection and TLS handshake per call: about 20% faster (set 600: 9-12 s became 7-10 s).
+- gunicorn runs 12 threads (was 8), so a 26-ingredient page loads in parallel with room for a move.
+
+Measured in Plex TEST, set 600 (26 ingredients, 3,599 containers), headless browser against a local
+server: page open 0.22 s, first ingredient 1.5 to 2.5 s, all 26 in 10 to 11 s. The total is Plex's
+time: its API takes about 2.4 s per ingredient on its side. A local browser opens only 6
+connections to one server; Cloud Run serves HTTP/2, so there all ingredients are asked at once.
+
+What was measured and set aside (all in TEST, 2026-11-20):
+
+| Angle | Result | Why not |
+|---|---|---|
+| 32 parallel calls instead of 16 | no faster | Plex caps the calls it serves at once |
+| Ask the API for less | not possible | no compression; 16 filter, paging and field parameters (active, status, limit, fields, updatedAfter, ...) are all ignored; every container it returns has quantity > 0 |
+| One SQL screen query for all ingredients | 0.5 to 0.9 s, identical containers in TEST | in **production** the SQL screen reads the same copy as ODBC (it froze with ODBC on 11-04; refreshed about every 4 h). In TEST it is live (a move showed 0.2 s later). Old data is not acceptable |
+| Copy for candidates + live check of the suggestions | about 3 to 4 s (estimate) | still shows a list built from old data, and misses containers received since the copy |
+
+Can the SQL screen write? **No** (TEST, zero-row statements): UPDATE / DELETE / INSERT / MERGE on a view
+or base table and EXEC are refused (HTTP 400); only #temp tables and table variables can be written.
 
 ## Cost (Cloud Run, pay per use)
 

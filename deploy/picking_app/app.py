@@ -1,6 +1,7 @@
 """Vox picking & staging app (2026-11-20). docs/PICKING_STAGING_APP.md.
 
-Pages: / (job sets due in N days), /set/<no> (pick list with live containers), POST /move
+Pages: / (job sets due in N days), /set/<no> (pick list: opens at once, each ingredient's live
+containers load in behind a loader from /set/<no>/line/<part_id>), POST /move
 (moves the ticked containers to the staging location), /log (moves done), /health, /warm.
 
 Sources: job sets and per-job BOM from Plex's SQL screen (plex_web.PlexWeb.sql, Plex's
@@ -9,6 +10,9 @@ live from the REST API (plex_api.PlexApi); moves through the Move Container scre
 (plex_web.PlexWeb.move).
 
 Speed (2026-11-20, second pass; was 24-36 s to open a job set):
+- the pick list opens at once and fills in ingredient by ingredient (third pass, 2026-11-20: live
+  data only, so the wait is shown instead of served stale);
+- one pooled HTTPS session for the API (no new TLS handshake per call), about 20% faster;
 - every ingredient's containers and lots are fetched in parallel (PICKING_WORKERS, default 16);
 - caches: job sets 10 min, location groups and lots 1 h, containers 60 s FOR DISPLAY ONLY
   (a move always reads the part's containers fresh first);
@@ -174,10 +178,8 @@ def index():
                            read_at=dt.datetime.fromtimestamp(at).strftime("%H:%M"))
 
 
-@app.get("/set/<set_no>")
-def job_set(set_no):
-    t0 = time.time()
-    days = int(request.args.get("days", 3))
+def _find_set(set_no: str, days: int):
+    """(set, read_at) from any fresh cached list, else the window of `days`, else a year back / 60 days ahead."""
     s, at = _cached_set(set_no)                     # any fresh cached list that holds it (the /warm one, ...)
     if not s:
         sets, at = job_sets(days)
@@ -185,19 +187,56 @@ def job_set(set_no):
     if not s:
         sets, at = job_sets(60, overdue=365)
         s = sets.get(set_no)
+    return s, at
+
+
+def _line(s: dict, ln: dict, target: str, data, groups: dict) -> dict:
+    conts, lots = data
+    return {**ln, "target": target, **picking.suggest(conts, lots, ln["required"], target, loc_group=groups)}
+
+
+def _page_args(s, days) -> dict:
+    return {"s": s, "days": days, "staging": picking.STAGING_LOCATIONS, "pick_from": sorted(picking.PICK_FROM_GROUPS)}
+
+
+@app.get("/set/<set_no>")
+def job_set(set_no):
+    """The pick list. Opens at once with a loader per ingredient; each ingredient's live containers
+    arrive from /set/<no>/line/<part_id> as soon as Plex answers (2026-11-20: Plex's API takes
+    about 2 s per ingredient on its side, and data older than live is not acceptable).
+    ?all=1 renders everything on the server in one go (the old way, and the no-JavaScript fallback)."""
+    t0 = time.time()
+    days = int(request.args.get("days", 3))
+    refresh = "1" if request.args.get("refresh") == "1" else None
+    s, at = _find_set(set_no, days)
     if not s:
         flash(f"Job set {set_no} has no open jobs due between a year ago and 60 days from now.", "error")
         return redirect(url_for("index"))
+    targets = {ln["part_id"]: request.args.get("target_" + ln["part_id"], ln["target"]) for ln in s["lines"]}
+    read_at = dt.datetime.fromtimestamp(at).strftime("%H:%M")
+    if request.args.get("all") != "1":
+        location_groups()                           # cached 1 h; warm it once instead of in every fragment
+        lines = [{**ln, "target": targets[ln["part_id"]]} for ln in s["lines"]]
+        return render_template("set.html", lines=lines, loading=True, refresh=refresh, read_at=read_at,
+                               load_seconds=None, **_page_args(s, days))
     groups = location_groups()
-    data = fetch_parts([ln["part_id"] for ln in s["lines"]], refresh=request.args.get("refresh") == "1")
-    lines = []
-    for ln in s["lines"]:
-        target = request.args.get("target_" + ln["part_id"], ln["target"])
-        conts, lots = data[ln["part_id"]]
-        lines.append({**ln, "target": target, **picking.suggest(conts, lots, ln["required"], target, loc_group=groups)})
-    return render_template("set.html", s=s, lines=lines, days=days, staging=picking.STAGING_LOCATIONS,
-                           pick_from=sorted(picking.PICK_FROM_GROUPS), load_seconds=round(time.time() - t0, 1),
-                           read_at=dt.datetime.fromtimestamp(at).strftime("%H:%M"))
+    data = fetch_parts([ln["part_id"] for ln in s["lines"]], refresh=bool(refresh))
+    lines = [_line(s, ln, targets[ln["part_id"]], data[ln["part_id"]], groups) for ln in s["lines"]]
+    return render_template("set.html", lines=lines, loading=False, refresh=refresh, read_at=read_at,
+                           load_seconds=round(time.time() - t0, 1), **_page_args(s, days))
+
+
+@app.get("/set/<set_no>/line/<part_id>")
+def job_set_line(set_no, part_id):
+    """One ingredient's card (HTML fragment) with its live containers and suggestions."""
+    days = int(request.args.get("days", 3))
+    s, _ = _find_set(set_no, days)
+    ln = next((x for x in (s or {}).get("lines", []) if x["part_id"] == part_id), None)
+    if not ln:
+        return f"<div class='card muted'>This ingredient is no longer in job set {set_no}.</div>", 404
+    data = fetch_parts([part_id], refresh=request.args.get("refresh") == "1")[part_id]
+    line = _line(s, ln, request.args.get("target") or ln["target"], data, location_groups())
+    return render_template("_line.html", ln=line, **_page_args(s, days))
 
 
 def _live_lookup(serials: list[str], part_list: list[dict]) -> dict:

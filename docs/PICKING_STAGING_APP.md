@@ -176,7 +176,7 @@ check against the bill after the first month):
 |---|---|---|
 | A. One instance always on | $55 to 60 | always instant |
 | B. Warm in working hours only (scheduled min-instances) | about $20 | instant in hours, about 15 s first click outside |
-| **C. Pay per use + keep-warm ping in working hours (chosen)** | **about $1** | instant in hours; outside hours a cold start, usually without a new Plex login |
+| **C. Pay per use + keep-warm ping in working hours (chosen; ping not running yet, below)** | **about $1** | instant in hours; outside hours a cold start, usually without a new Plex login |
 | D. Pay per use, no ping | under $1 | a wait after every quiet spell |
 
 C in numbers: request-based billing charges only while a request runs. The ping (every 10 min,
@@ -190,24 +190,36 @@ plus about 10 s only if the saved Plex session has also expired. Switching to B 
 
 ## Deploying
 
-Service `picking-app` in us-central1, deployed by `deploy/picking_app/deploy.sh` from the primary
-folder on a clean `main`:
+**Deployed 2026-11-20** (build a339ae8): https://picking-app-651304971296.us-central1.run.app, Plex TEST,
+open to Emilio (`emilio.dominguez@`) and Jennilyn (`jennilyn.tockstein@`; `jennilyntockstein@` is a
+mail alias, and IAP answers "User ... does not exist" for it). First page, cold, fresh Plex login: 18 s.
 
-1. `scripts/deploy.sh` (Terraform) first: it enables the IAP API (`iap.googleapis.com`) and creates
-   `PlexOps.picking_move_log`. Cloud Run's built-in IAP is not in the pinned google provider
-   (~> 5.40), so the service itself is deployed with gcloud, like the Cloud Functions.
+Steps, from the primary folder on a clean `main`:
+
+1. `./scripts/deploy.sh` (Terraform): the IAP API (`iap.googleapis.com`) and `PlexOps.picking_move_log`.
+   Cloud Run's built-in IAP is not in the pinned google provider (~> 5.40), so the service itself is
+   deployed with gcloud, like the Cloud Functions.
 2. `./deploy/picking_app/deploy.sh --access user:<email> ...` builds the image
-   (`deploy/picking_app/cloudbuild.yaml`, `plex-pipeline/picking-app:<sha>`) and deploys it:
+   (`deploy/picking_app/cloudbuild.yaml`, `plex-pipeline/picking-app:<sha>`, about 3.5 min) and deploys:
    - runs as `plex-etl-sa`, with the Plex login and API key from Secret Manager
      (`plex-portal-username` / `-password`, `plex-api-consumer-key` / `-secret`);
    - `--iap --no-allow-unauthenticated`, 1 vCPU, 2 GiB (Chromium for the login), 8 requests at a
      time, at most 1 instance, scaled to zero, request-based billing;
    - `PLEX_ENV=test`, moves logged to BigQuery (`PICKING_BQ_LOG=1`), the saved session in GCS.
+3. **An admin pastes the access commands the script prints.** `claude-operator` may deploy the
+   service but not set its IAM (`run.services.setIamPolicy` and the IAP policy are refused): the IAP
+   service agent's `run.invoker`, and `roles/iap.httpsResourceAccessor` for each person.
+4. Open the URL and sign in with a company Google account. `/log` reads the BigQuery log.
 
-   It also grants the IAP service agent `run.invoker`, gives each `--access` member (and the ETL
-   service account, for the ping) `roles/iap.httpsResourceAccessor`, and creates or updates the
-   scheduler `picking-app-warm`.
-3. Open the URL it prints and sign in with a company Google account. `/log` reads the BigQuery log.
+**The keep-warm ping is not running.** The scheduler `picking-app-warm` was created and got HTTP 401
+from IAP every time (audience the service URL, either form): Cloud Run's built-in IAP uses a
+Google-managed OAuth client, which signs people in through a browser but does not accept a service
+account's OIDC token. It was deleted the same evening (a failing scheduler would alert the watchdog).
+To turn it on: create a custom OAuth client for IAP in the console (APIs & Services, Credentials),
+set it on the service's IAP settings, then `WARM_AUDIENCE=<client id> ./deploy/picking_app/deploy.sh`
+(it grants the ETL service account IAP access and creates the scheduler). Until then the app is
+option D with a saved login: the first click after a quiet spell waits for a container start, plus
+about 10 s if the saved Plex session has expired.
 
 Not done yet, before production:
 - The team confirms the staging map, the pick-from rule (are "PW - *" / "PS - *" Manufacturing bins

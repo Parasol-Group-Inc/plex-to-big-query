@@ -494,10 +494,13 @@ Development screen through the same session. Things that bite:
   The app moves an LP whole when all its containers are ticked.
 - **Every move is recorded in Plex as gcp.odbc.vox**; `PlexOps.picking_move_log` is the only record of who asked.
 - `PLEX_ENV=test` is the default; production moves need `PICKING_ALLOW_PROD_MOVES=1`.
-- **Cloud Run `picking-app` is deployed by `deploy/picking_app/deploy.sh`, not Terraform** (IAP via `--iap` is not
-  in the pinned provider). Pay per use, max 1 instance, scheduler `picking-app-warm` pings `/warm` in working
-  hours (about $1 a month, not the $55-60 of an always-on instance). Terraform owns only the IAP API and the log
-  table. The saved Plex login (`gs://voxdatalake-plex-screenshots/picking-app/`) is a live gcp.odbc.vox session.
+- **Cloud Run `picking-app` (deployed 2026-11-20, Plex TEST) comes from `deploy/picking_app/deploy.sh`, not
+  Terraform** (IAP via `--iap` is not in the pinned provider). Pay per use, max 1 instance. **claude-operator
+  cannot set its IAM**: the script prints the access commands for Emilio. **The keep-warm ping gets 401 from
+  IAP** (the Google-managed OAuth client takes browsers, not service-account tokens) and is not running; it
+  needs a custom OAuth client (`WARM_AUDIENCE`). Terraform owns only the IAP API and the log table. The saved
+  Plex login (`gs://voxdatalake-plex-screenshots/picking-app/`) is a live gcp.odbc.vox session.
+- Jennilyn's Google account is `jennilyn.tockstein@`; `jennilyntockstein@` is only a mail alias (IAM rejects it).
 - Container lists are cached 60 s for display only; a move always reads them fresh.
 
 ## Customer Notes in Plex (2026-11-09)

@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Picking & Staging{% endblock %}</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--muted:#5c6670;--line:#dde2e7;--accent:#1f6feb;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--test:#f5a623}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#1a1f25;--ink:#e6e9ec;--muted:#9aa4ae;--line:#2c333b;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--card);flex-wrap:wrap}
+header a{color:var(--ink);text-decoration:none;font-weight:600}header nav a{font-weight:400;margin-right:12px;color:var(--accent)}
+.env{padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;color:#000;background:var(--test)}.env.prod{background:var(--bad);color:#fff}
+main{max-width:1200px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.tbl{overflow-x:auto}
+.flash{padding:8px 12px;border-radius:6px;margin-bottom:6px;border:1px solid var(--line)}.flash.ok{border-color:var(--ok)}.flash.error{border-color:var(--bad)}
+.role{font-size:12px;padding:1px 6px;border-radius:10px;border:1px solid var(--line)}.role.pick{border-color:var(--accent);color:var(--accent)}.role.staged{border-color:var(--ok);color:var(--ok)}.role.blocked{border-color:var(--bad);color:var(--bad)}
+button,.btn{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:7px 12px;font-size:14px;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
+select,input{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.short{color:var(--bad);font-weight:600}.done{color:var(--ok);font-weight:600}
+</style></head><body>
+<header><a href="{{ url_for('index') }}">Picking & Staging</a><span class="env {{ env }}">PLEX {{ env|upper }}</span>
+<nav><a href="{{ url_for('index') }}">Job sets</a><a href="{{ url_for('move_log') }}">Move log</a></nav>
+<span class="muted" style="margin-left:auto;font-size:13px">{{ user }}{% if not moves_enabled %} · moves off{% endif %}</span></header>
+<main>{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% block body %}{% endblock %}</main></body></html>

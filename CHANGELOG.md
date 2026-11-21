@@ -14,6 +14,31 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-20 - Picking & staging app (draft): job sets, live containers, moves through Plex's screen
+
+Nothing deploys: a new app under `deploy/picking_app/`, run locally against Plex TEST. Docs:
+`docs/PICKING_STAGING_APP.md`; OPEN_ITEMS D42.
+
+### Added
+- `deploy/picking_app/` (Flask): job sets due in N days from Plex's SQL screen (blend job + one Pre-Weigh job per
+  ingredient; per-job BOM), pick lines per set, live containers from the REST API with suggestions (status OK,
+  Warehouse location group, not "R and D" or "DO NOT USE", first-expiring lot first), and "Move to staging".
+- `plex_web.PlexWeb`: one Playwright login, then the Move Container screen's own request
+  (`POST /inventory/MoveContainer/ContainerMove?sourceActionKey=11984`) and SQL reads with the same cookies; logs in
+  again on HTTP 419. The REST API has no move (scrap and retire only) and ODBC refuses writes (tested 11-20).
+- Moves read each container live first (only status OK; Plex itself moves Hold containers without asking), move an
+  LP whole when all its containers are ticked (a container moved alone leaves its pallet), read it again after, and
+  log who asked (`PICKING_LOG`, optional `PlexOps.picking_move_log`). `PLEX_ENV=test` by default; production moves
+  need `PICKING_ALLOW_PROD_MOVES=1`.
+- `deploy/picking_app/move_cli.py`: verified moves by serial or LP with an undo file.
+- `tests/test_picking_app.py` (10 tests); hub tab "Picking & staging" (`scripts/hub/picking_tab.py`, Business tools);
+  git hooks know the new project (`ptbq-picking` / `dev-picking`).
+
+### Tested in Plex TEST (all moved back)
+- Screen, direct request, app and CLI moves; bad serial and bad location answers; Hold container; LP-087265 and
+  LP-079411 as pallets. LP-087265's containers, moved back one by one before the pallet rule existed, are no longer
+  on the LP in TEST.
+
 ## 2026-11-18 - Every Plex credential is the company user gcp.odbc.vox (test ODBC, API, local scripts)
 
 Ships with Cloud Build (main.py, screen_recon.py) and `./scripts/deploy.sh` (Terraform).

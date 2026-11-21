@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Move log{% endblock %}{% block body %}
+<div class="card tbl"><table><thead><tr><th>When (UTC)</th><th>Env</th><th>By</th><th>Set / job</th><th>Serial</th><th>From</th><th>To</th><th>Result</th><th>Now at</th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.at[:19].replace('T',' ') }}</td><td>{{ r.env }}</td><td>{{ r.requested_by }}</td><td>{{ r.set_no }} / {{ r.job_no }}</td><td>{{ r.serial }}</td>
+<td>{{ r.from_location }}</td><td>{{ r.to_location }}</td><td><span class="role {{ 'staged' if r.ok else 'blocked' }}">{{ 'moved' if r.ok else 'not moved' }}</span> <span class="muted">{{ r.message }}</span></td><td>{{ r.verified_location }}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">No moves yet.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

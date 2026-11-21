@@ -515,7 +515,7 @@ const TABS = [["reports", "Reports", D.reports.length], ["tables", "Raw tables",
 const TAB_GROUPS = [["data", "Data", ["reports", "tables", "pipelines"]],
   ["scorecard", "Scorecard", ["scorecard", "board", "rules"]],
   ["ops", "Operations", ["platform", "reliability", "screens", "label", "labelapi", "audit", "gcpaudit"]],
-  ["tools", "Business tools", ["custnotes", "qbo"]],
+  ["tools", "Business tools", ["custnotes", "qbo", "picking"]],
   ["project", "Project", ["pending", "budget", "dr", "onboarding", "history"]]];
 const TAB_BY_KEY = Object.fromEntries(TABS.map(t => [t[0], t]));
 const GROUPS = TAB_GROUPS.map(([g, l, ks]) => [g, l, ks.filter(k => TAB_BY_KEY[k])]).filter(g => g[2].length);

@@ -33,6 +33,8 @@ LABEL_DESIGN = re.compile(
 SCORECARD = re.compile(
     r"^(score-card-reference/|deploy/manual_data_app/|scripts/board/|docs/SCORECARD_DATA_LOAD\.md$"
     r"|scripts/scorecard_sandbox/|docs/SCORECARD_SANDBOX_FINDINGS\.md$)")
+PICKING = re.compile(  # 2026-11-20: picking & staging app (docs/PICKING_STAGING_APP.md)
+    r"^(deploy/picking_app/|tests/test_picking_app\.py$|docs/PICKING_STAGING_APP\.md$|scripts/hub/picking_tab\.py$)")
 PART_LOT = re.compile(
     r"^(reports/(test/)?part_lot\.yaml$|reports/sql/part_lot_[a-z_]+_view\.sql$"
     r"|docs/reports/part_lot_[a-z_]+\.md$)")
@@ -45,10 +47,12 @@ FOLDER_BRANCH = {
     "ptbq-sandbox": "dev-sandbox",
     "ptbq-label-design": "dev-label-design",
     "ptbq-part-lot": "dev-part-lot",
+    "ptbq-picking": "dev-picking",
     "ptbq-dev": "dev",
 }
 PROJECT_OF_BRANCH = {"dev-label-design": "label-design", "dev-scorecard": "scorecard",
-                     "dev-sandbox": "scorecard", "dev-part-lot": "part-lot"}
+                     "dev-sandbox": "scorecard", "dev-part-lot": "part-lot",
+                     "dev-picking": "picking"}
 
 
 def project(path):
@@ -58,6 +62,8 @@ def project(path):
         return "scorecard"
     if PART_LOT.match(path):
         return "part-lot"
+    if PICKING.match(path):
+        return "picking"
     return "shared"
 
 

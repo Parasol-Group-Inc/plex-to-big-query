@@ -54,7 +54,7 @@ Every tab is now built by this one command; nothing is pasted in by hand.
 
 | Tab | Built from | Inputs |
 |---|---|---|
-| Static tabs: Reliability, Label Design API, Budget, Disaster recovery, New developer | `scripts/hub/*_tab.py` | repo only |
+| Static tabs: Reliability, Label Design API, Budget, Disaster recovery, New developer, Picking & staging | `scripts/hub/*_tab.py` | repo only |
 | Report and table cards, Schedules, Scorecard, Label Design | repo files plus the BigQuery snapshot | `snapshot_data.py` |
 | QuickBooks, Audit, Screen extraction, Customer notes | `qbo_tab`, `audit_tab`, `screens_tab`, `customer_notes_tab` | one machine only, see below |
 | GCP audit (2026-11-19) | `gcp_audit_tab` | `docs/hub/folder_move_audit.json` (gitignored), else the stored render |

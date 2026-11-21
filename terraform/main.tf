@@ -91,6 +91,8 @@ resource "google_project_service" "required" {
     # The ETL dispatcher (deploy/etl_dispatcher/) and the Plex API extractor
     # are Gen 2 Cloud Functions.
     "cloudfunctions.googleapis.com",
+    # The picking app's company sign-in (Cloud Run with IAP, deploy/picking_app/deploy.sh).
+    "iap.googleapis.com",
   ])
 
   project            = var.gcp_project
@@ -6801,4 +6803,45 @@ resource "google_bigquery_table" "data_freshness" {
       FROM joined
     SQL
   }
+}
+
+
+# ── Picking & staging app (2026-11-20, docs/PICKING_STAGING_APP.md) ─────────────
+#
+# Cloud Run service `picking-app`, deployed by deploy/picking_app/deploy.sh (gcloud), not
+# here: it sits behind IAP (company Google sign-in), and Cloud Run's built-in IAP
+# (`gcloud run deploy --iap`) is not in the pinned google provider (~> 5.40). Same reason
+# the Cloud Functions above are deployed with gcloud. The script also grants who may open it
+# (roles/iap.httpsResourceAccessor) and creates the working-hours keep-warm scheduler
+# `picking-app-warm`. It runs as the ETL service account (Plex secrets, BigQuery, the
+# screenshots bucket, where the saved Plex session is kept under picking-app/).
+# What Terraform owns: the IAP API (above) and the move log below.
+
+# One row per move attempt from the app: who asked (IAP user), what, from, to, Plex's
+# answer and the location read back. Plex records every move as gcp.odbc.vox, so this
+# table is the only record of which person asked.
+resource "google_bigquery_table" "picking_move_log" {
+  dataset_id          = google_bigquery_dataset.ops.dataset_id
+  table_id            = "picking_move_log"
+  deletion_protection = true
+  description         = "Picking & staging app: every container move attempt (who asked, serial, from, to, Plex's answer, location read back). docs/PICKING_STAGING_APP.md"
+  time_partitioning {
+    type  = "DAY"
+    field = "at"
+  }
+  schema = jsonencode([
+    { name = "at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "env", type = "STRING", mode = "NULLABLE", description = "test | prod (Plex environment)" },
+    { name = "requested_by", type = "STRING", mode = "NULLABLE", description = "IAP user email (the person who clicked)" },
+    { name = "set_no", type = "STRING", mode = "NULLABLE" },
+    { name = "job_no", type = "STRING", mode = "NULLABLE" },
+    { name = "serial", type = "STRING", mode = "NULLABLE" },
+    { name = "moved_as", type = "STRING", mode = "NULLABLE", description = "the serial, or the LP when the whole pallet moved in one call; NULL when not sent to Plex" },
+    { name = "from_location", type = "STRING", mode = "NULLABLE" },
+    { name = "to_location", type = "STRING", mode = "NULLABLE" },
+    { name = "ok", type = "BOOLEAN", mode = "NULLABLE", description = "Plex said success AND the API read it back at to_location" },
+    { name = "message", type = "STRING", mode = "NULLABLE" },
+    { name = "verified_location", type = "STRING", mode = "NULLABLE" },
+    { name = "left_pallet", type = "STRING", mode = "NULLABLE", description = "LP the container left (moved alone off a partly ticked pallet)" },
+  ])
 }

@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Job set {{ s.set_no }}{% endblock %}{% block body %}
 <div class="card"><h2 style="margin:0 0 4px">Job set {{ s.set_no }}: {{ s.main.part_no }}</h2>
-<div class="muted">Main job {{ s.main.job_no }} ({{ s.main.group or 'no workcenter' }}, due {{ s.main.due }}) · {{ s.open_jobs }} open jobs · job set read {{ read_at }}; containers below are live from Plex.</div></div>
+<div class="muted">Main job {{ s.main.job_no }} ({{ s.main.group or 'no workcenter' }}, due {{ s.main.due }}) · {{ s.open_jobs }} open jobs · job set read {{ read_at }}; containers below are live from Plex (up to a minute old; every move re-reads them) · loaded in {{ load_seconds }} s · <a href="?days={{ days }}&refresh=1">reload containers</a></div></div>
 {% for ln in lines %}<div class="card">
 <div class="bar" style="justify-content:space-between"><div><b>{{ ln.part_no }}</b> <span class="muted">job {{ ln.job_no }} · {{ ln.group or 'no workcenter' }} {{ ln.workcenter }} · due {{ ln.due }}</span></div>
 <div>Need <b>{{ '%.3f'|format(ln.required) }}</b> · staged {{ '%.3f'|format(ln.staged_qty) }} · suggested {{ '%.3f'|format(ln.picked_qty) }}

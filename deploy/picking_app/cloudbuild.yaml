@@ -1,0 +1,20 @@
+# Builds the picking app image (docs/PICKING_STAGING_APP.md "Deploying"). Run by deploy.sh:
+#   gcloud builds submit --config deploy/picking_app/cloudbuild.yaml --substitutions=SHORT_SHA=<sha> .
+# Not part of deploy/cloudbuild.yaml (the ETL build): the app is a service deployed on its own.
+substitutions:
+  _GCP_REGION: "us-central1"
+  _AR_REPO: "plex-pipeline"
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "-f"
+      - deploy/picking_app/Dockerfile
+      - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/picking-app:${SHORT_SHA}"
+      - "--tag=${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/picking-app:latest"
+      - "."
+images:
+  - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/picking-app:${SHORT_SHA}"
+  - "${_GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/picking-app:latest"
+timeout: 1200s

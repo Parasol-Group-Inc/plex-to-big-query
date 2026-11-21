@@ -114,3 +114,63 @@ def test_whole_pallet_moves_as_lp_partial_pallet_moves_alone():
     assert picking.breaks_pallet("C", ["A", "B", "C", "E"], cs) == "LP-2"
     assert picking.breaks_pallet("A", ["A", "B"], cs) is None
     assert picking.breaks_pallet("E", ["E"], cs) is None
+
+
+def _app(monkeypatch, env="test"):
+    import importlib
+    monkeypatch.setenv("PLEX_ENV", env)
+    import app as picking_app
+    return importlib.reload(picking_app)
+
+
+def test_cache_reuses_until_ttl(monkeypatch):
+    a = _app(monkeypatch)
+    calls = []
+    f = lambda: calls.append(1) or len(calls)
+    assert a.cached("k", 60, f)[0] == 1 and a.cached("k", 60, f)[0] == 1 and len(calls) == 1
+    assert a.cached("k", 60, f, refresh=True)[0] == 2
+    assert a.cached("k2", 0, f)[0] == 3 and a.cached("k2", 0, f)[0] == 4
+
+
+def test_move_reads_part_once_before_and_after_and_moves_full_pallet_as_lp(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    state = {"A": "103", "B": "103", "C": "104", "H": "105"}
+    lp = {"A": "LP-1", "B": "LP-1"}
+    status = {"H": "Hold"}
+    reads, moves = [], []
+
+    def containers_for_part(pid):
+        reads.append(pid)
+        return [{"serialNo": s, "location": loc, "quantity": 5, "containerStatus": status.get(s, "OK"),
+                 "masterUnitNo": lp.get(s)} for s, loc in state.items()]
+
+    def move(item, target):
+        moves.append(item)
+        for s in ([k for k, v in lp.items() if v == item] or [item]):
+            state[s] = target
+        return True, f"{item} moved"
+
+    monkeypatch.setattr(a.api, "containers_for_part", containers_for_part)
+    monkeypatch.setattr(a.api, "container", lambda s: None)
+    monkeypatch.setattr(a.web, "move", move)
+    r = a.app.test_client().post("/move", data={"set_no": "", "job_no": "1", "part_id": "P", "target": "Pre-Weigh Staging",
+                                                "serial": ["A", "B", "C", "H"]})
+    assert r.status_code == 302
+    assert moves == ["LP-1", "C"]                      # pallet as one call, Hold never sent
+    assert reads == ["P", "P"]                         # one live read before, one after
+    rows = [__import__("json").loads(l) for l in (tmp_path / "log.jsonl").read_text().splitlines()]
+    assert {r["serial"]: r["ok"] for r in rows} == {"A": True, "B": True, "C": True, "H": False}
+    assert {r["serial"]: r["moved_as"] for r in rows}["A"] == "LP-1"
+
+
+def test_saved_session_file_round_trip(tmp_path, monkeypatch):
+    import plex_web
+    monkeypatch.setenv("PICKING_SESSION_GCS", "")
+    w = plex_web.PlexWeb("test")
+    w.store = str(tmp_path / "s.json")
+    w._store_write({"host": w.host, "at": 1, "ua": "x", "cookies": []})
+    assert w._store_read()["host"] == "https://vox.test.on.plex.com"
+    w2 = plex_web.PlexWeb("prod")
+    w2.store = w.store
+    assert w2._try_saved() is False                   # a TEST session is never used for prod

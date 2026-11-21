@@ -16,6 +16,7 @@ to BigQuery is free and would make this exact.
 | BigQuery storage | 1.85 GiB (plex_mirror 1.14) | $0 (10 GiB free) |
 | BigQuery queries | not readable; the largest table is 0.24 GiB | likely $0 (Looker Studio is the unknown) |
 | Cloud Functions, GCS, Logging | dispatcher every 5 min; screenshots 3 MB, already deleted after 365 days | ~$0 |
+| Picking app (Cloud Run service, since 2026-11-20) | pay per use, working-hours keep-warm ping; ~20k vCPU-s, 1 scheduler job, ~1.5 GB image | ~$1 (estimate; `docs/PICKING_STAGING_APP.md`, "Cost") |
 | **Total** | | **~$18-24** |
 
 ### Cloud Run, by job (wall seconds a month)

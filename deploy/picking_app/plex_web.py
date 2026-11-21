@@ -19,6 +19,12 @@ session answers HTTP 419 (or a login page): the session logs in again once and r
 SQL reads go through the SQL Development Environment's CSV download with the same
 cookies: job sets and per-job BOM are not in the REST API, and this needs no ODBC driver.
 
+The session is SAVED after each login (cookies + user agent) and reused by the next process or
+Cloud Run instance until Plex expires it, so a cold start rarely pays the ~10 s login:
+PICKING_SESSION_GCS=gs://bucket/path.json (Cloud Run; a private bucket: the cookies ARE a Plex
+session), else etl-manual/plex_session_<env>.json (gitignored). A saved session is checked with
+`SELECT 1` before use; check() is what the keep-warm ping calls.
+
 Hosts: PLEX_ENV=test (default) -> vox.test.on.plex.com; prod -> vox.on.plex.com.
 Credentials: plex_web_export.creds() (env or .env: PLEX_GCP_ODBC_USER / _PASSWORD, else
 PLEX_PORTAL_USERNAME / _PASSWORD). Docs: docs/PICKING_STAGING_APP.md.
@@ -27,6 +33,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import sys
 import threading
@@ -69,6 +76,61 @@ class PlexWeb:
         self._s: requests.Session | None = None
         self._lock = threading.Lock()
         self.logged_in_at: float | None = None
+        self.session_source: str | None = None      # "saved" | "login"
+        self.store = os.environ.get("PICKING_SESSION_GCS") or str(
+            REPO / "etl-manual" / f"plex_session_{self.env}.json")
+
+    # ── saved session ──
+    def _store_read(self) -> dict | None:
+        try:
+            if self.store.startswith("gs://"):
+                from google.cloud import storage
+                bucket, path = self.store[5:].split("/", 1)
+                blob = storage.Client().bucket(bucket).blob(path)
+                return json.loads(blob.download_as_text()) if blob.exists() else None
+            p = Path(self.store)
+            return json.loads(p.read_text()) if p.exists() else None
+        except Exception:  # noqa: BLE001 - no saved session is fine: log in
+            return None
+
+    def _store_write(self, data: dict) -> None:
+        try:
+            body = json.dumps(data)
+            if self.store.startswith("gs://"):
+                from google.cloud import storage
+                bucket, path = self.store[5:].split("/", 1)
+                storage.Client().bucket(bucket).blob(path).upload_from_string(body, content_type="application/json")
+            else:
+                p = Path(self.store)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(body)
+                os.chmod(p, 0o600)
+        except Exception:  # noqa: BLE001 - saving is an optimization
+            pass
+
+    @staticmethod
+    def _make_session(cookies: list[dict], ua: str) -> requests.Session:
+        s = requests.Session()
+        s.headers["User-Agent"] = ua
+        for c in cookies:
+            s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c["path"])
+        return s
+
+    def _try_saved(self) -> bool:
+        data = self._store_read()
+        if not data or data.get("host") != self.host:
+            return False
+        s = self._make_session(data["cookies"], data["ua"])
+        try:
+            r = s.post(self.host + SDE_PATH + "/DownloadAdHocQueryResults", timeout=60, data={
+                "PCN": "0", "AdHocQuery": "SELECT 1 AS x", "ExecutionPlanType": "0", "DataSourceExists": "false",
+                "SynonymExists": "false", "DataSource": "false", "IntelliPlexSynonym": "false"})
+        except requests.RequestException:
+            return False
+        if r.status_code != 200 or "csv" not in (r.headers.get("content-type") or ""):
+            return False
+        self._s, self.logged_in_at, self.session_source = s, data.get("at"), "saved"
+        return True
 
     # ── session ──
     def _login(self) -> None:
@@ -85,17 +147,19 @@ class PlexWeb:
                 cookies, ua = ctx.cookies(), pg.evaluate("navigator.userAgent")
             finally:
                 b.close()
-        s = requests.Session()
-        s.headers["User-Agent"] = ua
-        for c in cookies:
-            s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c["path"])
-        self._s, self.logged_in_at = s, time.time()
+        self._s, self.logged_in_at, self.session_source = self._make_session(cookies, ua), time.time(), "login"
+        self._store_write({"host": self.host, "at": self.logged_in_at, "ua": ua, "cookies": cookies})
 
     def session(self) -> requests.Session:
         with self._lock:
-            if self._s is None:
+            if self._s is None and not self._try_saved():
                 self._login()
             return self._s
+
+    def check(self) -> bool:
+        """Session alive (logs in again if Plex expired it). For the keep-warm ping."""
+        self.sql("SELECT 1 AS x")
+        return True
 
     @staticmethod
     def _expired(r: requests.Response) -> bool:
@@ -103,12 +167,15 @@ class PlexWeb:
             "text/html" in (r.headers.get("content-type") or "") and "iamButton" in r.text[:20000])
 
     def _post(self, path: str, **kw) -> requests.Response:
+        timeout = kw.pop("timeout", 120)
         for attempt in (1, 2):
-            r = self.session().post(self.host + path, timeout=kw.pop("timeout", 120), **kw)
+            s = self.session()
+            r = s.post(self.host + path, timeout=timeout, **kw)
             if not self._expired(r):
                 return r
             with self._lock:
-                self._s = None                      # log in again, once
+                if self._s is s:                    # not already replaced by another thread
+                    self._login()                   # a fresh login (the saved one just failed)
         raise PlexWebError(f"Plex session refused after a fresh login (HTTP {r.status_code})")
 
     # ── reads ──

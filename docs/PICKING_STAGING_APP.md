@@ -1,9 +1,10 @@
-# Picking & staging app (draft, 2026-11-20)
+# Picking & staging app (2026-11-20)
 
 Jennilyn asked on 2026-11-20 for "a simple web interface that pulls inventory and the job schedule"
 so the Vox team can pick and stage scheduled jobs, which takes them hours in Plex today. This is
-that draft: code in `deploy/picking_app/`, tests in `tests/test_picking_app.py`, tested end to end
-against **Plex TEST** on 11-20. It is not deployed and has not moved anything in production.
+that app: code in `deploy/picking_app/`, tests in `tests/test_picking_app.py`, tested end to end
+against **Plex TEST** on 11-20. It runs on Cloud Run (service `picking-app`, company Google sign-in,
+Plex TEST) once deployed with `deploy/picking_app/deploy.sh`; it has never moved anything in production.
 
 ## In short
 
@@ -120,7 +121,8 @@ pip install -r deploy/picking_app/requirements.txt && python -m playwright insta
 PLEX_ENV=test PICKING_USER=you python deploy/picking_app/app.py
 ```
 
-then http://127.0.0.1:8085. The first page takes about 15 s (Plex login and the job-set read).
+then http://127.0.0.1:8085. The first page takes about 12 s (Plex login and the job-set read); after
+that the login is saved in `etl-manual/plex_session_test.json` and reused.
 
 Command line (TEST unless `--prod`, which asks you to type PROD); writes an undo file:
 
@@ -131,25 +133,91 @@ python deploy/picking_app/move_cli.py --undo etl-manual/picking_undo_YYYYMMDD_HH
 
 Settings: `PLEX_ENV` (test | prod, default test), `PICKING_ALLOW_PROD_MOVES=1` (needed for any
 production move), `PICKING_FROM_GROUPS` (default Warehouse), `PICKING_EXCLUDE_LOCATIONS` (default
-"R and D"), `PICKING_SETS_TTL` (job-set cache, default 600 s), `PICKING_LOG`, `PICKING_BQ_LOG`.
+"R and D"), `PICKING_SETS_TTL` (job sets, 600 s), `PICKING_LOTS_TTL` (3600 s),
+`PICKING_CONTAINERS_TTL` (display only, 60 s), `PICKING_WORKERS` (16), `PICKING_SESSION_GCS`
+(where the Plex login is saved), `PICKING_LOG`, `PICKING_BQ_LOG`.
 
-## Deploying (not done)
+## Speed (second pass, 2026-11-20)
 
-`deploy/picking_app/Dockerfile` builds a Cloud Run service (Playwright base image, one worker, one
-thread: one Plex web session, moves one at a time). Before production:
+Measured against Plex TEST from a laptop, before and after:
 
-1. The team confirms the staging map, the pick-from rule (are "PW - *" / "PS - *" Manufacturing bins
-   already staged?) and whether Lot Hold stock is ever picked.
-2. Behind IAP (company Google accounts), so `requested_by` is a real person.
-3. Secrets: `plex-portal-username` / `-password` (or the gcp.odbc.vox pair) and
-   `plex-api-consumer-key` / `-secret`, as the screens job.
-4. The Plex web session is the same user as the screens job: one Plex login at a time matters
-   (two logins can end each other's session; `docs/PLEX_SCREEN_EXTRACTION.md`). A busy app needs
-   its own Plex user.
-5. Ask Plex whether a container move API exists for our subscription; if so, swap
-   `PlexWeb.move` for it (one function).
-6. Terraform for the service, then `PLEX_ENV=prod` with moves off, then on with
-   `PICKING_ALLOW_PROD_MOVES=1` after a supervised first run.
+| Step | First version | Now |
+|---|---|---|
+| First page after a fresh start (Plex login included) | 12 to 15 s | 11.6 s; **about 1 s** when the saved login is reused |
+| Open a job set, nothing cached | 24 to 36 s (8 ingredients) | **6.4 s** (8), 6.6 s (15), 9.5 s (26 ingredients) |
+| Open it again, or a set with the same ingredients | 24 to 36 s | **0.02 to 0.05 s** |
+| Move 2 containers | about 4.4 s | about 6 s, of which 5 s are the two reads of the part's 155 containers; each further container adds about 0.5 s (350 containers: about 3 min, was about 10) |
+
+What changed (`app.py`, `plex_web.py`):
+- **Parallel:** every ingredient's containers and lots are fetched at once (16 at a time,
+  `PICKING_WORKERS`). They used to be 2 calls per ingredient, one after the other.
+- **Caches:** job sets 10 min (Plex's copy is about 4 h behind anyway; a set opened from any cached
+  list is found there), location groups and lots 1 h, containers **60 s for display only**.
+  A move always reads the part's containers fresh first, so a cached list can never move the wrong
+  thing. "reload containers" on a set page skips the cache.
+- **Saved Plex login:** after a login the cookies are saved (Cloud Run:
+  `gs://voxdatalake-plex-screenshots/picking-app/plex_session_test.json`, private bucket;
+  locally `etl-manual/plex_session_test.json`, mode 600, gitignored) and the next instance checks them
+  with `SELECT 1` and reuses them. A TEST session is never used for production (the host is stored).
+  The cookies ARE a Plex session for gcp.odbc.vox: whoever can read that object can act in Plex as
+  that user until the session expires.
+- **Moves:** one live read of the part before, the moves (a fully ticked pallet as its LP), one live
+  read after to verify. It used to be one read before and one after per container.
+- **Keep-warm:** `/warm` checks the Plex session and refreshes the default job-set list (3 days).
+
+Still slow, and from Plex: some parts' container lists take 2 to 3 s in Plex's API.
+
+## Cost (Cloud Run, pay per use)
+
+The team should not pay for an always-on instance. Options looked at (Google list prices, by hand;
+check against the bill after the first month):
+
+| Option | About a month | Speed |
+|---|---|---|
+| A. One instance always on | $55 to 60 | always instant |
+| B. Warm in working hours only (scheduled min-instances) | about $20 | instant in hours, about 15 s first click outside |
+| **C. Pay per use + keep-warm ping in working hours (chosen)** | **about $1** | instant in hours; outside hours a cold start, usually without a new Plex login |
+| D. Pay per use, no ping | under $1 | a wait after every quiet spell |
+
+C in numbers: request-based billing charges only while a request runs. The ping (every 10 min,
+weekdays 6:00 to 17:50 Mountain, about 1 s each) is about 1,600 s a month; a team's clicks are
+perhaps 10,000 to 20,000 s. At 1 vCPU and 2 GiB that is well under $1, plus the scheduler job
+($0.10; the project's 3 free scheduler jobs are used) and the image in Artifact Registry (about
+$0.15). Our Cloud Run jobs already use the free tier, so none of this is free. Cloud Run can still
+retire an idle instance between pings; the next click then waits a few seconds (container start),
+plus about 10 s only if the saved Plex session has also expired. Switching to B later is one flag
+(`--min-instances=1` with a scheduler that sets it back to 0 at night).
+
+## Deploying
+
+Service `picking-app` in us-central1, deployed by `deploy/picking_app/deploy.sh` from the primary
+folder on a clean `main`:
+
+1. `scripts/deploy.sh` (Terraform) first: it enables the IAP API (`iap.googleapis.com`) and creates
+   `PlexOps.picking_move_log`. Cloud Run's built-in IAP is not in the pinned google provider
+   (~> 5.40), so the service itself is deployed with gcloud, like the Cloud Functions.
+2. `./deploy/picking_app/deploy.sh --access user:<email> ...` builds the image
+   (`deploy/picking_app/cloudbuild.yaml`, `plex-pipeline/picking-app:<sha>`) and deploys it:
+   - runs as `plex-etl-sa`, with the Plex login and API key from Secret Manager
+     (`plex-portal-username` / `-password`, `plex-api-consumer-key` / `-secret`);
+   - `--iap --no-allow-unauthenticated`, 1 vCPU, 2 GiB (Chromium for the login), 8 requests at a
+     time, at most 1 instance, scaled to zero, request-based billing;
+   - `PLEX_ENV=test`, moves logged to BigQuery (`PICKING_BQ_LOG=1`), the saved session in GCS.
+
+   It also grants the IAP service agent `run.invoker`, gives each `--access` member (and the ETL
+   service account, for the ping) `roles/iap.httpsResourceAccessor`, and creates or updates the
+   scheduler `picking-app-warm`.
+3. Open the URL it prints and sign in with a company Google account. `/log` reads the BigQuery log.
+
+Not done yet, before production:
+- The team confirms the staging map, the pick-from rule (are "PW - *" / "PS - *" Manufacturing bins
+  already staged?) and whether Lot Hold stock is ever picked.
+- **A Plex user of its own.** The app logs in as gcp.odbc.vox, the same user as the screens job, and
+  two logins as one user can end each other's session (`docs/PLEX_SCREEN_EXTRACTION.md`). A user
+  for the app also makes Plex's own history show who moved it.
+- Ask Plex whether a container move API exists for our subscription; if so, swap `PlexWeb.move`.
+- `PLEX_ENV_FOR_APP=prod ./deploy/picking_app/deploy.sh` with moves off, then on with
+  `PICKING_ALLOW_PROD_MOVES=1` (an env var on the service) after a supervised first run.
 
 ## Open questions for the team
 

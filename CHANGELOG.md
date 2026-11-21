@@ -14,6 +14,28 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-20 - Picking app: faster, saved Plex login, Cloud Run behind IAP (pay per use)
+
+Terraform (`./scripts/deploy.sh`): enables `iap.googleapis.com`, creates `PlexOps.picking_move_log`. The service
+itself: `deploy/picking_app/deploy.sh` (gcloud: build, `run deploy --iap`, access, keep-warm scheduler).
+
+### Added
+- Cloud Run service `picking-app` (Plex TEST): company Google sign-in (IAP), runs as `plex-etl-sa`, Plex login
+  and API key from Secret Manager, request-based billing, scaled to zero, max 1 instance; scheduler
+  `picking-app-warm` calls `/warm` every 10 min on weekdays 6:00-17:50 MT. About $1 a month (options and numbers in
+  `docs/PICKING_STAGING_APP.md`, "Cost").
+- `PlexOps.picking_move_log` (Terraform): every move attempt with who asked; the app's `/log` reads it.
+- `/warm`: checks the Plex session and refreshes the default job-set list.
+
+### Changed
+- A job set opens in 6-10 s cold (was 24-36 s) and in 0.02-0.05 s when cached: containers and lots for every
+  ingredient fetched in parallel; job sets cached 10 min (found in any cached list), lots and location groups
+  1 h, containers 60 s for display only.
+- The Plex login is saved (GCS in Cloud Run, `etl-manual/` locally) and reused by the next instance after a
+  `SELECT 1` check: about 1 s instead of about 10 s.
+- Moves read the part's containers once before and once after (not per container): about 0.5 s per container.
+- gunicorn 8 threads; moves stay one at a time.
+
 ## 2026-11-20 - Picking & staging app (draft): job sets, live containers, moves through Plex's screen
 
 Nothing deploys: a new app under `deploy/picking_app/`, run locally against Plex TEST. Docs:

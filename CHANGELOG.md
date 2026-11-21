@@ -14,6 +14,34 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-20 - Plex's REST API is Label Design's third source; emails send from bizops@voxnutrition.com
+
+Ships with Cloud Build (main.py, watchdog.py, plex_api_releases.py, Dockerfile) and
+`./scripts/deploy.sh` (Terraform: `API_SCREENS_TRIGGER` on the prod Label Design job, and the new
+`report_from_email` in `terraform.tfvars`).
+
+### Added
+- `plex_api_releases.py`: reads the Pending Fulfillment orders and Label Design releases from Plex's
+  REST API (status filters, ~2 s each; retries a 5xx or cut-off answer twice) and compares them with
+  our ODBC copy (via `Resource_ID`, which equals the API's UUIDs) and the last releases screen read.
+- Trigger: every prod Label Design run (`API_SCREENS_TRIGGER=1`, weekdays 5:00 AM-5:50 PM MT, before
+  ODBC is touched) starts `plex-live-screens` with `RECON_ONLY=releases` when a Label Design line is
+  in neither ODBC nor the last screen read and changed after it. Not while a read runs (a screens login
+  in the last 12 min), not from :08 to :19 (the hourly read is due), at most every 20 min. Decisions
+  go to the new `PlexOps.api_trigger_log`. Never raises.
+- Watchdog check `label_design_coverage`: a Label Design line Plex has had for over 75 min (5 h
+  off-hours) that is in neither ODBC nor the screens; emails on two runs in a row.
+- `docs/PLEX_API_THIRD_SOURCE.md` (all angles: endpoints, mapping, the rule, why no direct push,
+  failure matrix, runbook) and the hub tab "API third source" that renders it
+  (`scripts/hub/api_source_tab.py`). Tests: `tests/test_plex_api_releases.py` (12).
+
+### Changed
+- Every email's sender is `bizops@voxnutrition.com` (was `marketing@parasolgroupinc.com`): all 33 jobs
+  through `report_from_email` in `terraform.tfvars`, and the Monday Scorecards service
+  `monday-to-bigquery-vox` (`SENDGRID_FROM_EMAIL`, set by hand 2026-11-20, revision 00023). Verified
+  sender in SendGrid; a test send was delivered.
+- Business rule LBL-01 lists `plex_api_releases.py` as enforcing it too.
+
 ## 2026-11-18 - Every Plex credential is the company user gcp.odbc.vox (test ODBC, API, local scripts)
 
 Ships with Cloud Build (main.py, screen_recon.py) and `./scripts/deploy.sh` (Terraform).

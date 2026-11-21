@@ -798,6 +798,7 @@ Since 2026-11-10 two jobs watch the ETL from outside it:
 | `screens_job` | no `screen_recon` row for 5 h, or a screen failed 2 runs running | the screens job, its login or a screen changed |
 | `odbc_connect` | weekdays 5:30-17:45, 3 of the last 4 Label Design runs got "ODBC connection failed" (since 2026-11-11) | Plex ODBC refusing sessions ("Session refused by service", 11-11 06:46-10:16); nothing to fix on our side, tell Plex support if it lasts (D33) |
 | `odbc_vs_plex` | Plex's REST API (`connect.plex.com/sales/v1/orders`, ~1 s, read-only) has order changes our ODBC copy lacks, the oldest over 6 h (`ODBC_PLEX_LAG_MIN`; ODBC refreshes about every 4 h, so 6 h is a missed refresh) | ODBC frozen or refusing (11-11: frozen at 11-10 16:10 MT until ~10:00 while Plex changed orders from 06:xx); tell Plex support (D33). An API outage skips the check, it does not fail it |
+| `label_design_coverage` | a Label Design line (release Label Design, order Pending Fulfillment) that Plex's REST API has had for over 75 min (5 h outside weekdays 6-18) is in neither ODBC nor the releases screen, two runs in a row (since 2026-11-20) | the screens job and ODBC are both missing it: check `plex-live-screens` and its login, then ODBC. `docs/PLEX_API_THIRD_SOURCE.md` |
 | `raw_freshness` | a `raw_*` table with rows not rewritten in 30 h | Plex returns 0 rows (the ETL keeps yesterday's, D3) or a pipeline stopped |
 | `msl_daily` | no `msl_demand_daily` row for today after 7:30 | the scheduled query failed |
 | `usage_monthly` | from the 2nd, no `part_usage_monthly` rows for last month | the scheduled query failed, or its guard refused a month with no production records; re-run the month (docs/reports/part_usage_monthly.md) |
@@ -1062,7 +1063,7 @@ echo -n 'SG.your-key-here' | \
 
 ```hcl
 sendgrid_enabled  = "true"
-report_from_email = "marketing@parasolgroupinc.com"
+report_from_email = "bizops@voxnutrition.com"   # since 2026-11-20 (was marketing@parasolgroupinc.com)
 report_to_emails  = "emilio.dominguez@parasolgroupinc.com,jennilyn.tockstein@parasolgroupinc.com"
 company_name      = "Vox Nutrition"
 ```

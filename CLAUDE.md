@@ -410,6 +410,19 @@ ODBC can be down **or answer with frozen data** (11-10: 08:10-12:50 MT, every ru
 - Cloud Build builds the screens image FROM the same commit's ETL image and updates
   `plex-live-screens`; `plex-etl-watchdog` is in `_ALL_JOBS`.
 
+## Plex's REST API is Label Design's third source (since 2026-11-20)
+
+`plex_api_releases.py`: the API (`/sales/v1/orders?status=Pending%20Fulfillment`,
+`/sales/v1/releases?status=Label%20Design`; the status filter works, `orderId` is ignored) is compared
+with our ODBC copy and the last releases screen read. Its UUIDs are ODBC's `Resource_ID` (all matched).
+- **Trigger:** each prod Label Design run (`API_SCREENS_TRIGGER=1`, before ODBC, weekdays 5:00-17:50 MT)
+  starts a releases-only screen read when a Label Design line is in neither source and changed after
+  the last read. Log: `PlexOps.api_trigger_log`.
+- **Watchdog `label_design_coverage`:** a line in neither source for 75 min (5 h off-hours) emails.
+- **The API never pushes a line:** Monday items are keyed `<order>|L<po_line_key>` and the API has no
+  integer keys, so an API-made item would be a duplicate later. Rekeying was set aside (11-20).
+All angles: `docs/PLEX_API_THIRD_SOURCE.md` (hub tab "API third source").
+
 ## Every report says where its data came from (since 2026-11-10)
 
 `PlexOps.data_freshness` (Terraform view) gives, per dataset and report group, `data_source`
@@ -446,9 +459,13 @@ Its "disagreements" list holds the docs-vs-code differences found on 11-13 that 
 
 ## Hand-built datasets are backed up in `custom_views/` (since 2026-11-11)
 
-Jennilyn's `VoxScorecardsLive` has 60 views and 25 tables, built in the console and not by the
+Jennilyn's `VoxScorecardsLive` has 65 views and 28 tables (11-19), built in the console and not by the
 ETL. Its SQL and docs are in `custom_views/VoxScorecardsLive/`, and its table data is in
-`Backups.VoxScorecardsLive__*_20261111`.
+`Backups.VoxScorecardsLive__*_20261111`. The hub's **Vox Scorecards** tab lists every object, its source
+and the 51 PlexProd objects her views read: **check it before renaming or dropping anything in PlexProd.**
+8 of her views read the `v2_*` views (D36), so those stay. Its Monday tables come from
+`monday-daily-sync-VoxScorecardsLive` → Cloud Run `monday-to-bigquery-vox` (01:00 UTC); the older paused
+`monday-daily-sync` and `monday-sync-flattened` were deleted 11-19.
 - **Refresh:** `python scripts/backup_custom_views.py VoxScorecardsLive`, then read the git diff.
 - **Not backed up yet:** `plex_mirror` (also hers).
 
@@ -506,6 +523,9 @@ also logs its build SHA in `job_run_log.build`, and the batch digest flags a
 job on a different build.
 
 ## Email subjects
+
+**Sender: `bizops@voxnutrition.com` since 2026-11-20** (`report_from_email` in `terraform.tfvars`, and
+`SENDGRID_FROM_EMAIL` on `monday-to-bigquery-vox`, outside Terraform). Verified in SendGrid.
 
 `[Plex ETL] - {Category}: {Pipeline} — {date}`, built in `email_utils.py` from
 each config's `category` plus its pipeline name. Changed 2026-09-04 — the

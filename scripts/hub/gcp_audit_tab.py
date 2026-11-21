@@ -41,9 +41,9 @@ def render_tab(a: dict) -> str:
         for c in sorted(checks, key=lambda c: ["fail", "warn", "unknown", "ok"].index(c.get("status", "ok"))
                         if c.get("status") in ("fail", "warn", "unknown", "ok") else 4))
     gaps = "".join(
-        f'<tr><td>{esc(g.get("call"))}</td><td>{esc(g.get("role"))}</td><td>{esc(g.get("error"))}</td></tr>'
+        f'<tr><td>{esc(g.get("call"))}</td><td>{esc(g.get("role"))}</td><td>{esc(g.get("error"))}</td><td>{esc(g.get("resolved", "open"))}</td></tr>'
         for g in a.get("permission_gaps", []))
-    cmds = "\n".join(g["command"] for g in a.get("permission_gaps", []) if g.get("command"))
+    cmds = "\n".join(g["command"] for g in a.get("permission_gaps", []) if (g.get("command") or "").startswith("gcloud"))
     pol = "".join(f'<tr><td><code>{esc(p.get("constraint"))}</code></td><td>{esc(p.get("effective"))}</td></tr>'
                   for p in a.get("org_policies", []) if isinstance(p, dict))
     return f"""{START}<style>
@@ -60,7 +60,7 @@ def render_tab(a: dict) -> str:
 <div class="block"><h2>Checks</h2><div class="tbl-wrap"><table><thead><tr><th>Area</th><th>Status</th><th>Finding and evidence</th><th>Next</th></tr></thead><tbody>{rows}</tbody></table></div></div>
 <div class="block"><h2>Reads Claude was refused</h2>
 <p class="lede">Read-only roles; with them Claude checks these without the write account. Run with your own login.</p>
-<div class="tbl-wrap"><table><thead><tr><th>Call</th><th>Role that fixes it</th><th>Error</th></tr></thead><tbody>{gaps}</tbody></table></div>
+<div class="tbl-wrap"><table><thead><tr><th>Call</th><th>Role that fixes it</th><th>Error</th><th>Status</th></tr></thead><tbody>{gaps}</tbody></table></div>
 <pre class="code"><code>{esc(cmds)}</code></pre></div>
 <div class="block"><h2>Organization policies in force on the project</h2>
 <div class="tbl-wrap"><table><thead><tr><th>Constraint</th><th>Effective</th></tr></thead><tbody>{pol}</tbody></table></div></div>

@@ -12,7 +12,7 @@
 - **In her words:** "Our revenue should be based on shipment quantity and shipment value. Invoicing may lag behind. (11-13; first said 2026-09-01: "the shipping revenue should just be the units that went out the door, the summed value of the units that went out the door")"
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`, `sales_revenue_run_rate_report`, `revenue_vs_goal_report`, `shipping_daily_report`
 - **Enforced in:** `reports/sql/shipping_revenue_report.sql` lines 153-154, `reports/sql/shipping_revenue_report.sql` lines 198, `reports/sql/sales_revenue_summary_view.sql` lines 38-47
-- **Measured:** 1,271,123: Shipped revenue this month to date, dollars (quantity x shipment-line price) (2026-11-13 10:36 MT). Revenue is what shipped: $1,271,123 so far this month on 245 shipment lines, $1,157,799 in October from 10-19, $2.43M in all.
+- **Measured:** 1,781,628: Shipped revenue this month to date, dollars (quantity x shipment-line price) (2026-11-19 10:56 MT). Revenue is what shipped: $1,271,123 so far this month on 245 shipment lines, $1,157,799 in October from 10-19, $2.43M in all.
 
 ### REV-02 A revenue month is the ship month, not the invoice month
 
@@ -22,7 +22,7 @@
 - **In her words:** "We cannot change any financials for Oct because the reporting is done. In general, we report revenue based on shipments, not the invoices."
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`, `sales_revenue_run_rate_report`, `revenue_vs_goal_report`
 - **Enforced in:** `reports/sql/sales_revenue_summary_view.sql` lines 39, `reports/sql/shipping_revenue_report.sql` lines 134-143
-- **Measured:** 0: Shipment lines invoiced in a different month than they shipped (revenue stays in the ship month) (2026-11-13 10:36 MT). All 423 shipment lines were invoiced in their ship month, so this rule moves $0 today; it protects month-end shipments invoiced after midnight.
+- **Measured:** 0: Shipment lines invoiced in a different month than they shipped (revenue stays in the ship month) (2026-11-19 10:56 MT). All 423 shipment lines were invoiced in their ship month, so this rule moves $0 today; it protects month-end shipments invoiced after midnight.
 
 ### REV-03 Revenue uses the shipment price, not the invoiced amount
 
@@ -31,7 +31,7 @@
 - **Decided:** Jennilyn, 2026-11-13 · D32 (closed) · status: in force
 - **Reports:** `shipping_revenue_report`
 - **Enforced in:** `reports/sql/shipping_revenue_report.sql` lines 150-154
-- **Measured:** 2,088: Dollar gap between shipment-line revenue and what the invoice accounting (4xxxx accounts) booked, all months (2026-11-13 10:36 MT). Shipment-line revenue is $2,428,922 versus $2,426,834 booked on the 4xxxx invoice accounts, a $2,088 gap (0.09%).
+- **Measured:** 3,839: Dollar gap between shipment-line revenue and what the invoice accounting (4xxxx accounts) booked, all months (2026-11-19 10:56 MT). Shipment-line revenue is $2,428,922 versus $2,426,834 booked on the 4xxxx invoice accounts, a $2,088 gap (0.09%).
 - **Finding:** shipment_price_override (Shipment_Price) is 0 on all 423 lines, so the override path the rule describes (e.g. SH00105) does not show in the report; revenue always equals qty x price.
 
 ### REV-04 Revenue by part group uses Plex's part group
@@ -42,7 +42,7 @@
 - **In her words:** "it actually would be pretty nice to have by part group so that I can tell them their percent of revenue by part group."
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`
 - **Enforced in:** `reports/sql/shipping_revenue_report.sql` lines 191-196, `reports/sql/sales_revenue_summary_view.sql` lines 40
-- **Measured:** 0: Revenue shipped with no Plex part group this month (shown as '(no group)'), dollars (2026-11-13 10:36 MT). Every line has a part group: $0 sits under '(no group)'; Capsule $1.08M, Softgel $144K, Powder $24K, Tablet $14.5K, Liquid $4K, Go-Live Temp $2K, Label $660.
+- **Measured:** 0: Revenue shipped with no Plex part group this month (shown as '(no group)'), dollars (2026-11-19 10:56 MT). Every line has a part group: $0 sits under '(no group)'; Capsule $1.08M, Softgel $144K, Powder $24K, Tablet $14.5K, Liquid $4K, Go-Live Temp $2K, Label $660.
 
 ### REV-05 Run rate and % into month use calendar days
 
@@ -50,7 +50,7 @@
 - **Why:** Mirrors the old scorecard's own field. A month that starts with a long weekend projects low.
 - **Reports:** `sales_revenue_run_rate_report`
 - **Enforced in:** `reports/sql/sales_revenue_run_rate_view.sql` lines 23-29, `reports/sql/sales_revenue_run_rate_view.sql` lines 93
-- **Measured:** 2,933,360: Month-end revenue projection for the current month (calendar-day run rate), dollars (2026-11-13 10:36 MT). Day 13 of 30 (43.3% in) with $1,271,123 gives a month-end projection of $2,933,360; October, a finished month, shows 100%.
+- **Measured:** 2,813,097: Month-end revenue projection for the current month (calendar-day run rate), dollars (2026-11-19 10:56 MT). Day 13 of 30 (43.3% in) with $1,271,123 gives a month-end projection of $2,933,360; October, a finished month, shows 100%.
 
 ### REV-06 Daily shipping: cartons are containers, 'orders shipped' counts shipments
 
@@ -60,7 +60,7 @@
 - **In her words:** "you should be able to pull the number of packages shipped, and then a count of the orders that shipped."
 - **Reports:** `shipping_daily_report`
 - **Enforced in:** `reports/sql/shipping_daily_report_view.sql` lines 41, `reports/sql/shipping_daily_report_view.sql` lines 54-59
-- **Measured:** 249: Shipments counted as 'orders shipped' in the last 30 days (distinct shipments, not sales orders) (2026-11-13 10:36 MT). 249 shipments went out in the last 30 days (packages 9,269) while only 202 distinct sales orders shipped, so 'orders shipped' is shipments, not orders.
+- **Measured:** 325: Shipments counted as 'orders shipped' in the last 30 days (distinct shipments, not sales orders) (2026-11-19 10:56 MT). 249 shipments went out in the last 30 days (packages 9,269) while only 202 distinct sales orders shipped, so 'orders shipped' is shipments, not orders.
 
 ### REV-07 Ready to ship: value of the ready quantity only, with a price fallback
 
@@ -70,7 +70,7 @@
 - **In her words:** "they might have 10,000 units ordered, but 5,000 units are ready, and we'd only want the value of the 5,000 units that are ready to ship, not the 10,000 total... anything that's open or pending is what we'd want to sum."
 - **Reports:** `shipping_pending_revenue_report`
 - **Enforced in:** `reports/sql/shipping_pending_revenue_view.sql` lines 105-121, `reports/sql/shipping_pending_revenue_view.sql` lines 161-162
-- **Measured:** 26,899: Value of units ready on shipments not yet shipped (Total in Shipping), dollars (2026-11-13 10:36 MT). $26,899 is ready but not shipped, on 4 Open shipper lines, all priced from the order line.
+- **Measured:** 21,351: Value of units ready on shipments not yet shipped (Total in Shipping), dollars (2026-11-19 10:56 MT). $26,899 is ready but not shipped, on 4 Open shipper lines, all priced from the order line.
 
 ### REV-08 Revenue goal tile: company-wide only and currently a placeholder
 
@@ -79,7 +79,7 @@
 - **Decided:** 2026-10-02 · S3 · status: open decision
 - **Reports:** `revenue_vs_goal_report`
 - **Enforced in:** `reports/sql/revenue_vs_goal_view.sql` lines 63-72
-- **Measured:** 25.40: Revenue goal for the current month and percent reached (company-wide placeholder) (2026-11-13 10:36 MT). November revenue is 25.4% of a $5,000,000 goal that is a placeholder copy of the company sales goal.
+- **Measured:** 35.60: Revenue goal for the current month and percent reached (company-wide placeholder) (2026-11-19 10:56 MT). November revenue is 25.4% of a $5,000,000 goal that is a placeholder copy of the company sales goal.
 
 ### REV-09 Revenue is comparable only from November 2026
 
@@ -88,7 +88,7 @@
 - **Decided:** Emilio, 2026-11-04 · S18 · status: open decision
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`, `revenue_vs_goal_report`
 - **Enforced in:** `reports/sql/shipping_revenue_report.sql` lines 65
-- **Measured:** 1,157,799: Revenue in October (only 10-19 to 10-31) versus November so far, dollars; first shipment date (2026-11-13 10:36 MT). October holds only 10-19 to 10-31 ($1,157,799, 531,795 units) against a full-month goal; November's $1.27M is already ahead on dollars.
+- **Measured:** 1,157,799: Revenue in October (only 10-19 to 10-31) versus November so far, dollars; first shipment date (2026-11-19 10:56 MT). October holds only 10-19 to 10-31 ($1,157,799, 531,795 units) against a full-month goal; November's $1.27M is already ahead on dollars.
 
 ## Sales
 
@@ -100,7 +100,7 @@
 - **In her words:** "anything that moved into pending fulfillment status during that month is our sales month to date... it's the date of that status change, not the date of the order or anything else."
 - **Reports:** `sales_mtd_by_status_change_report`, `sales_mtd_summary_report`, `sales_vs_goal_report`
 - **Enforced in:** `reports/sql/sales_mtd_by_status_change_view.sql` lines 87-100, `reports/sql/sales_mtd_by_status_change_view.sql` lines 231-232
-- **Measured:** 1,838,222: Sales booked this month to date (first Pending Fulfillment), dollars (2026-11-13 10:36 MT). Sales booked in November so far are $1,838,222 on 140 orders; October reads $7,598,739.
+- **Measured:** 2,793,767: Sales booked this month to date (first Pending Fulfillment), dollars (2026-11-19 10:56 MT). Sales booked in November so far are $1,838,222 on 140 orders; October reads $7,598,739.
 
 ### SALES-02 October 2026 sales are distorted by the Plex go-live load
 
@@ -109,7 +109,7 @@
 - **Decided:** Emilio, 2026-11-04 · S18 · status: open decision
 - **Reports:** `sales_mtd_by_status_change_report`, `sales_mtd_summary_report`, `sales_vs_goal_report`, `VoxScorecardsLive.vw_sales`
 - **Enforced in:** `reports/sql/sales_mtd_by_status_change_view.sql` lines 277, `custom_views/VoxScorecardsLive/vw_sales.sql` lines 1-17
-- **Measured:** 5,406,071: Sales booked on 2026-10-16 alone (the go-live load), dollars (2026-11-13 10:36 MT). The 10-16 go-live load booked $5,406,071 on 232 orders in a single day, 71.1% of October's $7.6M.
+- **Measured:** 5,383,077: Sales booked on 2026-10-16 alone (the go-live load), dollars (2026-11-19 10:56 MT). The 10-16 go-live load booked $5,406,071 on 232 orders in a single day, 71.1% of October's $7.6M.
 
 ### SALES-03 Order value = line price x release quantity, no tax or freight
 
@@ -119,7 +119,7 @@
 - **In her words:** "No, it'll always have a price in there. So it needs to be the line item price."
 - **Reports:** `sales_mtd_by_status_change_report`, `sales_order_value_by_status_report`, `pipeline_plex_value_report`, `sales_orders_report`, `sales_orders_over_10k_report`, `sales_revenue_by_rep_report`, `sales_orders_open_report`
 - **Enforced in:** `reports/sql/sales_mtd_by_status_change_view.sql` lines 146-165, `reports/sql/sales_mtd_by_status_change_view.sql` lines 222-225
-- **Measured:** 0: Sales lines this month with no price at all (worth $0 in sales value) (2026-11-13 10:36 MT). 0 lines this month have no price (1 of 1,219 across all months), and none needed the price-list fallback.
+- **Measured:** 0: Sales lines this month with no price at all (worth $0 in sales value) (2026-11-19 10:56 MT). 0 lines this month have no price (1 of 1,219 across all months), and none needed the price-list fallback.
 
 ### SALES-04 Sales rep: order, then customer, then order salesperson
 
@@ -128,7 +128,7 @@
 - **Decided:** 2026-09-24 · D24 item 4 · status: in force
 - **Reports:** `sales_mtd_by_status_change_report`, `sales_mtd_summary_report`, `sales_vs_goal_report`, `sales_revenue_by_rep_report`, `sales_orders_report`, `pipeline_plex_value_report`
 - **Enforced in:** `reports/sql/sales_mtd_by_status_change_view.sql` lines 204-213, `reports/sql/sales_revenue_by_rep_view.sql` lines 94-98, `reports/sql/sales_mtd_summary_view.sql` lines 43
-- **Measured:** 103: Sales order lines (all months) with no rep found at all (2026-11-13 10:36 MT). 103 of 1,219 sales lines have no rep; 1,081 take their rep from Order Salesperson and only 35 from the order's Inside Salesperson.
+- **Measured:** 103: Sales order lines (all months) with no rep found at all (2026-11-19 10:56 MT). 103 of 1,219 sales lines have no rep; 1,081 take their rep from Order Salesperson and only 35 from the order's Inside Salesperson.
 - **Finding:** The order's Inside Salesperson is the first-priority rep but is set on only 35 of 1,219 lines; 1,081 (89%) come from the Order Salesperson fallback, which the older notes called nearly unused.
 
 ### SALES-05 WIP is Pending Fulfillment plus Hold, unshipped balance only
@@ -139,7 +139,7 @@
 - **In her words:** "really, it should just be pending fulfillment. I guess hold as well would be WIP because it was sold but it hasn't shipped yet. So it just be those two statuses. / we don't want to count pending sales approval because that's not considered an order yet."
 - **Reports:** `sales_order_value_by_status_report`
 - **Enforced in:** `reports/sql/sales_order_value_by_status_view.sql` lines 225-226
-- **Measured:** 6,809,066: Work in progress (Pending Fulfillment + Hold, unshipped balance), dollars (2026-11-13 10:36 MT). WIP is $6,809,066 on 352 Pending Fulfillment orders; there are no orders on Hold today.
+- **Measured:** 7,133,794: Work in progress (Pending Fulfillment + Hold, unshipped balance), dollars (2026-11-19 10:56 MT). WIP is $6,809,066 on 352 Pending Fulfillment orders; there are no orders on Hold today.
 
 ### SALES-06 Open orders exclude Closed, Cancelled and quote-stage orders
 
@@ -148,7 +148,7 @@
 - **Decided:** Jennilyn, 2026-10-19 · status: partly built
 - **Reports:** `sales_orders_open_report`, `sales_orders_aging_report`, `sales_orders_rush_open_report`, `sales_orders_over_10k_report`, `sales_orders_over_10k_bottles_report`
 - **Enforced in:** `reports/sql/sales_orders_open_view.sql` lines 216-217, `reports/sql/sales_orders_aging_view.sql` lines 161-162, `reports/sql/sales_orders_rush_open_view.sql` lines 182-183, `reports/sql/sales_orders_over_10k_view.sql` lines 109, `reports/sql/sales_orders_over_10k_bottles_view.sql` lines 63
-- **Measured:** 24: Quote-stage orders that show on the Orders Aging list although they are not open orders, and the size of the two lists (2026-11-13 10:36 MT). The aging list (321 orders, only those 14+ days old) holds 24 quote-stage orders that the open-orders list (423 orders) excludes.
+- **Measured:** 30: Quote-stage orders that show on the Orders Aging list although they are not open orders, and the size of the two lists (2026-11-19 10:56 MT). The aging list (321 orders, only those 14+ days old) holds 24 quote-stage orders that the open-orders list (423 orders) excludes.
 - **Finding:** The aging report also has an age filter the rule does not mention (orders 14+ days old only), so it lists 321 orders against 423 on the open list even though it is described as the looser definition.
 
 ### SALES-07 Deposit Review is the accounting stage
@@ -158,7 +158,7 @@
 - **Decided:** Jennilyn, 2026-09-11 · status: in force
 - **Reports:** `sales_orders_pending_accounting_approval_report`
 - **Enforced in:** `reports/sql/sales_orders_pending_accounting_approval_view.sql` lines 183
-- **Measured:** 47: Orders waiting in the two Deposit Review statuses (accounting approval), and dollars (2026-11-13 10:36 MT). 47 orders wait in Deposit Review ($348,869): 45 in Initiate Payment Request ($348,869) and 2 in Bypass Payment Request ($0).
+- **Measured:** 40: Orders waiting in the two Deposit Review statuses (accounting approval), and dollars (2026-11-19 10:56 MT). 47 orders wait in Deposit Review ($348,869): 45 in Initiate Payment Request ($348,869) and 2 in Bypass Payment Request ($0).
 - **Finding:** The 2 Bypass Payment Request orders carry $0 value (no price), so the accounting list undercounts dollars.
 
 ### SALES-08 Total pipeline (Plex half) counts quotes and not-yet-approved orders, including Deposit Review
@@ -169,7 +169,7 @@
 - **In her words:** "orders in Deposit Review haven't been approved yet, so they belong in the Pending Approval pipeline number."
 - **Reports:** `pipeline_plex_value_report`, `sales_orders_pending_approval_report`, `sales_orders_pending_approval_by_rep_report`
 - **Enforced in:** `reports/sql/pipeline_plex_value_view.sql` lines 199-203, `reports/sql/sales_orders_pending_approval_view.sql` lines 170
-- **Measured:** 1,553,940: Plex part of Total Pipeline, dollars; detail shows how the stages split (2026-11-13 10:36 MT). The Plex pipeline is $1,553,940: quotes $932,210 plus $621,730 of not-yet-approved orders, of which only $272,861 (21 orders) is Pending Sales Approval and $348,869 is Deposit Review.
+- **Measured:** 991,035: Plex part of Total Pipeline, dollars; detail shows how the stages split (2026-11-19 10:56 MT). The Plex pipeline is $1,553,940: quotes $932,210 plus $621,730 of not-yet-approved orders, of which only $272,861 (21 orders) is Pending Sales Approval and $348,869 is Deposit Review.
 - **Finding:** pipeline_plex_value_report labels every Deposit Review order as stage 'Pending Sales Approval' (68 orders, $621,730, of which 47 orders are Deposit Review), so its stage split cannot separate them; it also omits one Pending Sales Approval order (287, no price) that the Pending Approval Orders report lists (22 vs 21).
 
 ### SALES-09 Open quotes: only New, Estimating and Quoted
@@ -179,7 +179,7 @@
 - **Decided:** 2026-08-21 · status: in force
 - **Reports:** `sales_quotes_open_report`
 - **Enforced in:** `reports/sql/sales_quotes_open_view.sql` lines 70
-- **Measured:** 0: Open quotes (New, Estimating, Quoted) in Plex's quote module (2026-11-13 10:36 MT). Plex's quote module has 0 open quotes; the 41 quote-stage sales orders ($932K) are a different thing and are counted in the pipeline.
+- **Measured:** 0: Open quotes (New, Estimating, Quoted) in Plex's quote module (2026-11-19 10:56 MT). Plex's quote module has 0 open quotes; the 41 quote-stage sales orders ($932K) are a different thing and are counted in the pipeline.
 - **Finding:** sales_quotes_open_report is empty (Plex's quote module is unused) while 41 quote-stage sales orders exist; open quotes in this report and quote-stage orders are different populations.
 
 ### SALES-10 Open returns (RMAs): not Closed or Cancelled
@@ -189,7 +189,7 @@
 - **Decided:** 2026-08-14 · status: in force
 - **Reports:** `sales_returns_open_report`
 - **Enforced in:** `reports/sql/sales_returns_open_view.sql` lines 57
-- **Measured:** 4: Open returns (RMAs) (2026-11-13 10:36 MT). 4 returns are open, all in status New.
+- **Measured:** 4: Open returns (RMAs) (2026-11-19 10:56 MT). 4 returns are open, all in status New.
 
 ### SALES-11 Customers per rep come from order history, not an account owner
 
@@ -197,7 +197,7 @@
 - **Why:** Plex has no single standing account-rep field the report could use; best-criteria proxy.
 - **Reports:** `sales_customers_by_rep_report`
 - **Enforced in:** `reports/sql/sales_customers_by_rep_view.sql` lines 29-43
-- **Measured:** 292: Rows on the customers-by-rep list, versus customers that actually have sales (2026-11-13 10:36 MT). 292 customer-rep pairs for 279 customers; 3 customers appear under several reps. Customers get a different rep than the sales reports use (see spot check).
+- **Measured:** 305: Rows on the customers-by-rep list, versus customers that actually have sales (2026-11-19 10:56 MT). 292 customer-rep pairs for 279 customers; 3 customers appear under several reps. Customers get a different rep than the sales reports use (see spot check).
 
 ### SALES-12 Year-to-date Sales/Revenue is short by pre-go-live history
 
@@ -207,7 +207,7 @@
 - **In her words:** "We'll just pull over whatever we get in Plex and then add a static number to it on the date of transfer, and then let it just keep adding from there..."
 - **Reports:** `sales_mtd_summary_report`, `sales_revenue_summary_report`, `VoxScorecardsLive.vw_sales`
 - **Enforced in:** `reports/sql/sales_mtd_summary_view.sql` lines 20-35, `custom_views/VoxScorecardsLive/vw_sales.sql` lines 4-17
-- **Measured:** 41,327,528: Sales in Jennilyn's scorecard view dated before 2026-11-01 (static history), dollars; Plex-fed part from November (2026-11-13 10:36 MT). Jennilyn's view carries $41.3M of pre-November sales as static history (October $3.80M versus $7.60M from Plex), and Plex feeds November's $1.84M.
+- **Measured:** 41,327,528: Sales in Jennilyn's scorecard view dated before 2026-11-01 (static history), dollars; Plex-fed part from November (2026-11-19 10:56 MT). Jennilyn's view carries $41.3M of pre-November sales as static history (October $3.80M versus $7.60M from Plex), and Plex feeds November's $1.84M.
 
 ## Production
 
@@ -217,7 +217,7 @@
 - **Why:** The log is the same one Plex's Job Production screen shows. Going through the job operation lost records whose operation had closed.
 - **Reports:** `encap_daily_report`, `blending_daily_report`, `labeling_daily_report`, `packaging_daily_report`, `weekly_production_update_report`, `production_monthly_by_workcenter_group_report`, `quality_fpy_by_area_month_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 87-104,147-159, `reports/sql/weekly_production_update_view.sql` lines 103-115,146-158, `reports/sql/packaging_daily_report_view.sql` lines 71-85,150, `reports/sql/part_production_current_view.sql` lines 1-60
-- **Measured:** 9,950: Production records credited in the month to date (all groups), by the rule's own date and work centre (2026-11-13 10:36 MT). Counting by the record's own work centre and Mountain day gives 9,950 records this month; Labeling alone is 324,206 units and Printing 12,761, which the old job-operation route lost.
+- **Measured:** 14,908: Production records credited in the month to date (all groups), by the rule's own date and work centre (2026-11-19 10:56 MT). Counting by the record's own work centre and Mountain day gives 9,950 records this month; Labeling alone is 324,206 units and Printing 12,761, which the old job-operation route lost.
 
 ### PROD-02 Good output versus scrap
 
@@ -226,7 +226,7 @@
 - **Decided:** 2026-09-24 · status: in force
 - **Reports:** `encap_daily_report`, `blending_daily_report`, `labeling_daily_report`, `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `quality_fpy_by_area_month_report`, `weekly_production_update_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 111-117, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 125-138, `reports/sql/quality_fpy_by_area_month_view.sql` lines 66-72,89-92, `reports/sql/weekly_production_update_view.sql` lines 139-140, `reports/sql/approaching_msl_view.sql` lines 131
-- **Measured:** 2,896,677: Rejected (scrap) units in the last 90 days that the rule keeps out of good output (2026-11-13 10:36 MT). Scrap stays out of good output: without this rule Encapsulating would read 2,745,294 and Printing 151,383 units higher over the last 90 days (2.9M units in all).
+- **Measured:** 3,037,541: Rejected (scrap) units in the last 90 days that the rule keeps out of good output (2026-11-19 10:56 MT). Scrap stays out of good output: without this rule Encapsulating would read 2,745,294 and Printing 151,383 units higher over the last 90 days (2.9M units in all).
 - **Finding:** Printing scrap is large and daily: 292 rejected Printing records this month totalling 151,383 units versus 12,761 good (FPY 7.77%); worth confirming that Rejected is used for real scrap at Printing.
 
 ### PROD-03 Bottling 9-parts with an active 5-part BOM are not counted (5/9 rule)
@@ -237,7 +237,7 @@
 - **In her words:** "if we can drop those it'd be great. There are only 5 active parts currently in the system that we are still using with this 5/9 double count setup. We are still phasing these out. | 11-13 list: "93323-10REDRO-0, 93323-11REDRO-0, 93325-10REDRO-0, 93334-01VOXNU-0, 93055-45VOXNU-0. Each of these has a VOXNU-1 part to replace the VOXNU-0 part ready to go.""
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 87-96,150-153, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 106-115,160-163, `reports/sql/weekly_production_update_view.sql` lines 117-126,158-162,176-185
-- **Measured:** 11,500: Bottling units on 9-parts with an active 5-part BOM that the 5/9 rule drops, month to date (raw tables, repo logic) (2026-11-13 10:36 MT). Repo logic drops 11,500 Bottling units this month: Bottling reads 690,761 with the rule, 702,261 without it. The live view (13:00 run pending) still counts them.
+- **Measured:** 11,500: Bottling units on 9-parts with an active 5-part BOM that the 5/9 rule drops, month to date (raw tables, repo logic) (2026-11-19 10:56 MT). Repo logic drops 11,500 Bottling units this month: Bottling reads 690,761 with the rule, 702,261 without it. The live view (13:00 run pending) still counts them.
 - **Finding:** Jennilyn's 11-13 list has 5 parts; all have an active 5-part BOM line, so the rule covers them. 93147-10VOXNU-0 (5,000 units on 11-05) is dropped too but is not on her list: same -0/-1 setup, to confirm with her.
 
 ### PROD-04 Bulk cases (9xxxx-BK) are always counted
@@ -247,7 +247,7 @@
 - **Decided:** Jennilyn, 2026-10-22 · status: in force
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 119-123,151-152, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 143-145,162, `reports/sql/weekly_production_update_view.sql` lines 142-143,161
-- **Measured:** 76: Bottling units on bulk-case (9xxxx-BK) parts that always count, month to date (2026-11-13 10:36 MT). Bulk cases always count: 76 Bottling records on 21 bulk-case parts stay in Bottling output, and none sits on a part with a 5-part BOM.
+- **Measured:** 86: Bottling units on bulk-case (9xxxx-BK) parts that always count, month to date (2026-11-19 10:56 MT). Bulk cases always count: 76 Bottling records on 21 bulk-case parts stay in Bottling output, and none sits on a part with a 5-part BOM.
 
 ### PROD-05 The 5/9 rule applies to Bottling only; Labeling output counts in full
 
@@ -256,7 +256,7 @@
 - **Decided:** Jennilyn, 2026-10-22 · status: in force
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 150, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 160, `reports/sql/weekly_production_update_view.sql` lines 159
-- **Measured:** 324,206: Labeling units counted in full, month to date (2026-11-13 10:36 MT). Labeling is never checked: every one of its 324,206 units this month is on a 9-part that has a 5-part BOM, so applying the Bottling rule to Labeling would erase all of it.
+- **Measured:** 497,037: Labeling units counted in full, month to date (2026-11-19 10:56 MT). Labeling is never checked: every one of its 324,206 units this month is on a 9-part that has a 5-part BOM, so applying the Bottling rule to Labeling would erase all of it.
 
 ### PROD-06 The 5/9 rule reads today's BOM; the -0 BOMs stay, so past months hold
 
@@ -266,7 +266,7 @@
 - **In her words:** "ALL of the old BOMs are still there - but the parts they belong to are Obsolete (aka inactive)."
 - **Reports:** `packaging_daily_report`, `production_monthly_by_workcenter_group_report`, `weekly_production_update_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/packaging_daily_report_view.sql` lines 87-96, `reports/sql/production_monthly_by_workcenter_group_view.sql` lines 106-115
-- **Measured:** 3: 9-parts that still have an active 5-part BOM (and Bottling output on them since 2026-11-01) (2026-11-13 10:36 MT). Only 3 9-parts still have an active 5-part BOM (11,500 Bottling units this month). Each BOM Jennilyn removes moves that part's past output from dropped back to counted.
+- **Measured:** 3: 9-parts that still have an active 5-part BOM (and Bottling output on them since 2026-11-01) (2026-11-19 10:56 MT). Only 3 9-parts still have an active 5-part BOM (11,500 Bottling units this month). Each BOM Jennilyn removes moves that part's past output from dropped back to counted.
 
 ### PROD-07 Work centre groups behind each production report
 
@@ -275,7 +275,7 @@
 - **Decided:** 2026-08-21 · status: in force
 - **Reports:** `encap_daily_report`, `packaging_daily_report`, `labeling_daily_report`, `blending_daily_report`, `weekly_production_update_report`, `production_monthly_by_workcenter_group_report`
 - **Enforced in:** `reports/sql/encap_daily_report_view.sql` lines 130, `reports/sql/packaging_daily_report_view.sql` lines 150, `reports/sql/labeling_daily_report_view.sql` lines 94, `reports/sql/blending_daily_report_view.sql` lines 87, `reports/sql/weekly_production_update_view.sql` lines 129-135,158,168-170
-- **Measured:** 6: Work centre groups with production this month, and their good units (2026-11-13 10:36 MT). Six groups produced this month; the daily reports cover Encapsulating, Bottling, Labeling and Blending, the monthly and goal reports cover all six.
+- **Measured:** 6: Work centre groups with production this month, and their good units (2026-11-19 10:56 MT). Six groups produced this month; the daily reports cover Encapsulating, Bottling, Labeling and Blending, the monthly and goal reports cover all six.
 
 ### PROD-08 Week-to-date and month-to-date windows
 
@@ -284,7 +284,7 @@
 - **Decided:** Emilio, 2026-08-26 · status: in force
 - **Reports:** `weekly_production_update_report`
 - **Enforced in:** `reports/sql/weekly_production_update_view.sql` lines 91-100,177-190
-- **Measured:** 15,896,617: Week-to-date (Monday to today) good units across Encap, Bottling, Labeling and Printing, computed from raw tables with the repo logic; detail compares month-to-date with the live weekly view (2026-11-13 10:36 MT). Week to date (Monday 11-09 to today) is 15.9M good units across Encap, Bottling, Labeling and Printing; month to date uses the 1st to today and the month is 43.3% complete. The live weekly view still shows old month-to-date figures for Labeling and Printing.
+- **Measured:** 14,858,308: Week-to-date (Monday to today) good units across Encap, Bottling, Labeling and Printing, computed from raw tables with the repo logic; detail compares month-to-date with the live weekly view (2026-11-19 10:56 MT). Week to date (Monday 11-09 to today) is 15.9M good units across Encap, Bottling, Labeling and Printing; month to date uses the 1st to today and the month is 43.3% complete. The live weekly view still shows old month-to-date figures for Labeling and Printing.
 
 ### PROD-09 First pass yield and DPMO
 
@@ -293,7 +293,7 @@
 - **Decided:** 2026-09-01 · S9 · status: partly built
 - **Reports:** `quality_fpy_by_area_month_report`
 - **Enforced in:** `reports/sql/quality_fpy_by_area_month_view.sql` lines 66-72,89-95
-- **Measured:** 100: Bottling first pass yield this month (percent), live FPY view (2026-11-13 10:36 MT). FPY is good units over everything run: Bottling, Encapsulating, Labeling, Blending and Pre-Weigh read 100%, Printing reads 7.77% (151,383 rejected of 164,144 run), a DPMO of 922,257.
+- **Measured:** 100: Bottling first pass yield this month (percent), live FPY view (2026-11-19 10:56 MT). FPY is good units over everything run: Bottling, Encapsulating, Labeling, Blending and Pre-Weigh read 100%, Printing reads 7.77% (151,383 rejected of 164,144 run), a DPMO of 922,257.
 - **Finding:** FPY has no 5/9 rule: Bottling FPY total_qty (October 854,846; November 702,261) includes 9-part records the production reports drop (October 323,904 units, 38% of the total; November 11,500).
 
 ### PROD-10 Downtime hours versus productive hours on work orders
@@ -303,7 +303,7 @@
 - **Decided:** 2026-07-13 · status: in force
 - **Reports:** `work_orders_report`
 - **Enforced in:** `reports/sql/work_orders_view.sql` lines 33-48,66-88
-- **Measured:** 1.60: Downtime hours as a share of logged hours on work orders, operations started in the last 30 days (percent) (2026-11-13 10:36 MT). Of 12,372 logged hours on operations started in the last 30 days, 203 hours (1.6%) carry a work centre event and count as downtime rather than productive time.
+- **Measured:** 1.20: Downtime hours as a share of logged hours on work orders, operations started in the last 30 days (percent) (2026-11-19 10:56 MT). Of 12,372 logged hours on operations started in the last 30 days, 203 hours (1.6%) carry a work centre event and count as downtime rather than productive time.
 
 ## Inventory
 
@@ -314,7 +314,7 @@
 - **Decided:** Jennilyn, 2026-09-04 · status: in force
 - **Reports:** `part_on_hand_inventory_report`, `inventory_available_to_sell_report`, `inventory_out_of_stock_report`, `approaching_msl_report`, `inventory_top_quantity_report`, `inventory_risk_analysis_report`, `mfg_job_schedule_inventory_availability_report`
 - **Enforced in:** `reports/sql/part_on_hand_inventory_view.sql` lines 83-86, `reports/sql/inventory_risk_analysis_view.sql` lines 83-86, `reports/sql/inventory_lot_detail_view.sql` lines 108-109
-- **Measured:** 13,187: Containers on hand sitting in statuses the available-stock rule excludes (Defective, Quarantine, Lot Hold and so on) (2026-11-13 10:36 MT). 13,187 containers sit in statuses that are not on hand (Lot Hold 5,459, Expired 2,409, Quarantine 2,313, Allocated 1,742, Defective 743); only 51,603 containers count as available.
+- **Measured:** 13,596: Containers on hand sitting in statuses the available-stock rule excludes (Defective, Quarantine, Lot Hold and so on) (2026-11-19 10:56 MT). 13,187 containers sit in statuses that are not on hand (Lot Hold 5,459, Expired 2,409, Quarantine 2,313, Allocated 1,742, Defective 743); only 51,603 containers count as available.
 - **Finding:** Containers in status RELEASED (484) and LOADED (5) are also treated as not available, but the rule text does not list them.
 
 ### INV-02 Demand is open orders in Pending Fulfillment and Hold only
@@ -325,7 +325,7 @@
 - **In her words:** "I did change it in Plex because I saw that it was showing demand for deposit review and pending sales approval. We don't count those as demand until they're pending fulfillment."
 - **Reports:** `inventory_available_to_sell_report`, `inventory_out_of_stock_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 167-196
-- **Measured:** 0: Units of order demand coming only from orders on Hold (Include In MRP, still counted) (2026-11-13 10:36 MT). Orders on Hold would be counted as demand, but there are none on Hold today, so all 3.26M units of order demand (499 parts) come from Pending Fulfillment.
+- **Measured:** 0: Units of order demand coming only from orders on Hold (Include In MRP, still counted) (2026-11-19 10:56 MT). Orders on Hold would be counted as demand, but there are none on Hold today, so all 3.26M units of order demand (499 parts) come from Pending Fulfillment.
 
 ### INV-03 Quantity available = on hand minus demand (it can go negative)
 
@@ -335,7 +335,7 @@
 - **In her words:** "inventory would be quantity on hand. Required is going to be our sold and inventory minus required should be the quantity available."
 - **Reports:** `inventory_available_to_sell_report`, `inventory_out_of_stock_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 587-591
-- **Measured:** 774: Parts whose quantity available after all demand is below zero (2026-11-13 10:36 MT). 774 of 3,020 parts are below zero after demand (345 even on orders alone): availability goes negative on purpose to show the shortfall.
+- **Measured:** 747: Parts whose quantity available after all demand is below zero (2026-11-19 10:56 MT). 774 of 3,020 parts are below zero after demand (345 even on orders alone): availability goes negative on purpose to show the shortfall.
 
 ### INV-04 Component demand is netted down the BOM one level at a time
 
@@ -345,7 +345,7 @@
 - **In her words:** "go down one BOM at a time and only bring over demand for things not stocked"
 - **Reports:** `inventory_available_to_sell_report`, `approaching_msl_report`, `inventory_out_of_stock_report`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 303-350,517-526
-- **Measured:** 838: Parts whose netted component demand is lower than the old flat explosion (2026-11-13 10:36 MT). Netting lowers component demand on 838 parts; flat demand would total 329.8M units versus 221.6M netted. Worst case 10001-01VOXNU-1: 50.4M flat vs 7.3M netted.
+- **Measured:** 878: Parts whose netted component demand is lower than the old flat explosion (2026-11-19 10:56 MT). Netting lowers component demand on 838 parts; flat demand would total 329.8M units versus 221.6M netted. Worst case 10001-01VOXNU-1: 50.4M flat vs 7.3M netted.
 
 ### INV-05 Both gross and netted demand are published
 
@@ -355,7 +355,7 @@
 - **In her words:** "I've never been able to see total demand for any component + that demand reduced by bottled inventory"
 - **Reports:** `inventory_available_to_sell_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 600-608, `reports/sql/approaching_msl_view.sql` lines 249-250,364-366
-- **Measured:** 674: MSL rows where gross demand is higher than netted demand (both published) (2026-11-13 10:36 MT). Gross is higher than netted on 674 of 1,694 MSL rows, so both numbers matter; the biggest gap is 10001-01VOXNU-1 (50.4M gross vs 7.3M netted).
+- **Measured:** 718: MSL rows where gross demand is higher than netted demand (both published) (2026-11-19 10:56 MT). Gross is higher than netted on 674 of 1,694 MSL rows, so both numbers matter; the biggest gap is 10001-01VOXNU-1 (50.4M gross vs 7.3M netted).
 
 ### INV-06 What netting does not do (open jobs, due dates, depth)
 
@@ -364,7 +364,7 @@
 - **Decided:** 2026-10-30 · D26 · status: partly built
 - **Reports:** `inventory_available_to_sell_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 488-526,608
-- **Measured:** 0: Parts whose BOM is deeper than the 6 netting levels (0 means netting is complete) (2026-11-13 10:36 MT). No part is deeper than the 6 netting stages (0 flagged); the deepest low-level code is 6 and 391 parts sit at levels 5-6, so a net_7 stage is not needed yet.
+- **Measured:** 0: Parts whose BOM is deeper than the 6 netting levels (0 means netting is complete) (2026-11-19 10:56 MT). No part is deeper than the 6 netting stages (0 flagged); the deepest low-level code is 6 and 391 parts sit at levels 5-6, so a net_7 stage is not needed yet.
 
 ### INV-07 One part number with several Plex keys counts once (wrapper keys)
 
@@ -373,7 +373,7 @@
 - **Decided:** 2026-10-28 · status: in force
 - **Reports:** `inventory_available_to_sell_report`, `approaching_msl_report`, `mfg_job_schedule_inventory_availability_report`, `part_usage_monthly`
 - **Enforced in:** `reports/sql/inventory_available_to_sell_view.sql` lines 143-158,218-238,257-264, `reports/sql/approaching_msl_view.sql` lines 107-120,233-264
-- **Measured:** 45: Parts counted through a unit-wrapper key, and units of wrapper stock converted (2026-11-13 10:36 MT). 45 parts have stock on a wrapper key that is converted and counted once, adding 4,356 units that would otherwise be missed or double counted.
+- **Measured:** 34: Parts counted through a unit-wrapper key, and units of wrapper stock converted (2026-11-19 10:56 MT). 45 parts have stock on a wrapper key that is converted and counted once, adding 4,356 units that would otherwise be missed or double counted.
 
 ### INV-08 Out of stock definition (part number starts with 33, has a reorder point, and available is negative)
 
@@ -383,7 +383,7 @@
 - **In her words:** "for us to be out of stock, it has to start with 33 for the part number, and it has to have a minimum stock level... if the inventory amount is negative, or we have zero inventory and we have demand... sometimes we make custom parts, those are okay to be negative"
 - **Reports:** `inventory_out_of_stock_report`
 - **Enforced in:** `reports/sql/inventory_out_of_stock_view.sql` lines 95-98
-- **Measured:** 21: Parts out of stock right now (33-prefix, reorder point above 0, available below 0) (2026-11-13 10:36 MT). 21 parts are out of stock today; 15 more 33-parts have negative availability but no reorder point, so the rule does not flag them.
+- **Measured:** 15: Parts out of stock right now (33-prefix, reorder point above 0, available below 0) (2026-11-19 10:56 MT). 21 parts are out of stock today; 15 more 33-parts have negative availability but no reorder point, so the rule does not flag them.
 
 ### INV-09 Approaching MSL: when a part is at its reorder point
 
@@ -392,7 +392,7 @@
 - **Decided:** Jennilyn, 2026-10-28 · D21 · status: in force
 - **Reports:** `approaching_msl_report`
 - **Enforced in:** `reports/sql/approaching_msl_view.sql` lines 326-327,368
-- **Measured:** 819: Parts at their reorder point today (2026-11-13 10:36 MT). 819 of 1,694 parts are at or below their reorder point; 408 parts have no reorder point and can never be flagged.
+- **Measured:** 804: Parts at their reorder point today (2026-11-19 10:56 MT). 819 of 1,694 parts are at or below their reorder point; 408 parts have no reorder point and can never be flagged.
 
 ### INV-10 MSL average daily usage: NetSuite is held until Plex has 6 months of history
 
@@ -401,7 +401,7 @@
 - **Decided:** Jennilyn, 2026-11-10 · D21 · status: in force
 - **Reports:** `approaching_msl_report`, `mfg_job_schedule_inventory_availability_report`
 - **Enforced in:** `reports/sql/approaching_msl_view.sql` lines 59-67,144-177,303-316
-- **Measured:** 829: Parts whose usage figure comes from NetSuite because Plex history is under 6 months (2026-11-13 10:36 MT). 829 parts use NetSuite usage because Plex has only 25 of the 183 days needed; 306 use short Plex history and 559 have no usage figure.
+- **Measured:** 829: Parts whose usage figure comes from NetSuite because Plex history is under 6 months (2026-11-19 10:56 MT). 829 parts use NetSuite usage because Plex has only 25 of the 183 days needed; 306 use short Plex history and 559 have no usage figure.
 
 ### INV-11 MSL data flags: usage disagreement and stale NetSuite figures
 
@@ -410,7 +410,7 @@
 - **Decided:** 2026-10-26 · status: in force
 - **Reports:** `approaching_msl_report`
 - **Enforced in:** `reports/sql/approaching_msl_view.sql` lines 72-82,341-357
-- **Measured:** 1,146: MSL rows carrying a data flag (2026-11-13 10:36 MT). 1,146 of 1,694 MSL rows carry a flag; 196 are negative availability and most of the rest are the NetSuite/short-history notice. No usage disagreement is flagged yet because Plex has no trusted usage.
+- **Measured:** 1,238: MSL rows carrying a data flag (2026-11-19 10:56 MT). 1,146 of 1,694 MSL rows carry a flag; 196 are negative availability and most of the rest are the NetSuite/short-history notice. No usage disagreement is flagged yet because Plex has no trusted usage.
 
 ### INV-12 On order counts open PO releases; partial releases count in full
 
@@ -419,7 +419,7 @@
 - **Decided:** 2026-10-28 · D22 · status: in force
 - **Reports:** `approaching_msl_report`, `purchasing_open_orders_report`, `mfg_job_schedule_inventory_availability_report`
 - **Enforced in:** `reports/sql/approaching_msl_view.sql` lines 183-212, `reports/sql/purchasing_open_orders_view.sql` lines 100-102
-- **Measured:** 111,206,294: Units on order across open PO releases (partial releases counted in full) (2026-11-13 10:36 MT). 111.2M units are on order across 120 parts; 15 parts include a partly received PO line counted in full.
+- **Measured:** 110,198,989: Units on order across open PO releases (partial releases counted in full) (2026-11-19 10:56 MT). 111.2M units are on order across 120 parts; 15 parts include a partly received PO line counted in full.
 
 ### INV-13 Monthly part usage (what production consumed)
 
@@ -428,7 +428,7 @@
 - **Decided:** Jennilyn, 2026-11-10 · status: in force
 - **Reports:** `part_usage_monthly`, `part_usage_month_to_date`
 - **Enforced in:** `terraform/part_usage_for_month.sql` lines 41-60,62-78,113-139
-- **Measured:** 265: Parts with recorded consumption in the latest month held in part_usage_monthly (October is partial; November is written on the 1st of December) (2026-11-13 10:36 MT). Only October is held (partial, 13 days): 265 parts consumed 108.9M units. November is written on the 1st of December.
+- **Measured:** 265: Parts with recorded consumption in the latest month held in part_usage_monthly (October is partial; November is written on the 1st of December) (2026-11-19 10:56 MT). Only October is held (partial, 13 days): 265 parts consumed 108.9M units. November is written on the 1st of December.
 
 ### INV-14 Inventory value: every active container except Receiving, primary cost model
 
@@ -437,7 +437,7 @@
 - **Decided:** Jennilyn, 2026-10-30 · D25 · status: in force
 - **Reports:** `inventory_valuation_summary_report`, `inventory_valuation_total_report`, `inventory_lot_detail_report`, `inventory_snapshot_report`
 - **Enforced in:** `reports/sql/inventory_valuation_summary_view.sql` lines 176-205,224-232,257-269, `reports/sql/inventory_valuation_total_view.sql` lines 44-53,61-80
-- **Measured:** 14,723,241: Total inventory value on the current snapshot (dollars) (2026-11-13 10:36 MT). Inventory is worth $14.72M on the 2026-11-12 snapshot, of which $11.44M is available stock; 1,213 on-hand parts have no cost and add $0.
+- **Measured:** 14,589,330: Total inventory value on the current snapshot (dollars) (2026-11-19 10:56 MT). Inventory is worth $14.72M on the 2026-11-12 snapshot, of which $11.44M is available stock; 1,213 on-hand parts have no cost and add $0.
 
 ### INV-15 Only the current inventory snapshot has a value (no month-end trend)
 
@@ -446,7 +446,7 @@
 - **Decided:** 2026-09-24 · S10 · status: open decision
 - **Reports:** `inventory_valuation_total_report`, `inventory_valuation_summary_report`
 - **Enforced in:** `reports/sql/inventory_valuation_summary_view.sql` lines 257-262, `reports/sql/inventory_valuation_total_view.sql` lines 93-100
-- **Measured:** 22: Snapshots that show no total value (everything but the latest) (2026-11-13 10:36 MT). 22 of 23 snapshots show no total value; only the current one is valued, since Plex keeps costs for old snapshots but not their stock.
+- **Measured:** 22: Snapshots that show no total value (everything but the latest) (2026-11-19 10:56 MT). 22 of 23 snapshots show no total value; only the current one is valued, since Plex keeps costs for old snapshots but not their stock.
 
 ### INV-16 Lot detail: Best By and Expired
 
@@ -455,7 +455,7 @@
 - **Decided:** Jennilyn, 2026-10-30 · D26 · status: partly built
 - **Reports:** `inventory_lot_detail_report`
 - **Enforced in:** `reports/sql/inventory_lot_detail_view.sql` lines 72-76,98-109
-- **Measured:** 28: Lots past their Best By date whose container status is not yet Expired (2026-11-13 10:36 MT). 28 lots are past Best By but still show an active status (183 containers), which is the gap this report exists to show; Plex's own Expired flag covers 291 lots.
+- **Measured:** 29: Lots past their Best By date whose container status is not yet Expired (2026-11-19 10:56 MT). 28 lots are past Best By but still show an active status (183 containers), which is the gap this report exists to show; Plex's own Expired flag covers 291 lots.
 
 ### INV-17 Inventory risk: at risk after 90 days with no container activity
 
@@ -464,7 +464,7 @@
 - **Decided:** 2026-08-21 · status: open decision
 - **Reports:** `inventory_risk_analysis_report`
 - **Enforced in:** `reports/sql/inventory_risk_analysis_view.sql` lines 117-118
-- **Measured:** 2: Parts flagged at risk (90+ days without container activity) (2026-11-13 10:36 MT). Only 2 of 2,180 parts are at risk; the oldest container activity is 29 days ago because Plex went live a month ago.
+- **Measured:** 2: Parts flagged at risk (90+ days without container activity) (2026-11-19 10:56 MT). Only 2 of 2,180 parts are at risk; the oldest container activity is 29 days ago because Plex went live a month ago.
 
 ### INV-18 Cycle count accuracy is a per-location hit rate
 
@@ -473,7 +473,7 @@
 - **Decided:** Warehouse team (via Emilio), 2026-09-11 · status: in force
 - **Reports:** `part_cycle_count_report`
 - **Enforced in:** `reports/sql/part_cycle_count_view.sql` lines 62-110
-- **Measured:** 0: Months with cycle count results and locations counted in the latest month (2026-11-13 10:36 MT). Cycle counts are empty today: no month has counted locations yet.
+- **Measured:** 0: Months with cycle count results and locations counted in the latest month (2026-11-19 10:56 MT). Cycle counts are empty today: no month has counted locations yet.
 
 ## Label Design
 
@@ -483,8 +483,8 @@
 - **Why:** The old stored procedure filtered only on release status and also returned lines on orders not yet approved.
 - **Decided:** Jennilyn, 2026-09-11 · status: in force
 - **Reports:** `label_design_report`
-- **Enforced in:** `reports/sql/label_design_view.sql` lines 551-552,680-681
-- **Measured:** 69: Order lines in the Label Design queue now (2026-11-13 10:36 MT). 69 lines are in the queue, all Label Design lines on Pending Fulfillment orders.
+- **Enforced in:** `reports/sql/label_design_view.sql` lines 551-552,680-681, `plex_api_releases.py` lines 133,149,152
+- **Measured:** 77: Order lines in the Label Design queue now (2026-11-19 10:56 MT). 69 lines are in the queue, all Label Design lines on Pending Fulfillment orders.
 
 ### LBL-02 Orders before 2026-10-18 never reach the queue
 
@@ -493,7 +493,7 @@
 - **Decided:** Emilio, 2026-10-19 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 568,682
-- **Measured:** 0: Queue rows dated before 2026-10-18 (the rule says there should be none) (2026-11-13 10:36 MT). 0 queue rows are dated before 10-18 (earliest is 10-19); those older migrated lines (20 on 11-12) are worked by hand.
+- **Measured:** 0: Queue rows dated before 2026-10-18 (the rule says there should be none) (2026-11-19 10:56 MT). 0 queue rows are dated before 10-18 (earliest is 10-19); those older migrated lines (20 on 11-12) are worked by hand.
 
 ### LBL-03 One queue item per order line
 
@@ -502,7 +502,7 @@
 - **Decided:** Ashley, 2026-09-30 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 695-713,818
-- **Measured:** 0: Queue lines that collapse several releases into one item (2026-11-13 10:36 MT). One item per line: 0 lines have several releases today and there are no duplicate lines in the queue.
+- **Measured:** 0: Queue lines that collapse several releases into one item (2026-11-19 10:56 MT). One item per line: 0 lines have several releases today and there are no duplicate lines in the queue.
 
 ### LBL-04 ODBC and the Plex screens are combined for Label Design
 
@@ -511,7 +511,7 @@
 - **Decided:** Emilio, 2026-11-11 · D38 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 603-607,676-692
-- **Measured:** 1: Queue lines that only the Plex screens have (data_source = live) right now (2026-11-13 10:36 MT). 1 of 69 lines exists only on the Plex screens; 11 pushed items in the last 30 days were later confirmed by ODBC.
+- **Measured:** 0: Queue lines that only the Plex screens have (data_source = live) right now (2026-11-19 10:56 MT). 1 of 69 lines exists only on the Plex screens; 11 pushed items in the last 30 days were later confirmed by ODBC.
 
 ### LBL-05 A line is pushed to Monday once and never re-created
 
@@ -520,7 +520,7 @@
 - **Decided:** 2026-09-30 · L17 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `label_design_service/push.py` lines 11-23,106,126-127
-- **Measured:** 155: Monday items created by the push in the last 30 days (never re-created) (2026-11-13 10:36 MT). 155 Monday items were created in 30 days and no line was created twice; the log also holds 118 fills, 37 repairs and 2 alerts.
+- **Measured:** 148: Monday items created by the push in the last 30 days (never re-created) (2026-11-19 10:56 MT). 155 Monday items were created in 30 days and no line was created twice; the log also holds 118 fills, 37 repairs and 2 alerts.
 
 ### LBL-06 Late data fills only empty cells, once, and never overwrites
 
@@ -529,7 +529,7 @@
 - **Decided:** Emilio, 2026-11-11 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `label_design_service/fill.py` lines 29-55,87,137-138
-- **Measured:** 118: Late-data fills of empty Monday cells in the last 30 days (2026-11-13 10:36 MT). 118 fill actions in 30 days across 106 lines, all on empty cells only.
+- **Measured:** 181: Late-data fills of empty Monday cells in the last 30 days (2026-11-19 10:56 MT). 118 fill actions in 30 days across 106 lines, all on empty cells only.
 - **Finding:** 12 lines have two 'filled' log rows in 30 days; the second is the Data Source rewrite 'confirmed by ODBC' (an expected second touch), so 'fills once' holds per cell, not per line.
 
 ### LBL-07 Reason Code and Memo come from the job note
@@ -539,7 +539,7 @@
 - **Decided:** Emilio, 2026-09-29 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 765-790
-- **Measured:** 61: Queue lines whose job note starts with a digit 1-6 and so carry a Reason Code (2026-11-13 10:36 MT). 61 of 69 lines carry a Reason Code from the note (5 most common, x34); 1 line has a note but no code, so it goes into Memo only.
+- **Measured:** 73: Queue lines whose job note starts with a digit 1-6 and so carry a Reason Code (2026-11-19 10:56 MT). 61 of 69 lines carry a Reason Code from the note (5 most common, x34); 1 line has a note but no code, so it goes into Memo only.
 
 ### LBL-08 Sales Rep is the BDM; Inside Sales Rep is the AM
 
@@ -548,7 +548,7 @@
 - **Decided:** Emilio, 2026-10-08 · L17 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 71-77,425-430,623-626
-- **Measured:** 0: Queue lines with no Sales Rep (BDM) found (2026-11-13 10:36 MT). Every line has a BDM, but 66 of 69 have no Inside Sales Rep (AM).
+- **Measured:** 0: Queue lines with no Sales Rep (BDM) found (2026-11-19 10:56 MT). Every line has a BDM, but 66 of 69 have no Inside Sales Rep (AM).
 - **Finding:** 66 of 69 queue lines have no Inside Sales Rep (AM), so that Monday column is blank for 96% of lines.
 
 ### LBL-09 Label attributes come from the label part; Bottle Material from the bottle name
@@ -558,7 +558,7 @@
 - **Decided:** Emilio, 2026-10-02 · L8 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 262-272,302-330,543-545,741-745
-- **Measured:** 5: Queue lines where no label part was found (2026-11-13 10:36 MT). 5 of 69 lines have no label part found; 11 have no bottle material and 52 no label size.
+- **Measured:** 5: Queue lines where no label part was found (2026-11-19 10:56 MT). 5 of 69 lines have no label part found; 11 have no bottle material and 52 no label size.
 
 ### LBL-10 Priority is the release priority, passed through unchanged
 
@@ -567,7 +567,7 @@
 - **Decided:** Emilio, 2026-10-07 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 400,505-506
-- **Measured:** 69: Queue lines with a priority, by priority word (2026-11-13 10:36 MT). Priority passes through unchanged: 68 lines Medium, 1 High.
+- **Measured:** 77: Queue lines with a priority, by priority word (2026-11-19 10:56 MT). Priority passes through unchanged: 68 lines Medium, 1 High.
 
 ### LBL-11 Monday item name: customer part number or label code
 
@@ -584,7 +584,7 @@
 - **Decided:** team (hours given by Jennilyn), 2026-10-02 · status: in force
 - **Reports:** `label_design_report`
 - **Enforced in:** `terraform/main.tf` lines 4771-4775
-- **Measured:** 0: Push-log runs in the last 14 days that happened outside the stated window (weekends, or before 5:00 / after 18:10 MT) (2026-11-13 10:36 MT). 0 queue runs happened on a weekend in the last 14 days, and 27 runs were logged, all inside the window.
+- **Measured:** 0: Push-log runs in the last 14 days that happened outside the stated window (weekends, or before 5:00 / after 18:10 MT) (2026-11-19 10:56 MT). 0 queue runs happened on a weekend in the last 14 days, and 27 runs were logged, all inside the window.
 
 ## Goals and scorecard
 
@@ -596,7 +596,7 @@
 - **In her words:** "Make the manual-data app the ONLY writer of prod goals."
 - **Reports:** `scorecard_goals_resolved`, `revenue_vs_goal_report`, `sales_vs_goal_report`, `production_vs_goal_report`
 - **Enforced in:** `deploy/manual_data_app_v2/Code.gs` lines 7-9, `deploy/manual_data_app_v2/Code.gs` lines 246-248, `reports/sql/scorecard_goals_resolved_view.sql` lines 73-84
-- **Measured:** 125: Goal rows ever saved in the app, and how many are superseded or retractions (nothing is deleted) (2026-11-13 10:36 MT). 125 goal rows exist for 116 live goals, so 9 older versions are kept as history; no retractions yet, last save 2026-11-05.
+- **Measured:** 125: Goal rows ever saved in the app, and how many are superseded or retractions (nothing is deleted) (2026-11-19 10:56 MT). 125 goal rows exist for 116 live goals, so 9 older versions are kept as history; no retractions yet, last save 2026-11-05.
 
 ### GOAL-02 The app wins; the old goals table is only a fallback
 
@@ -605,7 +605,7 @@
 - **Decided:** 2026-09-22 · status: in force
 - **Reports:** `scorecard_goals_resolved`, `revenue_vs_goal_report`, `sales_vs_goal_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/scorecard_goals_resolved_view.sql` lines 61-91, `reports/sql/scorecard_goals_resolved_view.sql` lines 120-137
-- **Measured:** 0: Resolved goals that come from the legacy table instead of the app (2026-11-13 10:36 MT). 0 of 116 goals come from the legacy table; the app supplies all of them.
+- **Measured:** 0: Resolved goals that come from the legacy table instead of the app (2026-11-19 10:56 MT). 0 of 116 goals come from the legacy table; the app supplies all of them.
 
 ### GOAL-03 Goal scope must match Plex's spelling exactly
 
@@ -613,7 +613,7 @@
 - **Why:** A typo otherwise reads as 0% forever.
 - **Reports:** `sales_vs_goal_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/production_vs_goal_view.sql` lines 64-71, `reports/sql/production_vs_goal_view.sql` lines 87-92, `reports/sql/sales_vs_goal_view.sql` lines 81-88, `deploy/manual_data_app_v2/Code.gs` lines 174-185
-- **Measured:** 107: Goal/actual rows that do not match by exact scope text (a goal with no actuals or actuals with no goal), sales + production, all months (2026-11-13 10:36 MT). 107 goal-versus-actual rows have no match by exact text, including this month's Printing, Pre-Weigh and Blending (output but no goal).
+- **Measured:** 107: Goal/actual rows that do not match by exact scope text (a goal with no actuals or actuals with no goal), sales + production, all months (2026-11-19 10:56 MT). 107 goal-versus-actual rows have no match by exact text, including this month's Printing, Pre-Weigh and Blending (output but no goal).
 
 ### GOAL-04 The company-wide sales goal is its own row; rep goals are not added up
 
@@ -622,7 +622,7 @@
 - **Decided:** Jennilyn · status: in force
 - **Reports:** `sales_vs_goal_report`
 - **Enforced in:** `reports/sql/sales_vs_goal_view.sql` lines 58-66, `reports/sql/sales_vs_goal_view.sql` lines 72-88
-- **Measured:** 5,000,000: Company-wide sales goal this month, dollars (its own row; not the sum of rep goals) (2026-11-13 10:36 MT). The company-wide goal is $5,000,000 on its own row; summing every goal_value in the month would give $9,675,000 and wrongly halve the percent. Real company percent is 36.8%.
+- **Measured:** 5,000,000: Company-wide sales goal this month, dollars (its own row; not the sum of rep goals) (2026-11-19 10:56 MT). The company-wide goal is $5,000,000 on its own row; summing every goal_value in the month would give $9,675,000 and wrongly halve the percent. Real company percent is 36.8%.
 
 ### GOAL-05 A goal scoped 'Sales Representative' belongs to nobody
 
@@ -631,7 +631,7 @@
 - **Decided:** Jennilyn · S5 · status: open decision
 - **Reports:** `sales_vs_goal_report`
 - **Enforced in:** `reports/sql/sales_vs_goal_view.sql` lines 60-66
-- **Measured:** 7: Goal rows scoped 'Sales Representative' (matching nobody), and dollars per month (2026-11-13 10:36 MT). 7 monthly goals of $175,000 (June to December) are scoped 'Sales Representative' and match no person, so $1,225,000 of goal is counted nowhere.
+- **Measured:** 7: Goal rows scoped 'Sales Representative' (matching nobody), and dollars per month (2026-11-19 10:56 MT). 7 monthly goals of $175,000 (June to December) are scoped 'Sales Representative' and match no person, so $1,225,000 of goal is counted nowhere.
 
 ### GOAL-06 Who can have a sales goal: the Inside Sales roster
 
@@ -640,7 +640,7 @@
 - **Decided:** Emilio, 2026-09-22 · status: open decision
 - **Reports:** `sales_reps_report`, `sales_vs_goal_report`
 - **Enforced in:** `reports/sql/sales_reps_view.sql` lines 67-74, `deploy/manual_data_app_v2/Code.gs` lines 174-182
-- **Measured:** 15: People on the Inside Sales roster (goal form), and roster names with a goal this month (2026-11-13 10:36 MT). 15 people are on the Inside Sales roster (the rule text says 13); 'Sales Representative' is a goal scope that is not on it.
+- **Measured:** 15: People on the Inside Sales roster (goal form), and roster names with a goal this month (2026-11-19 10:56 MT). 15 people are on the Inside Sales roster (the rule text says 13); 'Sales Representative' is a goal scope that is not on it.
 - **Finding:** The Inside Sales roster has 15 people, not the 13 the rule states.
 
 ### GOAL-07 Production goals: real for November, placeholders elsewhere, in units
@@ -651,7 +651,7 @@
 - **In her words:** "November production goal per Jennilyn"
 - **Reports:** `production_vs_goal_report`
 - **Enforced in:** `reports/sql/production_vs_goal_view.sql` lines 63-71
-- **Measured:** 3: Production goal rows this month, and groups that ran with no goal (2026-11-13 10:36 MT). 3 of 6 production groups have a November goal (Bottling 52%, Labeling 43.2%, Encapsulating 28.9%); Blending, Pre-Weigh and Printing show production with no goal.
+- **Measured:** 3: Production goal rows this month, and groups that ran with no goal (2026-11-19 10:56 MT). 3 of 6 production groups have a November goal (Bottling 52%, Labeling 43.2%, Encapsulating 28.9%); Blending, Pre-Weigh and Printing show production with no goal.
 
 ### GOAL-08 Revenue-vs-goal drops a goal month that has no revenue
 
@@ -660,7 +660,7 @@
 - **Decided:** not recorded · S13 · status: open decision
 - **Reports:** `revenue_vs_goal_report`
 - **Enforced in:** `reports/sql/revenue_vs_goal_view.sql` lines 83-85
-- **Measured:** 10: Goal months that the revenue-vs-goal report drops because they had no shipments (2026-11-13 10:36 MT). 10 of 12 revenue goal months are dropped because they had no shipments; only 2 months appear.
+- **Measured:** 10: Goal months that the revenue-vs-goal report drops because they had no shipments (2026-11-19 10:56 MT). 10 of 12 revenue goal months are dropped because they had no shipments; only 2 months appear.
 
 ## Operations
 
@@ -671,7 +671,7 @@
 - **Decided:** 2026-09-01 · status: in force
 - **Reports:** `bottling_job_open_report`, `bottling_job_open_with_orders_report`, `mfg_job_open_caps_report`, `labeling_open_work_orders_report`, `printing_open_work_orders_report`, `approaching_msl_report`
 - **Enforced in:** `reports/sql/bottling_job_open_view.sql` lines 46-49, `reports/sql/mfg_job_open_caps_view.sql` lines 65-68, `reports/sql/labeling_open_work_orders_view.sql` lines 76-79, `reports/sql/printing_open_work_orders_view.sql` lines 56-59, `reports/sql/approaching_msl_view.sql` lines 201-212
-- **Measured:** 84: Open jobs: Bottling open jobs, Encapsulating open jobs and Labeling open work orders (rows each) (2026-11-13 10:36 MT). 84 open Bottling jobs, 42 open capsule jobs and 1 open labeling work order; only Scheduled and Production statuses appear, none Hold.
+- **Measured:** 71: Open jobs: Bottling open jobs, Encapsulating open jobs and Labeling open work orders (rows each) (2026-11-19 10:56 MT). 84 open Bottling jobs, 42 open capsule jobs and 1 open labeling work order; only Scheduled and Production statuses appear, none Hold.
 
 ### OPS-02 Open caps and open bottles are the job's planned quantity, once per job
 
@@ -680,7 +680,7 @@
 - **Decided:** 2026-09-24 · status: in force
 - **Reports:** `mfg_job_open_caps_report`, `bottling_job_open_report`
 - **Enforced in:** `reports/sql/mfg_job_open_caps_view.sql` lines 36-44,65, `reports/sql/bottling_job_open_view.sql` lines 46
-- **Measured:** 366,564,008: Capsules pending on open Encapsulating jobs, counted once per job (2026-11-13 10:36 MT). 366.6M capsules are pending on 42 open Encapsulating jobs and 1.69M bottles on 84 Bottling jobs, each job counted once.
+- **Measured:** 367,811,346: Capsules pending on open Encapsulating jobs, counted once per job (2026-11-19 10:56 MT). 366.6M capsules are pending on 42 open Encapsulating jobs and 1.69M bottles on 84 Bottling jobs, each job counted once.
 
 ### OPS-03 Which sales order is behind an open Bottling job
 
@@ -689,7 +689,7 @@
 - **Decided:** Jennilyn, 2026-10-26 · status: in force
 - **Reports:** `bottling_job_open_with_orders_report`
 - **Enforced in:** `reports/sql/bottling_job_open_with_orders_view.sql` lines 52-85
-- **Measured:** 9: Open Bottling jobs tied to a sales order directly (order_source Direct) (2026-11-13 10:36 MT). Of 84 open Bottling jobs, 9 are tied directly to an order, 50 get suggested orders and 25 have none.
+- **Measured:** 11: Open Bottling jobs tied to a sales order directly (order_source Direct) (2026-11-19 10:56 MT). Of 84 open Bottling jobs, 9 are tied directly to an order, 50 get suggested orders and 25 have none.
 
 ### OPS-04 MFG job success: three gates (yield, no deviation, 84-day turnaround)
 
@@ -698,7 +698,7 @@
 - **Decided:** Emilio, 2026-08-26 · status: partly built
 - **Reports:** `mfg_job_schedule_success_metrics_report`, `mfg_job_schedule_gate_stats_report`, `mfg_job_schedule_fg_testing_pending_report`
 - **Enforced in:** `reports/sql/mfg_job_schedule_success_metrics_view.sql` lines 194-210, `reports/sql/mfg_job_schedule_gate_stats_view.sql` lines 1-25
-- **Measured:** 0: Jobs meeting all three gates of MFG job success (share, percent) (2026-11-13 10:36 MT). 0 of 3,519 jobs are successful: the yield gate passes on 1,657, the deviation gate on all 3,519, and the 84-day gate on none.
+- **Measured:** 0: Jobs meeting all three gates of MFG job success (share, percent) (2026-11-19 10:56 MT). 0 of 3,519 jobs are successful: the yield gate passes on 1,657, the deviation gate on all 3,519, and the 84-day gate on none.
 - **Finding:** fg_testing_released_date is empty on all 3,519 jobs, so total_days is NULL and the 84-day gate can never pass: 0 jobs are successful by construction.
 
 ### OPS-05 Stock versus Custom is guessed from job distribution
@@ -708,7 +708,7 @@
 - **Decided:** 2026-08-26 · status: open decision
 - **Reports:** `mfg_job_schedule_success_metrics_report`, `mfg_job_schedule_gate_stats_report`
 - **Enforced in:** `reports/sql/mfg_job_schedule_success_metrics_view.sql` lines 150-152,198-199
-- **Measured:** 100: Share of MFG jobs read as Stock (no job distribution row) on production, percent (2026-11-13 10:36 MT). All 3,519 jobs (100%) are read as Stock and none as Custom, so the 95% yield goal applies to every job and the 92% custom goal never does.
+- **Measured:** 100: Share of MFG jobs read as Stock (no job distribution row) on production, percent (2026-11-19 10:56 MT). All 3,519 jobs (100%) are read as Stock and none as Custom, so the 95% yield goal applies to every job and the 92% custom goal never does.
 - **Finding:** No job has a job distribution row (0 of 3,519), so every job reads Stock and the Custom 92% yield goal is never used.
 
 ### OPS-06 Open purchase orders
@@ -718,7 +718,7 @@
 - **Decided:** 2026-08-10 · status: in force
 - **Reports:** `purchasing_open_orders_report`, `purchasing_po_pending_approval_report`
 - **Enforced in:** `reports/sql/purchasing_open_orders_view.sql` lines 98-102
-- **Measured:** 311: Open purchase order lines, and units on them (2026-11-13 10:36 MT). 311 open PO lines on 171 POs, 112.6M units on order (257 On Order, 38 Approved, 16 New).
+- **Measured:** 305: Open purchase order lines, and units on them (2026-11-19 10:56 MT). 311 open PO lines on 171 POs, 112.6M units on order (257 On Order, 38 Approved, 16 New).
 
 ### OPS-07 Pending requisitions are approved but not yet on a PO
 
@@ -728,7 +728,7 @@
 - **In her words:** "Pending Order = requisition is Approved (Allow_PO=1) but has NOT yet been turned into a PO release"
 - **Reports:** `purchasing_pending_requisitions_report`
 - **Enforced in:** `reports/sql/purchasing_pending_requisitions_view.sql` lines 100-106
-- **Measured:** 0: Approved requisitions not yet on a PO (2026-11-13 10:36 MT). No approved requisition is waiting for a PO today.
+- **Measured:** 0: Approved requisitions not yet on a PO (2026-11-19 10:56 MT). No approved requisition is waiting for a PO today.
 
 ### OPS-08 POs to approve and supplier returns pending
 
@@ -737,7 +737,7 @@
 - **Decided:** 2026-08-14 · status: open decision
 - **Reports:** `purchasing_po_pending_approval_report`, `quality_supplier_returns_pending_report`
 - **Enforced in:** `reports/sql/purchasing_po_pending_approval_view.sql` lines 70, `reports/sql/quality_supplier_returns_pending_view.sql` lines 68-69
-- **Measured:** 0: POs waiting for approval (Pending Approval-NS) (2026-11-13 10:36 MT). No PO is in Pending Approval-NS today; 3 supplier returns are pending (the stand-in list).
+- **Measured:** 1: POs waiting for approval (Pending Approval-NS) (2026-11-19 10:56 MT). No PO is in Pending Approval-NS today; 3 supplier returns are pending (the stand-in list).
 
 ### OPS-09 Quality problems come from Problem Control (Quality_v_Problem_2)
 
@@ -746,7 +746,7 @@
 - **Decided:** 2026-09-22 · status: in force
 - **Reports:** `quality_nonconformance_report`, `quality_turnaround_time_report`, `quality_cost_by_category_report`, `quality_disposition_cost_report`, `quality_deviation_report`
 - **Enforced in:** `reports/sql/quality_nonconformance_view.sql` lines 12-27
-- **Measured:** 26: Nonconformance records read from Problem Control (2026-11-13 10:36 MT). 26 nonconformance records in Problem Control since 2026-09-18, 22 of them open; the classic table would show none.
+- **Measured:** 26: Nonconformance records read from Problem Control (2026-11-19 10:56 MT). 26 nonconformance records in Problem Control since 2026-09-18, 22 of them open; the classic table would show none.
 
 ### OPS-10 Destruction is a Scrap disposition; rework cost is Plex's own cost field
 
@@ -756,7 +756,7 @@
 - **In her words:** "destructions is like a disposition, but I'm not sure where we would find that... I actually need to ask because I'm not sure where they note that they destroyed something."
 - **Reports:** `quality_disposition_cost_report`
 - **Enforced in:** `reports/sql/quality_disposition_cost_view.sql` lines 125-173
-- **Measured:** 0: Scrap and Rework dispositions recorded with no cost (counted in the table but worth $0) (2026-11-13 10:36 MT). No Scrap or Rework dispositions exist yet (21 records not yet dispositioned), so total cost is $0 and no record is missing a cost.
+- **Measured:** 0: Scrap and Rework dispositions recorded with no cost (counted in the table but worth $0) (2026-11-19 10:56 MT). No Scrap or Rework dispositions exist yet (21 records not yet dispositioned), so total cost is $0 and no record is missing a cost.
 
 ### OPS-11 Quality turnaround is measured in work days against hand-kept standards
 
@@ -765,7 +765,7 @@
 - **Decided:** Jennilyn, 2026-09-24 · S7 · status: partly built
 - **Reports:** `quality_turnaround_time_report`
 - **Enforced in:** `reports/sql/quality_turnaround_time_view.sql` lines 45-75,187-215
-- **Measured:** 0: Quality records whose turnaround standard is a placeholder or missing (2026-11-13 10:36 MT). All 26 records have a standard: 12 matched by part type and 14 on the catch-all row; none closed in the future.
+- **Measured:** 0: Quality records whose turnaround standard is a placeholder or missing (2026-11-19 10:56 MT). All 26 records have a standard: 12 matched by part type and 14 on the catch-all row; none closed in the future.
 
 ### OPS-12 Part Lot reports cover active parts only
 
@@ -775,7 +775,7 @@
 - **In her words:** "only for active parts ... just a table so we can see gaps and ensure things are lining up"
 - **Reports:** `part_lot_attribute_specs_report`, `part_lot_inheritance_report`
 - **Enforced in:** `reports/sql/part_lot_inheritance_view.sql` lines 135, `reports/sql/part_lot_attribute_specs_view.sql` lines 36
-- **Measured:** 153,262: Rows in the Part Lot reports (active parts only) (2026-11-13 10:36 MT). 153,262 attribute spec rows and 16,032 inheritance rows cover only active parts (7,596 parts in the specs).
+- **Measured:** 153,445: Rows in the Part Lot reports (active parts only) (2026-11-19 10:56 MT). 153,262 attribute spec rows and 16,032 inheritance rows cover only active parts (7,596 parts in the specs).
 
 ### OPS-13 Obsolescence and shelf-life reports
 
@@ -784,7 +784,7 @@
 - **Decided:** 2026-10-19 · status: in force
 - **Reports:** `part_obsolescence_report`, `part_shelf_life_report`
 - **Enforced in:** `reports/part_obsolescence.yaml` lines 36
-- **Measured:** 232: Parts flagged Obsolete or Phase Out (2026-11-13 10:36 MT). 232 parts are Obsolete (219) or Phase Out (13); 40 of 36,785 parts have no shelf life and show shelf_life_missing.
+- **Measured:** 234: Parts flagged Obsolete or Phase Out (2026-11-19 10:56 MT). 232 parts are Obsolete (219) or Phase Out (13); 40 of 36,785 parts have no shelf life and show shelf_life_missing.
 
 ## Data sources and freshness
 
@@ -795,7 +795,7 @@
 - **Decided:** Plex champion via Jennilyn, 2026-11-11 · D33 · status: in force
 - **Reports:** `every report built on ODBC`
 - **Enforced in:** `terraform/main.tf` lines 6330-6341, `terraform/main.tf` lines 6686-6693
-- **Measured:** 120: Minutes ODBC data is behind, per the freshness view (largest across report groups) (2026-11-13 10:36 MT). ODBC is about 60 minutes behind for Label Design and 0 for revenue, inside the normal 1-5 hour window; the production lag is not reported.
+- **Measured:** 120: Minutes ODBC data is behind, per the freshness view (largest across report groups) (2026-11-19 10:56 MT). ODBC is about 60 minutes behind for Label Design and 0 for revenue, inside the normal 1-5 hour window; the production lag is not reported.
 
 ### DATA-02 Every report says where its data came from
 
@@ -804,7 +804,7 @@
 - **Decided:** Emilio, 2026-11-10 · status: in force
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`, `sales_revenue_run_rate_report`, `revenue_vs_goal_report`, `label_design_report`, `production_vs_goal_report`
 - **Enforced in:** `reports/sql/shipping_revenue_report.sql` lines 79-86, `reports/sql/shipping_revenue_report.sql` lines 209-213, `terraform/main.tf` lines 6686-6693
-- **Measured:** 3: Report groups carrying a data-source label in PlexOps.data_freshness (2026-11-13 10:36 MT). Three report groups (production, revenue, label design) carry a data-source label, all currently ODBC.
+- **Measured:** 3: Report groups carrying a data-source label in PlexOps.data_freshness (2026-11-19 10:56 MT). Three report groups (production, revenue, label design) carry a data-source label, all currently ODBC.
 
 ### DATA-03 Revenue and shipments never switch to the Plex screens
 
@@ -813,7 +813,7 @@
 - **Decided:** Jennilyn, 2026-11-11 · status: in force
 - **Reports:** `shipping_revenue_report`, `sales_revenue_summary_report`, `sales_revenue_run_rate_report`, `revenue_vs_goal_report`, `shipping_daily_report`
 - **Enforced in:** `terraform/main.tf` lines 6166, `scripts/screen_recon.py` lines 78-83, `reports/sql/shipping_revenue_report.sql` lines 87-96
-- **Measured:** 0: Revenue shipping rows read from the screens (should be 0; revenue always reads ODBC) (2026-11-13 10:36 MT). 0 of 423 revenue rows read from the screens; the revenue switch is off and ODBC is not behind.
+- **Measured:** 0: Revenue shipping rows read from the screens (should be 0; revenue always reads ODBC) (2026-11-19 10:56 MT). 0 of 423 revenue rows read from the screens; the revenue switch is off and ODBC is not behind.
 
 ### DATA-04 Label Design combines ODBC with the screens' extra lines
 
@@ -823,7 +823,7 @@
 - **In her words:** "Keep ODBC + screens combined (proven: order 658 on Monday 2.6 h before ODBC)"
 - **Reports:** `label_design_report`
 - **Enforced in:** `reports/sql/label_design_view.sql` lines 590-692, `reports/sql/label_design_view.sql` lines 383
-- **Measured:** 1: Label Design lines that only the Plex screens have (data_source = live) right now (2026-11-13 10:36 MT). 1 of 69 Label Design lines is screen-only right now; 11 earlier screen-only items were later confirmed by ODBC.
+- **Measured:** 0: Label Design lines that only the Plex screens have (data_source = live) right now (2026-11-19 10:56 MT). 1 of 69 Label Design lines is screen-only right now; 11 earlier screen-only items were later confirmed by ODBC.
 
 ### DATA-05 Weekend runs are probes only; weekday 4 AM is the full refresh
 
@@ -832,7 +832,7 @@
 - **Decided:** Emilio, 2026-11-12 · status: in force
 - **Reports:** `every prod pipeline`
 - **Enforced in:** `PlexOps.etl_schedule (BigQuery table, not a file)` lines rows, `main.py` lines 585-592
-- **Measured:** 0: Weekend prod runs that were full runs since the weekend rule began (2026-11-12; the first weekend under it is 11-14) (2026-11-13 10:36 MT). No weekend full run has happened since the rule began on 11-12; the 56 full runs on the last weekend (11-07/08) predate it; the schedule now has 14 weekends-only probe rows, 14 all-days rows and 42 weekday rows.
+- **Measured:** 0: Weekend prod runs that were full runs since the weekend rule began (2026-11-12; the first weekend under it is 11-14) (2026-11-19 10:56 MT). No weekend full run has happened since the rule began on 11-12; the 56 full runs on the last weekend (11-07/08) predate it; the schedule now has 14 weekends-only probe rows, 14 all-days rows and 42 weekday rows.
 
 ### DATA-06 ODBC alerts ask whether Plex has changes ODBC lacks
 
@@ -841,7 +841,7 @@
 - **Decided:** Emilio, 2026-11-12 · status: in force
 - **Reports:** `watchdog alerts (not a report)`
 - **Enforced in:** `plex_api_lag.py` lines 1-60
-- **Measured:** 96: ODBC-vs-Plex checks the watchdog ran in the last 48 hours, and how many failed (2026-11-13 10:36 MT). 96 odbc_vs_plex checks in the last 48 hours: 12 failed and 1 alert was sent, so most failing checks did not page anyone.
+- **Measured:** 96: ODBC-vs-Plex checks the watchdog ran in the last 48 hours, and how many failed (2026-11-19 10:56 MT). 96 odbc_vs_plex checks in the last 48 hours: 12 failed and 1 alert was sent, so most failing checks did not page anyone.
 
 ### DATA-07 A hand edit to a live view lasts only until the next extracting run
 
@@ -850,7 +850,7 @@
 - **Decided:** Emilio · status: in force
 - **Reports:** `approaching_msl_report`, `bottling_job_open_with_orders_report`, `pipeline_plex_value_report`
 - **Enforced in:** `main.py` lines 2548-2557, `custom_views/VoxScorecardsLive/README.md` lines 1-6
-- **Measured:** 6.50: Hours since the three hand-edited views were last written (the next extracting run rewrites them from the repo) (2026-11-13 10:36 MT). The three views Jennilyn edits by hand were last rewritten 6.2 to 6.3 hours ago, so a hand edit made before the 13:00 run would be reverted by it.
+- **Measured:** 6.80: Hours since the three hand-edited views were last written (the next extracting run rewrites them from the repo) (2026-11-19 10:56 MT). The three views Jennilyn edits by hand were last rewritten 6.2 to 6.3 hours ago, so a hand edit made before the 13:00 run would be reverted by it.
 
 ## Customers
 

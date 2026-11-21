@@ -1,5 +1,5 @@
 -- VoxScorecardsLive.vw_plex_expiring_inventory_live (view), backed up from BigQuery by scripts/backup_custom_views.py
--- last created 2026-11-11 16:48 UTC by jennilyn.tockstein@parasolgroupinc.com
+-- last created 2026-11-16 22:03 UTC by jennilyn.tockstein@parasolgroupinc.com
 
 WITH use_by AS (
   SELECT SAFE_CAST(sl.Lot_Key AS INT64) AS lot_key,
@@ -18,7 +18,10 @@ base AS (
            AND NOT COALESCE(l.days_to_best_by < 0, FALSE)) AS is_past_use_by_only
   FROM `voxdatalake.PlexProd.inventory_lot_detail_report` l
   LEFT JOIN use_by u ON u.lot_key = l.lot_key
-  WHERE (l.is_available OR l.is_expired_status)
+  -- Status list kept here (2026-11-16) instead of l.is_available, because the
+  -- PlexProd view is redeployed from source without ALLOCATED and RELEASED.
+  WHERE UPPER(l.container_status) IN ('OK', 'HOLD', 'INSPECTION REQUIRED', 'HOLD FOR DESIGN ORDER',
+                                      'ALLOCATED', 'RELEASED', 'EXPIRED')
     AND l.best_by_date IS NOT NULL AND NOT l.best_by_is_placeholder
 ),
 lots AS (

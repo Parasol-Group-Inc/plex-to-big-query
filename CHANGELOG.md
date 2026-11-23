@@ -14,6 +14,14 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 (evening) - Picking app on Plex production, moves off
+
+### Deployed
+- `picking-app-00004-29z` (71794da) with `PLEX_ENV=prod`; `PICKING_ALLOW_PROD_MOVES` not set. Checked through IAP:
+  "PLEX PROD · moves off", 104 job sets, set 221 live in 5.4 s, Move buttons disabled, a forced move refused.
+  Before moves go on: staging target per area, one supervised single move and one pallet move in production
+  (`docs/PICKING_STAGING_APP.md`, "Production, moves off").
+
 ## 2026-11-23 (afternoon) - Picking app: demo videos, time-saved evidence, hub videos
 
 ### Added

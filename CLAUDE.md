@@ -493,8 +493,9 @@ Development screen through the same session. Things that bite:
 - **An LP number moves the whole pallet; a container moved alone leaves its pallet** (LP-087265 in TEST lost all 4).
   The app moves an LP whole when all its containers are ticked.
 - **Every move is recorded in Plex as gcp.odbc.vox**; `PlexOps.picking_move_log` is the only record of who asked.
-- `PLEX_ENV=test` is the default; production moves need `PICKING_ALLOW_PROD_MOVES=1`.
-- **Cloud Run `picking-app` (deployed 2026-11-20, Plex TEST) comes from `deploy/picking_app/deploy.sh`, not
+- `PLEX_ENV=test` is the code default; the service runs `PLEX_ENV_FOR_APP=prod` since 11-23. Production moves need
+  `PICKING_ALLOW_PROD_MOVES=1`, after a supervised first move (docs/PICKING_STAGING_APP.md, "Production, moves off").
+- **Cloud Run `picking-app` (deployed 2026-11-20; Plex production with moves OFF since 2026-11-23) comes from `deploy/picking_app/deploy.sh`, not
   Terraform** (IAP via `--iap` is not in the pinned provider). Pay per use, max 1 instance. **claude-operator
   cannot set its IAM**: the script prints the access commands for Emilio. **The keep-warm ping gets 401 from
   IAP** (the Google-managed OAuth client takes browsers, not service-account tokens) and is not running; it

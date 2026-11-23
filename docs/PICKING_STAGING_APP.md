@@ -299,6 +299,44 @@ and join with the concat demuxer.
 0.6 s and fills in 13.6 s, cached 1.1 s, set 221 11.2 s, `?all=1` 0.8 s, one move 5.4 s (was 11.2 s) and put back,
 Move log page 1.2 s and shows it (now read from BigQuery).
 
+## Production, moves off (since 2026-11-23)
+
+Emilio asked to switch the app to production. Redeployed the same image (71794da) with
+`PLEX_ENV_FOR_APP=prod ./deploy/picking_app/deploy.sh --no-build`: revision `picking-app-00004-29z`, env
+`prod`, `PICKING_ALLOW_PROD_MOVES` **not** set. Checked the same day through IAP: header "PLEX PROD · moves off";
+104 job sets due in 3 days; set 221 filled in live in 5.4 s; every "Move to staging" button disabled; a
+forced `POST /move` was refused ("Moves are turned off in production"). Plex login for production is saved at
+`gs://voxdatalake-plex-screenshots/picking-app/plex_session_prod.json`. IAP access unchanged (Emilio,
+Jennilyn). Back to TEST: the same command without `PLEX_ENV_FOR_APP`.
+
+In production the job sets come from the SQL screen, which reads Plex's reporting copy (about 4 h behind):
+a job created in the last hours may be missing from the list. Containers are live.
+
+### What the moves have shown, and what they have not
+
+Shown (Plex TEST): every move the app made was re-read live before, sent through Plex's own Move Container
+request, and read back after. The log has 9 cloud moves, all confirmed at the target, none wrong, none
+breaking a pallet; every demo container was put back. A container is never sent when it is not status
+OK, has no quantity, or is already there. Moves run one at a time (one instance, one lock).
+
+Not shown yet, and the reason moves stay off in production:
+- **No move has run in production.** TEST is a copy; the production tenant, its permissions for
+  gcp.odbc.vox and its location rules are untested.
+- **Where staged stock goes is not decided.** Production has Pre-Weigh / Packaging / Quality Released
+  Staging, but in the last 30 days only 1 container was moved into a "... Staging" location; the team works
+  from the PW-* and PS-* bins (344 single moves into PW bins). Moving stock to a location nobody looks
+  at would make it hard to find on the floor, even though Plex knows exactly where it is.
+- **Pallets:** a container moved alone leaves its pallet (LP-087265 lost all 4 in TEST on 11-20, by the
+  command line, before the app moved whole pallets). The app now moves a fully ticked pallet as one, and
+  says when a single move leaves a pallet, but a whole-pallet move has not been run from the cloud app.
+- **Who:** Plex records every move as gcp.odbc.vox; only `PlexOps.picking_move_log` knows the person.
+- **Undo** is by hand: the log's `from_location`, moved back (as done for the demos).
+
+Before `PICKING_ALLOW_PROD_MOVES=1`: (1) the team names the target per area (Staging locations or PW/PS bins;
+the app's list is `picking.STAGING_LOCATIONS`), (2) one supervised move of one container in production with
+someone on the floor, read back and moved back, (3) one whole pallet the same way, (4) then on, for named
+people first.
+
 ## Cost (Cloud Run, pay per use)
 
 The team should not pay for an always-on instance. Options looked at (Google list prices, by hand;

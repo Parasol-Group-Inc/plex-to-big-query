@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -24,6 +25,9 @@ from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter
 
+# At most this many API calls in flight per instance, however many pages load at once (2026-11-23:
+# Cloud Run now lets 40 requests in, and 32 parallel calls were no faster than 16 on 11-20).
+_PARALLEL = threading.BoundedSemaphore(int(os.environ.get("PICKING_API_PARALLEL", "16")))
 BASES = {"test": "https://test.connect.plex.com", "prod": "https://connect.plex.com"}
 REPO = Path(__file__).resolve().parents[2]
 
@@ -80,7 +84,8 @@ class PlexApi:
         last = None
         for attempt in range(3):
             try:
-                r = self._session().get(self.base + path, timeout=120)
+                with _PARALLEL:
+                    r = self._session().get(self.base + path, timeout=120)
                 if r.status_code == 404:
                     return None
                 if r.status_code < 500:

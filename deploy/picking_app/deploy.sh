@@ -51,7 +51,7 @@ fi
 
 gcloud run deploy "$SERVICE" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
   --service-account="$SA" --no-allow-unauthenticated --iap \
-  --cpu=1 --memory=2Gi --concurrency=8 --min-instances=0 --max-instances=1 --timeout=300 \
+  --cpu=1 --memory=2Gi --concurrency=40 --min-instances=0 --max-instances=1 --timeout=300 \
   --cpu-throttling \
   --set-env-vars="PLEX_ENV=${PLEX_ENV_FOR_APP},PICKING_BQ_LOG=1,PICKING_LOG=/tmp/picking_moves.jsonl,PICKING_SESSION_GCS=${SESSION_GCS}" \
   --set-secrets="PLEX_PORTAL_USERNAME=plex-portal-username:latest,PLEX_PORTAL_PASSWORD=plex-portal-password:latest,PLEX_API_KEY=plex-api-consumer-key:latest,PLEX_API_SECRET=plex-api-consumer-secret:latest" \

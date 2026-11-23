@@ -194,3 +194,35 @@ def test_set_page_opens_with_loaders_and_each_line_fills_in_live(monkeypatch):
     assert client.get("/set/832/line/nope").status_code == 404
     full = client.get("/set/832?all=1").get_data(as_text=True)  # the old one-go page still works
     assert "line-loading" not in full and full.count("<td>S1</td>") == len(s["lines"])
+
+
+def test_move_log_query_quotes_reserved_at_and_favicon_is_quiet(monkeypatch):
+    a = _app(monkeypatch)
+    assert "ORDER BY `at`" in a.LOG_SQL                 # unquoted `at` failed in BigQuery (live audit 11-23)
+    assert a.app.test_client().get("/favicon.ico").status_code == 204
+
+
+def test_api_calls_are_capped_however_many_pages_load(monkeypatch):
+    import threading
+    import plex_api
+    live, peak, lock = [0], [0], threading.Lock()
+
+    class R:
+        status_code, content = 200, b"[]"
+        def json(self): return []
+
+    def fake_get(url, timeout):
+        with lock:
+            live[0] += 1; peak[0] = max(peak[0], live[0])
+        __import__("time").sleep(0.02)
+        with lock:
+            live[0] -= 1
+        return R()
+
+    api = plex_api.PlexApi("test")
+    api._key = ("k", "s")
+    api._session().get = fake_get
+    monkeypatch.setattr(plex_api, "_PARALLEL", threading.BoundedSemaphore(4))
+    ts = [threading.Thread(target=api.containers_for_part, args=(str(i),)) for i in range(30)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert 1 <= peak[0] <= 4

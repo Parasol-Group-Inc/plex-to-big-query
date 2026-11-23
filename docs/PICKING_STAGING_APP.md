@@ -198,6 +198,47 @@ What was measured and set aside (all in TEST, 2026-11-20):
 Can the SQL screen write? **No** (TEST, zero-row statements): UPDATE / DELETE / INSERT / MERGE on a view
 or base table and EXEC are refused (HTTP 400); only #temp tables and table variables can be written.
 
+## Live audit and tests (2026-11-23)
+
+Run against the deployed app (revision `picking-app-00002-cfp`, image `8806c7f` = PR #163, Plex TEST),
+through IAP in a real Chrome signed in as Emilio. Repeatable with `deploy/picking_app/live_test.py`
+(`--login` once, then `--move` to include T6); it writes screenshots and `results.json` to
+`etl-manual/picking_live_test/<timestamp>/`.
+
+### Status and audit
+
+| Check | Found |
+|---|---|
+| Revision serving | `picking-app-00002-cfp`, 100% traffic, image `picking-app:8806c7f` (Cloud Build 7656ded2, SUCCESS). The first deploy attempt built `02c2d03` (folder not yet pulled) and was cancelled |
+| Access | IAP on. `iap.httpsResourceAccessor`: Emilio, Jennilyn (`jennilyn.tockstein@`), `plex-etl-sa` (for a future ping). `run.invoker`: only the IAP service agent. Signed out, `/`, `/health` and `/set/600` on both URLs redirect to Google sign-in (302) |
+| Settings | 1 vCPU, 2 GiB, max 1 instance, min 0, request-based billing, startup CPU boost on, timeout 300 s, runs as `plex-etl-sa`, Plex login and API key from Secret Manager, `PLEX_ENV=test` |
+| Saved Plex login | `gs://voxdatalake-plex-screenshots/picking-app/plex_session_test.json`; the 11-21 one had expired by 11-23, so the first page logged in again (20.7 s) and saved a new one |
+| Use since deploy | none before these tests (2 page views on revision 1 on 11-21) |
+| Keep-warm ping | none (parked: needs a custom OAuth client) |
+| **Bug: Move log page** | the BigQuery read failed (`at` is a reserved word; unquoted in `ORDER BY at`), so `/log` silently showed only the running instance's own file, which is lost on every restart. **Fixed** (`LOG_SQL`, test). Writes to `PlexOps.picking_move_log` were fine |
+| **Bug: queueing** | Cloud Run let in 8 requests at a time (`--concurrency=8`, set before the pick list loaded ingredients in parallel). Leaving a 26-ingredient page while it loads left its requests running, and the next page waited about 10 s to OPEN (server time 0.003 s; the rest was Cloud Run holding the request). **Fixed**: `--concurrency=40`, gunicorn 40 threads, and at most 16 Plex API calls in flight per instance (`PICKING_API_PARALLEL`) so Plex is not asked harder than before |
+| `/favicon.ico` | 404 on every first visit (cosmetic). Now 204 |
+
+### Test results (2026-11-23, 16:08-16:15 UTC)
+
+| # | Test | Result |
+|---|---|---|
+| T1 | `/health` (cold instance) | 200 in 1.9 s; env `test` |
+| T2 | Job-set list, 7 days | 120 sets in 21.0 s (cold: new instance + fresh Plex login + job-set query) |
+| T3 | Set 600 (26 ingredients), fresh | idle: opens 2.3 s, first ingredient 4.4 s, all 26 in 12.5 s; 0 failed, every fragment 200 |
+| T3 | Set 600, again within a minute (cached) | opens 0.4 s, all 26 in 0.9 s |
+| T4 | Set 221 (4 ingredients), fresh | opens 0.5 s, first 3.3 s, all in 5.6 s |
+| T4b | Set 221 right after leaving set 600 mid-load | opened after **10.3 s** (the queueing bug above) |
+| T5 | `?all=1` (one-go page, cached) | 0.8 s, 26 ingredients, no loaders |
+| T6 | Move: `68GCE8-0401` (lone container, status OK, 2.910) from `103-11C-01` to Pre-Weigh Staging | moved in 11.2 s; app said "successfully moved (now at Pre-Weigh Staging)"; API confirmed |
+| T6 | Logged | `PlexOps.picking_move_log`: requested_by `emilio.dominguez@`, set 600, ok, verified Pre-Weigh Staging |
+| T6 | Put back (from the laptop, Plex web session) | back at `103-11C-01`, API confirmed. This put-back is in Plex's history only, not in the app's log |
+| T7 | Move log page | 0.65 s, shows the move (from the instance file, because of the bug above) |
+
+Still slow, from Plex: about 2.4 s per ingredient in Plex's API (a 26-ingredient set takes about 12 s to
+fill in; the page itself opens at once), and a first page after a quiet spell (new instance + Plex
+login, about 20 s) until the keep-warm ping exists.
+
 ## Cost (Cloud Run, pay per use)
 
 The team should not pay for an always-on instance. Options looked at (Google list prices, by hand;

@@ -302,6 +302,16 @@ def move():
     return back
 
 
+# `at` is a reserved word in BigQuery: unquoted, this query failed and /log silently showed only the
+# instance's own file (lost on every restart). Found in the live audit, 2026-11-23.
+LOG_SQL = "SELECT * FROM `voxdatalake.PlexOps.picking_move_log` ORDER BY `at` DESC LIMIT 300"
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return "", 204
+
+
 @app.get("/log")
 def move_log():
     rows = []
@@ -309,7 +319,7 @@ def move_log():
         try:
             from google.cloud import bigquery
             rows = [dict(r) for r in bigquery.Client(project="voxdatalake").query(
-                "SELECT * FROM `voxdatalake.PlexOps.picking_move_log` ORDER BY at DESC LIMIT 300").result()]
+                LOG_SQL).result()]
             for r in rows:
                 r["at"] = r["at"].isoformat() if hasattr(r["at"], "isoformat") else str(r["at"])
         except Exception as e:  # noqa: BLE001 - fall back to the local file

@@ -239,6 +239,66 @@ Still slow, from Plex: about 2.4 s per ingredient in Plex's API (a 26-ingredient
 fill in; the page itself opens at once), and a first page after a quiet spell (new instance + Plex
 login, about 20 s) until the keep-warm ping exists.
 
+## Where the team's time goes: one container at a time (2026-11-23)
+
+Emilio: a page that takes seconds is fine; the team spends **hours** because each container is moved on
+its own in Plex's Move Container screen (find it, enter the location, confirm), not in batches.
+
+What production shows (`PlexProd.raw_Part_v_Container`, last 30 days to 11-21). These are **lower bounds**:
+the table keeps only each container's LAST action, so a container moved twice counts once.
+
+| Last action, last 30 days | Containers |
+|---|---|
+| Master Unit Move (moved with its pallet) | 13,508 (at least 811 pallets) |
+| Container Move (moved on its own) | 2,061 |
+| ... of those, into the Pre-Weigh bins (`PW - B8` 291, `PW - B10` 40, ...) | 344 |
+| Retired at Pre-Weigh 3 (used up at pre-weigh; each was brought there) | 1,409 |
+| Moved into a "... Staging" location | 1 (the Staging locations are not used; bins are) |
+
+Single-container moves by day (Mountain): 41 to 162 on 11-10 to 11-18, then 331 (11-19) and 701 (11-20), by
+up to 13 people a day. If one move on the screen takes about a minute (an assumption; the team should time
+it), 2,061 single moves are **at least 34 hours a month** of screen work, before walking.
+
+What the app does instead: one click per ingredient. On 11-23 (video 2), **7 containers moved and confirmed
+in 5.8 s with one click** (live re-read before, Plex's own Move Container request, read back after). A fully
+ticked pallet moves as one call. The few seconds a pick list takes to fill in are Plex's API time and are
+paid once per ingredient, not per container.
+
+Next angle, not built: **"Stage the whole set"**, one click for every ingredient of a job set (set 600: 66
+suggested containers over 26 ingredients). Wait for the team to confirm the staging map and the PW/PS bins first,
+since today they stage into bins, not the Staging locations.
+
+## Demo videos (2026-11-23)
+
+Recorded on the deployed app (revision `picking-app-00003-qhl`, Plex TEST) in a headless Chrome signed in
+through IAP, with captions, a visible cursor and click ripples. H.264, 1400×860, no sound.
+
+| File | Length | Size | Shows |
+|---|---|---|---|
+| `picking-app-1-find-and-read-the-pick-list.mp4` | 1:29 | 2.0 MB | job sets, the Pre-Weigh filter, set 756 opening at once and filling in live, the columns, pick / spare / staged / blocked / not-here |
+| `picking-app-2-stage-an-ingredient-in-one-click.mp4` | 1:21 | 2.7 MB | today's one-at-a-time screen vs one click: 7 containers of 12743-01VOXNU-1 moved and confirmed in 5.8 s; now "staged"; pallet rule |
+| `picking-app-3-safety-rules-and-move-log.mp4` | 1:00 | 1.2 MB | not-here stock, the live re-read before every move, moves off in production, the move log and BigQuery |
+| `picking-app-full-demo.mp4` | 3:50 | 5.8 MB | the three in one |
+
+Where they are: the hub's **Picking & staging** tab (published next to the page under `videos/`), Emilio's
+`~/Downloads/picking-app-videos-2026-11-23/`, and `gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23/`.
+Not in git (binary).
+
+Put back: the 7 containers moved in video 2 (S029901, S029940, 96419D-0007, A4E7G7-0004/-0005/-0009/-0010)
+were moved back to their `from_location` in `PlexOps.picking_move_log` from the laptop the same minute, and
+read back from the API. The move log keeps the demo rows (who: Emilio, set 756).
+
+Re-record: `python deploy/picking_app/record_demo.py <dir> 1` (then 2, 3); find the title card with
+ffmpeg `signalstats` (first frame with YAVG < 60), then
+`ffmpeg -ss <start> -i in.webm -c:v libx264 -preset slow -crf 26 -pix_fmt yuv420p -r 25 -movflags +faststart -an out.mp4`
+and join with the concat demuxer.
+
+## Live tests after the fixes (2026-11-23, revision 00003, image 71794da)
+
+`live_test.py --move`, all passed: health 2.3 s (cold), job-set list 3.6 s (was 21 s cold), set 600 fresh opens
+0.6 s and fills in 13.6 s, cached 1.1 s, set 221 11.2 s, `?all=1` 0.8 s, one move 5.4 s (was 11.2 s) and put back,
+Move log page 1.2 s and shows it (now read from BigQuery).
+
 ## Cost (Cloud Run, pay per use)
 
 The team should not pay for an always-on instance. Options looked at (Google list prices, by hand;

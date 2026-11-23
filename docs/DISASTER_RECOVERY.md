@@ -16,6 +16,7 @@ Last reviewed: 2026-11-12
 | Code, Terraform or docs lost | GitHub (every branch pushed). Also git bundles in `~/plex-monitor/backups/` on Emilio's Mac (`plex-to-big-query_<date>.bundle`) | `git clone <bundle> restore-dir` |
 | The dispatcher stopped (no prod runs) | Code in `deploy/etl_dispatcher/`; times in `PlexOps.etl_schedule` | Redeploy the function with the `gcloud functions deploy etl-dispatcher` command in `terraform/main.tf` (keep `--max-instances=1`, `--timeout=300`) |
 | A prod run time is wrong | `PlexOps.etl_schedule` (a `days` column since 11-12 says which weekdays) | Change it with SQL, not Terraform. Backups: `Backups.PlexOps__etl_schedule_20261112`, `_before_weekend_20261112` |
+| The picking app (Cloud Run `picking-app`) is gone or broken | Code in `deploy/picking_app/`; NOT in Terraform (only the IAP API and `PlexOps.picking_move_log` are). Move history: `PlexOps.picking_move_log`. Saved Plex login: `gs://voxdatalake-plex-screenshots/picking-app/` (re-created by the next login) | From the primary folder on a clean `main`: `./deploy/picking_app/deploy.sh`. It prints the IAM steps an admin must run (IAP agent invoker, IAP access for each user). Check with `python deploy/picking_app/live_test.py`. `docs/PICKING_STAGING_APP.md`, "Deploying" |
 | The laptop is lost | `.env`, `driver/`, `terraform.tfvars`: see Scenario B and `scripts/backup_to_bucket.ps1` | `scripts/dev_setup.sh` rebuilds `.env` and `driver/` |
 
 **In plain words.** Data lost: at most a day for anything the ETL reloads

@@ -1,6 +1,9 @@
 """Record the picking app demo videos on the DEPLOYED app (Plex TEST), through IAP (2026-11-23).
 
-RECORDS THE 11-23 MORNING FLOW (Staging targets, no review dialog): update the move steps before re-recording.
+Second take (2026-11-23 evening): targets from Plex history, the review dialog, undo from the Move log.
+PICKING_URL=http://127.0.0.1:8088 records a local server on Plex TEST (same code, no IAP); otherwise the
+deployed app with the signed-in Chrome profile. Video 3 also moves one container "as the floor" (plex_web)
+to show what undo refuses. Every container moved is put back at the end.
 
     python deploy/picking_app/live_test.py --login                      # once: sign in (Chrome profile)
     python deploy/picking_app/record_demo.py <out_dir> 1|2|3            # one video per run (.webm)
@@ -13,7 +16,7 @@ SET / PART below must be a job set with several suggested containers of one ingr
 import sys, time, json
 from playwright.sync_api import sync_playwright
 OUT, WHICH = sys.argv[1], sys.argv[2]
-U = "https://picking-app-651304971296.us-central1.run.app"
+U = __import__("os").environ.get("PICKING_URL", "https://picking-app-651304971296.us-central1.run.app")
 SET, PART = "756", "12743-01VOXNU-1"
 OVERLAY = r"""
 (() => {
@@ -59,79 +62,91 @@ def wait_lines(pg):
     pg.wait_for_function("document.querySelectorAll('.line-loading').length === 0", timeout=240000)
 
 meta = {}
+LOCAL = U.startswith("http://127.0.0.1")
 with sync_playwright() as p:
-    ctx = p.chromium.launch_persistent_context("etl-manual/picking_live_profile", channel="chrome", headless=True,
-            viewport={"width": 1400, "height": 860}, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
+    if LOCAL:
+        b = p.chromium.launch()
+        ctx = b.new_context(viewport={"width": 1400, "height": 860}, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
+    else:
+        ctx = p.chromium.launch_persistent_context("etl-manual/picking_live_profile", channel="chrome", headless=True,
+                viewport={"width": 1400, "height": 860}, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
     ctx.add_init_script(OVERLAY)
     pg = ctx.pages[0] if ctx.pages else ctx.new_page(); pg.set_default_timeout(240000)
-    pg.goto(U + f"/set/{SET}?days=7"); wait_lines(pg)        # warm the server and caches before recording starts
+    pg.goto(U + f"/set/{SET}?days=7"); wait_lines(pg)        # warm the server and caches before the title card
     pg.goto(U + "/?days=7"); pg.evaluate("() => sessionStorage.clear()")
+    sub = lambda n, t: (f"Picking &amp; Staging app<br><span style='font-size:26px;font-weight:400;color:#9aa4ae'>{n} of 3 · {t}<br>Plex TEST · "
+                        + time.strftime("%Y-%m-%d") + "</span>")
     if WHICH == "1":
-        title(pg, "Picking &amp; Staging app<br><span style='font-size:26px;font-weight:400;color:#9aa4ae'>1 of 3 · Find the pick list and read it<br>Plex TEST · " + time.strftime("%Y-%m-%d") + "</span>", 4)
-        caption(pg, "The app runs on Google Cloud. Sign in with your company Google account; nothing to install.")
-        caption(pg, "This page lists the job sets due in the next days, read from Plex. A job set is one blend job plus one Pre-Weigh job per ingredient: that is the pick list.")
+        title(pg, sub(1, "The pick list, and where material really goes"), 4)
+        caption(pg, "The job sets due in the next days, read from Plex. A job set is one blend job plus one Pre-Weigh job per ingredient: that is the pick list.")
         glide(pg, pg.locator("select[name=group]"), click=False)
         pg.select_option("select[name=group]", "Pre-Weigh"); time.sleep(0.8)
-        caption(pg, "Filter to Pre-Weigh work and press Show.", 2.5)
         with pg.expect_navigation(): glide(pg, pg.locator("button", has_text="Show"))
-        time.sleep(1)
         caption(pg, f"Open job set {SET}: a blend with 7 ingredients to weigh out.", 3)
         with pg.expect_navigation(): glide(pg, pg.locator(f"a[href^='/set/{SET}']").first)
-        caption(pg, "The page opens at once. Each ingredient then fills in with its containers, read live from Plex as you watch (a few seconds each, never old data).", 0)
-        wait_lines(pg); time.sleep(2.5)
+        caption(pg, "The page opens at once; each ingredient fills in with its containers, read live from Plex (a few seconds each, never old data).", 0)
+        wait_lines(pg); time.sleep(2)
         c = card(pg, PART); scroll_to(pg, c)
-        glide(pg, c.locator("b").first, click=False)
-        caption(pg, "Per ingredient: the job, its work center and due date, and the quantity needed (job quantity × BOM quantity).")
-        glide(pg, c.locator("thead"), click=False)
-        caption(pg, "Every container of that part in Plex: serial, pallet (LP), lot, best-by date, location, status and quantity.")
-        glide(pg, c.locator(".role.pick").first, click=False)
-        caption(pg, "'pick' = suggested: status OK, in a Warehouse location, first-expiring lot first, until the quantity needed is covered. Those boxes come ticked.")
-        sp = c.locator(".role.spare").first
-        if sp.count(): glide(pg, sp, click=False); caption(pg, "'spare' = OK but not needed. Tick it if you want it too.")
-        caption(pg, "Other labels: 'staged' (already there), 'blocked' (Hold or other status), 'not-here' (retains, R and D...). Those are never ticked.")
-        caption(pg, "Next video: move them all with one click.", 3)
-    elif WHICH == "2":
-        pg.goto(U + f"/set/{SET}?days=7"); wait_lines(pg)
-        title(pg, "Picking &amp; Staging app<br><span style='font-size:26px;font-weight:400;color:#9aa4ae'>2 of 3 · Stage a whole ingredient in one click<br>Plex TEST · " + time.strftime("%Y-%m-%d") + "</span>", 4)
-        c = card(pg, PART); scroll_to(pg, c)
-        n = c.locator(".role.pick").count()
-        caption(pg, f"Today, each container is moved on its own in Plex's Move Container screen: find it, enter the location, confirm. This ingredient alone is {n} containers.")
-        for i in range(n): glide(pg, c.locator(".role.pick").nth(i), click=False, pause=0.25)
-        caption(pg, f"Here the {n} suggested containers are already ticked. Pick the staging location...")
-        glide(pg, c.locator("select[name=target]"), click=False, pause=1)
-        caption(pg, "...and press 'Move to staging' once.", 2)
-        b = c.locator("button", has_text="Move to staging"); glide(pg, b, click=False, pause=1)
-        caption(pg, f"Moving {n} containers in Plex: each is re-read live first, moved through Plex's own Move Container request, then read back to confirm.", 1.5)
-        t = time.time()
-        with pg.expect_navigation(timeout=240000): pg.mouse.down(); pg.mouse.up()
-        secs = time.time() - t; meta["moved_n"], meta["move_s"] = n, round(secs, 1)
-        caption(pg, f"Done: {n} containers moved and confirmed in {secs:.0f} seconds, with one click.", 0)
-        time.sleep(1.5); glide(pg, pg.locator(".flash").first, click=False, pause=0.5); time.sleep(4)
-        caption(pg, "Each line says what Plex answered and where the container is now. The last line totals it.")
-        wait_lines(pg)
-        c = card(pg, PART); scroll_to(pg, c)
+        sel = c.locator("select[name=target]"); glide(pg, sel, click=False, pause=1)
+        caption(pg, "Where do containers go? Not to the 'Staging' locations. Plex's history says where material used at this work center was moved before use.")
+        caption(pg, "For Pre-Weigh 1 that is the PW bins: PW - B9 703 containers in 45 days, PW - B10 313, PW - B8 262. Most used first; the Staging locations stay at the bottom.")
         st = c.locator(".role.staged")
         if st.count(): glide(pg, st.first, click=False)
-        caption(pg, "The ingredient now shows them as 'staged', and its quantity needed is covered.")
-        caption(pg, "A pallet (LP) moves as a whole when all its containers are ticked. A container moved alone leaves its pallet, and the app says so.")
-        caption(pg, "Next video: what the app refuses to move, and the move log.", 3)
-    else:
+        caption(pg, "And PW - B9 already holds this ingredient: 1,225 against 148 needed. So nothing is suggested: the line says 'all there'.")
+        caption(pg, "The team keeps the PW bins stocked next to Pre-Weigh. A view of which bin runs low for the coming jobs may help more than a per-job list.")
+        glide(pg, c.locator("thead"), click=False)
+        caption(pg, "Each container: serial, pallet, lot, best-by, location, status, quantity. Labels: pick (suggested), spare, there (at the target), blocked, not-here.")
+        caption(pg, "Next: review and approve a move.", 3)
+    elif WHICH == "2":
         pg.goto(U + f"/set/{SET}?days=7"); wait_lines(pg)
-        title(pg, "Picking &amp; Staging app<br><span style='font-size:26px;font-weight:400;color:#9aa4ae'>3 of 3 · Safety rules and the move log<br>Plex TEST · " + time.strftime("%Y-%m-%d") + "</span>", 4)
-        bl = pg.locator(".role.blocked").first
-        if bl.count():
-            scroll_to(pg, bl); glide(pg, bl, click=False)
-            caption(pg, "Blocked: this container is not status OK (Hold, Quarantine...). It has no tick box. Plex itself would move a Hold container without asking; the app refuses.")
-        nh = pg.locator(".role.not-here").first
-        if nh.count():
-            scroll_to(pg, nh); glide(pg, nh, click=False)
-            caption(pg, "Not-here: this stock sits in a location we don't pick from (retains, R and D...), so it is never suggested.")
-        caption(pg, "Before every move the app reads the container live again: only status OK, quantity above zero and not already there is moved.")
-        caption(pg, "Moves run on Plex TEST for now. In production they stay off until the team turns them on.")
-        with pg.expect_navigation(): glide(pg, pg.locator("header nav a", has_text="Move log"))
-        caption(pg, "Plex records every move under the company user, so this log is the only record of who asked. Each row: when, who, set, job, container, from, to, Plex's answer, and where it is now.")
-        caption(pg, "The same log is kept in BigQuery (PlexOps.picking_move_log) for reports.")
-        caption(pg, "Questions for the team: which staging location per area, the PW and PS bins, Lot Hold, and who should use it first.", 4)
+        title(pg, sub(2, "Review, then approve, every move"), 4)
+        c = card(pg, PART); scroll_to(pg, c)
+        spare = c.locator("tr", has=pg.locator(".role.spare")).locator("input[name=serial]")
+        caption(pg, "For this demo we take two extra containers from the warehouse to PW - B9.")
+        for i in range(2): glide(pg, spare.nth(i), pause=0.4)
+        meta["serials"] = [spare.nth(i).get_attribute("value") for i in range(2)]
+        b = c.locator("button", has_text="Review move"); glide(pg, b, click=False, pause=0.8)
+        caption(pg, "'Review move' does not move anything yet. It reads the ticked containers live from Plex...", 2)
+        pg.mouse.down(); pg.mouse.up(); pg.wait_for_selector("dialog#review[open]"); time.sleep(1)
+        caption(pg, "...and lists exactly what would happen: each container, its lot and quantity, from where to where, as a container or a whole pallet.")
+        glide(pg, pg.locator("#rv-body tbody tr").first, click=False)
+        caption(pg, "A container that is not status OK, or would leave its pallet behind, is flagged here before anyone approves.")
+        glide(pg, pg.locator("#rv-cancel"), click=False)
+        caption(pg, "Cancel: nothing moves (and the cancel is logged). Approve: the app reads each container live again and moves only those that did not change meanwhile.")
+        glide(pg, pg.locator("#rv-approve"), click=False, pause=0.8)
+        t = time.time()
+        with pg.expect_navigation(timeout=240000): pg.mouse.down(); pg.mouse.up()
+        meta["move_s"] = round(time.time() - t, 1)
+        caption(pg, f"Done in {meta['move_s']:.0f} seconds: Plex confirmed each move and the app read the new location back.", 0)
+        time.sleep(1); glide(pg, pg.locator(".flash").first, click=False, pause=0.5); time.sleep(4)
+        caption(pg, "Each line: Plex's answer and where the container is now. The batch can be undone from the Move log for 30 minutes, if nothing touches it.")
+        caption(pg, "Next: the Move log, and why undo has a limit.", 3)
+    else:
+        import json as _j, sys as _s
+        _s.path[:0] = ["deploy/picking_app", "scripts"]
+        from plex_web import PlexWeb
+        serials = _j.loads(open(OUT + "/../serials.json").read())
+        PlexWeb("test").move(serials[1], "PW - B10")            # "the floor" moves one of them on
+        pg.goto(U + "/log")
+        title(pg, sub(3, "Undo from the Move log, and its limit"), 4)
+        caption(pg, "The Move log: one row per approved move, who did it and when. Plex records every move under the company user, so this is the only record of who asked.")
+        caption(pg, "Meanwhile on the floor, one of the two containers was moved on to PW - B10.", 3.5)
+        bt = pg.locator(".undo-btn").first; glide(pg, bt, click=False)
+        caption(pg, "Undo is offered for 30 minutes after a move. 'Undo…' reads Plex first: nothing moves yet.", 2.5)
+        pg.mouse.down(); pg.mouse.up(); pg.wait_for_selector("dialog#undo[open]"); time.sleep(1)
+        blocked = pg.locator("#un-body > .card", has=pg.locator(".role.blocked")).first
+        glide(pg, blocked, click=False)
+        caption(pg, "This one was touched after our move, so it is NOT put back. Instead the app shows what Plex recorded since: when, what, where, quantity, and who.")
+        caption(pg, "Why: in Plex's history, a third to a half of containers moved to the Bottling and Labeling lines change again within an hour. Undoing that would undo the floor's work.")
+        ok = pg.locator("#un-body > .card", has=pg.locator(".role.pick")).first
+        glide(pg, ok, click=False)
+        caption(pg, "This one is exactly as we left it, with no activity since, so it can go back.")
+        glide(pg, pg.locator("#un-go"), click=False, pause=0.8)
+        with pg.expect_navigation(timeout=240000): pg.mouse.down(); pg.mouse.up()
+        caption(pg, "Put back and confirmed. The other stays where the floor put it. After 30 minutes the button becomes 'Activity': the history, no undo.", 0)
+        time.sleep(1); glide(pg, pg.locator(".flash").first, click=False, pause=0.5); time.sleep(5)
+        caption(pg, "Every step is logged: the review, the cancel, the move with Plex's exact request and answer, the undo check, the undo.")
+        caption(pg, "Moves stay off in production until the team confirms the targets and we do one supervised move together.", 4)
     caption(pg, "", 0.5)
     pg.close(); vid = pg.video.path(); ctx.close()
     print("VIDEO", vid); print("META", json.dumps(meta))

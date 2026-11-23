@@ -506,7 +506,9 @@ Development screen through the same session. Things that bite:
 - **Targets come from Plex history, not the Staging locations (11-23):** where material used at each work center
   was last moved (`Part_v_Container_Change2`): PW bins for Pre-Weigh, the line itself for Bottling / Labeling.
 - **Every move is reviewed** (dialog, Approve / Cancel) and logged in full (before/after record, Plex request and
-  answer, batch). `deploy/picking_app/restore_moves.py --batch <id>` puts a batch back (dry run unless --apply).
+  answer, batch). **Undo is on the Move log** for 30 min, only for containers untouched since (live record equal to
+  right after the move, no Plex history since); otherwise it shows the activity. Evidence: a third to a half of
+  containers moved to the lines change again within an hour. `restore_moves.py` is Claude's admin tool only.
 
 ## Customer Notes in Plex (2026-11-09)
 

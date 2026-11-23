@@ -307,3 +307,70 @@ def test_api_calls_are_capped_however_many_pages_load(monkeypatch):
     ts = [threading.Thread(target=api.containers_for_part, args=(str(i),)) for i in range(30)]
     [t.start() for t in ts]; [t.join() for t in ts]
     assert 1 <= peak[0] <= 4
+
+
+def _mv(serial, at, frm="103", to="PW - B9", after=None, batch="b1", moved_as=None):
+    import json as _json
+    return {"at": at, "event": "move", "ok": True, "env": "test", "batch_id": batch, "serial": serial,
+            "moved_as": moved_as or serial, "from_location": frm, "to_location": to,
+            "after_json": _json.dumps(after or {"location": to, "quantity": 5, "containerStatus": "OK", "masterUnitNo": None})}
+
+
+def test_undo_check_time_limit_live_drift_and_activity():
+    import datetime as dt
+    import undo
+    now = dt.datetime(2026, 11, 23, 20, 0, tzinfo=dt.timezone.utc)
+    row = _mv("A", "2026-11-23T19:50:00+00:00")
+    same = {"location": "PW - B9", "quantity": 5, "containerStatus": "OK"}
+    ours = [{"Serial_No": "A", "Change_Date": "2026-11-23 14:50:01.000", "Last_Action": "Container Move", "Location": "PW - B9"}]
+    assert undo.check(row, same, ours, now)["ok"]                                   # our own move is not activity
+    late = undo.check(_mv("A", "2026-11-23T19:00:00+00:00"), same, [], now)
+    assert not late["ok"] and "undo is offered for" in late["reasons"][0]
+    drift = undo.check(row, {**same, "quantity": 3.2}, [], now)
+    assert not drift["ok"] and "quantity is now 3.2" in drift["reasons"][0]
+    loaded = [{"Serial_No": "A", "Change_Date": "2026-11-23 14:55:00.000", "Last_Action": "Loaded to Workcenter",
+               "Location": "PW - B9", "Quantity": "5", "First_Name": "Ana", "Last_Name": "R", "User_ID": "ana.r"}]
+    act = undo.check(row, same, ours + loaded, now)
+    assert not act["ok"] and act["activity"][0]["action"] == "Loaded to Workcenter" and act["activity"][0]["by"] == "Ana R (ana.r)"
+    assert act["activity"][0]["at_utc"].startswith("2026-11-23T19:55")              # Plex time is US Eastern
+    back = undo.check(row, {**same, "location": "103"}, [], now)
+    assert back["back"] and not back["ok"]
+
+
+def test_undo_batches_window_and_restored_count():
+    import datetime as dt
+    import undo
+    now = dt.datetime(2026, 11, 23, 20, 0, tzinfo=dt.timezone.utc)
+    rows = [_mv("A", "2026-11-23T19:50:00+00:00"), _mv("B", "2026-11-23T18:00:00+00:00", batch="b0"),
+            {"at": "2026-11-23T19:55:00+00:00", "event": "restore", "ok": True, "batch_id": "restore-b1", "serial": "A"}]
+    bs = {b["batch_id"]: b for b in undo.batches(rows, now)}
+    assert bs["b1"]["undo_open"] and bs["b1"]["undo_left_min"] == 20 and bs["b1"]["restored"] == 1
+    assert not bs["b0"]["undo_open"] and not bs["restore-b1"]["undo_open"]
+
+
+def test_undo_review_then_apply_puts_back_only_untouched(monkeypatch, tmp_path):
+    import datetime as dt
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    at = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=3)).isoformat()
+    rows = [_mv("A", at, batch="bx"), _mv("B", at, frm="104", batch="bx")]
+    monkeypatch.setattr(a, "load_log_rows", lambda limit=2000: rows)
+    state = {"A": {"serialNo": "A", "location": "PW - B9", "quantity": 5, "containerStatus": "OK"},
+             "B": {"serialNo": "B", "location": "Pre-Weigh 1", "quantity": 5, "containerStatus": "OK"}}   # B was loaded
+    moves = []
+    monkeypatch.setattr(a.api, "container", lambda s: dict(state[s]))
+    monkeypatch.setattr(a.web, "sql", lambda q: [])
+    def move_detail(item, to):
+        moves.append((item, to)); state[item]["location"] = to
+        return {"ok": True, "message": "moved", "request": {}, "status": 200, "body": "{}", "ms": 5}
+    monkeypatch.setattr(a.web, "move_detail", move_detail)
+    c = a.app.test_client()
+    rv = c.post("/log/undo/review", data={"batch_id": "bx"}).get_json()
+    assert rv["can"] == 1 and moves == []
+    assert {x["serial"]: x["ok"] for x in rv["checks"]} == {"A": True, "B": False}
+    c.post("/log/undo", data={"plan_id": rv["plan_id"]})
+    assert moves == [("A", "103")]                                                   # B stays where the floor put it
+    ev = [__import__("json").loads(l) for l in (tmp_path / "log.jsonl").read_text().splitlines()]
+    assert [e["serial"] for e in ev if e["event"] == "restore"] == ["A"]
+    page = c.get("/log").get_data(as_text=True)
+    assert "Undo…" in page or "Activity" in page

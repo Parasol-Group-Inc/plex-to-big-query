@@ -51,6 +51,7 @@ from flask import Flask, flash, has_request_context, redirect, render_template, 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import picking  # noqa: E402
+import undo  # noqa: E402
 from plex_api import PlexApi  # noqa: E402
 from plex_web import PlexWeb  # noqa: E402
 
@@ -66,6 +67,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("PICKING_SECRET", os.urandom(16).hex())
 web, api = PlexWeb(ENV), PlexApi(ENV)
 _cache: dict = {}
+MT = __import__('zoneinfo').ZoneInfo('America/Denver')
 _cache_lock = threading.Lock()
 _move_lock = threading.Lock()
 
@@ -157,6 +159,15 @@ def log_move(rec: dict) -> None:
                 app.logger.warning("picking_move_log insert: %s", errors)
         except Exception as e:  # noqa: BLE001 - the JSON log already has it
             app.logger.warning("picking_move_log: %s", e)
+
+
+@app.template_filter("mt")
+def mt_filter(at) -> str:
+    """A UTC timestamp (log) shown in Mountain time."""
+    try:
+        return undo._utc(at).astimezone(MT).strftime("%m-%d %H:%M:%S")
+    except Exception:  # noqa: BLE001
+        return str(at)[:19]
 
 
 @app.context_processor
@@ -441,7 +452,8 @@ def move():
         failed += not rec["ok"]
         note = f" (left pallet {rec['left_pallet']})" if rec["left_pallet"] else (f" (as pallet {item})" if item and item != s else "")
         flash(f"{s}: {msg}{note} (now at {now})", "ok" if rec["ok"] else "error")
-    flash(f"{done} moved to {target}, {failed} not moved. Batch {plan_id} (undo: restore_moves.py --batch {plan_id}).",
+    flash(f"{done} moved to {target}, {failed} not moved. Batch {plan_id}: undo it from the Move log within {undo.UNDO_MINUTES} min "
+          f"if nothing touches the containers meanwhile.",
           "ok" if not failed else "error")
     return back
 
@@ -456,21 +468,117 @@ def favicon():
     return "", 204
 
 
-@app.get("/log")
-def move_log():
+def load_log_rows(limit: int = 2000) -> list[dict]:
+    """The move log, newest first: BigQuery when PICKING_BQ_LOG=1, else (or if that fails) the instance's file."""
     rows = []
     if os.environ.get("PICKING_BQ_LOG") == "1":
         try:
             from google.cloud import bigquery
-            rows = [dict(r) for r in bigquery.Client(project="voxdatalake").query(
-                LOG_SQL).result()]
+            rows = [dict(r) for r in bigquery.Client(project="voxdatalake").query(LOG_SQL.replace("300", str(limit))).result()]
             for r in rows:
                 r["at"] = r["at"].isoformat() if hasattr(r["at"], "isoformat") else str(r["at"])
         except Exception as e:  # noqa: BLE001 - fall back to the local file
             app.logger.warning("reading picking_move_log: %s", e)
     if not rows and LOG.exists():
-        rows = [json.loads(l) for l in LOG.read_text(encoding="utf-8").splitlines() if l.strip()][-300:][::-1]
-    return render_template("log.html", rows=rows)
+        rows = [json.loads(l) for l in LOG.read_text(encoding="utf-8").splitlines() if l.strip()][-limit:][::-1]
+    return rows
+
+
+@app.get("/log")
+def move_log():
+    rows = load_log_rows()
+    now = dt.datetime.now(dt.timezone.utc)
+    return render_template("log.html", batches=undo.batches(rows, now)[:150], rows=rows[:300], undo_minutes=undo.UNDO_MINUTES,
+                           can_move=ENV == "test" or ALLOW_PROD_MOVES)
+
+
+def _undo_review(batch_id: str) -> dict:
+    """Per moved container of a batch: can it be put back, and everything Plex recorded since."""
+    rows = [r for r in load_log_rows() if r.get("batch_id") == batch_id and (r.get("event") or "move") == "move"
+            and r.get("ok") in (True, "true", "True")]
+    if not rows:
+        return {"ok": False, "error": f"No moves found for batch {batch_id}."}
+    if {r.get("env") for r in rows} != {ENV}:
+        return {"ok": False, "error": f"Batch {batch_id} was in Plex {rows[0].get('env')}; this app is on Plex {ENV}."}
+    serials = list(dict.fromkeys(r["serial"] for r in rows))
+    with ThreadPoolExecutor(max_workers=min(WORKERS, len(serials))) as ex:
+        live = dict(zip(serials, ex.map(api.container, serials)))
+    first = min(undo._utc(r["at"]) for r in rows)
+    try:
+        history, hist_note = web.sql(undo.history_sql(serials, first)), None
+    except Exception as e:  # noqa: BLE001 - the live check still decides
+        history, hist_note = [], f"Plex history could not be read ({e}); only the live check was made."
+    now = dt.datetime.now(dt.timezone.utc)
+    checks = [undo.check(r, live.get(r["serial"]), history, now) for r in rows]
+    return {"ok": True, "batch_id": batch_id, "rows": rows, "live": live, "history": history, "checks": checks,
+            "history_note": hist_note or ("Plex history in production is Plex's reporting copy (about 4 h behind); "
+                                          "the live check (location, quantity, status, pallet) is current." if ENV == "prod" else None)}
+
+
+@app.post("/log/undo/review")
+def undo_review():
+    """What undoing a batch would do, and the detailed Plex activity since the move. Nothing is moved."""
+    r = _undo_review(request.form.get("batch_id", ""))
+    if not r["ok"]:
+        return r, 400
+    can = [c for c in r["checks"] if c["ok"]]
+    plan_id = None
+    if can and (ENV == "test" or ALLOW_PROD_MOVES):
+        plan_id = "u" + uuid.uuid4().hex[:11]
+        _plans[plan_id] = {"kind": "undo", "created": time.time(), "batch_id": r["batch_id"], "rows": r["rows"],
+                           "history": r["history"], "by": who()}
+    for c in r["checks"]:
+        log_move({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "undo-review", "batch_id": f"restore-{r['batch_id']}",
+                  "env": ENV, "requested_by": who(), "serial": c["serial"], "from_location": c["now"], "to_location": c["from"],
+                  "message": "can undo" if c["ok"] else ("already back" if c["back"] else "; ".join(c["reasons"])),
+                  "plan_json": _j({"activity": c["activity"], "age_min": c["age_min"]})})
+    return {"ok": True, "batch_id": r["batch_id"], "plan_id": plan_id, "env": ENV, "undo_minutes": undo.UNDO_MINUTES,
+            "checks": r["checks"], "history_note": r["history_note"],
+            "moves_enabled": ENV == "test" or ALLOW_PROD_MOVES, "can": len(can)}
+
+
+@app.post("/log/undo")
+def undo_apply():
+    """Put back the containers of a reviewed undo that are STILL exactly as we left them (checked live again)."""
+    back = redirect(url_for("move_log"))
+    if not (ENV == "test" or ALLOW_PROD_MOVES):
+        flash("Moves are turned off in production (PICKING_ALLOW_PROD_MOVES is not 1).", "error")
+        return back
+    plan = _plans.pop(request.form.get("plan_id", ""), None)
+    if not plan or plan.get("kind") != "undo" or time.time() - plan["created"] > PLAN_TTL:
+        flash("That undo review has expired or was already used. Open it again from the log.", "error")
+        return back
+    import restore_moves
+    rows = plan["rows"]
+    done = bad = 0
+    with _move_lock:
+        serials = list(dict.fromkeys(r["serial"] for r in rows))
+        live = {s: api.container(s) for s in serials}
+        now = dt.datetime.now(dt.timezone.utc)
+        checks = {r["serial"]: undo.check(r, live.get(r["serial"]), plan["history"], now) for r in rows}
+        ok_rows = [r for r in rows if checks[r["serial"]]["ok"]]
+        actions = restore_moves.plan_restore(ok_rows, live)
+        for c in checks.values():
+            if not c["ok"]:
+                flash(f"{c['serial']}: not put back: {'already back' if c['back'] else '; '.join(c['reasons'])}", "error" if not c["back"] else "ok")
+        for x in [x for x in actions if x["kind"] in ("pallet", "container")]:
+            d = web.move_detail(x["send"], x["to"])
+            for s in x["serials"]:
+                now_loc = (api.container(s) or {}).get("location")
+                ok = d["ok"] and now_loc == x["to"]
+                done += ok
+                bad += not ok
+                log_move({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "restore", "batch_id": f"restore-{plan['batch_id']}",
+                          "env": ENV, "requested_by": who(), "serial": s, "moved_as": x["send"], "from_location": (live.get(s) or {}).get("location"),
+                          "to_location": x["to"], "ok": ok, "message": d["message"], "verified_location": now_loc,
+                          "before_json": _j(live.get(s)), "plex_request": _j(d["request"]), "plex_response": d["body"],
+                          "plex_status": d["status"], "plex_ms": d["ms"],
+                          "left_pallet": next((r.get("left_pallet") for r in rows if r["serial"] == s), None)})
+                note = next((f" (it had left pallet {r['left_pallet']}: re-add it in Plex's Add to Master Unit screen)"
+                             for r in rows if r["serial"] == s and r.get("left_pallet")), "")
+                flash(f"{s}: {d['message']} (now at {now_loc}){note}", "ok" if ok else "error")
+    flash(f"Undo of batch {plan['batch_id']}: {done} put back, {bad} to check.", "ok" if not bad else "error")
+    return back
 
 
 if __name__ == "__main__":

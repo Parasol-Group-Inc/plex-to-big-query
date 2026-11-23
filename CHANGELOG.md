@@ -14,6 +14,27 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 (night) - Picking app: undo on the Move log with a limit; new demo videos; old ones withdrawn
+
+### Added
+- Move log page: one row per batch with **Undo…** (30 min, `PICKING_UNDO_MINUTES`) or **Activity**. Undo reads Plex
+  first and puts back only containers exactly as we left them (live record equal to right after the move, no Plex
+  history since but our move); for the rest it shows the activity since the move from `Part_v_Container_Change2`
+  (time, action, location, quantity, status, LP, who). Approve re-reads live. Logged as `undo-review` / `restore`.
+  Evidence for the limit: after a move, 37% (Bottling) and 49% (Labeling) of containers change again within 1 h.
+  `deploy/picking_app/undo.py`; `restore_moves.py` stays as Claude's admin tool.
+- Second take of the demo videos (targets from history, review dialog, undo and its limit), on the hub tab, in
+  GCS `picking-app/videos/2026-11-23-v2/` and Downloads. Recorder `record_demo.py` (local or deployed).
+
+### Removed
+- The first-take videos (moves to Staging locations) from the hub, GCS and Downloads (Trash), and the 11-20 demo.
+
+### Changed
+- Pick list labels: "there" (at the chosen target) and "other target" instead of "staged".
+
+### Not deployed
+- After merge: `./scripts/deploy.sh` (log columns from #166) and `./deploy/picking_app/deploy.sh` on Plex TEST.
+
 ## 2026-11-23 (late) - Picking app: real targets from Plex history, review dialog, full move log, restore tool
 
 ### Changed

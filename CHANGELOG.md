@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 (late) - Picking app: real targets from Plex history, review dialog, full move log, restore tool
+
+### Changed
+- Targets: no longer the four "... Staging" locations. Each pick line offers where material used at its work
+  center was moved before use in the last 45 days (Plex `Part_v_Container_Change2` via the SQL screen, cached 6 h):
+  PW bins for Pre-Weigh, the line for Bottling / Labeling, machine or CSR rack for Encapsulation. Staging stays last.
+  The server accepts only a listed target.
+- Moving: "Review move…" opens a dialog with every container, from, to and what happens (pallet / single / not
+  moved and why); Approve or Cancel. Approve re-reads live and skips anything changed since the review.
+
+### Added
+- `PlexOps.picking_move_log` columns (Terraform): event, batch_id, part, before/after records, the exact Plex
+  request and raw response, status, timing, user agent, revision. Events: preview, cancelled, move, refused, restore.
+- `deploy/picking_app/restore_moves.py`: puts a batch (or serials) back, dry run by default; tested on Plex TEST.
+
+### Not deployed
+- Needs `./scripts/deploy.sh` (Terraform: the new columns) and `./deploy/picking_app/deploy.sh` with
+  `PLEX_ENV_FOR_APP=prod` (moves stay off) after merge.
+
+## 2026-11-23 (evening) - Picking app on Plex production, moves off
+
+### Deployed
+- `picking-app-00004-29z` (71794da) with `PLEX_ENV=prod`; `PICKING_ALLOW_PROD_MOVES` not set. Checked through IAP:
+  "PLEX PROD · moves off", 104 job sets, set 221 live in 5.4 s, Move buttons disabled, a forced move refused.
+  Before moves go on: staging target per area, one supervised single move and one pallet move in production
+  (`docs/PICKING_STAGING_APP.md`, "Production, moves off").
+
 ## 2026-11-23 (afternoon) - Picking app: demo videos, time-saved evidence, hub videos
 
 ### Added

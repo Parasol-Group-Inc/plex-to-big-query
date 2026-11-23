@@ -6843,5 +6843,22 @@ resource "google_bigquery_table" "picking_move_log" {
     { name = "message", type = "STRING", mode = "NULLABLE" },
     { name = "verified_location", type = "STRING", mode = "NULLABLE" },
     { name = "left_pallet", type = "STRING", mode = "NULLABLE", description = "LP the container left (moved alone off a partly ticked pallet)" },
+    # 2026-11-23: review dialog + full audit trail, enough for deploy/picking_app/restore_moves.py to undo any move
+    { name = "event", type = "STRING", mode = "NULLABLE", description = "preview | cancelled | move | refused | restore (NULL = before 2026-11-23, a move)" },
+    { name = "batch_id", type = "STRING", mode = "NULLABLE", description = "one review (plan) = one batch; restore rows use restore-<batch>" },
+    { name = "part_id", type = "STRING", mode = "NULLABLE" },
+    { name = "part_no", type = "STRING", mode = "NULLABLE" },
+    { name = "lp_before", type = "STRING", mode = "NULLABLE", description = "pallet (LP) the container was on before" },
+    { name = "status_before", type = "STRING", mode = "NULLABLE" },
+    { name = "qty_before", type = "FLOAT", mode = "NULLABLE" },
+    { name = "before_json", type = "STRING", mode = "NULLABLE", description = "the container's full live API record before the move" },
+    { name = "after_json", type = "STRING", mode = "NULLABLE", description = "the container's full live API record after the move" },
+    { name = "plan_json", type = "STRING", mode = "NULLABLE", description = "the reviewed plan item (preview rows)" },
+    { name = "plex_request", type = "STRING", mode = "NULLABLE", description = "exact payload sent to Plex's Move Container request" },
+    { name = "plex_response", type = "STRING", mode = "NULLABLE", description = "Plex's raw answer (first 4000 characters)" },
+    { name = "plex_status", type = "INTEGER", mode = "NULLABLE" },
+    { name = "plex_ms", type = "INTEGER", mode = "NULLABLE" },
+    { name = "user_agent", type = "STRING", mode = "NULLABLE" },
+    { name = "revision", type = "STRING", mode = "NULLABLE", description = "Cloud Run revision that made the row" },
   ])
 }

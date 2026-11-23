@@ -27,7 +27,7 @@ def test_pick_lines_are_the_pre_weigh_raw_materials_not_the_blend_wip():
     s = picking.build_sets(SET_832)["832"]
     assert [(l["job_no"], l["part_no"], l["required"]) for l in s["lines"]] == [
         ("4554", "12761-01VOXNU-1", 87.959), ("4560", "12160-01VOXNU-1", 7.051)]
-    assert all(l["target"] == "Pre-Weigh Staging" for l in s["lines"])
+    assert all(l["target"] == "" for l in s["lines"])        # chosen per line from Plex history (app.line_options)
     assert s["main"]["job_no"] == "4553" and s["open_jobs"] == 3
 
 
@@ -132,36 +132,115 @@ def test_cache_reuses_until_ttl(monkeypatch):
     assert a.cached("k2", 0, f)[0] == 3 and a.cached("k2", 0, f)[0] == 4
 
 
-def test_move_reads_part_once_before_and_after_and_moves_full_pallet_as_lp(monkeypatch, tmp_path):
-    a = _app(monkeypatch)
-    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
-    state = {"A": "103", "B": "103", "C": "104", "H": "105"}
-    lp = {"A": "LP-1", "B": "LP-1"}
-    status = {"H": "Hold"}
+def _fake_plex(a, monkeypatch, state, lp=None, status=None):
+    lp, status = lp or {}, status or {}
     reads, moves = [], []
 
     def containers_for_part(pid):
         reads.append(pid)
         return [{"serialNo": s, "location": loc, "quantity": 5, "containerStatus": status.get(s, "OK"),
-                 "masterUnitNo": lp.get(s)} for s, loc in state.items()]
+                 "masterUnitNo": lp.get(s), "lotNo": "L"} for s, loc in state.items()]
 
-    def move(item, target):
+    def move_detail(item, target):
         moves.append(item)
         for s in ([k for k, v in lp.items() if v == item] or [item]):
             state[s] = target
-        return True, f"{item} moved"
+        return {"ok": True, "message": f"{item} moved", "request": {"SerialNo": item, "Location": target},
+                "status": 200, "body": '{"Success":true}', "ms": 12}
 
     monkeypatch.setattr(a.api, "containers_for_part", containers_for_part)
     monkeypatch.setattr(a.api, "container", lambda s: None)
-    monkeypatch.setattr(a.web, "move", move)
-    r = a.app.test_client().post("/move", data={"set_no": "", "job_no": "1", "part_id": "P", "target": "Pre-Weigh Staging",
-                                                "serial": ["A", "B", "C", "H"]})
-    assert r.status_code == 302
-    assert moves == ["LP-1", "C"]                      # pallet as one call, Hold never sent
-    assert reads == ["P", "P"]                         # one live read before, one after
-    rows = [__import__("json").loads(l) for l in (tmp_path / "log.jsonl").read_text().splitlines()]
-    assert {r["serial"]: r["ok"] for r in rows} == {"A": True, "B": True, "C": True, "H": False}
-    assert {r["serial"]: r["moved_as"] for r in rows}["A"] == "LP-1"
+    monkeypatch.setattr(a.web, "move_detail", move_detail)
+    monkeypatch.setattr(a, "destinations", lambda: [])
+    monkeypatch.setattr(a, "location_groups", lambda: {})
+    monkeypatch.setattr(a, "_line_for", lambda *x: None)        # no line: the Staging locations are the allowed targets
+    return reads, moves
+
+
+def _rows(path):
+    return [__import__("json").loads(l) for l in path.read_text().splitlines()]
+
+
+def test_review_then_approve_moves_full_pallet_as_lp_and_logs_everything(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    state = {"A": "103", "B": "103", "C": "104", "H": "105"}
+    reads, moves = _fake_plex(a, monkeypatch, state, lp={"A": "LP-1", "B": "LP-1"}, status={"H": "Hold"})
+    c = a.app.test_client()
+    form = {"set_no": "", "job_no": "1", "part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B", "C", "H"]}
+    pv = c.post("/move/preview", data=form).get_json()
+    assert pv["ok"] and moves == []                                    # the review sends nothing to Plex
+    assert [(i["send"], i["pallet"]) for i in pv["items"]] == [("LP-1", "LP-1"), ("C", None), (None, None)]
+    assert pv["items"][2]["why"] and pv["containers_moving"] == 3
+    assert {r["event"] for r in _rows(tmp_path / "log.jsonl")} == {"preview"}
+    r = c.post("/move", data={"plan_id": pv["plan_id"], "set_no": ""})
+    assert r.status_code == 302 and moves == ["LP-1", "C"]            # pallet as one call, Hold never sent
+    assert reads == ["P", "P", "P"]                                    # review read, approve read, verify read
+    rows = [x for x in _rows(tmp_path / "log.jsonl") if x["event"] in ("move", "refused")]
+    assert {x["serial"]: x["ok"] for x in rows} == {"A": True, "B": True, "C": True, "H": False}
+    a_row = next(x for x in rows if x["serial"] == "A")
+    assert a_row["moved_as"] == "LP-1" and a_row["batch_id"] == pv["plan_id"] and a_row["lp_before"] == "LP-1"
+    assert '"location":"103"' in a_row["before_json"] and "Pre-Weigh Staging" in a_row["after_json"]
+    assert a_row["plex_status"] == 200 and "SerialNo" in a_row["plex_request"] and a_row["plex_response"]
+    assert c.post("/move", data={"plan_id": pv["plan_id"]}).status_code == 302 and moves == ["LP-1", "C"]   # a review is used once
+
+
+def test_approve_skips_a_container_that_changed_since_the_review(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    state = {"A": "103", "B": "104"}
+    _, moves = _fake_plex(a, monkeypatch, state)
+    c = a.app.test_client()
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B"]}).get_json()
+    state["B"] = "106"                                                 # someone moved B on the floor meanwhile
+    c.post("/move", data={"plan_id": pv["plan_id"]})
+    assert moves == ["A"]
+    b = next(x for x in _rows(tmp_path / "log.jsonl") if x["serial"] == "B" and x["event"] == "refused")
+    assert "changed since you reviewed it" in b["message"]
+
+
+def test_cancel_logs_and_bad_target_or_prod_is_refused(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    _, moves = _fake_plex(a, monkeypatch, {"A": "103"})
+    c = a.app.test_client()
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A"]}).get_json()
+    c.post("/move/cancel", data={"plan_id": pv["plan_id"]})
+    assert "cancelled" in {x["event"] for x in _rows(tmp_path / "log.jsonl")}
+    assert c.post("/move", data={"plan_id": pv["plan_id"]}).status_code == 302 and moves == []
+    assert c.post("/move/preview", data={"part_id": "P", "target": "Ship", "serial": ["A"]}).status_code == 400
+
+
+def test_destination_options_from_history():
+    rows = [{"Workcenter_Code": "Pre-Weigh 1", "Workcenter_Group": "Pre-Weigh", "Location": "PW - B9", "Containers": "703"},
+            {"Workcenter_Code": "Pre-Weigh 1", "Workcenter_Group": "Pre-Weigh", "Location": "PW - B10", "Containers": "313"},
+            {"Workcenter_Code": "Pre-Weigh 2", "Workcenter_Group": "Pre-Weigh", "Location": "PW - B7", "Containers": "551"},
+            {"Workcenter_Code": "Pre-Weigh 2", "Workcenter_Group": "Pre-Weigh", "Location": "102-04B-03", "Containers": "300"},
+            {"Workcenter_Code": "Pre-Weigh 2", "Workcenter_Group": "Pre-Weigh", "Location": "PW - A9", "Containers": "1"}]
+    groups = {"102-04B-03": "Warehouse"}
+    by_group = picking.destination_options(rows, "SCHED - Pre-weigh", "Pre-Weigh", groups)
+    assert [o["location"] for o in by_group][:3] == ["PW - B9", "PW - B7", "PW - B10"]        # group, most used first
+    assert "102-04B-03" not in [o["location"] for o in by_group]                               # putaway rack dropped
+    assert "PW - A9" not in [o["location"] for o in by_group]                                  # under 1%
+    assert by_group[-1]["location"] == "Quality Released Staging" and by_group[-1]["uses"] == 0
+    own = picking.destination_options(rows, "Pre-Weigh 1", "Pre-Weigh", groups)
+    assert own[0] == {"location": "PW - B9", "uses": 703, "basis": "Pre-Weigh 1"}
+
+
+def test_plan_restore_puts_back_pallets_and_containers_and_skips_moved_again():
+    import restore_moves as rm
+    rows = [{"serial": "A", "moved_as": "LP-1", "from_location": "103", "to_location": "PW - B9", "ok": True},
+            {"serial": "B", "moved_as": "LP-1", "from_location": "103", "to_location": "PW - B9", "ok": True},
+            {"serial": "C", "moved_as": "C", "from_location": "104", "to_location": "PW - B9", "ok": True, "left_pallet": "LP-2"},
+            {"serial": "D", "moved_as": "D", "from_location": "105", "to_location": "PW - B9", "ok": True},
+            {"serial": "E", "moved_as": "E", "from_location": "106", "to_location": "PW - B9", "ok": True}]
+    live = {"A": {"location": "PW - B9", "masterUnitNo": "LP-1"}, "B": {"location": "PW - B9", "masterUnitNo": "LP-1"},
+            "C": {"location": "PW - B9"}, "D": {"location": "Pre-Weigh 1"}, "E": {"location": "106"}}
+    acts = {tuple(x["serials"]): x for x in rm.plan_restore(rows, live)}
+    assert acts[("A", "B")]["kind"] == "pallet" and acts[("A", "B")]["send"] == "LP-1" and acts[("A", "B")]["to"] == "103"
+    assert acts[("C",)]["kind"] == "container" and "LP-2" in acts[("C",)]["note"]
+    assert acts[("D",)]["kind"] == "skip" and "moved again" in acts[("D",)]["why"]
+    assert acts[("E",)]["kind"] == "done"
 
 
 def test_saved_session_file_round_trip(tmp_path, monkeypatch):
@@ -181,6 +260,7 @@ def test_set_page_opens_with_loaders_and_each_line_fills_in_live(monkeypatch):
     s = picking.build_sets(SET_832)["832"]
     monkeypatch.setattr(a, "_find_set", lambda set_no, days: (s, 0) if set_no == "832" else (None, 0))
     monkeypatch.setattr(a, "location_groups", lambda: {"103": "Warehouse"})
+    monkeypatch.setattr(a, "destinations", lambda: [])
     reads = []
     monkeypatch.setattr(a.api, "containers_for_part", lambda pid: reads.append(pid) or
                         [{"serialNo": "S1", "location": "103", "quantity": 50, "containerStatus": "OK", "lotId": "L1"}])
@@ -190,7 +270,7 @@ def test_set_page_opens_with_loaders_and_each_line_fills_in_live(monkeypatch):
     assert reads == []                                         # opens without waiting for Plex
     assert page.count('class="card line-loading"') == len(s["lines"]) and "/set/832/line/p12761" in page
     frag = client.get("/set/832/line/p12761?days=3").get_data(as_text=True)
-    assert reads == ["p12761"] and "S1" in frag and 'id="line-p12761"' in frag and "Move to staging" in frag
+    assert reads == ["p12761"] and "S1" in frag and 'id="line-p12761"' in frag and "Review move" in frag
     assert client.get("/set/832/line/nope").status_code == 404
     full = client.get("/set/832?all=1").get_data(as_text=True)  # the old one-go page still works
     assert "line-loading" not in full and full.count("<td>S1</td>") == len(s["lines"])
@@ -210,6 +290,7 @@ def test_api_calls_are_capped_however_many_pages_load(monkeypatch):
     class R:
         status_code, content = 200, b"[]"
         def json(self): return []
+        def raise_for_status(self): return None
 
     def fake_get(url, timeout):
         with lock:

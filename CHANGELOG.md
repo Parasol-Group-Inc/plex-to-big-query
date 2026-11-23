@@ -14,6 +14,19 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 (afternoon) - Picking app: demo videos, time-saved evidence, hub videos
+
+### Added
+- Three captioned demo videos of the deployed app (Plex TEST) plus a combined one, on the hub's Picking &
+  staging tab (`scripts/hub/picking_tab.py`, files under `videos/`), in GCS
+  (`picking-app/videos/2026-11-23/`) and Emilio's Downloads. Recorder: `deploy/picking_app/record_demo.py`.
+- `docs/PICKING_STAGING_APP.md`: "Where the team's time goes" (production: 2,061 single-container moves and
+  13,508 pallet-moved containers in 30 days, lower bounds; 7 containers in 5.8 s with one click in the app),
+  "Demo videos", and the live tests on revision 00003.
+
+### Deployed
+- `picking-app-00003-qhl` (71794da, PR #164) by Emilio; live tests passed.
+
 ## 2026-11-23 - Picking app: live audit and tests; Move log page and queueing fixed
 
 ### Fixed

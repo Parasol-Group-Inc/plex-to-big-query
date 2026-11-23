@@ -121,8 +121,11 @@ def run(p, do_move: bool, big: str, small: str | None) -> dict:
             pg.evaluate("([cid, s]) => document.querySelectorAll('#' + cid + ' input[name=serial]')"
                         ".forEach(c => c.checked = (c.value === s))", [picked["card"], picked["serial"]])
             t = time.time()
+            pg.locator("#" + picked["card"] + " button", has_text="Review move").click()   # review dialog (11-23)
+            pg.wait_for_selector("dialog#review[open]", timeout=180000)
+            log("T6_review", {"title": pg.inner_text("#rv-title"), "rows": pg.locator("#rv-body tbody tr").count()})
             with pg.expect_navigation(timeout=180000):
-                pg.locator("#" + picked["card"] + " button").click()
+                pg.click("#rv-approve")
             log("T6_move", {"s": round(time.time() - t, 2), "flashes": pg.locator(".flash").all_inner_texts()})
             pg.screenshot(path=str(out / "t6_after.png"))
             from plex_web import PlexWeb

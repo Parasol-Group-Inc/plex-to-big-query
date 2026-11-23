@@ -1,5 +1,7 @@
 """Record the picking app demo videos on the DEPLOYED app (Plex TEST), through IAP (2026-11-23).
 
+RECORDS THE 11-23 MORNING FLOW (Staging targets, no review dialog): update the move steps before re-recording.
+
     python deploy/picking_app/live_test.py --login                      # once: sign in (Chrome profile)
     python deploy/picking_app/record_demo.py <out_dir> 1|2|3            # one video per run (.webm)
 

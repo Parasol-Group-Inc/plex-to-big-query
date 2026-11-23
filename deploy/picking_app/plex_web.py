@@ -190,13 +190,26 @@ class PlexWeb:
         return [{k: (None if v == "NULL" else v) for k, v in row.items() if k} for row in rows]
 
     # ── the move ──
-    def move(self, serial_or_lp: str, location: str) -> tuple[bool, str]:
-        r = self._post(MOVE_PATH, json={"SerialNo": serial_or_lp, "Location": location,
-                                        "Putaway": False, "Confirmed": False},
-                       headers={"X-Requested-With": "XMLHttpRequest"}, timeout=60)
-        if r.status_code != 200:
-            return False, f"HTTP {r.status_code}: {r.text[:200]}"
+    def move_detail(self, serial_or_lp: str, location: str) -> dict:
+        """One move, with everything needed to audit or undo it: {ok, message, request, status, body, ms}.
+        `request` is the exact payload sent; `body` Plex's raw answer (first 4000 characters)."""
+        payload = {"SerialNo": serial_or_lp, "Location": location, "Putaway": False, "Confirmed": False}
+        t0 = time.time()
         try:
-            return parse_move(r.json())
+            r = self._post(MOVE_PATH, json=payload, headers={"X-Requested-With": "XMLHttpRequest"}, timeout=60)
+        except Exception as e:  # noqa: BLE001 - recorded, never raised into a half-done batch
+            return {"ok": False, "message": f"request failed: {e}", "request": {"path": MOVE_PATH, **payload},
+                    "status": None, "body": None, "ms": round((time.time() - t0) * 1000)}
+        out = {"request": {"path": MOVE_PATH, **payload}, "status": r.status_code, "body": r.text[:4000],
+               "ms": round((time.time() - t0) * 1000)}
+        if r.status_code != 200:
+            return {**out, "ok": False, "message": f"HTTP {r.status_code}: {r.text[:200]}"}
+        try:
+            ok, msg = parse_move(r.json())
         except ValueError:
-            return False, f"not JSON: {r.text[:200]}"
+            ok, msg = False, f"not JSON: {r.text[:200]}"
+        return {**out, "ok": ok, "message": msg}
+
+    def move(self, serial_or_lp: str, location: str) -> tuple[bool, str]:
+        d = self.move_detail(serial_or_lp, location)
+        return d["ok"], d["message"]

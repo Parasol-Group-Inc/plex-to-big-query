@@ -8,23 +8,77 @@ job quantity x job BOM quantity (Part_v_Job_Bom, the job's own BOM, not the part
 
 Suggested containers: status OK, quantity > 0, not already in a staging or workcenter location,
 first-expiring lot first (lot best-by, then oldest container), until the required quantity is covered.
-Containers already in the target staging location count as staged.
+Containers already at the chosen target count as staged; at another of the line's targets, as elsewhere-staged.
 """
 from __future__ import annotations
 
 from collections import OrderedDict
 
-# Where each workcenter group's picks are staged. The four staging locations exist in Plex
-# (typed Storage; Plex's own "Staging" location type is unused). TO CONFIRM with the team.
-STAGING_FOR_GROUP = {
-    "Pre-Weigh": "Pre-Weigh Staging",
-    "Blending": "Pre-Weigh Staging",
-    "Encapsulating": "Packaging Staging",
-    "Bottling": "Packaging Staging",
-    "Packaging": "Packaging Staging",
-    "Labeling": "Labeling Staging",
-}
+# Where picked material goes. Until 2026-11-23 the app sent everything to the four "... Staging"
+# locations; Plex's own history (Part_v_Container_Change2) showed the team never stages for production:
+# each container used at a work center was last moved to that work center's point of use (Pre-Weigh 1-3:
+# the PW bins B7-B10/A3/A4/B6; Encapsulation: the machine or the A*/C* CSR racks; Bottling, Labeling,
+# First 48: the line itself). Targets are now those destinations (destinations_sql + destination_options);
+# the Staging locations stay at the end of the list for whoever wants them.
 STAGING_LOCATIONS = ["Pre-Weigh Staging", "Packaging Staging", "Labeling Staging", "Quality Released Staging"]
+DEST_DAYS = int(__import__("os").environ.get("PICKING_DEST_DAYS", "45"))
+# Moving into these location groups is putaway or shipping, not picking.
+DEST_SKIP_GROUPS = {"Warehouse", "Shipping", "Retains", "Quarantine"}
+
+
+def destinations_sql(days: int = DEST_DAYS) -> str:
+    """For every container used up ('Retired at <work center>') in the last `days` days: where it was last
+    moved before that. One row per (work center, group, location) with the number of containers."""
+    days = int(days)
+    return f"""
+WITH ret AS (
+  SELECT c.Serial_No, c.Change_Date, REPLACE(c.Last_Action, 'Retired at ', '') AS used_at
+  FROM Part_v_Container_Change2 AS c
+  WHERE c.Last_Action LIKE 'Retired at %' AND c.Change_Date >= DATEADD(day, -{days}, GETDATE())),
+mv AS (
+  SELECT r.used_at,
+    (SELECT TOP 1 m.Location FROM Part_v_Container_Change2 AS m
+     WHERE m.Serial_No = r.Serial_No AND m.Change_Date <= r.Change_Date
+       AND m.Last_Action IN ('Container Move', 'Master Unit Move') ORDER BY m.Change_Date DESC) AS to_location
+  FROM ret AS r)
+SELECT x.used_at AS Workcenter_Code, w.Workcenter_Group, x.to_location AS Location, COUNT(*) AS Containers
+FROM mv AS x LEFT JOIN Part_v_Workcenter AS w ON w.Workcenter_Code = x.used_at
+WHERE x.to_location IS NOT NULL
+GROUP BY x.used_at, w.Workcenter_Group, x.to_location"""
+
+
+def destination_options(rows: list[dict], workcenter: str, group: str, loc_group: dict | None = None,
+                        top: int = 8, min_share: float = 0.01, min_wc: int = 20) -> list[dict]:
+    """Target choices for one pick line, most used first: [{location, uses, basis}].
+
+    Uses the line's own work center when it has at least `min_wc` containers of history (a real
+    machine), else the whole work center group (jobs often sit on a "SCHED - ..." placeholder).
+    Drops putaway/shipping groups and anything under `min_share` of the basis. The Staging locations
+    are appended (uses 0) so they can still be chosen."""
+    def tally(match):
+        out: dict = {}
+        for r in rows:
+            if match(r):
+                out[r["Location"]] = out.get(r["Location"], 0) + int(float(r.get("Containers") or 0))
+        return out
+    counts = tally(lambda r: workcenter and r.get("Workcenter_Code") == workcenter)
+    basis = workcenter
+    if sum(counts.values()) < min_wc:
+        counts, basis = tally(lambda r: group and r.get("Workcenter_Group") == group), group
+    total = sum(counts.values()) or 1
+    opts = []
+    for loc, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        if loc_group is not None and loc_group.get(loc) in DEST_SKIP_GROUPS:
+            continue
+        if n / total < min_share or len(opts) >= top:
+            continue
+        opts.append({"location": loc, "uses": n, "basis": basis})
+    for loc in STAGING_LOCATIONS:
+        if loc not in {o["location"] for o in opts}:
+            opts.append({"location": loc, "uses": 0, "basis": "staging (rarely used)"})
+    return opts
+
+
 MOVABLE_STATUSES = {"OK"}   # Plex itself moves Hold containers without asking (TEST 11-20): we refuse
 # Only these Plex location groups are picked from. On 11-20 the first TEST pick lists suggested
 # dozens of ~0.05 retain samples in R5-3, "R and D", Ship and "z**DO NOT USE**": those sit in other
@@ -106,8 +160,7 @@ def build_sets(rows: list[dict]) -> "OrderedDict[str, dict]":
             seen.add((job_no, comp_id))
             lines.append({"job_no": job_no, "part_no": comp_no, "part_id": comp_id, "type": comp_type,
                           "required": round(j["qty"] * bom_qty, 4), "group": j["group"],
-                          "workcenter": j["workcenter"], "due": j["due"],
-                          "target": STAGING_FOR_GROUP.get(j["group"], STAGING_LOCATIONS[0])})
+                          "workcenter": j["workcenter"], "due": j["due"], "target": ""})
         s["lines"] = lines
         main = max(s["jobs"].values(), key=lambda j: (j["group"] != "Pre-Weigh", j["due"] or ""))
         s["main"] = main

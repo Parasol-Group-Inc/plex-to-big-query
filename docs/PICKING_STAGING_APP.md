@@ -332,10 +332,112 @@ Not shown yet, and the reason moves stay off in production:
 - **Who:** Plex records every move as gcp.odbc.vox; only `PlexOps.picking_move_log` knows the person.
 - **Undo** is by hand: the log's `from_location`, moved back (as done for the demos).
 
-Before `PICKING_ALLOW_PROD_MOVES=1`: (1) the team names the target per area (Staging locations or PW/PS bins;
-the app's list is `picking.STAGING_LOCATIONS`), (2) one supervised move of one container in production with
+Before `PICKING_ALLOW_PROD_MOVES=1`: (1) the team confirms the targets the app now takes from Plex's history
+(PW bins for Pre-Weigh, the line for Bottling / Labeling, machine or CSR rack for Encapsulation; "Where the team
+moves material" above), (2) one supervised move of one container in production with
 someone on the floor, read back and moved back, (3) one whole pallet the same way, (4) then on, for named
 people first.
+
+## Where the team moves material, and the targets the app offers (2026-11-23)
+
+Emilio: "why would we want to move to staging?" We don't. The four "... Staging" locations came from Plex's
+location names, not from how the floor works. Plex keeps every container change (`Part_v_Container_Change2`,
+location, action, who, when; in the SQL screen, not in our BigQuery copy). For every container **used up** at a
+work center ("Retired at <work center>") in the last 45 days, the app looks up where it was last moved before
+that (TEST copy, 11-23; history from go-live 10-15):
+
+| Used at | Containers | Last moved to before use |
+|---|---|---|
+| Pre-Weigh 1 | 1,300 | PW - B9 703, PW - B10 313, PW - B8 262, PW - B7 16 |
+| Pre-Weigh 2 | 1,472 | PW - B7 551, PW - B10 360, PW - B8 244, PW - A4 137, PW - B6 97, PW - B9 49, PW - A3 30 |
+| Pre-Weigh 3 | 1,640 | PW - B8 556, PW - B9 511, PW - B10 475, PW - B7 95 |
+| Encapsulation 1-10 | 1,830 | the machine itself (e.g. Encapsulation 4: 313), or the CSR racks (C4 - CSR 46, C2 - CSR 30, A7 - CSR 14 ...) |
+| Bottling 1-6 | 7,200 | the line itself (Bottling 4: 1,439 of 1,447); Packaging Staging 106 in all |
+| Labeling 1-7, First 48 | 7,500 | the line itself (Labeling 2: 2,110 of 2,136); Labeling Staging 17 in all |
+| Blending 2-5a | 5,600 | mostly never moved (made where it is used); some via PS - B6 / PS - B8 |
+
+Top destinations of all moves in the last 60 days: Quality Released Staging 5,727 (receiving / QA release, almost
+all pallets; not picking), Ship 4,372, the Bottling and Labeling lines, PW - B9 1,894, PW - B8 1,535, PW - B10
+1,422, PW - B7 1,051.
+
+**What the app does now.** Each pick line's "Move ticked to" list is where material used at that line's work
+center was moved before use, most used first, with the count ("PW - B9 · 703 used here"). It uses the job's own
+work center when it has 20+ containers of history, else its work center group (jobs often sit on a
+"SCHED - ..." placeholder). Putaway, shipping, retains and quarantine locations are left out, and anything under
+1%. The four Staging locations stay at the end ("staging (rarely used)"). The server accepts only a target in
+that line's list. History is read through the SQL screen (`picking.destinations_sql`), cached 6 h; in
+production that is Plex's reporting copy, fine for a 45-day statistic. `PICKING_DEST_DAYS` changes the window.
+
+**Found while testing (set 756):** the PW bins already hold each Pre-Weigh ingredient, several times the job's
+need (12743-01VOXNU-1: 1,225 in PW - B9 against 147.96 needed). The team keeps PW bins stocked as a buffer next to
+Pre-Weigh and replenishes them; it does not stage per job. The pick list then says "all there" and suggests
+nothing. A **replenishment view** (which PW bin is low for the coming jobs) may fit the floor better than a
+per-job pick list: a question for the team.
+
+## Review before every move (2026-11-23)
+
+"Review move…" no longer moves anything. It asks the server for a plan (`POST /move/preview`), which reads every
+ticked container live from Plex and returns, per container: serial, pallet, lot, quantity, status, from, to and
+what will happen (move the container / move the whole pallet LP-x in one call / not moved and why), plus a
+warning for each container that would leave its pallet. Nothing is sent to Plex. The page shows it in a dialog:
+
+- **Cancel** (or Escape): nothing moves; the review is logged as cancelled.
+- **Approve: move N**: the server carries out exactly that review (`POST /move` with its id). It reads every
+  container live again and **does not move one that changed since the review** (location, status, quantity or
+  pallet), or that may not move. A review is valid 10 minutes (`PICKING_PLAN_TTL`) and can be used once.
+- The result lists each container with Plex's answer and where it is now, and the **batch id** to undo it.
+
+Tested 11-23 against Plex TEST (local server, real browser): set 756, 12743-01VOXNU-1, two warehouse containers
+(S029901 from 118-08C-01, S029940 from 117-08B-01) to PW - B9: dialog correct, Cancel logged, Approve moved both
+(924 ms in Plex for the first), then `restore_moves.py` put both back, and a second run found them "already back".
+
+## The move log (since 2026-11-23)
+
+One row per container per event in `PlexOps.picking_move_log` (and the instance's JSON lines file):
+
+| Event | When |
+|---|---|
+| `preview` | a review was opened (the plan item and the container's full live record) |
+| `cancelled` | the review was cancelled |
+| `move` | sent to Plex (ok = Plex said success and the container was read back at the target) |
+| `refused` | approved but not sent (changed since the review, not OK, ...) |
+| `restore` | put back by `restore_moves.py` |
+
+Columns added 11-23 (Terraform): `event`, `batch_id`, `part_id`, `part_no`, `lp_before`, `status_before`,
+`qty_before`, `before_json` / `after_json` (the container's full API record before and after), `plan_json`,
+`plex_request` (the exact payload sent), `plex_response` (Plex's raw answer), `plex_status`, `plex_ms`,
+`user_agent`, `revision`. The app inserts with `ignore_unknown_values`, so it works before and after the
+Terraform change. Rows before 11-23 have `event` NULL (moves).
+
+Useful queries:
+
+```sql
+SELECT `at`, requested_by, event, batch_id, serial, moved_as, from_location, to_location, ok, verified_location, message
+FROM `voxdatalake.PlexOps.picking_move_log` WHERE DATE(`at`) = CURRENT_DATE() ORDER BY `at` DESC;
+
+SELECT batch_id, requested_by, MIN(`at`) at, COUNTIF(event = 'move') moved, COUNTIF(event = 'move' AND NOT ok) failed,
+       COUNTIF(event = 'refused') refused, ANY_VALUE(to_location) to_location
+FROM `voxdatalake.PlexOps.picking_move_log` WHERE event IN ('move', 'refused') GROUP BY 1, 2 ORDER BY at DESC;
+```
+
+## Restoring moves (if things go sideways)
+
+`deploy/picking_app/restore_moves.py` puts moves back, through Plex's Move Container screen request with a
+Playwright login (the same way the app moves). Dry run unless `--apply`; production also needs `--prod` and typing
+RESTORE.
+
+1. Find the batch: the message after a move ("Batch a3d02dbde038 (undo: ...)"), the Move log page, or the query above.
+2. `python deploy/picking_app/restore_moves.py --batch <id>` (add `--prod` for production): it reads every container
+   live and prints what it would do. Per container: **already back** (nothing), **moved again since** (skipped:
+   someone moved it after us; `--force` moves it back anyway), **whole pallet** still together at the target
+   (moved back in one call), or **container** moved back on its own.
+3. `... --apply`: moves, reads each one back, prints "now at", logs `event = restore`.
+4. A container that **left its pallet** when moved is back in its location but not on the pallet: the tool names
+   the LP; re-add it in Plex's Add to Master Unit screen.
+
+By container instead of batch: `--serial S029901 --serial S029940 [--since 2026-11-23]`. From a file instead of
+BigQuery: `--log etl-manual/picking_moves.jsonl`. Claude can run all of this on request (the Plex login is the
+company user gcp.odbc.vox; writes to BigQuery need the operator account).
 
 ## Cost (Cloud Run, pay per use)
 

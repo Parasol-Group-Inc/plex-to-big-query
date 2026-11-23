@@ -503,6 +503,10 @@ Development screen through the same session. Things that bite:
   Plex login (`gs://voxdatalake-plex-screenshots/picking-app/`) is a live gcp.odbc.vox session.
 - Jennilyn's Google account is `jennilyn.tockstein@`; `jennilyntockstein@` is only a mail alias (IAM rejects it).
 - Container lists are cached 60 s for display only; a move always reads them fresh.
+- **Targets come from Plex history, not the Staging locations (11-23):** where material used at each work center
+  was last moved (`Part_v_Container_Change2`): PW bins for Pre-Weigh, the line itself for Bottling / Labeling.
+- **Every move is reviewed** (dialog, Approve / Cancel) and logged in full (before/after record, Plex request and
+  answer, batch). `deploy/picking_app/restore_moves.py --batch <id>` puts a batch back (dry run unless --apply).
 
 ## Customer Notes in Plex (2026-11-09)
 

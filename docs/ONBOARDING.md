@@ -154,6 +154,7 @@ One repo, **six folders**, each bound to its own branch (git worktrees):
 | `ptbq-sandbox` | `dev-sandbox` | Scorecard Sandbox |
 | `ptbq-label-design` | `dev-label-design` | Label Design |
 | `ptbq-part-lot` | `dev-part-lot` | Part Lot Attributes and inheritance |
+| `ptbq-picking` | `dev-picking` | Picking & staging app |
 | `ptbq-dev` | `dev` | shared tooling: `main.py`, Terraform, hooks, scripts |
 
 **The branches hold different files.** Work sits on a project branch until it

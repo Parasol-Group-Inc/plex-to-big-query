@@ -14,6 +14,23 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 - Picking app: live audit and tests; Move log page and queueing fixed
+
+### Fixed
+- `/log` read BigQuery with `ORDER BY at` (`at` is reserved), failed, and showed only the instance's own
+  file. Now `` `at` `` (`LOG_SQL`).
+- Cloud Run `--concurrency` 8 → 40 and gunicorn 40 threads: a page left mid-load no longer makes the next
+  page wait about 10 s. Plex API calls stay capped at 16 per instance (`PICKING_API_PARALLEL`).
+- `/favicon.ico` answers 204 instead of 404.
+
+### Added
+- `deploy/picking_app/live_test.py`: live tests of the deployed app through IAP in a real Chrome
+  (`--login`, `--move` moves one TEST container and puts it back). Results of the 11-23 run:
+  `docs/PICKING_STAGING_APP.md`, "Live audit and tests".
+
+### Not deployed
+- Needs `./deploy/picking_app/deploy.sh` after merge (the concurrency flag is in it).
+
 ## 2026-11-20 (evening) - Picking app: pick list opens at once with loaders; pooled API connections
 
 ### Changed

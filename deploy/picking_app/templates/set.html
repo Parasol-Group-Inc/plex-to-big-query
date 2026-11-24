@@ -1,71 +1,4 @@
 {% extends "base.html" %}{% block title %}Job set {{ s.set_no }}
-<dialog id="review" aria-labelledby="rv-title">
-<form method="dialog" class="rv-inner">
-<h3 id="rv-title" style="margin:0 0 4px">Review the move</h3>
-<div id="rv-sub" class="muted"></div>
-<div id="rv-body" class="tbl" style="margin-top:10px"></div>
-<div id="rv-warn"></div>
-<div class="bar" style="justify-content:flex-end;margin-top:12px">
-<span id="rv-exp" class="muted" style="margin-right:auto"></span>
-<button type="button" id="rv-cancel" class="secondary">Cancel</button>
-<button type="button" id="rv-approve">Approve</button></div>
-</form></dialog>
-<form id="rv-go" method="post" action="{{ url_for('move') }}" hidden><input name="plan_id"><input name="set_no" value="{{ s.set_no }}"></form>
-<script>
-(function () {
-  const dlg = document.getElementById("review"), body = document.getElementById("rv-body");
-  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-  const fmt = q => q == null ? "" : Number(q).toFixed(3);
-  let plan = null, timer = null;
-  function close(cancelled) {
-    clearInterval(timer); if (dlg.open) dlg.close();
-    if (cancelled && plan) { const f = new FormData(); f.append("plan_id", plan.plan_id); fetch("{{ url_for('move_cancel') }}", {method: "POST", body: f, credentials: "same-origin"}); }
-    plan = null;
-  }
-  document.addEventListener("submit", ev => {
-    const form = ev.target;
-    if (!form.classList || !form.classList.contains("move-form")) return;
-    ev.preventDefault();
-    const btn = form.querySelector("button"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Reading live from Plex…";
-    fetch("{{ url_for('move_preview') }}", {method: "POST", body: new FormData(form), credentials: "same-origin"})
-      .then(r => r.json().then(j => ({ok: r.ok, j}))).then(({ok, j}) => {
-        btn.disabled = false; btn.textContent = label;
-        if (!ok || !j.ok) { alert(j.error || "Could not review this move."); return; }
-        plan = j; show(j);
-      }).catch(e => { btn.disabled = false; btn.textContent = label; alert("Could not reach the app: " + e.message); });
-  });
-  function show(j) {
-    document.getElementById("rv-title").textContent = `Move ${j.containers_moving} container${j.containers_moving == 1 ? "" : "s"} of ${j.part_no || "this part"} to ${j.target}?`;
-    document.getElementById("rv-sub").innerHTML = `Plex <b>${esc(j.env.toUpperCase())}</b> · job set ${esc(j.set_no)} · job ${esc(j.job_no)} · read live just now · review ${esc(j.plan_id)}`;
-    let rows = "", warns = [];
-    for (const it of j.items) {
-      const what = !it.send ? `<span class="short">Not moved: ${esc(it.why)}</span>`
-        : it.pallet ? `Whole pallet <b>${esc(it.pallet)}</b> (${it.covered.length} containers, one Plex call)` : "Move container";
-      if (it.left_pallet) warns.push(`${esc(it.containers[0].serial)} leaves pallet ${esc(it.left_pallet)} (its other containers stay behind).`);
-      it.containers.forEach((c, i) => {
-        rows += `<tr${it.send ? "" : ' class="no"'}><td>${esc(c.serial)}</td><td>${esc(c.lp)}</td><td>${esc(c.lot)}</td><td class="n">${fmt(c.qty)}</td><td>${esc(c.status)}</td>
-          <td>${esc(c.location)}</td><td>→ ${esc(j.target)}</td><td>${i == 0 ? what : (it.pallet ? "↳ same pallet" : "")}</td></tr>`;
-      });
-    }
-    body.innerHTML = `<table><thead><tr><th>Serial</th><th>LP</th><th>Lot</th><th class="n">Qty</th><th>Status</th><th>From</th><th>To</th><th>What happens</th></tr></thead><tbody>${rows}</tbody></table>`;
-    document.getElementById("rv-warn").innerHTML = (warns.length ? `<div class="flash error">${warns.join("<br>")}</div>` : "") +
-      `<div class="muted" style="margin-top:6px">On Approve, each container is read live again; anything that changed since this review is not moved. Every step is logged (batch ${esc(j.plan_id)}) and can be undone.</div>`;
-    const ap = document.getElementById("rv-approve");
-    ap.disabled = j.to_send == 0; ap.textContent = j.to_send == 0 ? "Nothing to move" : `Approve: move ${j.containers_moving}`;
-    let left = j.expires_s; const exp = document.getElementById("rv-exp");
-    clearInterval(timer); timer = setInterval(() => { left--; exp.textContent = `Review valid ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; if (left <= 0) { close(false); alert("The review expired. Press Review move again."); } }, 1000);
-    dlg.showModal();
-  }
-  document.getElementById("rv-cancel").onclick = () => close(true);
-  dlg.addEventListener("cancel", ev => { ev.preventDefault(); close(true); });
-  document.getElementById("rv-approve").onclick = () => {
-    if (!plan) return;
-    const ap = document.getElementById("rv-approve"); ap.disabled = true; ap.textContent = "Moving in Plex…";
-    document.getElementById("rv-cancel").disabled = true;
-    const go = document.getElementById("rv-go"); go.plan_id.value = plan.plan_id; clearInterval(timer); go.submit();
-  };
-})();
-</script>
 {% endblock %}{% block body %}
 <div class="card"><h2 style="margin:0 0 4px">Job set {{ s.set_no }}: {{ s.main.part_no }}</h2>
 <div class="muted">Main job {{ s.main.job_no }} ({{ s.main.group or 'no workcenter' }}, due {{ s.main.due }}) · {{ s.open_jobs }} open jobs · job set read {{ read_at }}; containers below are live from Plex (up to a minute old; every move re-reads them) · <span id="progress">{% if loading %}reading live containers: <b>0</b> of {{ lines|length }} ingredients{% else %}loaded in {{ load_seconds }} s{% endif %}</span> · <a href="?days={{ days }}&refresh=1">reload containers</a></div></div>
@@ -114,7 +47,7 @@
 <button type="button" id="rv-cancel" class="secondary">Cancel</button>
 <button type="button" id="rv-approve">Approve</button></div>
 </form></dialog>
-<form id="rv-go" method="post" action="{{ url_for('move') }}" hidden><input name="plan_id"><input name="set_no" value="{{ s.set_no }}"></form>
+<form id="rv-go" method="post" action="{{ url_for('move') }}" hidden><input name="plan_id"><input name="set_no" value="{{ s.set_no }}"><input name="csrf" value="{{ csrf }}"></form>
 <script>
 (function () {
   const dlg = document.getElementById("review"), body = document.getElementById("rv-body");
@@ -123,7 +56,7 @@
   let plan = null, timer = null;
   function close(cancelled) {
     clearInterval(timer); if (dlg.open) dlg.close();
-    if (cancelled && plan) { const f = new FormData(); f.append("plan_id", plan.plan_id); fetch("{{ url_for('move_cancel') }}", {method: "POST", body: f, credentials: "same-origin"}); }
+    if (cancelled && plan) { const f = new FormData(); f.append("plan_id", plan.plan_id); f.append("csrf", "{{ csrf }}"); fetch("{{ url_for('move_cancel') }}", {method: "POST", body: f, credentials: "same-origin"}); }
     plan = null;
   }
   document.addEventListener("submit", ev => {
@@ -146,6 +79,7 @@
       const what = !it.send ? `<span class="short">Not moved: ${esc(it.why)}</span>`
         : it.pallet ? `Whole pallet <b>${esc(it.pallet)}</b> (${it.covered.length} containers, one Plex call)` : "Move container";
       if (it.left_pallet) warns.push(`${esc(it.containers[0].serial)} leaves pallet ${esc(it.left_pallet)} (its other containers stay behind).`);
+      if (it.note) warns.push(esc(it.note));
       it.containers.forEach((c, i) => {
         rows += `<tr${it.send ? "" : ' class="no"'}><td>${esc(c.serial)}</td><td>${esc(c.lp)}</td><td>${esc(c.lot)}</td><td class="n">${fmt(c.qty)}</td><td>${esc(c.status)}</td>
           <td>${esc(c.location)}</td><td>→ ${esc(j.target)}</td><td>${i == 0 ? what : (it.pallet ? "↳ same pallet" : "")}</td></tr>`;

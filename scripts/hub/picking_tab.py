@@ -21,15 +21,16 @@ NAV = '["platform", "Schedules & probe", ""]'
 STATS = '  $("#q").disabled = '
 KEY, LABEL = "picking", "Picking & staging"
 
-# Demo videos (recorded 2026-11-23 on the deployed app, Plex TEST). Published next to the hub page
-# under videos/ (Artifact `files`; a rebuild that leaves them out keeps them). Durable copies:
-# gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23/. Re-record: docs/PICKING_STAGING_APP.md,
-# "Demo videos".
+# Demo videos, third take (2026-11-23, after the audit fixes, Plex TEST): allocations, real targets and netting, the
+# review dialog, undo and its limit. The first take (moves to Staging) and the second ("PW bins already stocked",
+# withdrawn by the audit) were removed. Published next to the hub page under videos/ (Artifact `files`; the old
+# paths were removed). Durable copies: gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v3/.
+# Re-record: docs/PICKING_STAGING_APP.md, "Demo videos".
 VIDEOS = [
-    ("videos/picking-app-1-find-and-read-the-pick-list.mp4", "1. Find the pick list and read it", "1:29"),
-    ("videos/picking-app-2-stage-an-ingredient-in-one-click.mp4", "2. Stage a whole ingredient in one click", "1:21"),
-    ("videos/picking-app-3-safety-rules-and-move-log.mp4", "3. Safety rules and the move log", "1:00"),
-    ("videos/picking-app-full-demo.mp4", "All three in one", "3:50"),
+    ("videos/picking-app-1-pick-list-allocations-and-targets.mp4", "1. The pick list: allocations, real targets, no double counting", "1:39"),
+    ("videos/picking-app-2-review-and-approve-a-move.mp4", "2. Review, then approve, every move", "1:26"),
+    ("videos/picking-app-3-undo-and-its-limit.mp4", "3. Undo from the Move log, and its limit", "1:24"),
+    ("videos/picking-app-full-demo-v3.mp4", "All three in one", "4:29"),
 ]
 
 
@@ -37,9 +38,9 @@ def videos_html() -> str:
     cards = "".join(
         f'<figure class="pv"><video controls preload="metadata" playsinline src="{src}"></video>'
         f'<figcaption><b>{label}</b> <span class="muted">{dur}</span></figcaption></figure>' for src, label, dur in VIDEOS)
-    return (f'<h2>Demo videos (2026-11-23, Plex TEST)</h2><p>Recorded on the deployed app with captions; every container '
+    return (f'<h2>Demo videos (2026-11-23, after the audit fixes, Plex TEST)</h2><p>Recorded with captions on Plex TEST (a local server running the same code as the deployed app); every container '
             f'moved in them was put back. To save one: the ⋮ menu on the player, or the files in '
-            f'gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23/.</p>'
+            f'gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v3/.</p>'
             f'<div class="pvs">{cards}</div>')
 
 
@@ -55,7 +56,7 @@ def render_tab() -> str:
 #s-{KEY} .pv figcaption {{ font-size: 13px; margin-top: 4px; }}
 </style><section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref"><div class="block">
 <p class="lede">From docs/PICKING_STAGING_APP.md (rendered when the hub is built). Code: deploy/picking_app/;
-live on Cloud Run against Plex TEST since 2026-11-20 (https://picking-app-651304971296.us-central1.run.app).</p>
+on Cloud Run since 2026-11-20 (https://picking-app-651304971296.us-central1.run.app; Plex TEST, moves off in production). Audit 2026-11-23: docs/PICKING_AUDIT_2026-11-23.md.</p>
 {videos_html()}{body}</div></div></section>{END}"""
 
 

@@ -1,6 +1,65 @@
 {% extends "base.html" %}{% block title %}Move log{% endblock %}{% block body %}
-<div class="card tbl"><table><thead><tr><th>When (UTC)</th><th>Env</th><th>By</th><th>Set / job</th><th>Serial</th><th>From</th><th>To</th><th>Result</th><th>Now at</th></tr></thead><tbody>
-{% for r in rows %}<tr><td>{{ r.at[:19].replace('T',' ') }}</td><td>{{ r.env }}</td><td>{{ r.requested_by }}</td><td>{{ r.set_no }} / {{ r.job_no }}</td><td>{{ r.serial }}</td>
-<td>{{ r.from_location }}</td><td>{{ r.to_location }}</td><td><span class="role {{ 'staged' if r.ok else 'blocked' }}">{{ 'moved' if r.ok else 'not moved' }}</span> <span class="muted">{{ r.message }}</span></td><td>{{ r.verified_location }}</td></tr>
+<div class="card"><h2 style="margin:0 0 4px">Move log</h2>
+<div class="muted">One row per approved move (a batch). <b>Undo</b> is offered for {{ undo_minutes }} minutes after a move, and only puts back containers that nothing has touched since: after that the floor has usually loaded, allocated or moved them (Plex history: on the Bottling and Labeling lines a third to a half of moved containers change again within an hour). For anything else, <b>Activity</b> shows what Plex recorded since the move.</div></div>
+<div class="card tbl"><table><thead><tr><th>When (MT)</th><th>By</th><th>Set / job</th><th>Part</th><th>To</th><th class="n">Moved</th><th class="n">Not moved</th><th class="n">Put back</th><th></th></tr></thead><tbody>
+{% for b in batches %}<tr><td>{{ b.at|mt }}</td><td>{{ b.by }}</td><td>{{ b.set_no }} / {{ b.job_no }}</td><td>{{ b.part_no or '' }}</td><td>{{ b.to }}</td>
+<td class="n">{{ b.moved }}</td><td class="n">{{ b.failed + b.refused }}</td><td class="n">{{ b.restored }}</td>
+<td style="white-space:nowrap">{% if b.batch_id and not b.batch_id.startswith('restore-') and b.moved %}
+{% if b.undo_open and can_move %}<button type="button" class="undo-btn" data-batch="{{ b.batch_id }}">Undo… <span style="font-weight:400">({{ b.undo_left_min }} min left)</span></button>
+{% else %}<button type="button" class="undo-btn secondary" data-batch="{{ b.batch_id }}">Activity</button>{% endif %}
+{% elif b.batch_id and b.batch_id.startswith('restore-') %}<span class="muted">undo of {{ b.batch_id[8:] }}</span>{% endif %}</td></tr>
 {% else %}<tr><td colspan="9" class="muted">No moves yet.</td></tr>{% endfor %}</tbody></table></div>
+<details class="card"><summary>Every logged event (newest 300): previews, cancels, moves, refusals, undo checks, restores</summary>
+<div class="tbl"><table><thead><tr><th>When (MT)</th><th>Event</th><th>Batch</th><th>By</th><th>Serial</th><th>From</th><th>To</th><th>Result</th><th>Now at</th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.at|mt }}</td><td>{{ r.event or 'move' }}</td><td>{{ r.batch_id or '' }}</td><td>{{ r.requested_by }}</td><td>{{ r.serial }}</td>
+<td>{{ r.from_location }}</td><td>{{ r.to_location }}</td><td>{% if (r.event or 'move') in ('move','restore') %}<span class="role {{ 'staged' if r.ok in (true, 'true', 'True') else 'blocked' }}">{{ 'done' if r.ok in (true, 'true', 'True') else 'failed' }}</span> {% endif %}<span class="muted">{{ r.message or '' }}</span></td><td>{{ r.verified_location or '' }}</td></tr>
+{% endfor %}</tbody></table></div></details>
+<dialog id="undo"><div class="rv-inner">
+<h3 id="un-title" style="margin:0 0 4px"></h3><div id="un-sub" class="muted"></div>
+<div id="un-body" style="margin-top:10px"></div>
+<div class="bar" style="justify-content:flex-end;margin-top:12px"><span id="un-note" class="muted" style="margin-right:auto"></span>
+<button type="button" id="un-close" class="secondary">Close</button><button type="button" id="un-go" hidden></button></div></div></dialog>
+<form id="un-form" method="post" action="{{ url_for('undo_apply') }}" hidden><input name="plan_id"><input name="csrf" value="{{ csrf }}"></form>
+<script>
+(function () {
+  const dlg = document.getElementById("undo"), esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+  const mt = iso => new Date(iso).toLocaleString("en-US", {timeZone: "America/Denver", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"});
+  let plan = null;
+  document.querySelectorAll(".undo-btn").forEach(btn => btn.onclick = () => {
+    const f = new FormData(); f.append("batch_id", btn.dataset.batch); f.append("csrf", "{{ csrf }}"); const label = btn.innerHTML; btn.disabled = true; btn.textContent = "Reading Plex…";
+    fetch("{{ url_for('undo_review') }}", {method: "POST", body: f, credentials: "same-origin"}).then(r => r.json()).then(j => {
+      btn.disabled = false; btn.innerHTML = label;
+      if (!j.ok) { alert(j.error); return; }
+      plan = j; show(j);
+    }).catch(e => { btn.disabled = false; btn.innerHTML = label; alert(e.message); });
+  });
+  function show(j) {
+    document.getElementById("un-title").textContent = j.plan_id ? `Undo batch ${j.batch_id}: put ${j.can} container${j.can == 1 ? "" : "s"} back?` : `Batch ${j.batch_id}: activity since the move`;
+    document.getElementById("un-sub").innerHTML = `Plex <b>${esc(j.env.toUpperCase())}</b> · read live just now${j.history_note ? " · " + esc(j.history_note) : ""}`;
+    let h = "";
+    for (const c of j.checks) {
+      const state = c.back ? `<span class="role staged">already back</span>` : c.ok ? `<span class="role pick">can put back</span> ${esc(c.now)} → <b>${esc(c.from)}</b>`
+        : `<span class="role blocked">not put back</span> <span class="muted">${esc(c.reasons.join("; "))}</span>`;
+      h += `<div class="card" style="margin:0 0 8px;padding:10px"><b>${esc(c.serial)}</b> <span class="muted">moved ${esc(c.from)} → ${esc(c.to)} ${c.age_min} min ago${c.moved_as && c.moved_as != c.serial ? " as pallet " + esc(c.moved_as) : ""} · now at ${esc(c.now || "?")}, qty ${esc(c.qty)}</span><br>${state}`;
+      if (c.left_pallet) h += `<div class="muted">It left pallet ${esc(c.left_pallet)} when moved; putting it back does not re-add it to the pallet (Plex screen Add to Master Unit).</div>`;
+      if (c.activity.length) {
+        h += `<div class="tbl act" style="margin-top:6px"><table><thead><tr><th>When (MT)</th><th>Plex action</th><th>Location</th><th class="n">Qty</th><th>Status</th><th>Pallet</th><th>By</th></tr></thead><tbody>` +
+          c.activity.map(a => `<tr><td>${mt(a.at_utc)}</td><td>${esc(a.action)}</td><td>${esc(a.location)}</td><td class="n">${esc(a.quantity ?? "")}</td><td>${esc(a.status)}</td><td>${esc(a.pallet)}</td><td>${esc(a.by)}</td></tr>`).join("") + `</tbody></table></div>`;
+      } else h += `<div class="muted" style="margin-top:4px">No Plex activity since the move.</div>`;
+      h += `</div>`;
+    }
+    document.getElementById("un-body").innerHTML = h;
+    const go = document.getElementById("un-go");
+    go.hidden = !j.plan_id; go.disabled = false; go.textContent = `Approve: put ${j.can} back`;
+    document.getElementById("un-note").textContent = j.plan_id ? "Each container is read live again before it is moved back; one that changed meanwhile stays where it is." :
+      (j.moves_enabled ? `Nothing can be put back: undo is for ${j.undo_minutes} min after a move, and only for containers nothing has touched since.` : "Moves are off here.");
+    dlg.showModal();
+  }
+  document.getElementById("un-close").onclick = () => { plan = null; dlg.close(); };
+  document.getElementById("un-go").onclick = () => {
+    const go = document.getElementById("un-go"); go.disabled = true; go.textContent = "Moving back in Plex…";
+    const f = document.getElementById("un-form"); f.plan_id.value = plan.plan_id; f.submit();
+  };
+})();
+</script>
 {% endblock %}

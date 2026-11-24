@@ -183,15 +183,63 @@ def pickable_from(location: str, loc_group: dict | None) -> str | None:
     return None
 
 
-def suggest(containers: list[dict], lots: list[dict], required: float, target: str,
-            staging=STAGING_LOCATIONS, loc_group: dict | None = None) -> dict:
-    """Classify a part's live containers for one pick line.
+ALLOCATED = "Allocated"
 
-    Returns {rows: [...], staged_qty, picked_qty, short_qty}; each row has `role`:
-    staged (already at target), pick (suggested), spare (OK, not needed), elsewhere-staged
-    (in another staging location), not-here (location group not picked from, e.g. Retains),
-    blocked (status not OK; reason in `why`). loc_group maps location -> Plex location group.
-    """
+
+def allocations_sql(part_id: str) -> str:
+    """Which job each active container of a part is allocated to (Part_v_Job_Allocation). The REST API has
+    no allocation endpoint (tested 11-23): it only shows containerStatus "Allocated", live. In production this
+    reads Plex's reporting copy (about 4 h behind), so a new allocation can be missing: see check_movable."""
+    pid = str(part_id).replace("'", "''").lower()
+    return f"""
+SELECT a.Container_Serial_No AS Serial_No, j.Job_No, a.Quantity
+FROM Part_v_Job_Allocation AS a
+JOIN Part_v_Job AS j ON j.Job_Key = a.Job_Key
+JOIN Part_v_Container AS c ON c.Serial_No = a.Container_Serial_No
+JOIN Part_v_Part AS p ON p.Part_Key = c.Part_Key
+WHERE c.Active = 1 AND LOWER(CAST(p.Resource_ID AS varchar(40))) = '{pid}'"""
+
+
+def alloc_map(rows: list[dict]) -> dict:
+    """allocations_sql rows -> {serial: [job_no, ...]}."""
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["Serial_No"], [])
+        if r.get("Job_No") and r["Job_No"] not in out[r["Serial_No"]]:
+            out[r["Serial_No"]].append(r["Job_No"])
+    return out
+
+
+def allocation_why(serial: str, status: str, job_no: str | None, alloc: dict | None) -> tuple[bool, str | None]:
+    """(for_this_job, why_not) for a container. Allocated to this job -> (True, None). Allocated elsewhere or to a
+    job the copy does not show yet -> (False, reason). Not allocated -> (False, None)."""
+    jobs = (alloc or {}).get(serial) or []
+    if status != ALLOCATED and not jobs:
+        return False, None
+    if job_no and job_no in jobs:
+        return True, None
+    if jobs:
+        return False, f"allocated to job {', '.join(jobs)}"
+    return False, "allocated to a job Plex's copy does not show yet (up to 4 h behind)"
+
+
+def suggest(containers: list[dict], lots: list[dict], required: float, target: str,
+            staging=STAGING_LOCATIONS, loc_group: dict | None = None, job_no: str | None = None,
+            alloc: dict | None = None, claimed: dict | None = None) -> dict:
+    """Classify a part's live containers for one pick line (2026-11-23 audit fixes: allocations + netting).
+
+    The floor stages per job through Plex job allocations (71% of containers moved into PW bins were status
+    Allocated at the move). So, in order:
+      1. containers allocated to THIS line's job: "staged" if at the target, else "pick" (from any location
+         that is not DO NOT USE), first;
+      2. OK, unallocated, unclaimed containers already at the target: "staged" until the need is covered,
+         then "there-spare";
+      3. OK, unallocated, unclaimed containers in pickable locations, first-expiring first: "pick" until covered,
+         then "spare".
+    `claimed` = {serial: "set 757 job 3806 (due 11-16)"} for containers earlier-due lines of the same part use
+    (app.net_claims): shown as "reserved", never counted twice. Allocated to another job: "reserved".
+    Returns {rows, staged_qty, picked_qty, short_qty, claims (serials this line uses), ...}."""
+    claimed = claimed or {}
     best_by = {l.get("id"): (l.get("bestByDateTime") or l.get("useByDateTime") or "") for l in lots}
     rows = []
     for c in containers:
@@ -202,38 +250,88 @@ def suggest(containers: list[dict], lots: list[dict], required: float, target: s
             "best_by": (best_by.get(c.get("lotId")) or "")[:10], "location": c.get("location") or "",
             "status": c.get("containerStatus") or "", "qty": _f(c.get("quantity")),
             "added": (c.get("addDateTime") or "")[:19], "updated": (c.get("updateDateTime") or "")[:19]})
-    staged = [r for r in rows if r["location"] == target]
-    for r in staged:
-        r["role"] = "staged"
-    need = max(0.0, required - sum(r["qty"] for r in staged if r["status"] in MOVABLE_STATUSES))
-    rest = [r for r in rows if r["location"] != target]
-    rest.sort(key=lambda r: (r["best_by"] or "9999", r["added"] or "9999", -r["qty"]))
-    picked = 0.0
-    for r in rest:
-        if r["status"] not in MOVABLE_STATUSES:
+    fefo = lambda r: (r["best_by"] or "9999", r["added"] or "9999", -r["qty"])
+    rows.sort(key=fefo)
+    covered = picked = 0.0
+    claims = []
+    for r in rows:                                    # 1. allocated to this job
+        mine, why = allocation_why(r["serial"], r["status"], job_no, alloc)
+        r["alloc_why"] = why
+        if mine:
+            r["why"] = f"allocated to this job ({job_no})"
+            if "DO NOT USE" in r["location"].upper():
+                r["role"] = "blocked"; r["why"] += "; location DO NOT USE"
+            elif r["location"] == target or r["location"] in staging:
+                # already where the floor stages for this work center (a PW bin ...): there, whichever bin
+                r["role"] = "staged"; covered += r["qty"]; claims.append(r["serial"])
+                if r["location"] != target:
+                    r["why"] += f", already at {r['location']}"
+            else:
+                r["role"] = "pick"; picked += r["qty"]; claims.append(r["serial"])
+    for r in rows:                                    # 2. already at the target
+        if r.get("role") or r["location"] != target:
+            continue
+        if r["serial"] in claimed:
+            r["role"], r["why"] = "reserved", f"for {claimed[r['serial']]}"
+        elif r["alloc_why"]:
+            r["role"], r["why"] = "reserved", r["alloc_why"]
+        elif r["status"] not in MOVABLE_STATUSES:
+            r["role"], r["why"] = "blocked", f"status {r['status']}"
+        elif covered + picked < required - 1e-9:
+            r["role"] = "staged"; covered += r["qty"]; claims.append(r["serial"])
+        else:
+            r["role"], r["why"] = "there-spare", "at the target, not needed for this line"
+    for r in rows:                                    # 3. pick from stock
+        if r.get("role"):
+            continue
+        if r["serial"] in claimed:
+            r["role"], r["why"] = "reserved", f"for {claimed[r['serial']]}"
+        elif r["alloc_why"]:
+            r["role"], r["why"] = ("reserved" if r["alloc_why"].startswith("allocated to job") else "blocked"), r["alloc_why"]
+        elif r["status"] not in MOVABLE_STATUSES:
             r["role"], r["why"] = "blocked", f"status {r['status']}"
         elif r["location"] in staging:
-            r["role"], r["why"] = "elsewhere-staged", f"already staged at {r['location']}"
+            r["role"], r["why"] = "elsewhere-staged", f"at {r['location']}"
         elif pickable_from(r["location"], loc_group):
             r["role"], r["why"] = "not-here", pickable_from(r["location"], loc_group)
-        elif picked < need - 1e-9:
-            r["role"] = "pick"
-            picked += r["qty"]
+        elif covered + picked < required - 1e-9:
+            r["role"] = "pick"; picked += r["qty"]; claims.append(r["serial"])
         else:
             r["role"] = "spare"
-    order = {"staged": 0, "pick": 1, "spare": 2, "elsewhere-staged": 3, "not-here": 4, "blocked": 5}
-    rows.sort(key=lambda r: (order[r["role"]], r["best_by"] or "9999", r["added"]))
-    staged_qty = sum(r["qty"] for r in staged)
-    return {"rows": rows, "staged_qty": round(staged_qty, 4), "picked_qty": round(picked, 4),
-            "short_qty": round(max(0.0, need - picked), 4), "required": required, "target": target}
+    order = {"staged": 0, "pick": 1, "spare": 2, "there-spare": 3, "elsewhere-staged": 4, "reserved": 5, "not-here": 6, "blocked": 7}
+    rows.sort(key=lambda r: (order[r["role"]], *fefo(r)))
+    need = max(0.0, required - covered)
+    return {"rows": rows, "staged_qty": round(covered, 4), "picked_qty": round(picked, 4),
+            "short_qty": round(max(0.0, need - picked), 4), "required": required, "target": target, "claims": claims,
+            "reserved_n": sum(r["role"] == "reserved" for r in rows)}
 
 
-def check_movable(live: dict | None, target: str, allow_status=MOVABLE_STATUSES) -> str | None:
-    """Why a container must not be moved right now (live API record), or None."""
+def default_target(options: list[dict], containers: list[dict], job_no: str | None, alloc: dict | None) -> str:
+    """The line's default target: the destination where this job's allocated containers already are (the floor
+    already chose it), else the most used destination. Found 11-23 on set 544: job 2305's containers were in
+    PW - B8 while the most used bin is PW - B9, so the app suggested moving them bin to bin."""
+    locs = {o["location"] for o in options}
+    here: dict = {}
+    for c in containers:
+        if job_no and job_no in ((alloc or {}).get(c.get("serialNo")) or []) and c.get("location") in locs:
+            here[c["location"]] = here.get(c["location"], 0) + 1
+    if here:
+        return max(here.items(), key=lambda kv: kv[1])[0]
+    return options[0]["location"]
+
+
+def check_movable(live: dict | None, target: str, allow_status=MOVABLE_STATUSES, job_no: str | None = None,
+                  alloc: dict | None = None) -> str | None:
+    """Why a container must not be moved right now (live API record), or None. Status OK moves; status
+    Allocated moves only when it is allocated to this line's job (`alloc` from allocations_sql)."""
     if not live:
         return "not found in Plex (consumed or wrong serial)"
-    if (live.get("containerStatus") or "") not in allow_status:
-        return f"status is {live.get('containerStatus')}, only {', '.join(sorted(allow_status))} is moved"
+    st = live.get("containerStatus") or ""
+    mine, why = allocation_why(live.get("serialNo"), st, job_no, alloc)
+    if why:
+        return why
+    if st not in allow_status and not (mine and st == ALLOCATED):
+        return f"status is {st}, only {', '.join(sorted(allow_status))} (or allocated to this job) is moved"
     if (live.get("location") or "") == target:
         return f"already at {target}"
     if _f(live.get("quantity")) <= 0:

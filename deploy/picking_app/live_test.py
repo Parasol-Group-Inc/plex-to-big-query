@@ -39,7 +39,8 @@ FIND_PICK = """() => {
 
 def browser(p, headless: bool):
     return p.chromium.launch_persistent_context(str(PROFILE), channel="chrome", headless=headless,
-                                                viewport={"width": 1280, "height": 900},
+                                                viewport={"width": 1280, "height": 900}, bypass_csp=True,  # app CSP (11-23) blocks wait_for_function
+
                                                 ignore_default_args=["--enable-automation"])
 
 

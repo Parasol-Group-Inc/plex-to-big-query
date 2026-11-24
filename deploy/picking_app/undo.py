@@ -28,7 +28,13 @@ from zoneinfo import ZoneInfo
 
 UNDO_MINUTES = int(os.environ.get("PICKING_UNDO_MINUTES", "30"))
 PLEX_TZ = ZoneInfo(os.environ.get("PLEX_TZ", "America/New_York"))
-MOVE_ACTIONS = {"Container Move", "Master Unit Move", "Master Unit Moved"}
+# Plex history actions OUR move produces (audit 11-23 #12/#17): the move itself ("Container Move" for a container,
+# "Master Unit Move" / "Master Unit Moved" for a pallet and its members) and, when a container moved alone leaves its
+# pallet, the "Remove from Master Unit" Plex writes about a second before. Only these, by the app's Plex user
+# (PICKING_PLEX_USER), within 120 s of our logged move, are ours. Different purpose from picking.destinations_sql,
+# which reads the FLOOR's moves to find where material goes.
+OUR_MOVE_ACTIONS = {"Container Move", "Master Unit Move", "Master Unit Moved"}
+OUR_SIDE_ACTIONS = {"Remove from Master Unit"}
 COMPARE = (("location", "location"), ("quantity", "quantity"), ("containerStatus", "status"), ("masterUnitNo", "pallet"))
 
 
@@ -63,16 +69,18 @@ def _num(v):
         return v or None
 
 
-def activity_since(row: dict, history: list[dict]) -> list[dict]:
-    """Plex changes to this container after our move, without our move itself."""
+def activity_since(row: dict, history: list[dict], app_user: str | None = None) -> list[dict]:
+    """Plex changes to this container after our move, without our move itself (and its pallet removal)."""
     moved_at = _utc(row["at"])
     out = []
     for h in history:
         if h.get("Serial_No") != row["serial"]:
             continue
         t = plex_time_utc(h["Change_Date"])
-        ours = (h.get("Last_Action") in MOVE_ACTIONS and h.get("Location") == row.get("to_location")
-                and abs((t - moved_at).total_seconds()) <= 120)
+        by_us = not app_user or not h.get("User_ID") or h.get("User_ID") == app_user
+        near = abs((t - moved_at).total_seconds()) <= 120
+        ours = by_us and near and ((h.get("Last_Action") in OUR_MOVE_ACTIONS and h.get("Location") == row.get("to_location"))
+                                   or h.get("Last_Action") in OUR_SIDE_ACTIONS)
         if t < moved_at - dt.timedelta(seconds=120) or ours:
             continue
         who = " ".join(x for x in (h.get("First_Name"), h.get("Last_Name")) if x) or f"user {h.get('Change_By')}"
@@ -82,11 +90,31 @@ def activity_since(row: dict, history: list[dict]) -> list[dict]:
     return out
 
 
-def check(row: dict, live: dict | None, history: list[dict], now: dt.datetime, minutes: int = UNDO_MINUTES) -> dict:
+def _truthy(v) -> bool:
+    return v in (True, "true", "True", 1, "1")
+
+
+def moved_rows(rows: list[dict], batch_id: str) -> list[dict]:
+    """One row per container that Plex moved in a batch (audit 11-23 #11): the verified 'move' row when there is
+    one, else the 'sent' row (Plex said success but the read-back failed, or the instance stopped before it).
+    A 'move' row with ok=false still counts when Plex answered success (plex_status 200, 'successfully')."""
+    out: dict = {}
+    for r in sorted((r for r in rows if r.get("batch_id") == batch_id), key=lambda r: str(r.get("at"))):
+        ev = r.get("event") or "move"
+        plex_ok = _truthy(r.get("ok")) or (str(r.get("plex_status")) == "200" and "success" in str(r.get("message") or "").lower())
+        if ev not in ("move", "sent") or not plex_ok:
+            continue
+        if ev == "move" or r["serial"] not in out:
+            out[r["serial"]] = r
+    return list(out.values())
+
+
+def check(row: dict, live: dict | None, history: list[dict], now: dt.datetime, minutes: int = UNDO_MINUTES,
+          app_user: str | None = None) -> dict:
     """Can this moved container be put back? {serial, ok, back, reasons, activity, now, was}."""
     age = (now - _utc(row["at"])).total_seconds() / 60
     after = json.loads(row["after_json"]) if row.get("after_json") else {"location": row.get("to_location")}
-    reasons, activity = [], activity_since(row, history)
+    reasons, activity = [], activity_since(row, history, app_user)
     back = bool(live) and live.get("location") == row.get("from_location")
     if age > minutes:
         reasons.append(f"moved {age:.0f} min ago; undo is offered for {minutes} min after a move")
@@ -107,7 +135,7 @@ def batches(rows: list[dict], now: dt.datetime, minutes: int = UNDO_MINUTES) -> 
     """Log rows -> one summary per batch (newest first) for the Move log page."""
     out: dict = {}
     for r in rows:
-        if (r.get("event") or "move") not in ("move", "refused", "restore"):
+        if (r.get("event") or "move") not in ("move", "refused", "restore"):     # 'sent' rows are counted via their 'move' row
             continue
         key = r.get("batch_id") or f"{r.get('at')}|{r.get('serial')}"
         b = out.setdefault(key, {"batch_id": r.get("batch_id"), "at": r.get("at"), "by": r.get("requested_by"), "env": r.get("env"),

@@ -47,7 +47,7 @@ bq_copy_as_operator() {
 }
 
 # 1b. dated BigQuery copies of hand-edited ops tables, once a day
-for t in PlexOps.etl_schedule PlexProd.manual_data_access; do   # tables only; views (live_source, data_freshness) are in Terraform
+for t in PlexOps.etl_schedule PlexProd.manual_data_access PlexOps.picking_move_log; do   # tables only; views (live_source, data_freshness) are in Terraform. picking_move_log: audit 11-23 #13 (the only record of who asked for each Plex move)
   dst="Backups.${t/./__}_${TODAY}"
   if bq show "voxdatalake:$dst" >/dev/null 2>&1; then
     log "- Backup: $dst already taken today"

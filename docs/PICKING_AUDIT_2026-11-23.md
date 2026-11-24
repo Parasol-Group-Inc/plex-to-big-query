@@ -11,7 +11,7 @@ production Plex). Requested by Emilio after the review dialog and undo were buil
   [picking_audit_2026-11-23/sql/](picking_audit_2026-11-23/sql/), named as in the report (d3, h1, ...).
 - **Audit 3: security, operations, docs.** Live Cloud Run, IAM and BigQuery read as claude-readonly.
 
-Status column: what was done about each finding, in the fix PR that follows this file ("Fix" = fixed and
+Status column (updated with the fix PR, same day): what was done about each finding, in the fix PR that follows this file ("Fix" = fixed and
 tested; "Ops" = needs an admin or a deploy; "Doc" = docs corrected; "Open" = not done, with the reason).
 
 ## Summary, ranked
@@ -31,20 +31,20 @@ tested; "Ops" = needs an admin or a deploy; "Doc" = docs corrected; "Open" = not
 | 11 | Medium | A move Plex made but read back wrong (`ok=false`) can never be undone | 1 | Fix |
 | 12 | Medium | Undo would refuse every container moved off a pallet (Plex logs "Remove from Master Unit" just before the move; counted as outside activity) | 2 | Fix |
 | 13 | Medium | Move log is editable by ETL jobs and Editors, not backed up; refused prod-gate attempts not logged; laptop tools log `$USER` | 3 | Fix (backup, refused log) + Open (append-only sink) |
-| 14 | Medium | Prod gate is one env var; CLIs `--prod` skip the app gate; plain `deploy.sh` silently switches prod -> TEST | 3 | Doc + Open |
+| 14 | Medium | Prod gate is one env var; CLIs `--prod` skip the app gate; plain `deploy.sh` silently switches prod -> TEST | 3 | Fix (deploy.sh needs PLEX_ENV_FOR_APP) + Open (alert on service changes, allowlist) |
 | 15 | Medium | Saved Plex session in GCS readable by Editors and plex-etl-sa, never expires | 3 | Ops |
 | 16 | Medium | Any IAP user can approve anyone's review or undo | 1, 3 | Fix |
 | 17 | Medium | The two "move" action lists disagree (`destinations_sql` vs `undo.MOVE_ACTIONS`); PW bin is the step before the work center ("Move via Inventory Location Move") | 2 | Fix + Doc |
 | 18 | Medium | 189 open jobs have an operation with no work center: only Staging targets | 2 | Open (shown; team) |
 | 19 | Low | Undo apply reuses the history read at review (up to 10 min old) | 1 | Fix |
 | 20 | Low | `_plans` pruned without a lock (possible 500); cancel on an undo plan raises KeyError | 1 | Fix |
-| 21 | Low | Large batches overflow the flash cookie (results lost) | 1 | Open |
+| 21 | Low | Large batches overflow the flash cookie (results lost) | 1 | Fix (capped at 12 lines + pointer) |
 | 22 | Low | `set.html` title block holds a copy of the dialog | 1, 3 | Fix |
 | 23 | Low | A ticked serial is not checked to belong to the line's part | 1 | Fix |
 | 24 | Low | `who()` trusts the unsigned IAP email header (safe only while IAP is on); plex-etl-sa still has IAP access | 3 | Fix (JWT check when present) + Ops |
 | 25 | Low | Plex API serial path not fully encoded (`../`) | 3 | Fix |
 | 26 | Low | `days` / `overdue` unbounded; cache never shrinks | 3 | Fix |
-| 27 | Low | Unpinned google-cloud deps, base image by tag, runs as root | 3 | Open |
+| 27 | Low | Unpinned google-cloud deps, base image by tag, runs as root | 3 | Fix (pins, non-root) + Open (image digest) |
 | 28 | Low | Component on two operations of one job dropped once; no netting of material already used on Production jobs; never-moved Blending containers dropped from destinations | 2 | Open (documented) |
 | 29 | Low | Daylight-saving fall-back hour ambiguous in history times | 1, 2 | Open (documented) |
 | 30 | Doc | Five files disagree on prod vs TEST after #167; stale Staging map, "12 threads", "8 requests", "created on first use", "works before and after Terraform"; hub says "recorded on the deployed app"; two counts not reproduced (Packaging Staging 110 not 106; Bottling 1-6 9,181 not 7,200) | 2, 3 | Doc |
@@ -193,3 +193,10 @@ Sound: only the IAP agent has run.invoker; both run.app URLs require sign-in; 2 
 reference, never logged; session per host; review, live re-read, verify; Hold refused; one move at a time; prod
 gate on preview / move / undo; 48-bit plan ids, 10-min expiry; quoted history SQL; parameterized BigQuery;
 `live_test.py` refuses unless env test; Flask debug off; about $1 a month.
+
+## Found while fixing
+
+- **Allocated containers already in a PW bin were suggested to move bin to bin** (set 544, job 2305: 199 allocated
+  containers in PW - B8, default target PW - B9). Fixed: allocated-to-this-job containers at any of the line's
+  destinations count as there, and the default target is where they are (`picking.default_target`).
+- The app's CSP blocks Playwright's in-page waits; the test and recording scripts use `bypass_csp`.

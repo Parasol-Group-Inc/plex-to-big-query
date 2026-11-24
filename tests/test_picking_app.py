@@ -101,7 +101,7 @@ def test_prod_moves_are_off_unless_allowed(monkeypatch):
     calls = []
     monkeypatch.setattr(picking_app.web, "move", lambda *a: calls.append(a) or (True, "moved"))
     monkeypatch.setattr(picking_app.api, "container", lambda s: calls.append(s) or None)
-    r = picking_app.app.test_client().post("/move", data={"set_no": "1", "target": "Pre-Weigh Staging", "serial": ["A"]})
+    r = _csrf_client(picking_app).post("/move", data={"set_no": "1", "target": "Pre-Weigh Staging", "serial": ["A"]})
     assert r.status_code == 302 and calls == []      # refused before any Plex call
     monkeypatch.setenv("PLEX_ENV", "test")
     importlib.reload(picking_app)
@@ -114,6 +114,21 @@ def test_whole_pallet_moves_as_lp_partial_pallet_moves_alone():
     assert picking.breaks_pallet("C", ["A", "B", "C", "E"], cs) == "LP-2"
     assert picking.breaks_pallet("A", ["A", "B"], cs) is None
     assert picking.breaks_pallet("E", ["E"], cs) is None
+
+
+def _csrf_client(a):
+    """A test client whose session holds a CSRF token, posting it with every form (audit 11-23 #4)."""
+    c = a.app.test_client()
+    with c.session_transaction() as s:
+        s["csrf"] = "tok"
+    orig = c.post
+
+    def post(url, data=None, **kw):
+        data = dict(data or {})
+        data.setdefault("csrf", "tok")
+        return orig(url, data=data, **kw)
+    c.post = post
+    return c
 
 
 def _app(monkeypatch, env="test"):
@@ -132,14 +147,21 @@ def test_cache_reuses_until_ttl(monkeypatch):
     assert a.cached("k2", 0, f)[0] == 3 and a.cached("k2", 0, f)[0] == 4
 
 
-def _fake_plex(a, monkeypatch, state, lp=None, status=None):
-    lp, status = lp or {}, status or {}
+def _fake_plex(a, monkeypatch, state, lp=None, status=None, extra=None, alloc_rows=None):
+    """extra: serials on a pallet that belong to another part (not in the part's list, but on the LP)."""
+    lp, status, extra = lp or {}, status or {}, set(extra or [])
     reads, moves = [], []
+
+    def rec(s, loc):
+        return {"serialNo": s, "location": loc, "locationId": "id-" + loc, "quantity": 5, "containerStatus": status.get(s, "OK"),
+                "masterUnitNo": lp.get(s), "lotNo": "L"}
 
     def containers_for_part(pid):
         reads.append(pid)
-        return [{"serialNo": s, "location": loc, "quantity": 5, "containerStatus": status.get(s, "OK"),
-                 "masterUnitNo": lp.get(s), "lotNo": "L"} for s, loc in state.items()]
+        return [rec(s, loc) for s, loc in state.items() if s not in extra]
+
+    def containers_at(loc_id):
+        return [rec(s, loc) for s, loc in state.items() if "id-" + loc == loc_id]
 
     def move_detail(item, target):
         moves.append(item)
@@ -149,8 +171,10 @@ def _fake_plex(a, monkeypatch, state, lp=None, status=None):
                 "status": 200, "body": '{"Success":true}', "ms": 12}
 
     monkeypatch.setattr(a.api, "containers_for_part", containers_for_part)
-    monkeypatch.setattr(a.api, "container", lambda s: None)
+    monkeypatch.setattr(a.api, "containers_at", containers_at)
+    monkeypatch.setattr(a.api, "container", lambda s: rec(s, state[s]) if s in state else None)
     monkeypatch.setattr(a.web, "move_detail", move_detail)
+    monkeypatch.setattr(a.web, "sql", lambda q: list(alloc_rows or []))
     monkeypatch.setattr(a, "destinations", lambda: [])
     monkeypatch.setattr(a, "location_groups", lambda: {})
     monkeypatch.setattr(a, "_line_for", lambda *x: None)        # no line: the Staging locations are the allowed targets
@@ -166,7 +190,7 @@ def test_review_then_approve_moves_full_pallet_as_lp_and_logs_everything(monkeyp
     monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
     state = {"A": "103", "B": "103", "C": "104", "H": "105"}
     reads, moves = _fake_plex(a, monkeypatch, state, lp={"A": "LP-1", "B": "LP-1"}, status={"H": "Hold"})
-    c = a.app.test_client()
+    c = _csrf_client(a)
     form = {"set_no": "", "job_no": "1", "part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B", "C", "H"]}
     pv = c.post("/move/preview", data=form).get_json()
     assert pv["ok"] and moves == []                                    # the review sends nothing to Plex
@@ -190,7 +214,7 @@ def test_approve_skips_a_container_that_changed_since_the_review(monkeypatch, tm
     monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
     state = {"A": "103", "B": "104"}
     _, moves = _fake_plex(a, monkeypatch, state)
-    c = a.app.test_client()
+    c = _csrf_client(a)
     pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B"]}).get_json()
     state["B"] = "106"                                                 # someone moved B on the floor meanwhile
     c.post("/move", data={"plan_id": pv["plan_id"]})
@@ -203,7 +227,7 @@ def test_cancel_logs_and_bad_target_or_prod_is_refused(monkeypatch, tmp_path):
     a = _app(monkeypatch)
     monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
     _, moves = _fake_plex(a, monkeypatch, {"A": "103"})
-    c = a.app.test_client()
+    c = _csrf_client(a)
     pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A"]}).get_json()
     c.post("/move/cancel", data={"plan_id": pv["plan_id"]})
     assert "cancelled" in {x["event"] for x in _rows(tmp_path / "log.jsonl")}
@@ -364,7 +388,7 @@ def test_undo_review_then_apply_puts_back_only_untouched(monkeypatch, tmp_path):
         moves.append((item, to)); state[item]["location"] = to
         return {"ok": True, "message": "moved", "request": {}, "status": 200, "body": "{}", "ms": 5}
     monkeypatch.setattr(a.web, "move_detail", move_detail)
-    c = a.app.test_client()
+    c = _csrf_client(a)
     rv = c.post("/log/undo/review", data={"batch_id": "bx"}).get_json()
     assert rv["can"] == 1 and moves == []
     assert {x["serial"]: x["ok"] for x in rv["checks"]} == {"A": True, "B": False}
@@ -374,3 +398,163 @@ def test_undo_review_then_apply_puts_back_only_untouched(monkeypatch, tmp_path):
     assert [e["serial"] for e in ev if e["event"] == "restore"] == ["A"]
     page = c.get("/log").get_data(as_text=True)
     assert "Undo…" in page or "Activity" in page
+
+
+# ---- audit 2026-11-23 regression tests (docs/PICKING_AUDIT_2026-11-23.md) ----
+
+def test_audit1_undo_never_sends_a_pallet_carrying_a_container_that_failed_its_check():
+    import restore_moves as rm
+    rows = [{"serial": "A", "moved_as": "LP-1", "from_location": "103", "to_location": "PW", "ok": True},
+            {"serial": "B", "moved_as": "LP-1", "from_location": "103", "to_location": "PW", "ok": True}]
+    live = {"A": {"location": "PW", "masterUnitNo": "LP-1"}, "B": {"location": "PW", "masterUnitNo": "LP-1"}}
+    acts = rm.plan_restore([rows[0]], live, all_rows=rows, lp_members=lambda lp, s: ["A", "B"])   # B failed its check
+    assert [(x["kind"], x["send"]) for x in acts] == [("container", "A")] and "leaves the pallet" in acts[0]["note"]
+    acts = rm.plan_restore(rows, live, all_rows=rows, lp_members=lambda lp, s: ["A", "B", "Z"])     # Z joined the pallet
+    assert {x["send"] for x in acts} == {"A", "B"}
+    acts = rm.plan_restore(rows, live, all_rows=rows, lp_members=lambda lp, s: ["A", "B"])
+    assert [(x["kind"], x["send"]) for x in acts] == [("pallet", "LP-1")]
+
+
+def test_audit2_approve_refuses_a_pallet_that_changed_or_holds_other_containers(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    state = {"A": "103", "B": "103"}
+    lp = {"A": "LP-1", "B": "LP-1"}
+    _, moves = _fake_plex(a, monkeypatch, state, lp=lp)
+    c = _csrf_client(a)
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B"]}).get_json()
+    assert pv["items"][0]["pallet"] == "LP-1"
+    state["Z"], lp["Z"] = "103", "LP-1"                 # a container joins the pallet after the review
+    c.post("/move", data={"plan_id": pv["plan_id"]})
+    assert moves == []
+    rows = _rows(tmp_path / "log.jsonl")
+    assert {r["serial"] for r in rows if r["event"] == "refused"} == {"A", "B"} and "pallet LP-1 changed" in rows[-1]["message"]
+
+
+def test_audit2_pallet_with_another_parts_container_moves_singly_with_warning(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    _, moves = _fake_plex(a, monkeypatch, {"A": "103", "B": "103", "X": "103"}, lp={"A": "LP-1", "B": "LP-1", "X": "LP-1"}, extra=["X"])
+    c = _csrf_client(a)
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B"]}).get_json()
+    assert [(i["send"], i["left_pallet"]) for i in pv["items"]] == [("A", "LP-1"), ("B", "LP-1")]
+    assert "also holds X" in pv["items"][0]["note"]
+    c.post("/move", data={"plan_id": pv["plan_id"]})
+    assert moves == ["A", "B"]                          # X (other part) never sent
+
+
+def test_audit3_a_move_is_logged_when_plex_answers_even_if_the_read_back_fails(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    state = {"A": "103"}
+    reads, moves = _fake_plex(a, monkeypatch, state)
+    c = _csrf_client(a)
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A"]}).get_json()
+    orig = a.api.containers_for_part
+    calls = []
+    def flaky(pid):
+        calls.append(pid)
+        if len(calls) >= 2:
+            raise RuntimeError("API 503")
+        return orig(pid)
+    monkeypatch.setattr(a.api, "containers_for_part", flaky)
+    r = c.post("/move", data={"plan_id": pv["plan_id"]})
+    assert r.status_code == 302 and moves == ["A"]
+    ev = [(x["event"], x["serial"]) for x in _rows(tmp_path / "log.jsonl") if x["event"] in ("sent", "move")]
+    assert ev == [("sent", "A"), ("move", "A")]
+    import undo
+    assert [x["serial"] for x in undo.moved_rows(_rows(tmp_path / "log.jsonl"), pv["plan_id"])] == ["A"]   # still undoable (#11)
+
+
+def test_audit4_no_reflected_html_and_posts_need_the_form_token(monkeypatch):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "_find_set", lambda set_no, days: (None, 0))
+    r = a.app.test_client().get("/set/<img src=x onerror=alert(1)>/line/x")
+    assert "<img" not in r.get_data(as_text=True) and r.status_code == 404
+    assert a.app.test_client().post("/move/preview", data={"part_id": "P"}).status_code == 400   # no token
+    assert "Content-Security-Policy" in r.headers and r.headers["X-Frame-Options"] == "DENY"
+
+
+def test_audit10_split_pallet_after_a_refusal_warns_left_pallet(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    _fake_plex(a, monkeypatch, {"A": "103", "B": "103"}, lp={"A": "LP-1", "B": "LP-1"}, status={"B": "Hold"})
+    pv = _csrf_client(a).post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "B"]}).get_json()
+    assert [(i["send"], i["left_pallet"]) for i in pv["items"]] == [("A", "LP-1"), (None, None)]
+
+
+def test_audit12_our_remove_from_master_unit_is_not_outside_activity():
+    import datetime as dt
+    import undo
+    now = dt.datetime(2026, 11, 23, 20, 0, tzinfo=dt.timezone.utc)
+    row = _mv("A", "2026-11-23T19:50:00+00:00")
+    hist = [{"Serial_No": "A", "Change_Date": "2026-11-23 14:49:59.000", "Last_Action": "Remove from Master Unit", "User_ID": "gcp.odbc.vox"},
+            {"Serial_No": "A", "Change_Date": "2026-11-23 14:50:00.500", "Last_Action": "Container Move", "Location": "PW - B9", "User_ID": "gcp.odbc.vox"}]
+    same = {"location": "PW - B9", "quantity": 5, "containerStatus": "OK"}
+    assert undo.check(row, same, hist, now, app_user="gcp.odbc.vox")["ok"]
+    floor = hist + [{"Serial_No": "A", "Change_Date": "2026-11-23 14:50:30.000", "Last_Action": "Remove from Master Unit", "User_ID": "ana.r"}]
+    assert not undo.check(row, same, floor, now, app_user="gcp.odbc.vox")["ok"]
+
+
+def test_audit16_only_the_reviewer_can_approve(monkeypatch, tmp_path):
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    _, moves = _fake_plex(a, monkeypatch, {"A": "103"})
+    c = _csrf_client(a)
+    monkeypatch.setenv("PICKING_USER", "ana")
+    pv = c.post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A"]}).get_json()
+    monkeypatch.setenv("PICKING_USER", "bob")
+    c.post("/move", data={"plan_id": pv["plan_id"]})
+    assert moves == []
+
+
+def test_audit5_allocations_pick_this_jobs_containers_and_reserve_others():
+    conts = [{"serialNo": "A", "location": "103", "quantity": 25, "containerStatus": "Allocated"},
+             {"serialNo": "B", "location": "104", "quantity": 25, "containerStatus": "Allocated"},
+             {"serialNo": "C", "location": "105", "quantity": 25, "containerStatus": "Allocated"},
+             {"serialNo": "D", "location": "106", "quantity": 25, "containerStatus": "OK"}]
+    alloc = picking.alloc_map([{"Serial_No": "A", "Job_No": "1195"}, {"Serial_No": "B", "Job_No": "2000"}])
+    groups = {"103": "Warehouse", "104": "Warehouse", "105": "Warehouse", "106": "Warehouse"}
+    res = picking.suggest(conts, [], 40, "PW - B8", loc_group=groups, job_no="1195", alloc=alloc)
+    role = {r["serial"]: (r["role"], r.get("why")) for r in res["rows"]}
+    assert role["A"][0] == "pick" and "allocated to this job" in role["A"][1]
+    assert role["B"] == ("reserved", "allocated to job 2000")
+    assert role["C"][0] == "blocked" and "copy does not show" in role["C"][1]
+    assert role["D"][0] == "pick" and res["picked_qty"] == 50
+    assert picking.check_movable(conts[0], "PW - B8", job_no="1195", alloc=alloc) is None
+    assert picking.check_movable(conts[1], "PW - B8", job_no="1195", alloc=alloc) == "allocated to job 2000"
+
+
+def test_audit6_earlier_sets_claims_are_reserved_not_counted_twice():
+    conts = [{"serialNo": f"S{i}", "location": "PW - B9", "quantity": 25, "containerStatus": "OK"} for i in range(8)]
+    first = picking.suggest(conts, [], 148, "PW - B9")
+    assert first["staged_qty"] == 150 and len(first["claims"]) == 6
+    claimed = {s: "set 756 job 3805 (due 11-16)" for s in first["claims"]}
+    second = picking.suggest(conts, [], 148, "PW - B9", claimed=claimed)
+    assert second["staged_qty"] == 50 and second["short_qty"] == 98 and second["reserved_n"] == 6
+
+
+def test_audit23_25_26_serial_of_another_part_bounds_and_encoding(monkeypatch, tmp_path):
+    import plex_api
+    a = _app(monkeypatch)
+    monkeypatch.setattr(a, "LOG", tmp_path / "log.jsonl")
+    _fake_plex(a, monkeypatch, {"A": "103"})
+    pv = _csrf_client(a).post("/move/preview", data={"part_id": "P", "target": "Pre-Weigh Staging", "serial": ["A", "ZZ"]}).get_json()
+    assert {i["covered"][0]: i["send"] for i in pv["items"]} == {"ZZ": None, "A": "A"}
+    seen = []
+    plex_api.PlexApi("test", get=lambda path: seen.append(path)).container("../../x")
+    assert seen == ["/inventory/v1/inventory-tracking/containers/..%2F..%2Fx"]
+    with a.app.test_request_context("/?days=99999&overdue=-4"):
+        assert a._int_arg("days", 3, 1, 60) == 60 and a._int_arg("overdue", 14, 0, 365) == 0
+
+
+def test_allocated_containers_already_in_a_destination_bin_count_as_there_and_set_the_default():
+    conts = [{"serialNo": "A", "location": "PW - B8", "quantity": 25, "containerStatus": "Allocated"},
+             {"serialNo": "B", "location": "103", "quantity": 25, "containerStatus": "OK"}]
+    alloc = {"A": ["2305"]}
+    opts = [{"location": "PW - B9"}, {"location": "PW - B8"}]
+    assert picking.default_target(opts, conts, "2305", alloc) == "PW - B8"
+    assert picking.default_target(opts, conts, "9999", alloc) == "PW - B9"
+    res = picking.suggest(conts, [], 20, "PW - B9", staging=["PW - B9", "PW - B8"], loc_group={"103": "Warehouse"}, job_no="2305", alloc=alloc)
+    role = {r["serial"]: r["role"] for r in res["rows"]}
+    assert role == {"A": "staged", "B": "spare"} and res["staged_qty"] == 25 and res["picked_qty"] == 0

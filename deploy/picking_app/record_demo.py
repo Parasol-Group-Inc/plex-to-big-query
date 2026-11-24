@@ -66,9 +66,9 @@ LOCAL = U.startswith("http://127.0.0.1")
 with sync_playwright() as p:
     if LOCAL:
         b = p.chromium.launch()
-        ctx = b.new_context(viewport={"width": 1400, "height": 860}, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
+        ctx = b.new_context(viewport={"width": 1400, "height": 860}, bypass_csp=True, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
     else:
-        ctx = p.chromium.launch_persistent_context("etl-manual/picking_live_profile", channel="chrome", headless=True,
+        ctx = p.chromium.launch_persistent_context("etl-manual/picking_live_profile", channel="chrome", headless=True, bypass_csp=True,
                 viewport={"width": 1400, "height": 860}, record_video_dir=OUT, record_video_size={"width": 1400, "height": 860})
     ctx.add_init_script(OVERLAY)
     pg = ctx.pages[0] if ctx.pages else ctx.new_page(); pg.set_default_timeout(240000)

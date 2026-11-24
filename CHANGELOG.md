@@ -14,6 +14,33 @@ infrastructure, or a deployed report gets a matching entry here, added in
 the same commit. Pure doc-typo fixes and this file's own housekeeping
 don't need an entry.
 
+## 2026-11-23 (late night) - Picking app: fixes for the three Opus audits
+
+Findings and status: `docs/PICKING_AUDIT_2026-11-23.md` (evidence SQL and repro tests in `docs/picking_audit_2026-11-23/`).
+
+### Fixed
+- **Allocations** (audit 2 #1): containers Plex allocated to the line's job are picked first or count as there (any of
+  the line's destinations); allocated to another job = reserved; Allocated with no row in Plex's copy = blocked. The
+  default target is where the job's allocated containers already are. `Part_v_Job_Allocation` via the SQL screen.
+- **Demand netting** (audit 2 #2): each ingredient's lines in sets due within 30 days are served in due order; what
+  earlier sets use is "reserved" on later ones (sets 756-763 no longer share one receipt).
+- **Pallets** (audit 1 #1, #2): a pallet is sent whole only when exactly the reviewed containers are on it (read live,
+  any part); re-checked on Approve; undo sends a pallet back only when every container on it qualifies.
+- **Logging** (audit 1 #3, #6): each move logged when Plex answers (`sent`), then after the read-back (`move`); a
+  Plex-confirmed move stays undoable; file-log errors never cut a batch short; refused gate attempts logged.
+- **Security** (audit 1 #4, audit 3): escaped 404 page, CSRF tokens on every POST, CSP and no framing, IAP JWT verified
+  when `PICKING_IAP_REQUIRED=1`, only the reviewer approves, serial must belong to the part, encoded API paths,
+  bounded parameters, locked plan store, capped result messages, our "Remove from Master Unit" not outside activity.
+- **Ops**: `deploy.sh` requires `PLEX_ENV_FOR_APP` and refuses until the log table has `batch_id`; uses
+  `picking-app-sa` / `picking-app-secret` once an admin creates them (commands printed); pinned dependencies; the
+  container runs as `pwuser`; the move log joins the daily milestone backups.
+- **Docs**: time saving recomputed from Plex's full history (17,631 screen moves / 30 days; ~147 h a month at 1 min,
+  to be timed); the "PW bins are a stocked buffer / no per-job staging" conclusion withdrawn; counts corrected; the
+  service's state after these fixes is **Plex TEST** (`PLEX_ENV_FOR_APP=test`).
+
+### Not deployed
+- After merge: `./scripts/deploy.sh` (the log columns, reviewed: 1 change), then `PLEX_ENV_FOR_APP=test ./deploy/picking_app/deploy.sh`.
+
 ## 2026-11-23 (night) - Picking app: undo on the Move log with a limit; new demo videos; old ones withdrawn
 
 ### Added

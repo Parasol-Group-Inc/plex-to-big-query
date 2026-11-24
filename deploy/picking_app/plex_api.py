@@ -104,7 +104,12 @@ class PlexApi:
         return self.get("/inventory/v1/inventory-tracking/containers", partId=part_id) or []
 
     def container(self, serial: str) -> dict | None:
-        return self.get(f"/inventory/v1/inventory-tracking/containers/{urllib.parse.quote(serial)}")
+        # safe="": a serial with "/" or "../" must not reach another API path (audit 11-23 #25)
+        return self.get(f"/inventory/v1/inventory-tracking/containers/{urllib.parse.quote(serial, safe='')}")
+
+    def containers_at(self, location_id: str) -> list[dict]:
+        """Every container at a location, live (the locationId filter works; used to read a pallet's members)."""
+        return self.get("/inventory/v1/inventory-tracking/containers", locationId=location_id) or []
 
     def lots_for_part(self, part_id: str) -> list[dict]:
         return self.get("/inventory/v1/inventory-tracking/lots", partId=part_id) or []

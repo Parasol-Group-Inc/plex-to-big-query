@@ -493,9 +493,9 @@ Development screen through the same session. Things that bite:
 - **An LP number moves the whole pallet; a container moved alone leaves its pallet** (LP-087265 in TEST lost all 4).
   The app moves an LP whole when all its containers are ticked.
 - **Every move is recorded in Plex as gcp.odbc.vox**; `PlexOps.picking_move_log` is the only record of who asked.
-- `PLEX_ENV=test` is the code default; the service runs `PLEX_ENV_FOR_APP=prod` since 11-23. Production moves need
+- `PLEX_ENV=test` is the code default; deploy with `PLEX_ENV_FOR_APP=test` (required; =prod for production). Production moves need
   `PICKING_ALLOW_PROD_MOVES=1`, after a supervised first move (docs/PICKING_STAGING_APP.md, "Production, moves off").
-- **Cloud Run `picking-app` (deployed 2026-11-20; Plex production with moves OFF since 2026-11-23) comes from `deploy/picking_app/deploy.sh`, not
+- **Cloud Run `picking-app` (deployed 2026-11-20; production with moves off 11-23; back to Plex TEST with the audit fixes) comes from `deploy/picking_app/deploy.sh`, not
   Terraform** (IAP via `--iap` is not in the pinned provider). Pay per use, max 1 instance. **claude-operator
   cannot set its IAM**: the script prints the access commands for Emilio. **The keep-warm ping gets 401 from
   IAP** (the Google-managed OAuth client takes browsers, not service-account tokens) and is not running; it
@@ -503,6 +503,12 @@ Development screen through the same session. Things that bite:
   Plex login (`gs://voxdatalake-plex-screenshots/picking-app/`) is a live gcp.odbc.vox session.
 - Jennilyn's Google account is `jennilyn.tockstein@`; `jennilyntockstein@` is only a mail alias (IAM rejects it).
 - Container lists are cached 60 s for display only; a move always reads them fresh.
+- **Audit 11-23 (`docs/PICKING_AUDIT_2026-11-23.md`):** the floor stages per job through **Plex job allocations**
+  (71% of moves into PW bins were Allocated containers): the app picks a job's allocated containers first and nets
+  each ingredient's demand across job sets (earlier-due sets' containers are "reserved"). Pallets are sent whole only
+  when exactly the reviewed containers are on them (read live); each move is logged when Plex answers (`sent`);
+  only the reviewer can approve; CSRF tokens, IAP JWT check (`PICKING_IAP_REQUIRED`). `deploy.sh` needs
+  `PLEX_ENV_FOR_APP=test|prod` and refuses until the log table has `batch_id` (Terraform first).
 - **Targets come from Plex history, not the Staging locations (11-23):** where material used at each work center
   was last moved (`Part_v_Container_Change2`): PW bins for Pre-Weigh, the line itself for Bottling / Labeling.
 - **Every move is reviewed** (dialog, Approve / Cancel) and logged in full (before/after record, Plex request and

@@ -8,4 +8,6 @@ RUN pip install --no-cache-dir -r deploy/picking_app/requirements.txt
 COPY scripts/plex_web_export.py scripts/load_plex_csv_dump.py scripts/
 COPY deploy/picking_app deploy/picking_app
 ENV PLEX_ENV=test PICKING_LOG=/tmp/picking_moves.jsonl PICKING_BQ_LOG=1 HOST=0.0.0.0
+# Not root (audit 11-23 #27): the Playwright image's own user; the app writes only /tmp and GCS.
+USER pwuser
 CMD exec gunicorn --chdir deploy/picking_app -w 1 --threads 40 -b 0.0.0.0:${PORT:-8080} --timeout 300 app:app

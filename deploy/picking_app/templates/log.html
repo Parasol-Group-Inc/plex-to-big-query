@@ -19,14 +19,14 @@
 <div id="un-body" style="margin-top:10px"></div>
 <div class="bar" style="justify-content:flex-end;margin-top:12px"><span id="un-note" class="muted" style="margin-right:auto"></span>
 <button type="button" id="un-close" class="secondary">Close</button><button type="button" id="un-go" hidden></button></div></div></dialog>
-<form id="un-form" method="post" action="{{ url_for('undo_apply') }}" hidden><input name="plan_id"></form>
+<form id="un-form" method="post" action="{{ url_for('undo_apply') }}" hidden><input name="plan_id"><input name="csrf" value="{{ csrf }}"></form>
 <script>
 (function () {
   const dlg = document.getElementById("undo"), esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const mt = iso => new Date(iso).toLocaleString("en-US", {timeZone: "America/Denver", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"});
   let plan = null;
   document.querySelectorAll(".undo-btn").forEach(btn => btn.onclick = () => {
-    const f = new FormData(); f.append("batch_id", btn.dataset.batch); const label = btn.innerHTML; btn.disabled = true; btn.textContent = "Reading Plex…";
+    const f = new FormData(); f.append("batch_id", btn.dataset.batch); f.append("csrf", "{{ csrf }}"); const label = btn.innerHTML; btn.disabled = true; btn.textContent = "Reading Plex…";
     fetch("{{ url_for('undo_review') }}", {method: "POST", body: f, credentials: "same-origin"}).then(r => r.json()).then(j => {
       btn.disabled = false; btn.innerHTML = label;
       if (!j.ok) { alert(j.error); return; }
@@ -44,7 +44,7 @@
       if (c.left_pallet) h += `<div class="muted">It left pallet ${esc(c.left_pallet)} when moved; putting it back does not re-add it to the pallet (Plex screen Add to Master Unit).</div>`;
       if (c.activity.length) {
         h += `<div class="tbl act" style="margin-top:6px"><table><thead><tr><th>When (MT)</th><th>Plex action</th><th>Location</th><th class="n">Qty</th><th>Status</th><th>Pallet</th><th>By</th></tr></thead><tbody>` +
-          c.activity.map(a => `<tr><td>${mt(a.at_utc)}</td><td>${esc(a.action)}</td><td>${esc(a.location)}</td><td class="n">${a.quantity ?? ""}</td><td>${esc(a.status)}</td><td>${esc(a.pallet)}</td><td>${esc(a.by)}</td></tr>`).join("") + `</tbody></table></div>`;
+          c.activity.map(a => `<tr><td>${mt(a.at_utc)}</td><td>${esc(a.action)}</td><td>${esc(a.location)}</td><td class="n">${esc(a.quantity ?? "")}</td><td>${esc(a.status)}</td><td>${esc(a.pallet)}</td><td>${esc(a.by)}</td></tr>`).join("") + `</tbody></table></div>`;
       } else h += `<div class="muted" style="margin-top:4px">No Plex activity since the move.</div>`;
       h += `</div>`;
     }

@@ -40,7 +40,7 @@ def load_rows(batch: str | None, serials: list[str], since: str | None, log: str
         rows = [json.loads(l) for l in Path(log).read_text(encoding="utf-8").splitlines() if l.strip()]
     else:
         from google.cloud import bigquery
-        where, params = ["event = 'move'", "ok"], []
+        where, params = ["event IN ('move', 'sent')"], []
         if batch:
             where.append("batch_id = @batch"); params.append(bigquery.ScalarQueryParameter("batch", "STRING", batch))
         if serials:
@@ -50,25 +50,22 @@ def load_rows(batch: str | None, serials: list[str], since: str | None, log: str
         q = f"SELECT * FROM `voxdatalake.PlexOps.picking_move_log` WHERE {' AND '.join(where)} ORDER BY `at`"
         rows = [dict(r) for r in bigquery.Client(project="voxdatalake").query(
             q, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    import undo
+    keep = [r for r in rows if (not serials or r.get("serial") in serials) and (not since or str(r.get("at")) >= since)]
     out = []
-    for r in rows:
-        if r.get("event", "move") != "move" or not r.get("ok"):
-            continue
-        if batch and r.get("batch_id") != batch:
-            continue
-        if serials and r.get("serial") not in serials:
-            continue
-        if since and str(r.get("at")) < since:
-            continue
-        out.append(r)
-    return out
+    for b in dict.fromkeys(r.get("batch_id") for r in keep if not batch or r.get("batch_id") == batch):
+        out += undo.moved_rows(keep, b)                 # verified 'move' rows, else Plex-confirmed 'sent' rows
+    return sorted(out, key=lambda r: str(r.get("at")))
 
 
-def plan_restore(rows: list[dict], live: dict) -> list[dict]:
+def plan_restore(rows: list[dict], live: dict, all_rows: list[dict] | None = None, lp_members=None) -> list[dict]:
     """Pure: log rows + {serial: live API record or None} -> actions.
 
     Each action: {kind: 'pallet' | 'container' | 'skip' | 'done', send, to, serials, why, note}.
-    The LAST logged move of a container wins (restore to where it was before that move)."""
+    The LAST logged move of a container wins (restore to where it was before that move).
+    A pallet is sent back whole only when (audit 11-23 #1) every container we moved on it is in `rows` (all_rows =
+    the whole batch; rows = those that passed the checks) and lp_members(lp, serial) -> the pallet's live members
+    equals exactly those containers. Otherwise the containers in `rows` go back one by one (leaving the pallet)."""
     last: "OrderedDict[str, dict]" = OrderedDict()
     for r in rows:
         last.pop(r["serial"], None)
@@ -96,10 +93,17 @@ def plan_restore(rows: list[dict], live: dict) -> list[dict]:
             else:
                 (ready if pallet and now.get("masterUnitNo") == item else rest).append((r, note))
         froms = {r.get("from_location") for r, _ in ready}
-        if ready and len(froms) == 1 and len(ready) == len(rs):
+        whole = {r["serial"] for r in (all_rows or rs) if (r.get("moved_as") or r["serial"]) == item}
+        on_lp = sorted(lp_members(item, ready[0][0]["serial"]) or []) if (pallet and ready and lp_members) else None
+        same_lp = on_lp is None or set(on_lp) == whole
+        if ready and len(froms) == 1 and len(ready) == len(rs) and {r["serial"] for r, _ in ready} == whole and same_lp:
             actions.append({"kind": "pallet", "send": item, "to": froms.pop(), "serials": [r["serial"] for r, _ in ready],
                             "why": f"whole pallet {item} back in one call", "note": None})
         else:
+            if pallet and ready:
+                why_split = (f"pallet {item} now holds {', '.join(sorted(set(on_lp or []) ^ whole)) or 'other containers'}"
+                             if not same_lp else f"not every container moved on pallet {item} can go back")
+                ready = [(r, f"{why_split}: goes back on its own and leaves the pallet") for r, _ in ready]
             rest = ready + rest
         for r, note in rest:
             actions.append({"kind": "container", "send": r["serial"], "to": r.get("from_location"), "serials": [r["serial"]],
@@ -142,7 +146,10 @@ def main() -> int:
         sys.exit(f"the log rows are for {sorted(envs)}, not {env}: pass --prod for production rows")
     print(f"{len(rows)} logged move(s); reading {len({r['serial'] for r in rows})} container(s) live from Plex {env.upper()}")
     live = {s: api.container(s) for s in dict.fromkeys(r["serial"] for r in rows)}
-    actions = plan_restore(rows, live)
+    def members(lp, serial):
+        loc = (live.get(serial) or {}).get("locationId")
+        return [c.get("serialNo") for c in api.containers_at(loc) if c.get("masterUnitNo") == lp] if loc else None
+    actions = plan_restore(rows, live, all_rows=rows, lp_members=members)
     for x in actions:
         if x["kind"] == "skip" and a.force and x.get("send"):
             x.update(kind="container", why=x["why"] + " (forced)")
@@ -168,7 +175,7 @@ def main() -> int:
             good += ok
             print(f"  {s}: {d['message']} (now at {now}){'' if ok else '  <-- CHECK'}")
             write_log({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "restore", "env": env,
-                       "batch_id": f"restore-{a.batch or 'serials'}", "requested_by": os.environ.get("USER", "restore_moves"),
+                       "batch_id": f"restore-{a.batch or 'serials'}", "requested_by": f"restore_moves.py (laptop user {os.environ.get('USER', '?')})",
                        "serial": s, "moved_as": x["send"], "from_location": (live.get(s) or {}).get("location"),
                        "to_location": x["to"], "ok": ok, "message": d["message"], "verified_location": now,
                        "plex_request": json.dumps(d["request"]), "plex_response": d["body"], "plex_status": d["status"],

@@ -38,7 +38,7 @@ def videos_html() -> str:
     cards = "".join(
         f'<figure class="pv"><video controls preload="metadata" playsinline src="{src}"></video>'
         f'<figcaption><b>{label}</b> <span class="muted">{dur}</span></figcaption></figure>' for src, label, dur in VIDEOS)
-    return (f'<h2>Demo videos (2026-11-23, second take, Plex TEST)</h2><p>Recorded on the deployed app with captions; every container '
+    return (f'<h2>Demo videos (2026-11-23, second take, Plex TEST)</h2><p>Recorded with captions on Plex TEST (a local server running the same code as the deployed app); every container '
             f'moved in them was put back. To save one: the ⋮ menu on the player, or the files in '
             f'gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v2/.</p>'
             f'<div class="pvs">{cards}</div>')
@@ -56,7 +56,7 @@ def render_tab() -> str:
 #s-{KEY} .pv figcaption {{ font-size: 13px; margin-top: 4px; }}
 </style><section id="s-{KEY}" data-tab="{KEY}" hidden><div class="ref"><div class="block">
 <p class="lede">From docs/PICKING_STAGING_APP.md (rendered when the hub is built). Code: deploy/picking_app/;
-live on Cloud Run against Plex TEST since 2026-11-20 (https://picking-app-651304971296.us-central1.run.app).</p>
+on Cloud Run since 2026-11-20 (https://picking-app-651304971296.us-central1.run.app; Plex TEST, moves off in production). Audit 2026-11-23: docs/PICKING_AUDIT_2026-11-23.md.</p>
 {videos_html()}{body}</div></div></section>{END}"""
 
 

@@ -38,8 +38,10 @@ Run locally (Plex TEST):  PLEX_ENV=test python deploy/picking_app/app.py   -> ht
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import secrets
 import sys
 import threading
 import time
@@ -47,7 +49,8 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from flask import Flask, flash, has_request_context, redirect, render_template, request, url_for
+from flask import Flask, flash, has_request_context, redirect, render_template, request, session, url_for
+from markupsafe import escape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import picking  # noqa: E402
@@ -62,6 +65,9 @@ SETS_TTL = int(os.environ.get("PICKING_SETS_TTL", "600"))
 LOTS_TTL = int(os.environ.get("PICKING_LOTS_TTL", "3600"))
 CONTAINERS_TTL = int(os.environ.get("PICKING_CONTAINERS_TTL", "60"))
 WORKERS = int(os.environ.get("PICKING_WORKERS", "16"))
+NET_DAYS = int(os.environ.get("PICKING_NET_DAYS", "30"))     # demand netting window (audit 11-23 #6)
+IAP_REQUIRED = os.environ.get("PICKING_IAP_REQUIRED") == "1"  # deploy.sh sets it: a request without a valid IAP JWT is "unverified"
+APP_PLEX_USER = os.environ.get("PICKING_PLEX_USER", "gcp.odbc.vox")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("PICKING_SECRET", os.urandom(16).hex())
@@ -70,11 +76,85 @@ _cache: dict = {}
 MT = __import__('zoneinfo').ZoneInfo('America/Denver')
 _cache_lock = threading.Lock()
 _move_lock = threading.Lock()
+_plans_lock = threading.Lock()
+_jwt_ok: dict = {}                 # sha256(token) -> (email, exp)
+
+
+def _verify_iap(token: str) -> str | None:
+    """Email from a valid IAP JWT (X-Goog-IAP-JWT-Assertion), else None. Audit 11-23 #24: the plain email header is
+    unsigned and only safe while IAP fronts the service. Audience checked when PICKING_IAP_AUDIENCE is set."""
+    key = hashlib.sha256(token.encode()).hexdigest()
+    hit = _jwt_ok.get(key)
+    if hit and hit[1] > time.time():
+        return hit[0]
+    try:
+        from google.auth.transport import requests as ga_requests
+        from google.oauth2 import id_token
+        claims = id_token.verify_token(token, ga_requests.Request(), audience=os.environ.get("PICKING_IAP_AUDIENCE") or None,
+                                       certs_url="https://www.gstatic.com/iap/verify/public_key")
+        if claims.get("iss") != "https://cloud.google.com/iap" or not claims.get("email"):
+            return None
+        _jwt_ok[key] = (claims["email"], float(claims.get("exp", time.time() + 300)))
+        return claims["email"]
+    except Exception as e:  # noqa: BLE001 - invalid, expired or unreachable certs: not verified
+        app.logger.warning("IAP JWT not verified: %s", e)
+        return None
 
 
 def who() -> str:
-    h = request.headers.get("X-Goog-Authenticated-User-Email", "")
-    return h.split(":", 1)[-1] if h else os.environ.get("PICKING_USER", "local")
+    """The person: the IAP JWT's email when present (verified); without one, the IAP email header unless
+    PICKING_IAP_REQUIRED=1 (then "unverified", and nothing can move); locally PICKING_USER."""
+    if not has_request_context():
+        return os.environ.get("PICKING_USER", "local")
+    if getattr(request, "_who", None):
+        return request._who
+    tok = request.headers.get("X-Goog-IAP-JWT-Assertion")
+    hdr = request.headers.get("X-Goog-Authenticated-User-Email", "")
+    if tok:
+        u = _verify_iap(tok) or "unverified"
+    elif IAP_REQUIRED:
+        u = "unverified"
+    else:
+        u = hdr.split(":", 1)[-1] if hdr else os.environ.get("PICKING_USER", "local")
+    request._who = u
+    return u
+
+
+def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
+    """A bounded integer query parameter (audit 11-23 #26)."""
+    try:
+        return max(lo, min(hi, int(request.args.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def csrf_token() -> str:
+    if "csrf" not in session:
+        session["csrf"] = secrets.token_urlsafe(24)
+    return session["csrf"]
+
+
+@app.before_request
+def _csrf_check():
+    """Every POST carries the session's token (audit 11-23 #4: a forged cross-site POST, or a script injected
+    through any page, must not be able to move)."""
+    if request.method == "POST":
+        tok = request.form.get("csrf") or request.headers.get("X-CSRF-Token")
+        if not tok or not secrets.compare_digest(str(tok), str(session.get("csrf", ""))):
+            if request.path.startswith(("/move/preview", "/log/undo/review", "/move/cancel")):
+                return {"ok": False, "error": "This page is out of date (form token). Reload it and try again."}, 400
+            return "This page is out of date (form token). Go back, reload it and try again.", 400
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; "
+                            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+    return resp
 
 
 def cached(key, ttl: int, fn, refresh: bool = False):
@@ -119,13 +199,27 @@ def part_lots(part_id: str) -> list[dict]:
     return cached(("lots", part_id), LOTS_TTL, lambda: api.lots_for_part(part_id))[0]
 
 
+def part_alloc(part_id: str, fresh=False) -> dict:
+    """{serial: [job_no]} for a part (audit 11-23 #5: the floor stages through job allocations). SQL screen;
+    in production Plex's copy (about 4 h behind), so a container whose live status is Allocated but has no
+    row here is treated as allocated to an unknown job (picking.allocation_why)."""
+    def read():
+        try:
+            return picking.alloc_map(web.sql(picking.allocations_sql(part_id)))
+        except Exception as e:  # noqa: BLE001 - Allocated containers then stay blocked
+            app.logger.warning("allocations %s: %s", part_id, e)
+            return {}
+    return cached(("alloc", part_id), CONTAINERS_TTL, read, fresh)[0]
+
+
 def fetch_parts(part_ids: list[str], refresh=False) -> dict:
-    """{part_id: (containers, lots)}, all parts in parallel."""
+    """{part_id: (containers, lots, allocations)}, all parts in parallel."""
     ids = list(dict.fromkeys(part_ids))
-    with ThreadPoolExecutor(max_workers=max(1, min(WORKERS, 2 * len(ids) or 1))) as ex:
-        conts = {p: ex.submit(part_containers, p, refresh) for p in ids}     # containers and lots together
+    with ThreadPoolExecutor(max_workers=max(1, min(WORKERS, 3 * len(ids) or 1))) as ex:
+        conts = {p: ex.submit(part_containers, p, refresh) for p in ids}
         lots = {p: ex.submit(part_lots, p) for p in ids}
-        return {p: (conts[p].result(), lots[p].result()) for p in ids}
+        alloc = {p: ex.submit(part_alloc, p, refresh) for p in ids}
+        return {p: (conts[p].result(), lots[p].result(), alloc[p].result()) for p in ids}
 
 
 LOG_FIELDS = ("at", "env", "requested_by", "set_no", "job_no", "serial", "moved_as", "from_location", "to_location",
@@ -141,14 +235,18 @@ def _j(x):
 
 
 def log_move(rec: dict) -> None:
-    """One row per container per event (preview | cancelled | move | refused | restore). Always to the JSON
+    """One row per container per event (preview | cancelled | sent | move | refused | refused-gate |
+    undo-review | restore). Always to the JSON
     lines file; to BigQuery PlexOps.picking_move_log when PICKING_BQ_LOG=1 (unknown columns are ignored, so
     the app may run before Terraform adds new ones)."""
     rec = {**rec, "revision": rec.get("revision") or os.environ.get("K_REVISION"),
            "user_agent": rec.get("user_agent") or ((request.headers.get("User-Agent") or "")[:300] if has_request_context() else None)}
-    LOG.parent.mkdir(parents=True, exist_ok=True)
-    with LOG.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(rec, default=str) + "\n")
+    try:
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        with LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, default=str) + "\n")
+    except OSError as e:                 # audit 11-23 #3: never cut a batch's logging short
+        app.logger.error("move log file: %s; row: %s", e, json.dumps(rec, default=str)[:2000])
     if os.environ.get("PICKING_BQ_LOG") == "1":
         try:
             from google.cloud import bigquery
@@ -172,7 +270,7 @@ def mt_filter(at) -> str:
 
 @app.context_processor
 def common():
-    return {"env": ENV, "moves_enabled": ENV == "test" or ALLOW_PROD_MOVES, "user": who()}
+    return {"env": ENV, "moves_enabled": ENV == "test" or ALLOW_PROD_MOVES, "user": who(), "csrf": csrf_token()}
 
 
 @app.get("/health")
@@ -194,9 +292,9 @@ def warm():
 
 @app.get("/")
 def index():
-    days = int(request.args.get("days", 3))
+    days = _int_arg("days", 3, 1, 60)
     group = request.args.get("group", "")
-    overdue = int(request.args.get("overdue", 14))
+    overdue = _int_arg("overdue", 14, 0, 365)
     sets, at = job_sets(days, refresh=request.args.get("refresh") == "1", overdue=overdue)
     rows = [s for s in sets.values() if s["lines"] and (not group or s["main"]["group"] == group
                                                          or any(l["group"] == group for l in s["lines"]))]
@@ -234,12 +332,39 @@ def line_options(ln: dict) -> list[dict]:
     return picking.destination_options(destinations(), ln.get("workcenter") or "", ln.get("group") or "", location_groups())
 
 
+def net_claims(s: dict, ln: dict, conts, lots, groups: dict, alloc: dict) -> dict:
+    """Containers that earlier-due lines of the same part (any job set due within NET_DAYS) would use, each at its
+    own default target: {serial: "set 757 job 3806 (due 11-16)"}. Audit 11-23 #6: eight sets each saw the same
+    1,225 in PW - B9 as "all there"."""
+    try:
+        sets, _ = job_sets(NET_DAYS)
+    except Exception as e:  # noqa: BLE001 - without netting the line still shows; say so in the log
+        app.logger.warning("net_claims: %s", e)
+        return {}
+    mine = (ln.get("due") or "9999", s["set_no"], ln["job_no"])
+    earlier = sorted(((l.get("due") or "9999", ss["set_no"], l["job_no"]), ss, l) for ss in sets.values()
+                     for l in ss["lines"] if l["part_id"] == ln["part_id"])
+    claimed: dict = {}
+    for key, ss, l in earlier:
+        if key >= mine:
+            break
+        opts = line_options(l)
+        res = picking.suggest(conts, lots, l["required"], picking.default_target(opts, conts, l["job_no"], alloc),
+                              staging=[o["location"] for o in opts],
+                              loc_group=groups, job_no=l["job_no"], alloc=alloc, claimed=claimed)
+        for sn in res["claims"]:
+            claimed.setdefault(sn, f"set {ss['set_no']} job {l['job_no']} (due {l.get('due')})")
+    return claimed
+
+
 def _line(s: dict, ln: dict, target: str, data, groups: dict) -> dict:
-    conts, lots = data
+    conts, lots, alloc = data
     opts = line_options(ln)
-    target = target if target in {o["location"] for o in opts} else opts[0]["location"]
+    target = target if target in {o["location"] for o in opts} else picking.default_target(opts, conts, ln["job_no"], alloc)
+    claimed = net_claims(s, ln, conts, lots, groups, alloc)
     return {**ln, "target": target, "options": opts,
-            **picking.suggest(conts, lots, ln["required"], target, staging=[o["location"] for o in opts], loc_group=groups)}
+            **picking.suggest(conts, lots, ln["required"], target, staging=[o["location"] for o in opts], loc_group=groups,
+                              job_no=ln["job_no"], alloc=alloc, claimed=claimed)}
 
 
 def _page_args(s, days) -> dict:
@@ -253,7 +378,7 @@ def job_set(set_no):
     about 2 s per ingredient on its side, and data older than live is not acceptable).
     ?all=1 renders everything on the server in one go (the old way, and the no-JavaScript fallback)."""
     t0 = time.time()
-    days = int(request.args.get("days", 3))
+    days = _int_arg("days", 3, 1, 60)
     refresh = "1" if request.args.get("refresh") == "1" else None
     s, at = _find_set(set_no, days)
     if not s:
@@ -277,11 +402,11 @@ def job_set(set_no):
 @app.get("/set/<set_no>/line/<part_id>")
 def job_set_line(set_no, part_id):
     """One ingredient's card (HTML fragment) with its live containers and suggestions."""
-    days = int(request.args.get("days", 3))
+    days = _int_arg("days", 3, 1, 60)
     s, _ = _find_set(set_no, days)
     ln = next((x for x in (s or {}).get("lines", []) if x["part_id"] == part_id), None)
-    if not ln:
-        return f"<div class='card muted'>This ingredient is no longer in job set {set_no}.</div>", 404
+    if not ln:                                       # escaped: audit 11-23 #4 (reflected XSS)
+        return f"<div class='card muted'>This ingredient is no longer in job set {escape(set_no)}.</div>", 404
     data = fetch_parts([part_id], refresh=request.args.get("refresh") == "1")[part_id]
     line = _line(s, ln, request.args.get("target") or "", data, location_groups())
     return render_template("_line.html", ln=line, **_page_args(s, days))
@@ -301,6 +426,22 @@ PLAN_TTL = int(os.environ.get("PICKING_PLAN_TTL", "600"))
 _plans: dict = {}
 
 
+def plan_put(plan: dict) -> str:
+    pid = (plan.get("kind") == "undo" and "u" or "") + uuid.uuid4().hex[:12]
+    now = time.time()
+    with _plans_lock:                                   # audit 11-23 #20: no unlocked iteration
+        for k in [k for k, v in _plans.items() if now - v["created"] > PLAN_TTL]:
+            _plans.pop(k, None)
+        _plans[pid] = {**plan, "created": now}
+    return pid
+
+
+def plan_pop(pid: str) -> dict | None:
+    with _plans_lock:
+        p = _plans.pop(pid or "", None)
+    return p if p and time.time() - p["created"] <= PLAN_TTL else None
+
+
 def _summary(c: dict | None, serial: str) -> dict:
     c = c or {}
     return {"serial": serial, "lp": c.get("masterUnitNo") or "", "lot": c.get("lotNo") or "", "part_no": c.get("partNo") or "",
@@ -315,14 +456,32 @@ def _line_for(set_no: str, part_id: str, job_no: str):
     return None
 
 
-def _check_request(form) -> tuple[dict | None, str | None]:
-    """Common checks for preview and approve: moves allowed here, a known line, an allowed target."""
+def _gate_refused(form, what: str) -> str | None:
+    """Prod gate and identity. Refusals are logged (audit 11-23 #13)."""
+    msg = None
     if not (ENV == "test" or ALLOW_PROD_MOVES):
-        return None, "Moves are turned off in production (PICKING_ALLOW_PROD_MOVES is not 1)."
+        msg = "Moves are turned off in production (PICKING_ALLOW_PROD_MOVES is not 1)."
+    elif who() == "unverified":
+        msg = "Your sign-in could not be verified (IAP), so nothing can move. Reload the page; if it persists, tell Emilio."
+    if msg:
+        log_move({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "refused-gate", "env": ENV, "requested_by": who(),
+                  "set_no": form.get("set_no"), "job_no": form.get("job_no"), "part_id": form.get("part_id"),
+                  "batch_id": form.get("plan_id") or form.get("batch_id"), "serial": ",".join(form.getlist("serial"))[:1000] or None,
+                  "to_location": form.get("target"), "message": f"{what}: {msg}"})
+    return msg
+
+
+def _check_request(form) -> tuple[dict | None, str | None]:
+    """Common checks for preview: moves allowed here, a known line, an allowed target."""
+    err = _gate_refused(form, "preview")
+    if err:
+        return None, err
     set_no, job_no, part_id = form.get("set_no", ""), form.get("job_no", ""), form.get("part_id", "")
     target, serials = form.get("target", ""), list(dict.fromkeys(form.getlist("serial")))
     if not serials:
         return None, "Nothing ticked."
+    if not part_id:
+        return None, "No part given."
     ln = _line_for(set_no, part_id, job_no)
     allowed = {o["location"] for o in line_options(ln)} if ln else set(picking.STAGING_LOCATIONS)
     if target not in allowed:
@@ -331,26 +490,63 @@ def _check_request(form) -> tuple[dict | None, str | None]:
             "part_no": (ln or {}).get("part_no")}, None
 
 
+def lp_members(lp: str, any_live: dict | None) -> list[str] | None:
+    """Every container on pallet `lp` right now, any part, any quantity (audit 11-23 #2), read live from the
+    pallet's location. None when it cannot be read."""
+    loc_id = (any_live or {}).get("locationId")
+    if not lp or not loc_id:
+        return None
+    try:
+        return sorted(c.get("serialNo") for c in api.containers_at(loc_id) if c.get("masterUnitNo") == lp)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("lp_members %s: %s", lp, e)
+        return None
+
+
 def build_plan(req: dict) -> dict:
-    """What a move would do, from a fresh live read: one item per Plex call (a container, or a whole pallet)."""
-    part_list = part_containers(req["part_id"], fresh=True) if req["part_id"] else []
-    lives = _live_lookup(req["serials"], part_list)
-    items = []
-    for what, members in picking.plan_moves(req["serials"], part_list):
-        whys = {s: picking.check_movable(lives[s], req["target"]) for s in members}
-        if what in members:
-            todo = [(what, [what])]
-        elif any(whys.values()):
-            todo = [(s, [s]) for s in members]
+    """What a move would do, from a fresh live read: one item per Plex call (a container, or a whole pallet).
+    A pallet is sent whole only when exactly the ticked containers are on it right now; otherwise its ticked
+    containers go one by one, each flagged as leaving the pallet."""
+    part_list = part_containers(req["part_id"], fresh=True)
+    alloc = part_alloc(req["part_id"], fresh=True)
+    by = {c.get("serialNo"): c for c in part_list}
+    lives = {s: by.get(s) for s in req["serials"]}
+    items, lp_cache = [], {}
+    not_part = [s for s in req["serials"] if s not in by]              # audit 11-23 #23
+    for s in not_part:
+        items.append({"send": None, "covered": [s], "why": "not a container of this part in Plex now", "pallet": None,
+                      "left_pallet": None, "lp_snapshot": None, "containers": [_summary(None, s)]})
+    serials = [s for s in req["serials"] if s in by]
+
+    def members(lp, live):
+        if lp not in lp_cache:
+            lp_cache[lp] = lp_members(lp, live)
+        return lp_cache[lp]
+
+    def single(s, why, note=None):
+        lp = (lives[s] or {}).get("masterUnitNo")
+        mates = members(lp, lives[s]) if lp and not why else None
+        left = lp if lp and not why and (mates is None or set(mates) - {s}) else None
+        return {"send": None if why else s, "covered": [s], "why": why, "pallet": None, "left_pallet": left, "lp_snapshot": None,
+                "note": note, "containers": [_summary(lives[s], s)]}
+
+    for what, covered in picking.plan_moves(serials, part_list):
+        whys = {s: picking.check_movable(lives[s], req["target"], job_no=req["job_no"], alloc=alloc) for s in covered}
+        if what in covered:
+            items.append(single(what, whys[what]))
+            continue
+        on_lp = members(what, lives[covered[0]])
+        if any(whys.values()):
+            items += [single(s, whys[s]) for s in covered]
+        elif on_lp is None or set(on_lp) != set(covered):
+            extra = sorted(set(on_lp or []) - set(covered))
+            note = (f"pallet {what} also holds {', '.join(extra)} (other parts or empty containers, not in this review), so these "
+                    f"go one by one and leave it" if on_lp is not None else f"pallet {what} could not be read whole, so these go one by one")
+            items += [single(s, None, note) for s in covered]
         else:
-            todo = [(what, members)]
-        for item, covered in todo:
-            why = next((whys[s] or "its pallet has a container that may not move" for s in covered if whys[s]), None)
-            items.append({"send": None if why else item, "covered": covered, "why": why,
-                          "pallet": item if item not in covered else None,
-                          "left_pallet": picking.breaks_pallet(item, req["serials"], part_list) if item in covered else None,
-                          "containers": [_summary(lives[s], s) for s in covered]})
-    return {**req, "items": items, "lives": {s: lives[s] for s in req["serials"]}}
+            items.append({"send": what, "covered": covered, "why": None, "pallet": what, "left_pallet": None,
+                          "lp_snapshot": on_lp, "note": None, "containers": [_summary(lives[s], s) for s in covered]})
+    return {**req, "items": items, "lives": lives}
 
 
 @app.post("/move/preview")
@@ -361,18 +557,14 @@ def move_preview():
     if err:
         return {"ok": False, "error": err}, 400
     plan = build_plan(req)
-    plan_id = uuid.uuid4().hex[:12]
-    now = time.time()
-    for k in [k for k, v in _plans.items() if now - v["created"] > PLAN_TTL]:
-        _plans.pop(k, None)
-    _plans[plan_id] = {**plan, "created": now, "by": who()}
+    plan_id = plan_put({**plan, "by": who()})
     at = dt.datetime.now(dt.timezone.utc).isoformat()
     for it in plan["items"]:
         for c in it["containers"]:
             log_move({"at": at, "event": "preview", "batch_id": plan_id, "env": ENV, "requested_by": who(),
                       "set_no": req["set_no"], "job_no": req["job_no"], "part_id": req["part_id"], "part_no": req["part_no"],
                       "serial": c["serial"], "moved_as": it["send"], "from_location": c["location"], "to_location": req["target"],
-                      "lp_before": c["lp"], "status_before": c["status"], "qty_before": c["qty"], "message": it["why"],
+                      "lp_before": c["lp"], "status_before": c["status"], "qty_before": c["qty"], "message": it["why"] or it.get("note"),
                       "left_pallet": it["left_pallet"], "before_json": _j(plan["lives"].get(c["serial"])), "plan_json": _j(it)})
     return {"ok": True, "plan_id": plan_id, "target": req["target"], "part_no": req["part_no"], "set_no": req["set_no"],
             "job_no": req["job_no"], "env": ENV, "items": plan["items"], "expires_s": PLAN_TTL,
@@ -382,13 +574,15 @@ def move_preview():
 
 @app.post("/move/cancel")
 def move_cancel():
-    plan = _plans.pop(request.form.get("plan_id", ""), None)
+    pid = request.form.get("plan_id", "")
+    plan = plan_pop(pid)
     if plan:
         at = dt.datetime.now(dt.timezone.utc).isoformat()
-        for s in plan["serials"]:
-            log_move({"at": at, "event": "cancelled", "batch_id": request.form.get("plan_id"), "env": ENV, "requested_by": who(),
-                      "set_no": plan["set_no"], "job_no": plan["job_no"], "part_id": plan["part_id"], "serial": s,
-                      "to_location": plan["target"], "message": "cancelled in the review dialog"})
+        serials = plan.get("serials") or [r["serial"] for r in plan.get("rows", [])]     # audit 11-23 #20: undo plans too
+        for s in serials:
+            log_move({"at": at, "event": "cancelled", "batch_id": pid, "env": ENV, "requested_by": who(),
+                      "set_no": plan.get("set_no"), "job_no": plan.get("job_no"), "part_id": plan.get("part_id"), "serial": s,
+                      "to_location": plan.get("target"), "message": f"{plan.get('kind') or 'move'} review cancelled"})
     return {"ok": True}
 
 
@@ -402,59 +596,98 @@ def _changed(before: dict | None, now: dict | None) -> str | None:
     return None
 
 
+def _flash_results(lines: list[tuple[str, str]], summary: str, ok: bool) -> None:
+    """Per-container lines, capped (audit 11-23 #21: a big batch overflowed the flash cookie)."""
+    for msg, cat in lines[:12]:
+        flash(msg, cat)
+    if len(lines) > 12:
+        flash(f"... and {len(lines) - 12} more: every line is in the Move log.", "ok" if ok else "error")
+    flash(summary, "ok" if ok else "error")
+
+
 @app.post("/move")
 def move():
-    """Approve: carries out a reviewed plan (plan_id from /move/preview), re-checking every container live
-    first. A container that changed since the review, or may not move, is not sent."""
+    """Approve: carries out a reviewed plan (plan_id from /move/preview), re-checking every container live first.
+    Each Plex call is logged the moment Plex answers (event 'sent'), then again once read back ('move')."""
     set_no = request.form.get("set_no", "")
     back = redirect(url_for("job_set", set_no=set_no) if set_no else url_for("index"))
-    if not (ENV == "test" or ALLOW_PROD_MOVES):
-        flash("Moves are turned off in production (PICKING_ALLOW_PROD_MOVES is not 1).", "error")
+    err = _gate_refused(request.form, "approve")
+    if err:
+        flash(err, "error")
         return back
     plan_id = request.form.get("plan_id", "")
-    plan = _plans.pop(plan_id, None)
-    if not plan or time.time() - plan["created"] > PLAN_TTL:
+    plan = plan_pop(plan_id)
+    if not plan:
         flash("That review has expired or was already used. Press the move button again to review it.", "error")
+        return back
+    if plan.get("by") != who():                                   # audit 11-23 #16
+        flash(f"Only the person who opened that review ({plan.get('by')}) can approve it. Open your own review.", "error")
         return back
     target = plan["target"]
     base = {"env": ENV, "requested_by": who(), "set_no": plan["set_no"], "job_no": plan["job_no"], "to_location": target,
             "batch_id": plan_id, "part_id": plan["part_id"], "part_no": plan["part_no"]}
-    results = []                                        # (serial, item or None, plex detail or None, message)
+    now_iso = lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+
+    def row(s, **kw):
+        b = plan["lives"].get(s) or {}
+        return {**base, "at": now_iso(), "serial": s, "from_location": b.get("location"), "lp_before": b.get("masterUnitNo"),
+                "status_before": b.get("containerStatus"), "qty_before": b.get("quantity"), "before_json": _j(plan["lives"].get(s)), **kw}
+
+    results = []                                        # (serial, item, plex detail or None, message, left_pallet)
     with _move_lock:
-        part_list = part_containers(plan["part_id"], fresh=True) if plan["part_id"] else []
+        part_list = part_containers(plan["part_id"], fresh=True)
+        alloc = part_alloc(plan["part_id"], fresh=True)
         lives = _live_lookup(plan["serials"], part_list)
         for it in plan["items"]:
             if not it["send"]:
-                results += [(s, None, None, f"not moved: {it['why']}") for s in it["covered"]]
+                for s in it["covered"]:
+                    log_move(row(s, event="refused", ok=False, message=f"not moved: {it['why']}"))
+                    results.append((s, None, None, f"not moved: {it['why']}", None))
                 continue
-            whys = {s: _changed(plan["lives"].get(s), lives[s]) or picking.check_movable(lives[s], target) for s in it["covered"]}
+            whys = {s: _changed(plan["lives"].get(s), lives[s])
+                    or picking.check_movable(lives[s], target, job_no=plan["job_no"], alloc=alloc) for s in it["covered"]}
+            if it["pallet"] and not any(whys.values()):
+                now_lp = lp_members(it["pallet"], lives[it["covered"][0]])
+                if now_lp != it["lp_snapshot"]:
+                    whys = {s: f"pallet {it['pallet']} changed since you reviewed it ({len(it['lp_snapshot'] or [])} -> "
+                               f"{'?' if now_lp is None else len(now_lp)} containers)" for s in it["covered"]}
             if any(whys.values()):
-                results += [(s, None, None, f"not moved: {whys[s] or 'a container on its pallet changed or may not move'}")
-                            for s in it["covered"]]
+                for s in it["covered"]:
+                    m = f"not moved: {whys[s] or 'a container on its pallet changed or may not move'}"
+                    log_move(row(s, event="refused", ok=False, message=m))
+                    results.append((s, None, None, m, None))
                 continue
             d = web.move_detail(it["send"], target)
-            results += [(s, it["send"], d, d["message"]) for s in it["covered"]]
-        moved = [s for s, item, d, _ in results if item]
-        after = _live_lookup(moved, part_containers(plan["part_id"], fresh=True) if plan["part_id"] and moved else []) if moved else {}
+            for s in it["covered"]:                   # audit 11-23 #3: logged before anything else can fail
+                log_move(row(s, event="sent", moved_as=it["send"], ok=bool(d["ok"]), message=d["message"],
+                             left_pallet=it["left_pallet"], plex_request=_j(d["request"]), plex_response=d["body"],
+                             plex_status=d["status"], plex_ms=d["ms"], plan_json=_j(it)))
+                results.append((s, it["send"], d, d["message"], it["left_pallet"]))
+        moved = [s for s, item, d, _, _ in results if item]
+        after, read_note = {}, None
+        if moved:
+            try:
+                after = _live_lookup(moved, part_containers(plan["part_id"], fresh=True))
+            except Exception as e:  # noqa: BLE001 - the 'sent' rows already record the moves
+                read_note = f"read-back failed ({str(e)[:80]}); Plex's answer is logged"
     done = failed = 0
-    for s, item, d, msg in results:
-        now = (after.get(s) or {}).get("location") if item else (lives[s] or {}).get("location")
-        b = plan["lives"].get(s) or {}
-        rec = {**base, "at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "move" if item else "refused",
-               "serial": s, "moved_as": item, "from_location": b.get("location"), "ok": bool(item) and bool(d and d["ok"]) and now == target,
-               "message": msg, "verified_location": now, "lp_before": b.get("masterUnitNo"), "status_before": b.get("containerStatus"),
-               "qty_before": b.get("quantity"), "left_pallet": picking.breaks_pallet(s, plan["serials"], part_list) if item == s else None,
-               "before_json": _j(plan["lives"].get(s)), "after_json": _j(after.get(s)) if item else None,
-               "plex_request": _j(d and d["request"]), "plex_response": d and d["body"], "plex_status": d and d["status"],
-               "plex_ms": d and d["ms"]}
-        log_move(rec)
-        done += rec["ok"]
-        failed += not rec["ok"]
-        note = f" (left pallet {rec['left_pallet']})" if rec["left_pallet"] else (f" (as pallet {item})" if item and item != s else "")
-        flash(f"{s}: {msg}{note} (now at {now})", "ok" if rec["ok"] else "error")
-    flash(f"{done} moved to {target}, {failed} not moved. Batch {plan_id}: undo it from the Move log within {undo.UNDO_MINUTES} min "
-          f"if nothing touches the containers meanwhile.",
-          "ok" if not failed else "error")
+    lines = []
+    for s, item, d, msg, left in results:
+        if not item:
+            failed += 1
+            lines.append((f"{s}: {msg}", "error"))
+            continue
+        now = (after.get(s) or {}).get("location")
+        ok = bool(d["ok"]) and now == target
+        log_move(row(s, event="move", moved_as=item, ok=ok, message=msg + (f" [{read_note}]" if read_note else ""),
+                     verified_location=now, left_pallet=left, after_json=_j(after.get(s)), plex_request=_j(d["request"]),
+                     plex_response=d["body"], plex_status=d["status"], plex_ms=d["ms"]))
+        done += ok
+        failed += not ok
+        note = f" (left pallet {left})" if left else (f" (as pallet {item})" if item != s else "")
+        lines.append((f"{s}: {msg}{note} (now at {now or '?'})", "ok" if ok else "error"))
+    _flash_results(lines, f"{done} moved to {target}, {failed} not moved. Batch {plan_id}: undo it from the Move log within "
+                          f"{undo.UNDO_MINUTES} min if nothing touches the containers meanwhile.", not failed)
     return back
 
 
@@ -492,10 +725,16 @@ def move_log():
                            can_move=ENV == "test" or ALLOW_PROD_MOVES)
 
 
+def _history(serials: list[str], since) -> tuple[list, str | None]:
+    try:
+        return web.sql(undo.history_sql(serials, since)), None
+    except Exception as e:  # noqa: BLE001 - the live check still decides
+        return [], f"Plex history could not be read ({str(e)[:80]}); only the live check was made."
+
+
 def _undo_review(batch_id: str) -> dict:
     """Per moved container of a batch: can it be put back, and everything Plex recorded since."""
-    rows = [r for r in load_log_rows() if r.get("batch_id") == batch_id and (r.get("event") or "move") == "move"
-            and r.get("ok") in (True, "true", "True")]
+    rows = undo.moved_rows(load_log_rows(), batch_id)                  # audit 11-23 #11: 'sent' rows count
     if not rows:
         return {"ok": False, "error": f"No moves found for batch {batch_id}."}
     if {r.get("env") for r in rows} != {ENV}:
@@ -503,13 +742,9 @@ def _undo_review(batch_id: str) -> dict:
     serials = list(dict.fromkeys(r["serial"] for r in rows))
     with ThreadPoolExecutor(max_workers=min(WORKERS, len(serials))) as ex:
         live = dict(zip(serials, ex.map(api.container, serials)))
-    first = min(undo._utc(r["at"]) for r in rows)
-    try:
-        history, hist_note = web.sql(undo.history_sql(serials, first)), None
-    except Exception as e:  # noqa: BLE001 - the live check still decides
-        history, hist_note = [], f"Plex history could not be read ({e}); only the live check was made."
+    history, hist_note = _history(serials, min(undo._utc(r["at"]) for r in rows))
     now = dt.datetime.now(dt.timezone.utc)
-    checks = [undo.check(r, live.get(r["serial"]), history, now) for r in rows]
+    checks = [undo.check(r, live.get(r["serial"]), history, now, app_user=APP_PLEX_USER) for r in rows]
     return {"ok": True, "batch_id": batch_id, "rows": rows, "live": live, "history": history, "checks": checks,
             "history_note": hist_note or ("Plex history in production is Plex's reporting copy (about 4 h behind); "
                                           "the live check (location, quantity, status, pallet) is current." if ENV == "prod" else None)}
@@ -523,10 +758,8 @@ def undo_review():
         return r, 400
     can = [c for c in r["checks"] if c["ok"]]
     plan_id = None
-    if can and (ENV == "test" or ALLOW_PROD_MOVES):
-        plan_id = "u" + uuid.uuid4().hex[:11]
-        _plans[plan_id] = {"kind": "undo", "created": time.time(), "batch_id": r["batch_id"], "rows": r["rows"],
-                           "history": r["history"], "by": who()}
+    if can and (ENV == "test" or ALLOW_PROD_MOVES) and who() != "unverified":
+        plan_id = plan_put({"kind": "undo", "batch_id": r["batch_id"], "rows": r["rows"], "by": who()})
     for c in r["checks"]:
         log_move({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "undo-review", "batch_id": f"restore-{r['batch_id']}",
                   "env": ENV, "requested_by": who(), "serial": c["serial"], "from_location": c["now"], "to_location": c["from"],
@@ -539,45 +772,58 @@ def undo_review():
 
 @app.post("/log/undo")
 def undo_apply():
-    """Put back the containers of a reviewed undo that are STILL exactly as we left them (checked live again)."""
+    """Put back the containers of a reviewed undo that are STILL exactly as we left them (live record and a fresh
+    read of Plex's history). A pallet goes back whole only if every container we moved on it qualifies and the
+    pallet holds exactly those containers (audit 11-23 #1); otherwise the qualifying ones go back one by one."""
     back = redirect(url_for("move_log"))
-    if not (ENV == "test" or ALLOW_PROD_MOVES):
-        flash("Moves are turned off in production (PICKING_ALLOW_PROD_MOVES is not 1).", "error")
+    err = _gate_refused(request.form, "undo")
+    if err:
+        flash(err, "error")
         return back
-    plan = _plans.pop(request.form.get("plan_id", ""), None)
-    if not plan or plan.get("kind") != "undo" or time.time() - plan["created"] > PLAN_TTL:
+    plan = plan_pop(request.form.get("plan_id", ""))
+    if not plan or plan.get("kind") != "undo":
         flash("That undo review has expired or was already used. Open it again from the log.", "error")
+        return back
+    if plan.get("by") != who():
+        flash(f"Only the person who opened that undo review ({plan.get('by')}) can approve it.", "error")
         return back
     import restore_moves
     rows = plan["rows"]
     done = bad = 0
+    lines = []
     with _move_lock:
         serials = list(dict.fromkeys(r["serial"] for r in rows))
         live = {s: api.container(s) for s in serials}
+        history, _ = _history(serials, min(undo._utc(r["at"]) for r in rows))       # audit 11-23 #19: fresh history
         now = dt.datetime.now(dt.timezone.utc)
-        checks = {r["serial"]: undo.check(r, live.get(r["serial"]), plan["history"], now) for r in rows}
+        checks = {r["serial"]: undo.check(r, live.get(r["serial"]), history, now, app_user=APP_PLEX_USER) for r in rows}
         ok_rows = [r for r in rows if checks[r["serial"]]["ok"]]
-        actions = restore_moves.plan_restore(ok_rows, live)
+        actions = restore_moves.plan_restore(ok_rows, live, all_rows=rows,
+                                             lp_members=lambda lp, s: lp_members(lp, live.get(s)))
         for c in checks.values():
             if not c["ok"]:
-                flash(f"{c['serial']}: not put back: {'already back' if c['back'] else '; '.join(c['reasons'])}", "error" if not c["back"] else "ok")
+                lines.append((f"{c['serial']}: not put back: {'already back' if c['back'] else '; '.join(c['reasons'])}",
+                              "ok" if c["back"] else "error"))
         for x in [x for x in actions if x["kind"] in ("pallet", "container")]:
             d = web.move_detail(x["send"], x["to"])
             for s in x["serials"]:
-                now_loc = (api.container(s) or {}).get("location")
-                ok = d["ok"] and now_loc == x["to"]
+                try:
+                    now_loc = (api.container(s) or {}).get("location")
+                except Exception:  # noqa: BLE001 - logged with Plex's answer regardless
+                    now_loc = None
+                ok = bool(d["ok"]) and now_loc == x["to"]
                 done += ok
                 bad += not ok
+                left = next((r.get("left_pallet") for r in rows if r["serial"] == s), None)
                 log_move({"at": dt.datetime.now(dt.timezone.utc).isoformat(), "event": "restore", "batch_id": f"restore-{plan['batch_id']}",
                           "env": ENV, "requested_by": who(), "serial": s, "moved_as": x["send"], "from_location": (live.get(s) or {}).get("location"),
-                          "to_location": x["to"], "ok": ok, "message": d["message"], "verified_location": now_loc,
-                          "before_json": _j(live.get(s)), "plex_request": _j(d["request"]), "plex_response": d["body"],
-                          "plex_status": d["status"], "plex_ms": d["ms"],
-                          "left_pallet": next((r.get("left_pallet") for r in rows if r["serial"] == s), None)})
-                note = next((f" (it had left pallet {r['left_pallet']}: re-add it in Plex's Add to Master Unit screen)"
-                             for r in rows if r["serial"] == s and r.get("left_pallet")), "")
-                flash(f"{s}: {d['message']} (now at {now_loc}){note}", "ok" if ok else "error")
-    flash(f"Undo of batch {plan['batch_id']}: {done} put back, {bad} to check.", "ok" if not bad else "error")
+                          "to_location": x["to"], "ok": ok, "message": d["message"] + (f" [{x['note']}]" if x.get("note") else ""),
+                          "verified_location": now_loc, "before_json": _j(live.get(s)), "plex_request": _j(d["request"]),
+                          "plex_response": d["body"], "plex_status": d["status"], "plex_ms": d["ms"], "left_pallet": left})
+                note = (f" (it had left pallet {left}: re-add it in Plex's Add to Master Unit screen)" if left else "") + \
+                       (f" ({x['note']})" if x.get("note") else "")
+                lines.append((f"{s}: {d['message']} (now at {now_loc or '?'}){note}", "ok" if ok else "error"))
+    _flash_results(lines, f"Undo of batch {plan['batch_id']}: {done} put back, {bad} to check.", not bad)
     return back
 
 

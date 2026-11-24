@@ -271,25 +271,25 @@ The app saves screen time, not walking.
 Next angle, not built: **"Stage the whole set"**, one review for every ingredient of a job set (set 600: 66
 suggested containers over 26 ingredients), once the team trusts the per-ingredient flow.
 
-## Demo videos (2026-11-23, second take)
+## Demo videos (2026-11-23, third take, after the audit fixes)
 
-The first take (morning of 11-23) showed moves to the "... Staging" locations, which the team does not use;
-it was **withdrawn** (Emilio): removed from the hub, from GCS and from Emilio's Downloads (to the Trash), with the
-11-20 demo. The second take shows the app as it is now. Recorded against a local server on **Plex TEST** with
-the same code as PR #167 (the deployed app was still the older image on production), in a headless Chromium with
-captions, a visible cursor and click ripples. H.264, 1400×860, no sound.
+Three takes on 11-23. The first showed moves to the "... Staging" locations, which the team does not use; the
+second said the PW bins are a stocked buffer, which the audit disproved (the floor stages per job through
+allocations). Both were **withdrawn**: removed from the hub, GCS and Emilio's Downloads (to the Trash). The third
+take shows the app after the audit fixes. Recorded against a local server on **Plex TEST** running the PR #167 code
+(the deployed revision was older), headless Chromium with captions, cursor and click ripples. H.264, 1400×860, no sound.
 
 | File | Length | Size | Shows |
 |---|---|---|---|
-| `picking-app-1-pick-list-and-real-targets.mp4` | 1:27 | 2.0 MB | job sets, set 756 filling in live, the targets from Plex history (PW - B9 703, B10 313, B8 262), PW - B9 already holding 1,225 against 148 needed ("all there"), the labels |
-| `picking-app-2-review-and-approve-a-move.mp4` | 1:19 | 2.0 MB | two warehouse containers ticked, "Review move" dialog (from, to, what happens), Cancel vs Approve, moved and confirmed in 4 s |
-| `picking-app-3-undo-and-its-limit.mp4` | 1:23 | 0.8 MB | the Move log; "the floor" moves one container on to PW - B10; Undo puts back only the untouched one and shows the other's Plex activity; why the limit |
-| `picking-app-full-demo-v2.mp4` | 4:09 | 4.4 MB | the three in one |
+| `picking-app-1-pick-list-allocations-and-targets.mp4` | 1:39 | 4.0 MB | set 544: job 2305's allocated containers already in PW - B8 count as "there" (default target PW - B8); job 2308's allocated warehouse containers suggested first; targets from Plex history; set 757 showing set 756's containers as "reserved" |
+| `picking-app-2-review-and-approve-a-move.mp4` | 1:26 | 2.0 MB | two warehouse containers to PW - B9: review dialog, pallet rule, Cancel vs Approve (reviewer only), moved and confirmed in 5 s, logged when Plex answers |
+| `picking-app-3-undo-and-its-limit.mp4` | 1:24 | 0.8 MB | the Move log; "the floor" moves one container on; Undo puts back only the untouched one and shows the other's Plex activity; why the 30-minute limit |
+| `picking-app-full-demo-v3.mp4` | 4:29 | 6.7 MB | the three in one |
 
-Where: the hub's **Picking & staging** tab (`videos/`), `~/Downloads/picking-app-videos-2026-11-23-v2/`,
-`gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v2/`. Not in git.
+Where: the hub's **Picking & staging** tab (`videos/`), `~/Downloads/picking-app-videos-2026-11-23-v3/`,
+`gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v3/`. Not in git.
 
-Containers moved while recording (S029901 from 118-08C-01, S029940 from 117-08B-01; S029940 also moved on to
+Containers moved while recording (S029901 from 118-08C-01, S029940 from 117-08B-01, S029940 also moved on to
 PW - B10 "as the floor") are back at 118-08C-01 and 117-08B-01, read back from the API.
 
 Re-record: start the app on TEST locally (`PLEX_ENV=test python deploy/picking_app/app.py`, port 8085, or any

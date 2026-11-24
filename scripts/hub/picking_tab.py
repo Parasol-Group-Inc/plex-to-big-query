@@ -21,16 +21,16 @@ NAV = '["platform", "Schedules & probe", ""]'
 STATS = '  $("#q").disabled = '
 KEY, LABEL = "picking", "Picking & staging"
 
-# Demo videos, second take (2026-11-23 evening, Plex TEST): the real targets from Plex history, the review
-# dialog, and undo from the Move log with its limit. The first take (moves to the "... Staging" locations, which
-# the team does not use) was withdrawn. Published next to the hub page under videos/ (Artifact `files`; the old
-# paths were removed). Durable copies: gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v2/.
+# Demo videos, third take (2026-11-23, after the audit fixes, Plex TEST): allocations, real targets and netting, the
+# review dialog, undo and its limit. The first take (moves to Staging) and the second ("PW bins already stocked",
+# withdrawn by the audit) were removed. Published next to the hub page under videos/ (Artifact `files`; the old
+# paths were removed). Durable copies: gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v3/.
 # Re-record: docs/PICKING_STAGING_APP.md, "Demo videos".
 VIDEOS = [
-    ("videos/picking-app-1-pick-list-and-real-targets.mp4", "1. The pick list, and where material really goes", "1:27"),
-    ("videos/picking-app-2-review-and-approve-a-move.mp4", "2. Review, then approve, every move", "1:19"),
-    ("videos/picking-app-3-undo-and-its-limit.mp4", "3. Undo from the Move log, and its limit", "1:23"),
-    ("videos/picking-app-full-demo-v2.mp4", "All three in one", "4:09"),
+    ("videos/picking-app-1-pick-list-allocations-and-targets.mp4", "1. The pick list: allocations, real targets, no double counting", "1:39"),
+    ("videos/picking-app-2-review-and-approve-a-move.mp4", "2. Review, then approve, every move", "1:26"),
+    ("videos/picking-app-3-undo-and-its-limit.mp4", "3. Undo from the Move log, and its limit", "1:24"),
+    ("videos/picking-app-full-demo-v3.mp4", "All three in one", "4:29"),
 ]
 
 
@@ -38,9 +38,9 @@ def videos_html() -> str:
     cards = "".join(
         f'<figure class="pv"><video controls preload="metadata" playsinline src="{src}"></video>'
         f'<figcaption><b>{label}</b> <span class="muted">{dur}</span></figcaption></figure>' for src, label, dur in VIDEOS)
-    return (f'<h2>Demo videos (2026-11-23, second take, Plex TEST)</h2><p>Recorded with captions on Plex TEST (a local server running the same code as the deployed app); every container '
+    return (f'<h2>Demo videos (2026-11-23, after the audit fixes, Plex TEST)</h2><p>Recorded with captions on Plex TEST (a local server running the same code as the deployed app); every container '
             f'moved in them was put back. To save one: the ⋮ menu on the player, or the files in '
-            f'gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v2/.</p>'
+            f'gs://voxdatalake-plex-screenshots/picking-app/videos/2026-11-23-v3/.</p>'
             f'<div class="pvs">{cards}</div>')
 
 
